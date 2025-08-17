@@ -1,0 +1,318 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "README.md"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
+  # Otherwise, tests jobs will install their own uv, and now it has concurrent issue.
+  UV_VERSION: '0.8.6'
+  NODE_VERSION: '19.9.0'
+  GO_VERSION: '1.24.5'
+
+jobs:
+  typos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+
+  lint:
+    name: "lint"
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rustfmt"
+        run: rustup component add rustfmt
+      - name: "rustfmt"
+        run: cargo fmt --all --check
+
+  cargo-clippy-linux:
+    name: "cargo clippy | ubuntu"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+      - name: "Clippy"
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  cargo-clippy-windows:
+    timeout-minutes: 15
+    runs-on: windows-latest
+    name: "cargo clippy | windows"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+
+      - name: "Clippy"
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  cargo-shear:
+    name: "cargo shear"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall --no-confirm cargo-shear
+      - run: cargo shear
+
+  cargo-test-linux:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    name: "cargo test | ubuntu"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: "Install Python"
+        run: uv python install --no-bin
+
+      - name: "Install Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: "Install Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest show-config test-groups
+          cargo nextest run \
+            --workspace \
+            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+
+  cargo-test-macos:
+    timeout-minutes: 10
+    runs-on: macos-latest
+    name: "cargo test | macos"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: "Install Python"
+        run: uv python install --no-bin
+
+      - name: "Install Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: "Install Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest show-config test-groups
+          cargo nextest run \
+            --workspace \
+            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+
+
+  cargo-test-windows:
+    timeout-minutes: 15
+    runs-on: windows-latest
+    name: "cargo test | windows"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
+
+      - name: "Install Python"
+        run: uv python install --no-bin
+
+      - name: "Install Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: "Install Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: "Find node and npm versions"
+        run: |
+          Get-Command node -All
+          Get-Command npm -All
+        shell: pwsh
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest show-config test-groups
+          cargo nextest run --workspace --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+
+
+  test-python-setup-linux:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    name: "test python setup | linux"
+    strategy:
+      matrix:
+        uv-source: ["github", "pypi", "default"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+      - name: "Install Rust toolchain"
+        run: rustup show
+      - name: "Build prek with GitHub source"
+        if: matrix.uv-source == 'github'
+        run: cargo build --features uv-source-github
+      - name: "Build prek with PyPI source"
+        if: matrix.uv-source == 'pypi'
+        run: cargo build --features uv-source-pypi
+      - name: "Build prek with default source"
+        if: matrix.uv-source == 'default'
+        run: cargo build
+      - name: "Run test"
+        run: |
+          cd /tmp
+          mkdir python-setup-${{ matrix.uv-source }}
+          cd python-setup-${{ matrix.uv-source }}
+          git init
+          git config user.name "Test User"
+          git config user.email "test@example.com"
+          echo "print('Hello from Python!')" > test.py
+          cat > .pre-commit-config.yaml << 'EOF'
+          repos:
+            - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+              rev: v5.0.0
+              hooks:
+                - id: trailing-whitespace
+                - id: end-of-file-fixer
+                - id: check-yaml
+                - id: check-added-large-files
+          EOF
+          git add .
+          git commit -m "Initial commit"
+          echo "Testing with uv source: ${{ matrix.uv-source }}"
+          ${{ github.workspace }}/target/debug/prek run --files test.py -vvv
+
+  test-python-setup-windows:
+    timeout-minutes: 15
+    runs-on: windows-latest
+    name: "test python setup | windows"
+    strategy:
+      matrix:
+        uv-source: ["github", "pypi", "default"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Build prek with GitHub source"
+        if: matrix.uv-source == 'github'
+        run: cargo build --features uv-source-github
+
+      - name: "Build prek with PyPI source"
+        if: matrix.uv-source == 'pypi'
+        run: cargo build --features uv-source-pypi
+
+      - name: "Build prek with default source"
+        if: matrix.uv-source == 'default'
+        run: cargo build
+
+      - name: "Run test"
+        run: |
+          cd $env:TEMP
+          mkdir python-setup-${{ matrix.uv-source }}
+          cd python-setup-${{ matrix.uv-source }}
+          git init
+          git config user.name "Test User"
+          git config user.email "test@example.com"
+          echo "print('Hello from Python!')" > test.py
+          @"
+          repos:
+            - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+              rev: v5.0.0
+              hooks:
+                - id: trailing-whitespace
+                - id: end-of-file-fixer
+                - id: check-yaml
+                - id: check-added-large-files
+          "@ > .pre-commit-config.yaml
+          git add .
+          git commit -m "Initial commit"
+          echo "Testing with uv source: ${{ matrix.uv-source }}"
+          & "${{ github.workspace }}/target/debug/prek" run --files test.py -vvv
