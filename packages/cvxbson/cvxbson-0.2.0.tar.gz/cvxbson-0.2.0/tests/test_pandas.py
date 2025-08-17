@@ -1,0 +1,87 @@
+"""Tests for pandas and polars DataFrame serialization with BSON.
+
+This module tests the serialization and deserialization of pandas and polars
+DataFrames using the BSON format.
+"""
+
+import numpy as np
+import pandas as pd
+import polars as pl
+import pytest
+
+from cvx.bson.file import from_bson, to_bson
+
+
+@pytest.fixture()
+def data():
+    """Provide test data for serialization tests.
+
+    Returns:
+        A dictionary containing various data types to test serialization:
+        - pandas DataFrame
+        - numpy array
+        - pandas DataFrame with timestamp index
+        - polars DataFrame
+    """
+    return {
+        "frame": pd.DataFrame(data=np.random.rand(5, 2)),
+        "numpy": np.random.rand(5, 2),
+        "frame_with_time": pd.DataFrame(
+            data=np.random.rand(2, 2),
+            index=[pd.Timestamp("2020-01-01"), pd.Timestamp("2022-01-01")],
+        ),
+        "polars": pl.DataFrame(data=np.random.rand(10, 3)),
+    }
+
+
+def assert_equal(obj1, obj2):
+    """Assert that two objects are equal, handling different data types.
+
+    This function compares different types of objects (pandas DataFrames,
+    numpy arrays, polars DataFrames) using the appropriate equality check.
+
+    Args:
+        obj1: First object to compare
+        obj2: Second object to compare
+    """
+    assert type(obj1) is type(obj2)
+
+    if isinstance(obj1, pd.DataFrame):
+        pd.testing.assert_frame_equal(obj1, obj2)
+
+    if isinstance(obj1, np.ndarray):
+        np.testing.assert_array_equal(obj1, obj2)
+
+    if isinstance(obj1, pl.DataFrame):
+        assert obj1.equals(obj2)
+
+
+def test_roundtrip(data):
+    """Testing the roundtrip.
+
+    Args:
+        data: Fixture exposing a dictionary of data
+    """
+    reproduced = from_bson(to_bson(data))
+    for key, value in reproduced.items():
+        assert_equal(value, data[key])
+
+
+def test_file(data, tmp_path):
+    """Test serialization and deserialization using file I/O.
+
+    This test writes data to a BSON file, reads it back, and verifies
+    that the deserialized data matches the original data.
+
+    Args:
+        data: Test data fixture
+        tmp_path: Temporary path fixture
+    """
+    with open(file=tmp_path / "xxx.bson", mode="wb") as bson_file:
+        bson_file.write(to_bson(data))
+
+    with open(file=tmp_path / "xxx.bson", mode="rb") as bson_file:
+        reproduced = from_bson(bson_file.read())
+
+    for key, value in reproduced.items():
+        assert_equal(reproduced[key], data[key])
