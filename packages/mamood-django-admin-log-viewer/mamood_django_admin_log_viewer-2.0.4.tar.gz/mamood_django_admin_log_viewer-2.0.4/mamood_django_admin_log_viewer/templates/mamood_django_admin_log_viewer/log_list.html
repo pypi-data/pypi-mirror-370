@@ -1,0 +1,142 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extrahead %}
+<link rel="stylesheet" type="text/css" href="{% static 'mamood_django_admin_log_viewer/css/log_viewer.css' %}">
+<script src="{% static 'mamood_django_admin_log_viewer/js/log_viewer.js' %}"></script>
+<style>
+/* Completely hide Django admin search/filter components */
+#changelist-search,
+.module.filtered,
+.sidebar {
+    display: none !important;
+}
+</style>
+{% endblock %}
+
+{% block sidebar %}
+<!-- Override sidebar to be empty for log viewer -->
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="log-viewer-container">
+    <div class="log-viewer-header">
+        <div class="header-left">
+            <div class="navigation-buttons">
+                <a href="{% url 'admin:index' %}" class="button secondary">
+                    ← Back to Admin
+                </a>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="log-viewer-controls">
+                <button id="refresh-list" class="button default" onclick="location.reload()">Refresh List</button>
+                <button id="expand-all" class="button secondary" onclick="expandAllGroups()">Expand All</button>
+                <button id="collapse-all" class="button secondary" onclick="collapseAllGroups()">Collapse All</button>
+            </div>
+        </div>
+    </div>
+    <h1>{{ title }}</h1>
+    
+    {% if log_files %}
+    <div class="log-files-grid">
+        {% for log_file in log_files %}
+        <div class="log-file-card">
+            <div class="log-file-header">
+                <h3><a href="{% url 'admin:log_viewer_detail' log_file.name %}">{{ log_file.name }}</a></h3>
+                {% if log_file.type == 'rotational_group' %}
+                <span class="rotational-badge">{{ log_file.file_count }} file{{ log_file.file_count|pluralize }}</span>
+                {% endif %}
+            </div>
+            <div class="log-file-info">
+                <p><strong>Size:</strong> {{ log_file.size|filesizeformat }}</p>
+                <p><strong>Modified:</strong> {{ log_file.modified|date:"Y-m-d H:i:s" }}</p>
+                <p><strong>Path:</strong> <code>{{ log_file.path }}</code></p>
+                {% if log_file.type == 'rotational_group' %}
+                <p><strong>Type:</strong> Rotational log group</p>
+                {% endif %}
+            </div>
+            {% if log_file.type == 'rotational_group' %}
+            <div class="rotational-files">
+                <details>
+                    <summary>View all {{ log_file.file_count }} file{{ log_file.file_count|pluralize }}</summary>
+                    <ul class="rotational-file-list">
+                        {% for rot_file in log_file.rotational_files %}
+                        <li>
+                            <div class="rotational-file-item">
+                                <a href="{% url 'admin:log_viewer_detail' rot_file.name %}" class="rotational-file-link">
+                                    {{ rot_file.name }}
+                                    {% if rot_file.is_current %}<span class="current-file">(current)</span>{% endif %}
+                                </a>
+                                <div class="rotational-file-meta">
+                                    <span class="file-size">{{ rot_file.size|filesizeformat }}</span>
+                                    <a href="{% url 'admin:log_viewer_download' rot_file.name %}" class="download-link" title="Download {{ rot_file.name }}">⬇️</a>
+                                </div>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            </div>
+            {% endif %}
+            <div class="log-file-actions">
+                <a href="{% url 'admin:log_viewer_detail' log_file.name %}" class="button default">
+                    {% if log_file.type == 'rotational_group' %}View Current Log{% else %}View Log{% endif %}
+                </a>
+                <a href="{% url 'admin:log_viewer_download' log_file.name %}" class="button secondary" download>
+                    Download {% if log_file.type == 'rotational_group' %}Current{% endif %}
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-logs-message">
+        <h2>No log files found</h2>
+        <p>Please check your LOG_VIEWER_FILES and LOG_VIEWER_FILES_DIR settings.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Ensure functions are available globally and after DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Make sure expandAllGroups and collapseAllGroups are available
+    window.expandAllGroups = function() {
+        console.log('Expanding all groups...');
+        // For details-based rotational files
+        document.querySelectorAll('.rotational-files details').forEach(details => {
+            details.open = true;
+        });
+        
+        // Legacy support for .rotational-group classes
+        document.querySelectorAll('.rotational-group').forEach(group => {
+            group.classList.add('expanded');
+        });
+    };
+
+    window.collapseAllGroups = function() {
+        console.log('Collapsing all groups...');
+        // For details-based rotational files
+        document.querySelectorAll('.rotational-files details').forEach(details => {
+            details.open = false;
+        });
+        
+        // Legacy support for .rotational-group classes
+        document.querySelectorAll('.rotational-group').forEach(group => {
+            group.classList.remove('expanded');
+        });
+    };
+});
+</script>
+
+{% endblock %}

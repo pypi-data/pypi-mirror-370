@@ -1,0 +1,361 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extrahead %}
+<link rel="stylesheet" type="text/css" href="{% static 'mamood_django_admin_log_viewer/css/log_viewer.css' %}">
+<script src="{% static 'mamood_django_admin_log_viewer/js/log_viewer.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:log_viewer_list' %}">Log Files</a>
+    &rsaquo; {{ filename }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="log-viewer-container">
+    <div class="log-viewer-header">
+        <div class="header-left">
+            <div class="navigation-buttons">
+                <a href="{% url 'admin:log_viewer_list' %}" class="button secondary">
+                    ← Back to Log Files
+                </a>
+                {% if is_rotational and log_file.parent_group %}
+                <a href="{% url 'admin:log_viewer_detail' log_file.parent_group %}" class="button secondary">
+                    View Current Log
+                </a>
+                {% endif %}
+                
+                <!-- Log File Navigation Dropdown -->
+                <div class="log-navigation-dropdown">
+                    <select id="log-file-selector" class="button-styled-select" onchange="navigateToLogFile(this.value)">
+                        <option value="">Switch to Log File...</option>
+                        {% for log_file_item in all_log_files %}
+                            {% if log_file_item.type == 'rotational_group' %}
+                                <optgroup label="{{ log_file_item.name }}">
+                                    <option value="{{ log_file_item.name }}" 
+                                        {% if filename == log_file_item.name %}selected{% endif %}>
+                                        {{ log_file_item.name }} (Current)
+                                    </option>
+                                    {% for rot_file in log_file_item.rotational_files %}
+                                        <option value="{{ rot_file.name }}" 
+                                            {% if filename == rot_file.name %}selected{% endif %}>
+                                            ↳ {{ rot_file.name }} ({{ rot_file.size|filesizeformat }})
+                                        </option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% else %}
+                                <option value="{{ log_file_item.name }}" 
+                                    {% if filename == log_file_item.name %}selected{% endif %}>
+                                    {{ log_file_item.name }} ({{ log_file_item.size|filesizeformat }})
+                                </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="log-viewer-controls">
+                {% if not is_rotational %}
+                <span id="live-mode-indicator" class="live-indicator">🔴 LIVE</span>
+                <button id="live-mode-toggle" class="button primary">Live Mode: ON</button>
+                <button id="refresh-log" class="button default">Refresh</button>
+                <button id="auto-refresh-toggle" class="button default">Auto-refresh: OFF</button>
+                <button id="auto-scroll-toggle" class="button default">Auto-scroll: ON</button>
+                {% endif %}
+                <button id="toggle-filters" class="button default">Show Filters</button>
+                <a href="{% url 'admin:log_viewer_download' filename %}" class="button secondary" download>Download</a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Advanced Filters Panel -->
+    <div id="filters-panel" class="filters-panel" style="display: none;">
+        <div class="filters-row">
+            <div class="filter-group">
+                <label for="search-input">Search Text:</label>
+                <input type="text" id="search-input" class="form-control" placeholder="Search in log messages...">
+            </div>
+            
+            <div class="filter-group">
+                <label for="log-level-filter">Log Level:</label>
+                <select id="log-level-filter" class="form-control">
+                    <option value="">All Levels</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="filters-row">
+            <div class="filter-group">
+                <label for="time-from">From Time:</label>
+                <input type="datetime-local" id="time-from" class="form-control">
+            </div>
+            
+            <div class="filter-group">
+                <label for="time-to">To Time:</label>
+                <input type="datetime-local" id="time-to" class="form-control">
+            </div>
+            
+            <div class="filter-group">
+                <label>Quick Time Filters:</label>
+                <div class="quick-time-filters">
+                    <button class="quick-time-btn" data-hours="1">Last Hour</button>
+                    <button class="quick-time-btn" data-hours="6">Last 6 Hours</button>
+                    <button class="quick-time-btn" data-hours="24">Last 24 Hours</button>
+                    <button class="quick-time-btn" data-hours="168">Last Week</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="filters-row">
+            <div class="filter-group">
+                <label for="regex-search">Regex Pattern:</label>
+                <input type="text" id="regex-search" class="form-control" placeholder="Regular expression pattern...">
+                <small class="help-text">Advanced pattern matching (leave empty for text search)</small>
+            </div>
+            
+            <div class="filter-group">
+                <label for="multiline-only">Entry Type:</label>
+                <select id="multiline-only" class="form-control">
+                    <option value="">All Entries</option>
+                    <option value="multiline">Multi-line Only</option>
+                    <option value="single">Single-line Only</option>
+                </select>
+            </div>
+            
+            <div class="filter-group filter-actions">
+                <button id="apply-filters" class="button default">Apply Filters</button>
+                <button id="clear-filters" class="button secondary">Clear All</button>
+            </div>
+        </div>
+    </div>
+    </div>
+    
+    <div class="log-file-info">
+        <p><strong>File:</strong> {{ log_file.name }}
+            {% if is_rotational %}
+                <span class="file-badge rotational">rotational</span>
+            {% endif %}
+        </p>
+        {% if is_rotational and log_file.parent_group %}
+        <p><strong>Parent Group:</strong> 
+            <a href="{% url 'admin:log_viewer_list' %}">{{ log_file.parent_group }}</a>
+        </p>
+        {% endif %}
+        <p><strong>Size:</strong> {{ log_file.size|filesizeformat }}</p>
+        <p><strong>Modified:</strong> {{ log_file.modified|date:"Y-m-d H:i:s" }}</p>
+        <p><strong>Total Lines:</strong> {{ total_lines }}</p>
+        <p><strong>Total Entries:</strong> {{ total_entries }}</p>
+        <p><strong>Showing:</strong> Lines {{ start_line }} - {{ end_line }} ({{ log_lines|length }} entries)</p>
+        {% if is_rotational %}
+        <p><strong>Type:</strong> Historical log file (no live updates)</p>
+        {% endif %}
+    </div>
+    
+    {% if log_lines %}
+    <div class="log-content">
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th width="100">Line(s)</th>
+                    <th width="80">Level</th>
+                    <th width="180">Timestamp</th>
+                    <th width="120">Module</th>
+                    <th>Message</th>
+                    <th width="60">Action</th>
+                </tr>
+            </thead>
+            <tbody id="log-lines">
+                {% for line in log_lines %}
+                <tr class="log-line log-level-{{ line.level|lower }} {% if line.is_multiline %}multiline-entry{% endif %}" data-level="{{ line.level }}">
+                    <td class="line-number">
+                        {{ line.line_range }}
+                        {% if line.is_multiline %}
+                            <span class="multiline-indicator" title="Multi-line entry ({{ line.line_count }} lines)">📄</span>
+                        {% endif %}
+                    </td>
+                    <td class="log-level">
+                        <span class="level-badge level-{{ line.level|lower }}">{{ line.level }}</span>
+                    </td>
+                    <td class="timestamp">{{ line.timestamp }}</td>
+                    <td class="log-module">
+                        {% if line.logger %}
+                            <span class="log-module-name">{{ line.logger }}</span>
+                        {% else %}
+                            <span class="no-log-module">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="message">
+                        <div class="message-preview">{{ line.content }}</div>
+                        {% if line.is_long %}
+                            <div class="message-truncated-indicator">Content truncated...</div>
+                        {% endif %}
+                    </td>
+                    <td class="action">
+                        {% if line.is_long or line.is_multiline %}
+                            <button class="view-full-btn" 
+                                    data-content="{{ line.full_content|escapejs }}" 
+                                    data-level="{{ line.level }}" 
+                                    data-timestamp="{{ line.timestamp }}" 
+                                    data-line-range="{{ line.line_range }}"
+                                    onclick="showLogModalFromData(this)">View Full</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    <div class="pagination-controls">
+        <div class="pagination-info">
+            <span>Page {{ current_page }} of {{ total_pages }}</span>
+        </div>
+        <div class="pagination-buttons">
+            {% if current_page > 1 %}
+                <a href="?page=1" class="button secondary">First</a>
+                <a href="?page={{ current_page|add:'-1' }}" class="button secondary">Previous</a>
+            {% endif %}
+            
+            <input type="number" id="page-jump" min="1" max="{{ total_pages }}" value="{{ current_page }}" class="page-jump-input">
+            <button onclick="jumpToPage()" class="button default">Go</button>
+            
+            {% if current_page < total_pages %}
+                <a href="?page={{ current_page|add:'1' }}" class="button secondary">Next</a>
+                <a href="?page={{ total_pages }}" class="button secondary">Last</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="no-logs-message">
+        <h2>No log entries found</h2>
+        <p>The log file appears to be empty or could not be read.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Log Entry Modal -->
+<div id="logModal" class="log-modal" style="display: none;">
+    <div class="log-modal-content">
+        <div class="log-modal-header">
+            <h3 id="modalTitle">Log Entry Details</h3>
+            <button class="log-modal-close" onclick="closeLogModal()">&times;</button>
+        </div>
+        <div class="log-modal-info">
+            <span class="modal-level-badge" id="modalLevelBadge"></span>
+            <span class="modal-timestamp" id="modalTimestamp"></span>
+            <span class="modal-line-range" id="modalLineRange"></span>
+        </div>
+        <div class="log-modal-body">
+            <pre id="modalContent"></pre>
+        </div>
+        <div class="log-modal-footer">
+            <button onclick="copyToClipboard()" class="button default">Copy to Clipboard</button>
+            <button onclick="closeLogModal()" class="button default">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function showLogModal(content, level, timestamp, lineRange) {
+    const modal = document.getElementById('logModal');
+    const modalContent = document.getElementById('modalContent');
+    const modalLevelBadge = document.getElementById('modalLevelBadge');
+    const modalTimestamp = document.getElementById('modalTimestamp');
+    const modalLineRange = document.getElementById('modalLineRange');
+    
+    modalContent.textContent = content;
+    modalLevelBadge.textContent = level;
+    modalLevelBadge.className = `modal-level-badge level-${level.toLowerCase()}`;
+    modalTimestamp.textContent = timestamp;
+    modalLineRange.textContent = `Lines: ${lineRange}`;
+    
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function showLogModalFromData(button) {
+    // Get data from the button attributes - this prevents JavaScript injection
+    const content = button.getAttribute('data-content');
+    const level = button.getAttribute('data-level');
+    const timestamp = button.getAttribute('data-timestamp');
+    const lineRange = button.getAttribute('data-line-range');
+    
+    // Call the existing modal function
+    showLogModal(content, level, timestamp, lineRange);
+}
+
+function closeLogModal() {
+    const modal = document.getElementById('logModal');
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function copyToClipboard() {
+    const content = document.getElementById('modalContent').textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        // Show a brief success message
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => {
+            btn.textContent = originalText;
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+    const modal = document.getElementById('logModal');
+    if (event.target == modal) {
+        closeLogModal();
+    }
+}
+
+function navigateToLogFile(filename) {
+    if (filename && filename.trim() !== '') {
+        // Navigate to the selected log file
+        window.location.href = '{% url "admin:log_viewer_detail" "FILENAME_PLACEHOLDER" %}'.replace('FILENAME_PLACEHOLDER', filename);
+    }
+}
+
+function jumpToPage() {
+    if (window.logViewer) {
+        window.logViewer.jumpToPage();
+    } else {
+        // Fallback if LogViewer not loaded yet
+        const pageInput = document.getElementById('page-jump');
+        const pageNumber = parseInt(pageInput.value);
+        if (pageNumber && pageNumber > 0) {
+            window.location.href = `?page=${pageNumber}`;
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.logViewer = new LogViewer({
+        filename: '{{ filename }}',
+        currentPage: {{ current_page }},
+        liveMode: {{ live_mode|yesno:"true,false" }},
+        refreshInterval: {{ refresh_interval }},
+        onlyRefreshWhenActive: {{ only_refresh_when_active|yesno:"true,false" }},
+        autoRefreshDefault: {{ auto_refresh_default|yesno:"true,false" }},
+        autoScrollToBottom: {{ auto_scroll_to_bottom|yesno:"true,false" }},
+        ajaxUrl: '{% url "admin:log_viewer_ajax" filename %}'
+    });
+});
+</script>
+{% endblock %}
