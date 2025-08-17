@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # MAOS Core Services
+  maos-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: maos-orchestrator
+    environment:
+      - MAOS_MODE=orchestrator
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgresql://maos:maos_password@postgres:5432/maos
+      - MAOS_LOG_LEVEL=INFO
+      - MAOS_MAX_AGENTS=20
+      - MAOS_CHECKPOINT_INTERVAL=30
+    depends_on:
+      - redis
+      - postgres
+      - prometheus
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./checkpoints:/app/checkpoints
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis - Message Bus & Shared State
+  redis:
+    image: redis:7.2-alpine
+    container_name: maos-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL - Persistent Storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: maos-postgres
+    environment:
+      - POSTGRES_DB=maos
+      - POSTGRES_USER=maos
+      - POSTGRES_PASSWORD=maos_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maos"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: maos-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: maos-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+
+  # MAOS Web Dashboard - Commented out until Dockerfile.dashboard is created
+  # maos-dashboard:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dashboard
+  #   container_name: maos-dashboard
+  #   environment:
+  #     - MAOS_API_URL=http://maos-orchestrator:8000
+  #     - NODE_ENV=production
+  #   ports:
+  #     - "3001:3001"
+  #   depends_on:
+  #     - maos-orchestrator
+  #   restart: unless-stopped
+
+  # Worker Nodes (Scalable)
+  maos-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      - MAOS_MODE=worker
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgresql://maos:maos_password@postgres:5432/maos
+      - MAOS_LOG_LEVEL=INFO
+      - WORKER_CONCURRENCY=4
+    depends_on:
+      - redis
+      - postgres
+      - maos-orchestrator
+    volumes:
+      - ./logs:/app/logs
+    deploy:
+      replicas: 3
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  default:
+    name: maos-network
+    driver: bridge
