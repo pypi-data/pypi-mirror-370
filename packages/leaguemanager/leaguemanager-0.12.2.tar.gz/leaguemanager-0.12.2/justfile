@@ -1,0 +1,205 @@
+set dotenv-load := true
+set export := true
+
+# List all available commands.
+@_default:
+    just --list
+
+# Format justfile
+@_fmt:
+    just --fmt --unstable
+
+
+##########################################################################
+# Setup
+##########################################################################
+
+# Download and install uv.
+[group('setup')]
+uv-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if {{ os_family() }} == "windows"; then
+        echo "# For Windows, please visit https://docs.astral.sh/uv/getting-started/installation/ for instructions on how to install uv."
+        exit 1
+    if ! command -v uv &> /dev/null;
+    then
+      echo "uv is not found on path! Starting install..."
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+    else
+      uv self update
+    fi
+
+# Update uv
+[group('setup')]
+@uv-update:
+    uv self update
+
+# Uninstall uv
+[group('setup')]
+@uv-uninstall:
+    uv self uninstall
+
+# Check that project is ready for development
+[group('setup')]
+check:
+    #!/usr/bin/env bash
+    if ! command -v uv &> /dev/null; then
+      echo "UV is not installed!"
+      exit 1
+    fi
+    if [[ ! -f ".venv/bin/python" ]]; then
+      echo "Virtual environment is not installed! Run 'just bootstrap' to complete setup."
+      exit 1
+    fi
+
+# Set up the project and update dependencies
+[group('setup')]
+@bootstrap: uv-install
+    uv sync --all-groups --upgrade
+
+# Upgrade all dependencies to latest versions
+[group('setup')]
+@upgrade: lock
+    uv sync --all-extras --upgrade
+    uvx --with pre-commit-uv pre-commit autoupdate
+
+# Rebuild lock file from scratch
+[group('setup')]
+@lock:
+    echo "Rebuilding lock file..."
+    uv lock --upgrade
+    echo "Done!"
+
+##########################################################################
+# Database
+##########################################################################
+
+# Remove db file and migrations
+[group('db')]
+@nuke-db:
+    rm -rf data_league_db/
+    rm -rf src/leaguemanager/db/migrations
+
+# Remove database and start with new one
+[group('db')]
+@clean-db:
+    just nuke-db
+    just init-db
+    just make-migrations
+    just db-upgrade
+
+# Initialize the database migration environment
+[group('db')]
+@init-db:
+    mgr db init --no-prompt
+
+# Make the migration files for database
+[group('db')]
+@make-migrations:
+    mgr db make-migrations --no-prompt
+
+# Apply migrations
+[group('db')]
+@db-upgrade:
+    mgr db upgrade --no-prompt
+
+
+##########################################################################
+# Data Management
+##########################################################################
+
+# Load data from Excel template
+[group('data')]
+@load-excel:
+    mgr loader --source excel
+
+# Load data from CSV file
+[group('data')]
+@load-csv:
+    mgr loader --source csv
+
+# # Delete all data and load fresh Excel data
+# [group('data')]
+# @fresh-excel: clean-db
+#     mgr loader --source excel
+
+
+##########################################################################
+# Distribution
+##########################################################################
+
+@_build-remove:
+    rm -rf dist/*
+
+# Build a Python package
+[group('distribute')]
+@build *ARGS: check _build-remove
+    uv build {{ ARGS }}
+
+# Publish package to PyPI
+[group('distribute')]
+@publish *ARGS: check build
+    uv publish {{ ARGS }}
+
+# Bump version (patch|minor| major)
+[group('distribute')]
+@bump version_type *ARGS:
+    #!/usr/bin/env bash
+    uv run bump-my-version bump {{ version_type }} {{ ARGS }}
+
+# Create Codeberg release
+[group('distribute')]
+@cb-release:
+    uv run tools/cbapi.py releases --create
+
+# Release version (patch|minor|major)
+[group('distribute')]
+@release version_type:
+    just bump {{version_type}}
+    just publish
+    just cb-release
+
+
+##########################################################################
+# Documentation
+##########################################################################
+
+# Remove generated docs
+@_docs-clean:
+    rm -rf docs/_build/*
+
+# Build documentation
+[group('docs')]
+@docs: _docs-clean
+    uv run sphinx-build -M html docs docs/_build/ -E -a -j auto -W --keep-going
+
+# Build documentation and serve it locally
+[group('docs')]
+@docs-serve port="8090":
+    sphinx-autobuild docs docs/_build/html --host "localhost" --watch src --port {{ port }}
+
+
+##########################################################################
+# Utility
+##########################################################################
+
+@_pycache-remove:
+    find . | grep -E "(__pycache__|\.pyc|\.pyo$$)" | xargs rm -rf
+
+# Run the test suite
+[group('util')]
+@test *ARGS: check
+    uv run -m pytest {{ ARGS }}
+
+# Remove pycache, dist, and docs related files
+[group('util')]
+@clean: _pycache-remove _build-remove _docs-clean
+    echo "Cleaned up pycache, docs, and dist files/directories."
+
+# Run ruff linting
+[group('util')]
+@lint *ARGS: check
+    # -uv --quiet tool run curlylint _layouts/
+    # -bunx awesome-lint README.md
+    uvx --with pre-commit-uv pre-commit run --all-files
