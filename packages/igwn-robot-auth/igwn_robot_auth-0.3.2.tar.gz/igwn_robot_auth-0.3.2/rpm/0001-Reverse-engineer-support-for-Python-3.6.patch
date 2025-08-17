@@ -1,0 +1,181 @@
+From 679002fe9dd2d3dfa8a652f578146b28eabb2b06 Mon Sep 17 00:00:00 2001
+From: Duncan Macleod <macleoddm@cardiff.ac.uk>
+Date: Wed, 30 Apr 2025 11:06:06 +0100
+Subject: [PATCH] Reverse engineer support for Python 3.6
+
+---
+ igwn_robot_auth/htcondor.py   | 18 +++++++++++++-----
+ igwn_robot_auth/tools/core.py | 13 ++++++++-----
+ igwn_robot_auth/tools/get.py  | 28 ++++++++++++++--------------
+ 3 files changed, 35 insertions(+), 24 deletions(-)
+
+diff --git a/igwn_robot_auth/htcondor.py b/igwn_robot_auth/htcondor.py
+index 97dc575..d5acf7f 100644
+--- a/igwn_robot_auth/htcondor.py
++++ b/igwn_robot_auth/htcondor.py
+@@ -3,8 +3,6 @@
+ 
+ """HTCondor utilities for IGWN Robot Auth."""
+ 
+-from __future__ import annotations
+-
+ __author__ = "Duncan Macleod <duncan.macleod@ligo.org>"
+ 
+ import logging
+@@ -12,6 +10,16 @@ import shlex
+ import shutil
+ import subprocess
+ from pathlib import Path
++from typing import List
++
++try:
++    from shlex import join as shlex_join
++except ImportError:  # python < 3.8
++    import shlex
++
++    def shlex_join(split: str) -> str:
++        """Backport of `shlex.join` from Python 3.8."""
++        return " ".join(map(shlex.quote, split))
+ 
+ log = logging.getLogger(__name__)
+ 
+@@ -34,12 +42,12 @@ def condor_config_path() -> Path:
+     return Path.home() / ".condor" / user_config
+ 
+ 
+-def _match_config(args: list[str]) -> None:
++def _match_config(args: List[str]) -> None:
+     """Match the current HTCondor configuration against the given ``args``."""
+     found = _get_config(CONDOR_GETTOKEN_OPTS_PARAM)
+     foundargs = set(shlex.split(found))
+     if foundargs.symmetric_difference(args):
+-        argstr = shlex.join(args)
++        argstr = shlex_join(args)
+         msg = (
+            f"HTCondor user_config value for {CONDOR_GETTOKEN_OPTS_PARAM} "
+            f"in {condor_config_path()} doesn't match current options: "
+@@ -100,7 +108,7 @@ def condor_vault_storer(
+         *verbosearg,
+         oauth_service,
+     ]
+-    cmdstr = shlex.join(cmd)
++    cmdstr = shlex_join(cmd)
+     log.debug("$ %s", cmdstr)
+     try:
+         subprocess.check_call(cmd, shell=False)
+diff --git a/igwn_robot_auth/tools/core.py b/igwn_robot_auth/tools/core.py
+index bd61041..9f98b14 100644
+--- a/igwn_robot_auth/tools/core.py
++++ b/igwn_robot_auth/tools/core.py
+@@ -3,10 +3,13 @@
+ 
+ """Core utilities for IGWN Robot Auth tools."""
+ 
+-from __future__ import annotations
+-
+ import argparse
+ import logging
++from typing import (
++    Dict,
++    List,
++    Optional,
++)
+ 
+ __author__ = "Duncan Macleod <duncan.macleod@ligo.org>"
+ 
+@@ -56,9 +59,9 @@ class ArgumentParser(argparse.ArgumentParser):
+ 
+     def __init__(
+         self,
+-        version: str | None = None,
+-        man_short_description: str | None = None,
+-        manpage: list[dict[str, str]] | None = None,
++        version: Optional[str] = None,
++        man_short_description: Optional[str] = None,
++        manpage: Optional[List[Dict[str, str]]] = None,
+         **kwargs,
+     ) -> None:
+         """Initialise the `ArgumentParser`."""
+diff --git a/igwn_robot_auth/tools/get.py b/igwn_robot_auth/tools/get.py
+index 6dc7e7e..896d023 100644
+--- a/igwn_robot_auth/tools/get.py
++++ b/igwn_robot_auth/tools/get.py
+@@ -3,18 +3,20 @@
+ 
+ """Get credentials for an IGWN robot."""
+ 
+-from __future__ import annotations
+-
+ __author__ = "Duncan Macleod <duncan.macleod@ligo.org>"
+ 
+ import logging
+ import os
+-import typing
+ from datetime import (
+     datetime,
+     timezone,
+ )
+ from pathlib import Path
++from typing import (
++    List,
++    Optional,
++    Union,
++)
+ from unittest import mock
+ 
+ from igwn_auth_utils import (
+@@ -25,6 +27,7 @@ from igwn_auth_utils.scitokens import (
+     default_bearer_token_file,
+     load_token_file,
+ )
++from scitokens import SciToken
+ 
+ from igwn_robot_auth.htcondor import condor_vault_storer
+ from igwn_robot_auth.tools.core import (
+@@ -32,9 +35,6 @@ from igwn_robot_auth.tools.core import (
+     configure_logging,
+ )
+ 
+-if typing.TYPE_CHECKING:
+-    from scitokens import SciToken
+-
+ log = logging.getLogger(__name__)
+ 
+ DEFAULT_BEARER_TOKEN_FILE = default_bearer_token_file()
+@@ -95,17 +95,17 @@ def debug_token(token: SciToken) -> None:
+ # -- Python entry point
+ 
+ def get(
+-    principal: str | None = None,
+-    keytab: str | None = None,
++    principal: Optional[str] = None,
++    keytab: Optional[str] = None,
+     outfile: str = DEFAULT_BEARER_TOKEN_FILE,
+     issuer: str = DEFAULT_SCITOKEN_ISSUER,
+-    ccache: str | None = None,
+-    credkey: str | None = None,
+-    role: str | None = None,
++    ccache: Optional[str] = None,
++    credkey: Optional[str] = None,
++    role: Optional[str] = None,
+     minsecs: int = DEFAULT_MINSECS,
+     vaultserver: str = DEFAULT_VAULT_SERVER,
+-    vaulttokenfile: str | None = None,
+-    vaulttokenminttl: str | int = "24h",
++    vaulttokenfile: Optional[str] = None,
++    vaulttokenminttl: Union[str, int] = "24h",
+     *,
+     condor: bool = False,
+ ) -> None:
+@@ -358,7 +358,7 @@ def create_parser() -> ArgumentParser:
+ 
+ # -- main entry point
+ 
+-def main(args: list[str] | None = None) -> None:
++def main(args: Optional[List[str]] = None) -> None:
+     """Run this tool.
+ 
+     Parameters
+-- 
+2.39.5
+
