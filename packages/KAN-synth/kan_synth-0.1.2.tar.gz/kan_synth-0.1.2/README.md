@@ -1,0 +1,121 @@
+<p align="center">
+  <a href="https://pypi.org/project/KAN-synth/"><img src="https://img.shields.io/pypi/v/KAN-synth.svg?color=orange&label=pypi" alt="pypi"></a>
+  <img src="https://img.shields.io/pypi/dm/KAN-synth.svg?color=grey&label=downloads" alt="downloads">
+  <img src="https://img.shields.io/pypi/l/KAN-synth.svg?color=brightgreen&label=license" alt="license">
+  <img src="https://img.shields.io/pypi/pyversions/KAN-synth.svg?label=python" alt="python">
+</p>
+
+# Kolmogorov–Arnold Networks for Tabular Data Synthesis
+
+**KAN_synth** is an open-source Python package for generating high-fidelity synthetic tabular data using Kolmogorov–Arnold Networks (KANs). It extends the original [CTGAN](https://github.com/sdv-dev/CTGAN) and [TVAE](https://github.com/sdv-dev/CTGAN) models from the Synthetic Data Vault (SDV) by replacing their MLP-based architectures with KAN-based components. 
+
+This project was developed for research (undergraduate thesis) and practical evaluation of KAN-based generative models, particularly in comparison to traditional GANs and VAEs on tabular data synthesis tasks.
+
+## Overview
+
+The KAN_synth repository is structured into several components:
+
+### Models (`models/`)
+KAN-based generative models for tabular data:
+- **KAN_CTGAN**: Fully KAN-based implementation of CTGAN.
+- **HYBRID_KAN_CTGAN**: CTGAN with only the first layer replaced by KAN.
+- **Disc_KAN_CTGAN**: CTGAN with a KAN-based discriminator only.
+- **Gen_KAN_CTGAN**: CTGAN with a KAN-based generator only.
+- **KAN_TVAE**: Full KAN-based variant of TVAE.
+- **HYBRID_KAN_TVAE**: TVAE where one intermediate layer is replaced by a KAN block.
+
+### Evaluation Scripts (`benchmarks/`)
+Non-reusable scripts developed to:
+- Train and evaluate each model on various datasets.
+- Measure similarity and ML utility.
+- Aggregate and visualize results.
+
+### Data Generation Scripts (`data_gen/`)
+Standalone scripts for generating synthetic datasets using each model for internal benchmarking and experimentation purposes.
+
+### Utilities (`utilities/`)
+Functions to compute:
+- Overall similarity between real and synthetic datasets
+- Model evaluation metrics (MAE, RMSE, R² for regression; Accuracy, F1, etc. for classification)
+- Visualizations of ML utility scores across models
+
+### Tests (`test/`)
+Unit tests for model importability, synthetic generation routines, and ML pipeline sanity checks using `pytest`.
+
+The full model descriptions can be found in the thesis work at: [Not yet published].
+
+## Installation
+
+Once the package is published on [PyPI](https://pypi.org), it can be installed via `pip`:
+
+```bash
+pip install KAN-synth
+```
+
+All required packages are listed in `requirements.txt`, and will be automatically installed when using:
+
+```bash
+pip install -r requirements.txt
+```
+
+Since these models are based on the original CTGAN and TVAE architectures, the same data preprocessing principles apply:
+
+- Continuous columns must be represented as floats.
+- Discrete columns must be represented as integers or strings.
+- The input dataset should not contain any missing values.
+
+For additional details, refer to the original CTGAN repository: [https://github.com/sdv-dev/CTGAN](https://github.com/sdv-dev/CTGAN)
+
+### Local Development Installation
+if you'd like to install the package locally for development or experimentation:
+
+```bash
+git clone https://github.com/cris1618/KAN_synth.git
+cd KAN_synth
+pip install -e .
+```
+
+The `-e` flag installs the package in "editable" mode, meaning any changes you make to the code will immediately affect the installed version without needing to reinstall.
+
+## Usage Example
+Here's a minimal working example to train a KAN-based synthesizer and generate synthetic tabular data using the `KAN_CTGAN` model.
+
+```python
+from KAN_synth import KAN_CTGAN
+import pandas as pd
+
+# Load real tabular data (pandas DataFrame)
+df = pd.read_csv("your_dataset.csv")
+
+# Define the discrete columns (if any)
+discrete_columns = ["column_a", "column_b"]  # Modify as needed
+
+# Initialize the synthesizer
+synthesizer = KAN_CTGAN(
+    epochs=100, 
+    verbose=True, 
+    grid_size_gen=5,  
+    spline_order_gen=3,
+    grid_size_desc=5,
+    spline_order_desc=3
+)
+
+# Train the model on your data
+synthesizer.fit(df, discrete_columns)
+
+# Sample 1000 synthetic rows
+synthetic_data = synthesizer.sample(1000)
+
+# Save or explore the results
+synthetic_data.to_csv("synthetic_output.csv", index=False)
+```
+
+You can replace KAN_CTGAN with any of the other available models, such as:
+
+- `HYBRID_KAN_CTGAN`
+- `Disc_KAN_CTGAN`
+- `Gen_KAN_CTGAN`
+- `KAN_TVAE`
+- `HYBRID_KAN_TVAE`
+
+Each supports similar training and sampling APIs compatible with the original CTGAN and TVAE interfaces.
