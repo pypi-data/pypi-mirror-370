@@ -1,0 +1,280 @@
+Metadata-Version: 2.4
+Name: powerlogger
+Version: 0.0.1
+Summary: A high-performance, thread-safe logging library with Rich console output and UTF-8 support
+Home-page: https://github.com/kpandiyaraj/powerlogger
+Author: Pandiyaraj Karuppasamy
+Author-email: Pandiyaraj Karuppasamy <pandiyarajk@live.com>
+Maintainer-email: Pandiyaraj Karuppasamy <pandiyarajk@live.com>
+License: MIT
+Project-URL: Homepage, https://github.com/kpandiyaraj/powerlogger
+Project-URL: Documentation, https://github.com/kpandiyaraj/powerlogger#readme
+Project-URL: Repository, https://github.com/kpandiyaraj/powerlogger
+Project-URL: Bug Tracker, https://github.com/kpandiyaraj/powerlogger/issues
+Project-URL: Changelog, https://github.com/kpandiyaraj/powerlogger/blob/main/CHANGELOG.md
+Keywords: logging,rich,console,utf8,unicode,thread-safe,file-rotation,windows
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Logging
+Classifier: Topic :: Text Processing :: General
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: rich>=13.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: pytest-cov>=2.0; extra == "dev"
+Requires-Dist: black>=21.0; extra == "dev"
+Requires-Dist: flake8>=3.8; extra == "dev"
+Requires-Dist: mypy>=0.800; extra == "dev"
+Requires-Dist: build>=0.10.0; extra == "dev"
+Requires-Dist: twine>=4.0.0; extra == "dev"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
+# PowerLogger
+
+A high-performance, thread-safe logging library built with Python's logging module and enhanced with the Rich library for beautiful console output with full UTF-8 support.
+
+## Features
+
+- **Rich Console Output**: Beautiful, colored logging with the Rich library
+- **Thread-Safe Queue Logging**: Asynchronous, non-blocking log processing
+- **File Rotation**: Automatic log file rotation with size-based truncation
+- **UTF-8 Support**: Full Unicode and emoji support in log files
+- **Configuration Management**: Flexible configuration via `app_config.ini`
+- **Windows Optimized**: Special handling for Windows file access issues
+- **Multiple Logger Types**: Console-only, file-only, and combined loggers
+
+## Installation
+
+```bash
+pip install powerlogger
+```
+
+## Quick Start
+
+```python
+from powerlogger import get_logger
+
+# Create a basic logger
+logger = get_logger("my_app")
+
+# Log messages
+logger.info("Application started")
+logger.warning("This is a warning")
+logger.error("An error occurred")
+```
+
+## Logger Types
+
+### Basic Logger
+```python
+from powerlogger import get_logger
+
+logger = get_logger("app_name")
+```
+
+### File Logger with Rotation
+```python
+from powerlogger import get_logger_with_file_handler
+
+logger = get_logger_with_file_handler("app_name")
+```
+
+### Queue Logger (Thread-Safe)
+```python
+from powerlogger import get_logger_with_queue
+
+logger = get_logger_with_queue("app_name")
+```
+
+### Queue Logger with File Output
+```python
+from powerlogger import get_logger_with_queue_and_file
+
+logger = get_logger_with_queue_and_file("app_name")
+```
+
+## Configuration
+
+Create `app_config.ini` in your project root:
+
+```ini
+[app]
+name = my_app
+
+[logging]
+level = INFO
+format = %%(levelname)s %%(name)s - %%(message)s
+console_format = %%(levelname)s %%(message)s
+logs_dir = logs
+max_bytes = 10485760
+backup_count = 5
+queue_enabled = true
+queue_size = 100
+flush_interval = 0.1
+```
+
+### Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `level` | Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO |
+| `format` | Log message format for files | `%(levelname)s %(name)s - %(message)s` |
+| `console_format` | Log message format for console | `%(levelname)s %(message)s` |
+| `logs_dir` | Directory for log files | `logs` |
+| `max_bytes` | Maximum log file size before rotation | 1MB (1048576) |
+
+| `queue_enabled` | Enable thread-safe queue logging | true |
+| `queue_size` | Maximum queue size for log records | 100 |
+| `flush_interval` | Queue flush interval in seconds | 0.1 |
+
+## Log Rotation
+
+Log files automatically rotate when they reach the configured size limit. When rotation occurs, the current log file is truncated to start fresh, ensuring logs don't grow indefinitely while maintaining a single log file.
+
+## Thread Safety
+
+The queue-based loggers provide thread-safe logging by:
+
+- Buffering log records in a thread-safe queue
+- Processing logs in a dedicated worker thread
+- Non-blocking log emission
+- Configurable queue size and flush intervals
+
+## Usage Examples
+
+### Basic Application Logging
+```python
+from powerlogger import get_logger
+
+logger = get_logger("my_application")
+
+def main():
+    logger.info("Starting application")
+    
+    try:
+        # Your application logic here
+        logger.info("Application running successfully")
+    except Exception as e:
+        logger.error(f"Application error: {e}")
+    
+    logger.info("Application finished")
+
+if __name__ == "__main__":
+    main()
+```
+
+### Web Application with File Logging
+```python
+from powerlogger import get_logger_with_file_handler
+import time
+
+logger = get_logger_with_file_handler("web_app")
+
+def handle_request(request_id):
+    logger.info(f"Processing request {request_id}")
+    time.sleep(0.1)  # Simulate work
+    logger.info(f"Request {request_id} completed")
+
+# Simulate multiple requests
+for i in range(100):
+    handle_request(i)
+```
+
+### High-Performance Logging
+```python
+from powerlogger import get_logger_with_queue_and_file
+import threading
+import time
+
+logger = get_logger_with_queue_and_file("high_perf_app")
+
+def worker(worker_id):
+    for i in range(1000):
+        logger.info(f"Worker {worker_id}: Message {i}")
+        time.sleep(0.001)  # Very fast logging
+
+# Start multiple worker threads
+threads = []
+for i in range(5):
+    t = threading.Thread(target=worker, args=(i,))
+    t.start()
+    threads.append(t)
+
+# Wait for completion
+for t in threads:
+    t.join()
+
+# Clean up
+from powerlogger import cleanup_loggers
+cleanup_loggers()
+```
+
+## Performance Considerations
+
+- **Queue Size**: Smaller queue sizes (100-1000) provide better real-time logging
+- **Flush Interval**: Lower intervals (0.1-0.5s) reduce latency but increase CPU usage
+- **File Rotation**: Frequent rotation can impact performance on slower storage
+- **Thread Count**: More worker threads increase throughput but also resource usage
+
+## Troubleshooting
+
+### Console Colors Not Working
+Ensure your terminal supports ANSI color codes. For Windows, use Windows Terminal or enable ANSI support.
+
+### Log Files Not Rotating
+Check that:
+- File size exceeds `max_bytes` setting
+- `backup_count` is greater than 0
+- Application has write permissions to the logs directory
+
+### Queue Full Warnings
+Increase `queue_size` or reduce logging frequency if you see "queue is full" warnings.
+
+### File Access Errors on Windows
+The library includes special handling for Windows file access issues. If problems persist, ensure no other processes are accessing the log files.
+
+## API Reference
+
+### Functions
+
+- `get_logger(name, level, config_file)` - Basic Rich logger
+- `get_logger_with_file_handler(name, level, log_file, config_file)` - Logger with file output
+- `get_logger_with_queue(name, level, config_file)` - Thread-safe queue logger
+- `get_logger_with_queue_and_file(name, level, log_file, config_file)` - Complete solution
+- `cleanup_loggers()` - Clean up all loggers and handlers
+
+### Classes
+
+- `WindowsSafeRotatingFileHandler` - Windows-optimized file rotation
+- `ThreadSafeQueueHandler` - Asynchronous log processing
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
