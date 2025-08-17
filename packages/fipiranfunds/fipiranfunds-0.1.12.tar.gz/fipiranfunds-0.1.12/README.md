@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FipiranFunds Documentation</title>
+</head>
+<body>
+  <header>
+    <h1>FipiranFunds</h1>
+    <p lang="fa" dir="rtl">
+      کتابخانه‌ی پایتون برای دریافت و ذخیره‌سازی داده‌های معاملات و بازدهی صندوق‌ها از API فپیران (Fipiran) و خروجی گرفتن به CSV.  
+      این README شامل توضیحات به فارسی برای کاربران ایرانی و نمونه‌های کدنویسی کاربردی به انگلیسی است.
+    </p>
+  </header>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">پیش‌نیازها / Requirements</h2>
+    <p lang="fa">
+      نسخه‌ی پایتون: 3.8+<br />
+      الزامات اصلی:
+    </p>
+    <ul>
+      <li>requests &gt;= 2.25</li>
+      <li>pandas &gt;= 1.2</li>
+      <li>jdatetime &gt;= 3.6</li>
+      <li>beautifulsoup4</li>
+    </ul>
+    <p lang="fa">کتابخانه‌های اختیاری (برای امکانات بیشتر):</p>
+    <ul>
+      <li>pyodbc — برای اتصال و نوشتن در SQL Server (نیاز به نصب ODBC driver از مایکروسافت روی ویندوز)</li>
+      <li>pytse-client — در صورتی که بخواهید از داده‌های TSETMC استفاده کنید</li>
+      <li>tqdm — برای نوار پیشرفت (progress bar)</li>
+      <li>python-dateutil — کمک در پردازش تاریخ‌ها</li>
+    </ul>
+    <p>نصب سریع (پیشنهادی برای تمام امکانات):</p>
+    <pre><code>pip install fipiranfunds requests pandas jdatetime beautifulsoup4 pyodbc pytse-client tqdm python-dateutil</code></pre>
+    <p lang="fa">نکته برای pyodbc روی ویندوز:</p>
+    <ul>
+      <li>قبل از نصب pyodbc، در صورت نیاز درایور ODBC مایکروسافت را نصب کنید (مثلاً “Microsoft ODBC Driver 17 for SQL Server”).</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">نصب / Installation</h2>
+    <p lang="fa">برای استفاده ساده:</p>
+    <pre><code>pip install fipiranfunds</code></pre>
+    <p lang="fa">برای توسعه یا نصب آخرین نسخه از گیت‌هاب:</p>
+    <pre><code>pip install git+https://github.com/Kimiaslhd/fipiranfunds.git</code></pre>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">شروع سریع / Quick Start</h2>
+    <p lang="fa">
+      مثال تعاملی: برنامه از شما تاریخ شمسی می‌پرسد و خروجی CSV روی Desktop ذخیره می‌شود.
+    </p>
+    <pre><code>from fipiranfunds import export_fund_data
+
+export_fund_data()
+# برنامه از شما تاریخ شروع و پایان به فرمت شمسی YYYY/MM/DD را می‌پرسد
+# سپس فایل CSV خروجی روی Desktop ذخیره می‌شود
+</code></pre>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">خلاصه‌ی قابلیت‌ها / Usage overview</h2>
+    <ul>
+      <li>export_fund_data(): اجرای تعاملی، دریافت داده‌ها در بازه تاریخی و ذخیره به CSV (Desktop).</li>
+      <li>core.FundDataFetcher: کلاس برای استفاده‌ی برنامه‌نویسی (برگرداندن pandas.DataFrame).</li>
+      <li>utils.jalali_to_gregorian(date_str): تبدیل تاریخ شمسی به میلادی.</li>
+      <li>mapper.*: توابع داخلی برای نگاشت فیلدها از API به نام‌های دوستانه در CSV.</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">توابع و مثال‌ها / Functions &amp; Examples</h2>
+
+    <article>
+      <h3 lang="fa">export_fund_data()</h3>
+      <p lang="fa">
+        تابع راحت و تعاملی: از کاربر تاریخ‌های شروع و پایان شمسی می‌پرسد، آن‌ها را به میلادی تبدیل کرده، داده‌ها را از API فراخوانی می‌کند و CSV را ذخیره می‌کند.
+      </p>
+      <p>رفتار:</p>
+      <ul>
+        <li>اعتبارسنجی تاریخ ورودی (Jalali).</li>
+        <li>تلاش‌های مجدد (retries) در صورت بروز خطاهای موقتی شبکه.</li>
+        <li>چاپ وضعیت پیشرفت و مسیر نهایی فایل CSV.</li>
+      </ul>
+      <p>مثال:</p>
+      <pre><code>from fipiranfunds import export_fund_data
+
+export_fund_data()
+# Enter start date (Jalali YYYY/MM/DD): 1403/01/01
+# Enter end date (Jalali YYYY/MM/DD): 1403/01/05
+# Data saved to: C:\Users\<You>\Desktop\fipiran_export_2025-01-01_140501.csv
+</code></pre>
+    </article>
+
+    <article>
+      <h3 lang="fa">core.FundDataFetcher</h3>
+      <p lang="fa">برای کنترل برنامه‌نویسی و استفاده در ETL یا اسکریپت‌ها استفاده می‌شود. خروجی pandas.DataFrame است.</p>
+      <p>مثال:</p>
+      <pre><code>from fipiranfunds.core import FundDataFetcher
+from fipiranfunds.utils import jalali_to_gregorian
+
+fetcher = FundDataFetcher()
+start = jalali_to_gregorian("1403/01/01")
+end = jalali_to_gregorian("1403/01/31")
+df = fetcher.fetch_fund_data(start, end)
+
+print(df.head())
+df.to_csv("funds_local.csv", index=False)
+</code></pre>
+    </article>
+
+    <article>
+      <h3 lang="fa">utils.jalali_to_gregorian(date_str)</h3>
+      <p lang="fa">تبدیل رشته تاریخ شمسی "YYYY/MM/DD" به تاریخ میلادی یا رشته ISO "YYYY-MM-DD".</p>
+      <p>مثال:</p>
+      <pre><code>from fipiranfunds.utils import jalali_to_gregorian
+
+print(jalali_to_gregorian("1403/01/01"))  # مثال: "2024-03-21"
+</code></pre>
+    </article>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">ساختار CSV خروجی / Output CSV structure</h2>
+    <p>الگوی نام فایل:</p>
+    <ul>
+      <li>fipiranfunds_export_&lt;YYYYMMDD_HHMMSS&gt;.csv</li>
+    </ul>
+    <p>ستون‌های نمونه (ممکن است بسته به نسخه تغییر کنند):</p>
+    <ul>
+      <li>regNo, fundTitle, isCompleted, calcDate, licenseTitle, fundSize, fundType, initiationDate, dailyEfficiency, weeklyEfficiency, monthlyEfficiency, quarterlyEfficiency, sixMonthEfficiency, annualEfficiency, statisticalNav, efficiency, cancelNav, issueNav, dividendPeriodEfficiency, netAsset, unitBalance, accountsNo, articlesOfAssociationEfficiency</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">اتصال به SQL Server (اختیاری) / SQL Server connection (optional)</h2>
+    <p lang="fa">در صورتی که می‌خواهید خروجی‌ها را در دیتابیس بنویسید:</p>
+    <p>نمونه‌ی ساده‌ی اتصال و نوشتن pandas DataFrame با pyodbc:</p>
+    <pre><code>import pyodbc
+import pandas as pd
+
+conn_str = "DRIVER={ODBC Driver 17 for SQL Server};SERVER=192.168.1.131;DATABASE=LotusibBI;UID=user;PWD=pass"
+conn = pyodbc.connect(conn_str)
+cursor = conn.cursor()
+
+# فرض کنید df دیتا شما است
+# سریع‌ترین روش: df.to_csv(...) و سپس BULK INSERT یا از pandas.to_sql (با SQLAlchemy) استفاده کنید.
+</code></pre>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">نکات خطاها و راهنمایی‌ها / Troubleshooting &amp; tips</h2>
+    <ul>
+      <li>اگر با خطای تاریخ مواجه شدید، ورودی تاریخ را بررسی کنید؛ فرمت باید YYYY/MM/DD باشد.</li>
+      <li>اگر درخواست‌ها با خطای 500 یا ip-block مواجه شدند، چند دقیقه صبر کنید و دوباره امتحان کنید — سایت ممکن است شما را موقتاً محدود کند.</li>
+      <li>اگر از jdatetime استفاده می‌کنید و تداخل نسخه‌ای با سایر پکیج‌ها دارید، سعی کنید نسخه‌ای را انتخاب کنید که با دیگر بسته‌های شما سازگار باشد.</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">CLI (در صورت وجود) / CLI</h2>
+    <p>اگر پکیج شیوه‌ی خط فرمان را پشتیبانی کند:</p>
+    <pre><code>python -m fipiranfunds.cli
+# یا اگر console_script تعریف شده:
+fipiranfunds
+</code></pre>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">توسعه و مشارکت / Contributing</h2>
+    <ul>
+      <li>مسائل و درخواست‌ها (issues / PR) را در گیت‌هاب باز کنید: <a href="https://github.com/Kimiaslhd/fipiranfunds" target="_blank" rel="noopener noreferrer">https://github.com/Kimiaslhd/fipiranfunds</a></li>
+      <li>لطفاً قبل از ارسال PR، تست‌های محلی را اجرا و سبک کدنویسی را رعایت کنید.</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2 lang="fa">مجوز / License</h2>
+    <p>MIT</p>
+  </section>
+
+  <hr />
+
+  <footer>
+    <h2 lang="fa">نویسنده / Author &amp; Contact</h2>
+    <p>
+      Kimia Salehi Delarestaghi<br />
+      Email: <a href="mailto:kimiaslhd@gmail.com">kimiaslhd@gmail.com</a><br />
+      LinkedIn: <a href="https://www.linkedin.com/in/kimia-salehy-delarestaghy/" target="_blank" rel="noopener noreferrer">https://www.linkedin.com/in/kimia-salehy-delarestaghy/</a><br />
+      GitHub: <a href="https://github.com/Kimiaslhd/fipiranfunds" target="_blank" rel="noopener noreferrer">https://github.com/Kimiaslhd/fipiranfunds</a><br />
+      PyPI: <a href="https://pypi.org/project/fipiranfunds/" target="_blank" rel="noopener noreferrer">https://pypi.org/project/fipiranfunds/</a>
+    </p>
+  </footer>
+</body>
+</html>
