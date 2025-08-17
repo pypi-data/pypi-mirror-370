@@ -1,0 +1,215 @@
+Metadata-Version: 2.4
+Name: speak2py
+Version: 0.3.1
+Summary: Stateful natural-language → pandas/matplotlib, offline-first.
+Home-page: https://github.com/varunpuli/speak2py
+Author: Varun Pulipati
+Author-email: varunpulipati26@gmail.com
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pandas>=2.0
+Requires-Dist: matplotlib>=3.6
+Requires-Dist: openpyxl>=3.1
+Provides-Extra: local
+Dynamic: author
+Dynamic: author-email
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# speak2py v0.3.1 — English → Python (stateful, optional offline AI)
+
+[![PyPI version](https://img.shields.io/pypi/v/speak2py.svg)](https://pypi.org/project/speak2py/)
+[![Python versions](https://img.shields.io/pypi/pyversions/speak2py.svg)](https://pypi.org/project/speak2py/)
+[![Wheel](https://img.shields.io/pypi/wheel/speak2py.svg)](https://pypi.org/project/speak2py/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
+[![Downloads](https://img.shields.io/pypi/dm/speak2py?label=Downloads)](https://pypi.org/project/speak2py/)
+
+Turn plain English into executable Python. Works out-of-the-box for common data tasks; add a tiny local model (one-time download) to unlock **AI code generation** — **no keys, no cloud**.
+
+---
+
+## TL;DR Quickstart
+
+```bash
+pip install speak2py
+```
+
+```python
+from speak2py import speak2py
+
+# Zero-setup (no AI needed)
+df = speak2py('read "data/iris.csv" and head 5')
+
+# With AI (optional; see “Enable AI”)
+out = speak2py('create a function is_prime(n); return {n:is_prime(n) for n in [2,3,4,17]}')
+print(out)  # -> {2: True, 3: True, 4: False, 17: True}
+```
+
+---
+
+## Why speak2py?
+
+- **Data basics, instantly** — `read` / `head` / `describe` / `histogram` without setup.
+- **Stateful steps** — name results (e.g., `... as orders`) and reference them later.
+- **Charts** — ask for a plot, get a PNG file path back.
+- **Any Python (optional AI)** — generate & run small functions locally in a **sandbox**.
+- **Offline** — no API keys, no cloud, runs on your machine.
+
+---
+
+## Installation
+
+```bash
+pip install speak2py
+```
+
+Then immediately:
+
+```python
+from speak2py import speak2py
+print(speak2py('read "data/iris.csv" and describe'))
+```
+
+---
+
+## Enable AI (optional, no build)
+
+AI mode lets you ask for “any code”, not just data tasks. `speak2py` uses a tiny local **llama.cpp** server and a small **GGUF** model.
+
+- **Model (GGUF)** — e.g., TinyLlama (fast on CPU)
+- **Server binary** — `llama-server(.exe)` that runs locally
+- You **do not** compile anything.
+
+### Option A — One-time auto-download (recommended)
+
+Set these once, then run any `speak2py(...)`. Files are cached under your user folder and the server starts automatically.
+
+**Windows (PowerShell):**
+
+```powershell
+$env:SPEAK2PY_MODEL_URL        = "https://huggingface.co/datasets/Varunpulipati/speak2py-assets/resolve/main/default.gguf"
+$env:SPEAK2PY_LLAMA_SERVER_URL = "https://huggingface.co/datasets/Varunpulipati/speak2py-assets/resolve/main/win/llama-server.exe"
+python -c "from speak2py import speak2py; print(speak2py('1'))"
+```
+
+**macOS / Linux:**  
+Provide a macOS/Linux `llama-server` URL when available. Until then, use **Option B** to copy a local binary.
+
+```bash
+export SPEAK2PY_MODEL_URL="https://…/default.gguf"
+export SPEAK2PY_LLAMA_SERVER_URL="https://…/llama-server"
+python -c "from speak2py import speak2py; print(speak2py('1'))"
+```
+
+After the first run, **no internet or keys are required**. The local server starts automatically whenever you call `speak2py(...)`.
+
+### Option B — Manual copy (also simple)
+
+Place the two files yourself:
+
+**Model →**
+
+- Windows: `%USERPROFILE%\.cache\speak2py\models\default.gguf`
+- macOS/Linux: `~/.cache/speak2py/models/default.gguf`
+
+**Server binary →**
+
+- Windows: `%USERPROFILE%\.cache\speak2py\runtime\llama-server.exe`
+- macOS/Linux: `~/.cache/speak2py/runtime/llama-server` (then `chmod +x ~/.cache/speak2py/runtime/llama-server`)
+
+Then just use `speak2py(...)` — AI is on.
+
+---
+
+## Examples
+
+### Data (no AI required)
+
+```python
+from speak2py import speak2py
+
+speak2py('read "data/orders.csv" as orders and head 10')
+speak2py('filter orders where status == "shipped" and amount > 100 as shipped_big')
+speak2py('group shipped_big by region and sum amount as totals')
+png = speak2py('plot a bar chart of totals_amount by region from totals')
+print(png)  # -> path to saved image
+```
+
+### Any Python (with AI enabled)
+
+```python
+speak2py('create a function fib(n); return [fib(i) for i in range(8)]')
+speak2py('make a function is_palindrome(s); result = [is_palindrome(x) for x in ["aba","abc","abba"]]')
+```
+
+### Prefer to see the code without running it?
+
+```python
+from speak2py import speak2py_code
+code = speak2py_code('write a function fizzbuzz(n) and set result = [fizzbuzz(i) for i in range(1,21)]')
+print(code)
+```
+
+---
+
+## Configuration (env vars)
+
+| Variable                    | Default | Purpose                                                    |
+| --------------------------- | ------- | ---------------------------------------------------------- |
+| `SPEAK2PY_MODEL_URL`        | —       | URL to a `.gguf` model for auto-download (Option A).       |
+| `SPEAK2PY_LLAMA_SERVER_URL` | —       | URL to `llama-server` binary for auto-download (Option A). |
+| `SPEAK2PY_LLAMA_PORT`       | `11435` | Port for local llama.cpp server.                           |
+| `SPEAK2PY_MAX_TOKENS`       | `256`   | Upper bound on AI generation length.                       |
+| `SPEAK2PY_HTTP_TIMEOUT`     | `180`   | Timeout (s) for local server requests.                     |
+
+**Tips:** On slow CPUs, try `SPEAK2PY_MAX_TOKENS=200`. Behind a proxy? Set `HTTP(S)_PROXY` before the first run.
+
+---
+
+## Security model (sandbox)
+
+- Generated code runs with a **strict allowlist** (no arbitrary imports, file system, OS, or network).
+- The **final value must be assigned to `result`** to be returned.
+- If unsafe operations are attempted, the sandbox will block and return code instead of executing it.
+
+---
+
+## Troubleshooting
+
+- **“Model not found at …/default.gguf”** — Provide the model (Option A env vars or Option B manual copy).
+- **“Server binary not found at …/llama-server(.exe)”** — Same—provide the server URL/file.
+- **“invalid magic … expected GGUF”** — Your download isn’t a real GGUF (likely an HTML login page). Re-download; first 4 bytes should be `GGUF`.
+- **Slow results** — Keep the TinyLlama default and set `SPEAK2PY_MAX_TOKENS=200`.
+- **Code returned instead of running** — The sandbox blocked execution or the model wrapped output. Try again with: _“assign the final value to result and no extra text”_.
+
+---
+
+## Release maintainer notes (not for end users)
+
+Host two files somewhere static (e.g., Hugging Face Dataset):  
+`default.gguf` and `llama-server(.exe)`  
+Then document those URLs for `SPEAK2PY_MODEL_URL` and `SPEAK2PY_LLAMA_SERVER_URL`.
+
+**Windows URLs used today:**
+
+- **Model:** <https://huggingface.co/datasets/Varunpulipati/speak2py-assets/resolve/main/default.gguf>
+- **Server (Windows):** <https://huggingface.co/datasets/Varunpulipati/speak2py-assets/resolve/main/win/llama-server.exe>
+
+_For macOS/Linux, add corresponding `mac/llama-server` and/or `linux/llama-server` and document those URLs._
+
+---
+
+## Contributing
+
+Contributions welcome! Please open an issue or submit a pull request.
+
+## License
+
+MIT © 2025 Speak2Py Contributors
