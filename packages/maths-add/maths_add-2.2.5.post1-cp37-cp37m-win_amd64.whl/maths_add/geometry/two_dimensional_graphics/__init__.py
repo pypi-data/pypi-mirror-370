@@ -1,0 +1,3 @@
+import maths_add.geometry.two_dimensional_graphics.perimeter
+import maths_add.geometry.two_dimensional_graphics.circumference
+import maths_add.geometry.two_dimensional_graphics.area
