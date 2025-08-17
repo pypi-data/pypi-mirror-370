@@ -1,0 +1,1 @@
+from .dedsec_cli import cli
