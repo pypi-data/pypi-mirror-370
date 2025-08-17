@@ -1,0 +1,152 @@
+FipiranFunds
+کتابخانه‌ی پایتون برای دریافت و ذخیره‌سازی داده‌های معاملات و بازدهی صندوق‌ها از API فپیران (Fipiran) و خروجی گرفتن به CSV.
+
+این README دو بخش دارد: توضیحات فارسی برای کاربران ایرانی و نمونه‌های کدنویسی به انگلیسی که به سرعت قابل اجرا هستند.
+
+پیش‌نیازها (Requirements)
+نسخه‌ی پایتون: 3.8+
+
+الزامات اصلی (برای کارکرد پایه):
+
+requests >= 2.25
+pandas >= 1.2
+jdatetime >= 3.6
+beautifulsoup4
+کتابخانه‌های اختیاری (برای امکانات بیشتر):
+
+pyodbc — برای اتصال و نوشتن در SQL Server (نیاز به نصب ODBC driver از مایکروسافت روی ویندوز)
+pytse-client — در صورتی که بخواهید از داده‌های TSETMC استفاده کنید
+tqdm — برای نوار پیشرفت (progress bar)
+python-dateutil — کمک در پردازش تاریخ‌ها
+نصب سریع (پیشنهادی برای تمام امکانات):
+
+bash
+pip install fipiranfunds requests pandas jdatetime beautifulsoup4 pyodbc pytse-client tqdm python-dateutil
+نکته برای pyodbc روی ویندوز:
+
+قبل از نصب pyodbc، در صورت نیاز درایور ODBC مایکروسافت را نصب کنید (مثلاً “Microsoft ODBC Driver 17 for SQL Server”).
+نصب
+برای استفاده ساده:
+
+bash
+pip install fipiranfunds
+برای توسعه یا نصب آخرین نسخه از گیت‌هاب:
+
+bash
+pip install git+https://github.com/Kimiaslhd/fipiranfunds.git
+شروع سریع (Quick Start)
+مثال تعاملی (کاربر وارد تاریخ می‌شود و CSV روی دسکتاپ ذخیره می‌شود):
+
+python
+from fipiranfunds import export_fund_data
+
+export_fund_data()
+# برنامه از شما تاریخ شروع و پایان به فرمت شمسی YYYY/MM/DD را می‌پرسد
+# سپس فایل CSV خروجی روی Desktop ذخیره می‌شود
+خلاصه‌ی قابلیت‌ها (Usage overview)
+export_fund_data(): اجرای تعاملی، دریافت داده‌ها در بازه تاریخی و ذخیره به CSV (Desktop).
+core.FundDataFetcher: کلاس برای استفاده‌ی برنامه‌نویسی (برگرداندن pandas.DataFrame).
+utils.jalali_to_gregorian(date_str): تبدیل تاریخ شمسی به میلادی.
+mapper.*: توابع داخلی برای نگاشت فیلدها از API به نام‌های دوستانه در CSV.
+توابع و مثال‌ها (Functions & Examples)
+export_fund_data()
+توضیح:
+
+تابع راحت و تعاملی: از کاربر تاریخ‌های شروع و پایان شمسی می‌پرسد، آن‌ها را به میلادی تبدیل کرده، داده‌ها را از API فراخوانی می‌کند و CSV را ذخیره می‌کند.
+رفتار:
+
+اعتبارسنجی تاریخ ورودی (Jalali).
+تلاش‌های مجدد (retries) در صورت بروز خطاهای موقتی شبکه.
+چاپ وضعیت پیشرفت و مسیر نهایی فایل CSV.
+مثال:
+
+python
+from fipiranfunds import export_fund_data
+
+export_fund_data()
+# ورودی نمونه:
+# Enter start date (Jalali YYYY/MM/DD): 1403/01/01
+# Enter end date (Jalali YYYY/MM/DD): 1403/01/05
+# خروجی: Data saved to: C:\Users\<You>\Desktop\fipiran_export_2025-01-01_140501.csv
+بازگشت:
+
+معمولاً None؛ نتایج در CSV نوشته می‌شود. در صورت خطای جدی استثنا بالا می‌رود.
+core.FundDataFetcher
+توضیح:
+
+برای کنترل برنامه‌نویسی و استفاده در ETL یا اسکریپت‌ها استفاده می‌شود. خروجی pandas.DataFrame است.
+روش معمول:
+
+fetch_fund_data(start_date, end_date)
+مثال:
+
+python
+from fipiranfunds.core import FundDataFetcher
+from fipiranfunds.utils import jalali_to_gregorian
+
+fetcher = FundDataFetcher()
+start = jalali_to_gregorian("1403/01/01")  # => "2024-03-21" یا date object
+end = jalali_to_gregorian("1403/01/31")
+df = fetcher.fetch_fund_data(start, end)
+
+print(df.head())
+df.to_csv("funds_local.csv", index=False)
+نکات:
+
+ورودی‌های تاریخ می‌توانند رشته ISO یا شیء date باشند.
+fetcher توابع batching و retry را مدیریت می‌کند. پارامترهای مربوط به موازی‌سازی (workers) در صورت نیاز قابل تغییر است.
+utils.jalali_to_gregorian(date_str)
+توضیح:
+
+تبدیل رشته تاریخ شمسی “YYYY/MM/DD” به تاریخ میلادی یا رشته ISO “YYYY-MM-DD”.
+مثال:
+
+python
+from fipiranfunds.utils import jalali_to_gregorian
+
+print(jalali_to_gregorian("1403/01/01"))  # مثال: "2024-03-21"
+ساختار CSV خروجی
+الگوی نام فایل:
+
+fipiranfunds_export_<YYYYMMDD_HHMMSS>.csv
+ستون‌های نمونه (ممکن است بسته به نسخه تغییر کنند):
+
+regNo, fundTitle, isCompleted, calcDate, licenseTitle, fundSize, fundType, initiationDate, dailyEfficiency, weeklyEfficiency, monthlyEfficiency, quarterlyEfficiency, sixMonthEfficiency, annualEfficiency, statisticalNav, efficiency, cancelNav, issueNav, dividendPeriodEfficiency, netAsset, unitBalance, accountsNo, articlesOfAssociationEfficiency
+اتصال به SQL Server (اختیاری)
+در صورتی که می‌خواهید خروجی‌ها را در دیتابیس بنویسید:
+
+اطمینان حاصل کنید pyodbc نصب شده و ODBC Driver مایکروسافت روی سیستم وجود دارد.
+نمونه‌ی ساده‌ی اتصال و نوشتن pandas DataFrame با pyodbc:
+python
+import pyodbc
+import pandas as pd
+
+conn_str = "DRIVER={ODBC Driver 17 for SQL Server};SERVER=192.168.1.131;DATABASE=LotusibBI;UID=user;PWD=pass"
+conn = pyodbc.connect(conn_str)
+cursor = conn.cursor()
+
+# فرض کنید df دیتا شما است
+# سریع‌ترین روش: df.to_csv(...) و سپس BULK INSERT یا از pandas.to_sql (با SQLAlchemy) استفاده کنید.
+نکات خطاها و راهنمایی‌ها
+اگر با خطای تاریخ مواجه شدید، ورودی تاریخ را بررسی کنید؛ فرمت باید YYYY/MM/DD باشد.
+اگر درخواست‌ها با خطای 500 یا ip-block مواجه شدند، چند دقیقه صبر کنید و دوباره امتحان کنید — سایت ممکن است شما را موقتاً محدود کند.
+اگر از jdatetime استفاده می‌کنید و تداخل نسخه‌ای با سایر پکیج‌ها دارید، سعی کنید نسخه‌ای را انتخاب کنید که با دیگر بسته‌های شما سازگار باشد.
+CLI (در صورت وجود)
+در صورتی که پکیج شیوه‌ی خط فرمان نصب شده را پشتیبانی کند:
+
+bash
+python -m fipiranfunds.cli
+# یا اگر console_script تعریف شده:
+fipiranfunds
+توسعه و مشارکت
+مسائل و درخواست‌ها (issues / PR) را در گیت‌هاب باز کنید: https://github.com/Kimiaslhd/fipiranfunds
+لطفاً قبل از ارسال PR، تست‌های محلی را اجرا و سبک کدنویسی را رعایت کنید.
+مجوز (License)
+MIT
+
+نویسنده
+Kimia Salehi Delarestaghi
+
+GitHub: https://github.com/Kimiaslhd/fipiranfunds
+
+PyPI: https://pypi.org/project/fipiranfunds/
