@@ -1,0 +1,1 @@
+import{C as t}from"./CommingSoon-2BOtaPpA.js";import{d as o,a as s,c as a,e as n,h as c,w as r,f as i,t as m,j as _}from"./index-DOdIYOkR.js";const d={class:"mt-52"},l={class:"text-center"},C=o({__name:"AboutView",setup(p){const{t:e}=s();return(u,f)=>(n(),a("div",d,[c(t,null,{default:r(()=>[i("div",l,m(_(e)("common.developing")),1)]),_:1})]))}});export{C as default};
