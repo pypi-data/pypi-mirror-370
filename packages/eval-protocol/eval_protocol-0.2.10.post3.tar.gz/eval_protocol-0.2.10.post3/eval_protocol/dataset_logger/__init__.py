@@ -1,0 +1,3 @@
+from eval_protocol.dataset_logger.sqlite_dataset_logger_adapter import SqliteDatasetLoggerAdapter
+
+default_logger = SqliteDatasetLoggerAdapter()
