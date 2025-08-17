@@ -1,0 +1,459 @@
+# configmanager_hjy
+
+一个统一、高效、可靠的Python配置管理包，支持多种存储后端和验证机制。
+
+[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
+
+## 🚀 特性
+
+### 核心功能
+- **统一配置管理**: 提供简洁的API进行配置的获取、设置、更新和删除
+- **多存储后端**: 支持数据库、Redis、OSS等多种存储方式
+- **智能缓存系统**: 内存缓存 + Redis缓存，支持5种缓存策略
+- **配置验证**: 模式验证、类型验证、值验证三重保障
+- **实时监听**: 配置变更实时通知机制
+- **版本管理**: 配置版本控制和回滚功能
+
+### 缓存策略
+- **MEMORY_ONLY**: 仅使用内存缓存，性能最高
+- **REDIS_ONLY**: 仅使用Redis缓存，支持分布式
+- **MEMORY_FIRST**: 内存优先，Redis作为备份
+- **REDIS_FIRST**: Redis优先，内存作为本地缓存
+- **LAYERED**: 分层缓存，智能数据同步
+
+### 架构特点
+- **高内聚低耦合**: 模块化设计，易于扩展和维护
+- **云原生**: 支持云服务，具备故障恢复能力
+- **高性能**: 内存缓存性能优异，云Redis性能符合预期
+- **高可靠**: 完善的错误处理和健康检查机制
+
+## 📦 安装
+
+### 从源码安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/your-username/configmanager_hjy.git
+cd configmanager_hjy
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 安装包
+pip install -e .
+```
+
+### 从PyPI安装（即将发布）
+
+```bash
+pip install configmanager_hjy
+```
+
+## 🎯 快速开始
+
+### 基础使用
+
+```python
+from configmanager_hjy import ConfigManager
+
+# 初始化配置管理器
+config = ConfigManager({
+    'redis': {
+        'host': 'localhost',
+        'port': 6379,
+        'db': 0
+    },
+    'memory': {
+        'max_size': 1000,
+        'default_ttl': 300
+    }
+})
+
+# 设置配置
+config.set('app.name', 'MyApp')
+config.set('app.version', '1.0.0')
+config.set('database.url', 'mysql://localhost:3306/mydb')
+
+# 获取配置
+app_name = config.get('app.name')
+version = config.get_int('app.version')
+db_url = config.get('database.url')
+
+print(f"应用名称: {app_name}")
+print(f"版本: {version}")
+print(f"数据库URL: {db_url}")
+```
+
+### 缓存管理
+
+```python
+from configmanager_hjy.cache import CacheManager, CacheStrategy
+
+# 创建缓存管理器
+cache_manager = CacheManager(
+    redis_config={
+        'host': 'localhost',
+        'port': 6379,
+        'db': 0
+    },
+    memory_config={
+        'max_size': 1000,
+        'default_ttl': 300
+    },
+    strategy=CacheStrategy.REDIS_FIRST
+)
+
+# 缓存操作
+cache_manager.set('user:123', {'name': 'John', 'age': 30}, ttl=3600)
+user_data = cache_manager.get('user:123')
+cache_manager.delete('user:123')
+
+# 健康检查
+health = cache_manager.health_check()
+print(f"内存缓存状态: {health['memory']['status']}")
+print(f"Redis缓存状态: {health['redis']['status']}")
+```
+
+### 配置验证
+
+```python
+from configmanager_hjy.validators import SchemaValidator, TypeValidator, ValueValidator
+
+# 模式验证
+schema_validator = SchemaValidator()
+schema = {
+    'type': 'object',
+    'properties': {
+        'name': {'type': 'string'},
+        'age': {'type': 'integer', 'minimum': 0},
+        'email': {'type': 'string', 'format': 'email'}
+    },
+    'required': ['name', 'age']
+}
+
+data = {'name': 'John', 'age': 30, 'email': 'john@example.com'}
+is_valid = schema_validator.validate(data, schema)
+
+# 类型验证
+type_validator = TypeValidator()
+is_int = type_validator.validate(123, int)
+is_string = type_validator.validate("hello", str)
+
+# 值验证
+value_validator = ValueValidator()
+is_in_range = value_validator.validate(25, {'min': 0, 'max': 100})
+is_valid_email = value_validator.validate('test@example.com', {'format': 'email'})
+```
+
+## 📚 详细文档
+
+### 配置管理
+
+#### 基本操作
+
+```python
+# 设置配置
+config.set('key', 'value')
+config.set('key', 'value', ttl=3600)  # 设置TTL
+
+# 获取配置
+value = config.get('key')
+value = config.get('key', default='default_value')
+
+# 类型化获取
+int_value = config.get_int('key')
+float_value = config.get_float('key')
+bool_value = config.get_bool('key')
+json_value = config.get_json('key')
+
+# 删除配置
+config.delete('key')
+
+# 检查存在性
+exists = config.exists('key')
+```
+
+#### 配置监听
+
+```python
+def on_config_change(key, old_value, new_value):
+    print(f"配置变更: {key} = {old_value} -> {new_value}")
+
+# 监听配置变更
+config.watch('app.name', on_config_change)
+
+# 取消监听
+config.unwatch('app.name', on_config_change)
+```
+
+#### 版本管理
+
+```python
+# 获取版本
+version = config.get_version('key')
+
+# 回滚到指定版本
+config.rollback('key', version)
+
+# 获取历史记录
+history = config.get_history('key')
+```
+
+### 缓存管理
+
+#### 缓存策略
+
+```python
+# 内存优先策略
+cache_manager = CacheManager(
+    strategy=CacheStrategy.MEMORY_FIRST,
+    memory_config={'max_size': 1000},
+    redis_config={'host': 'localhost', 'port': 6379}
+)
+
+# Redis优先策略
+cache_manager = CacheManager(
+    strategy=CacheStrategy.REDIS_FIRST,
+    memory_config={'max_size': 1000},
+    redis_config={'host': 'localhost', 'port': 6379}
+)
+
+# 分层缓存策略
+cache_manager = CacheManager(
+    strategy=CacheStrategy.LAYERED,
+    memory_config={'max_size': 1000},
+    redis_config={'host': 'localhost', 'port': 6379}
+)
+```
+
+#### 高级操作
+
+```python
+# 批量操作
+cache_manager.set_many({
+    'key1': 'value1',
+    'key2': 'value2',
+    'key3': 'value3'
+})
+
+values = cache_manager.get_many(['key1', 'key2', 'key3'])
+
+# TTL操作
+ttl = cache_manager.get_ttl('key')
+cache_manager.set_ttl('key', 3600)
+
+# 统计信息
+stats = cache_manager.get_stats()
+print(f"命中率: {stats['memory_hit_rate']:.2f}%")
+print(f"总请求数: {stats['total_requests']}")
+
+# 清理缓存
+cache_manager.clear()
+```
+
+### 验证器
+
+#### 模式验证
+
+```python
+# 简单模式
+schema = {'type': 'string', 'minLength': 1, 'maxLength': 100}
+is_valid = schema_validator.validate("hello", schema)
+
+# 复杂模式
+schema = {
+    'type': 'object',
+    'properties': {
+        'name': {'type': 'string', 'minLength': 1},
+        'age': {'type': 'integer', 'minimum': 0, 'maximum': 150},
+        'email': {'type': 'string', 'format': 'email'},
+        'tags': {'type': 'array', 'items': {'type': 'string'}}
+    },
+    'required': ['name', 'age']
+}
+```
+
+#### 类型验证
+
+```python
+# 基本类型
+type_validator.validate(123, int)
+type_validator.validate(3.14, float)
+type_validator.validate("hello", str)
+type_validator.validate(True, bool)
+
+# 自定义类型
+from typing import List, Dict
+type_validator.validate([1, 2, 3], List[int])
+type_validator.validate({'key': 'value'}, Dict[str, str])
+```
+
+#### 值验证
+
+```python
+# 范围验证
+value_validator.validate(25, {'min': 0, 'max': 100})
+value_validator.validate(3.14, {'min': 0.0, 'max': 10.0})
+
+# 格式验证
+value_validator.validate('test@example.com', {'format': 'email'})
+value_validator.validate('2023-12-01', {'format': 'date'})
+value_validator.validate('123-456-7890', {'format': 'phone'})
+
+# 模式验证
+value_validator.validate('ABC123', {'pattern': r'^[A-Z]{3}\d{3}$'})
+
+# 枚举验证
+value_validator.validate('red', {'enum': ['red', 'green', 'blue']})
+```
+
+## 🧪 测试
+
+### 运行测试
+
+```bash
+# 运行所有测试
+pytest
+
+# 运行特定测试
+pytest tests/test_cache_manager.py
+
+# 运行性能测试
+pytest tests/test_performance.py
+
+# 运行真实环境测试
+pytest tests/test_real_redis.py
+```
+
+### 测试覆盖率
+
+```bash
+# 生成覆盖率报告
+pytest --cov=configmanager_hjy --cov-report=html
+
+# 查看覆盖率报告
+open htmlcov/index.html
+```
+
+## 📊 性能基准
+
+### 缓存性能测试结果
+
+| 测试项目 | 性能指标 | 要求 | 实际结果 | 状态 |
+|---------|---------|------|---------|------|
+| 内存缓存设置 | 吞吐量 | > 1000 ops/s | 11210 ops/s | ✅ |
+| 内存缓存获取 | 吞吐量 | > 10000 ops/s | 953468 ops/s | ✅ |
+| 云Redis设置 | 吞吐量 | > 10 ops/s | 24.82 ops/s | ✅ |
+| 云Redis获取 | 吞吐量 | > 20 ops/s | 24.64 ops/s | ✅ |
+| 网络延迟 | 延迟 | < 100ms | 40ms | ✅ |
+
+### 测试环境
+- **Python版本**: 3.13.3
+- **操作系统**: macOS
+- **Redis服务**: 阿里云Redis RDS
+- **测试框架**: pytest 8.4.1
+
+## 🔧 配置
+
+### 环境变量
+
+```bash
+# Redis配置
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=your_password
+
+# 数据库配置
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=your_user
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=your_database
+
+# OSS配置
+OSS_ACCESS_KEY_ID=your_access_key
+OSS_ACCESS_KEY_SECRET=your_secret_key
+OSS_ENDPOINT=your_endpoint
+OSS_BUCKET_NAME=your_bucket
+```
+
+### 配置文件
+
+```yaml
+# config.yaml
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+  password: your_password
+
+memory:
+  max_size: 1000
+  default_ttl: 300
+
+database:
+  host: localhost
+  port: 3306
+  user: your_user
+  password: your_password
+  database: your_database
+
+oss:
+  access_key_id: your_access_key
+  access_key_secret: your_secret_key
+  endpoint: your_endpoint
+  bucket_name: your_bucket
+```
+
+## 🤝 贡献
+
+我们欢迎所有形式的贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何参与项目开发。
+
+### 开发环境搭建
+
+```bash
+# 克隆仓库
+git clone https://github.com/your-username/configmanager_hjy.git
+cd configmanager_hjy
+
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# 或
+venv\Scripts\activate  # Windows
+
+# 安装开发依赖
+pip install -r requirements-dev.txt
+
+# 运行测试
+pytest
+
+# 代码格式化
+black configmanager_hjy tests
+
+# 代码检查
+flake8 configmanager_hjy tests
+```
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+
+## 🙏 致谢
+
+感谢所有为这个项目做出贡献的开发者和用户！
+
+## 📞 支持
+
+如果您遇到问题或有任何建议，请：
+
+1. 查看 [文档](docs/)
+2. 搜索 [Issues](https://github.com/your-username/configmanager_hjy/issues)
+3. 创建新的 [Issue](https://github.com/your-username/configmanager_hjy/issues/new)
+
+---
+
+**configmanager_hjy** - 让配置管理变得简单而强大！
