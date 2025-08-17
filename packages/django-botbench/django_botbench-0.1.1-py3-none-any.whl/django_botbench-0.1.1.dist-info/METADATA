@@ -1,0 +1,145 @@
+Metadata-Version: 2.4
+Name: django-botbench
+Version: 0.1.1
+Summary: A Django app for integrating RoboOp-powered chat sessions.
+Author-email: Alan Rowarth <alan@codex.cx>
+License-Expression: MIT
+Project-URL: Repository, https://github.com/ajrowr/BotBench
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 4.0
+Classifier: Framework :: Django :: 4.1
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+Requires-Dist: channels-redis>=4.3.0
+Requires-Dist: daphne>=4.2.1
+Requires-Dist: django-channels>=0.7.0
+Requires-Dist: roboop>=0.6.0
+Dynamic: license-file
+
+
+## BotBench
+
+BotBench is a sister project to [RoboOp](https://github.com/ajrowr/RoboOp) - a microframework for rapid development of Claude-powered agents, applications and assistants. If you haven't had a look at RoboOp yet, go do that now to get a sense of what's possible, and be sure and check out the [Cookbook](https://github.com/ajrowr/RoboOp/blob/master/docs/cookbook.md)! :)
+
+BotBench offers handy boilerplate to plug RoboOp bots into the web via a Django app that can embed iframe-based chat sessions in webpages. Or you can just use it as a web-based frontend to RoboOp. Note that it's currently fairly experimental - it's not considered production-ready and may not yet play nicely with other websocket-based Django applications.
+
+## Setting up
+
+To set up a development environment with Botbench, start by installing into your Django project's virtualenv (or that of a fresh Django project if you just want to use the frontend without adding it to an existing project):
+
+```sh
+pip install django-botbench
+```
+
+In the `settings.py`:
+
+```python
+INSTALLED_APPS = [
+    'daphne',
+    'django_botbench',
+    # ... existing installed apps here
+]
+
+...
+
+ASGI_APPLICATION = '<your-project-name>.asgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)]
+        },
+    },
+}
+
+BOTBENCH_BOT = 'django_botbench.bots.Bot' # a default Bot with no system prompt for quick start
+BOTBENCH_CHATLOGS_DIR = BASE_DIR / 'chatlogs' # for conversation persistence
+```
+
+Make sure the path you nominated for `BOTBENCH_CHATLOGS_DIR` is a writable directory.
+
+Then, in `urls.py`:
+
+```python
+# ... existing imports
+from django.urls import path, include
+from django_botbench import views as bb_views
+
+...
+
+urlpatterns = [
+    # ... existing URL patterns
+    path('chat/', include('django_botbench.urls')),
+    path('example/', bb_views.embed_example, name='embed_example'), # optional, see explanation below
+ ]
+```
+
+The `embed_example` view gives an example of embedding an `iframe`-based chat box in a webpage. You can adapt this for pages on an existing site or just use it as-is for a quick way to get interacting with your bots.
+
+Next, edit `asgi.py`:
+
+```python
+# ... add the following lines to the end of asgi.py
+from django_botbench.asgi import configure_asgi
+
+application = configure_asgi(application)
+```
+
+Finally, you'll need a Redis (as alluded to in the `CHANNEL_LAYERS` config above). Easiest is to spin one up with Docker:
+
+```sh
+docker run --rm -p 6379:6379 redis:7
+```
+
+Now you should be good to launch the dev server - 
+
+```sh
+# in your Django dir
+./manage.py runserver
+```
+
+If you've used the above setup (and obtained and configured an Anthropic API key as per the RoboOp docs) then you should be able to navigate to `http://localhost:8000/example/` and see a chatbox waiting for your input.
+
+## Using custom bots
+
+You can pretty much set your custom bots up wherever you like as long as it's on the `PYTHONPATH`. Let's say you decide to add a `bots.py` to the top level of your Django project, like so:
+
+```python
+# bots.py
+from robo import Bot
+
+class EnthusiasticBot(Bot):
+    sysprompt_text = """You are an enthusiastic chatbot who is excited about everything and really 
+                        enjoys using emojis in your chats with users."""
+    welcome_message = """Hi there! What's cookin'?"""
+    soft_start = True
+    
+```
+
+You can then specify this chatbot from `settings.py`:
+```python
+BOTBENCH_BOT = 'bots.EnthusiasticBot'
+```
+
+Or in the command environment when launching the development server:
+```sh
+BOTBENCH_BOT='bots.EnthusiasticBot' ./manage.py runserver
+```
+
+## Frontend-specific Bot attributes
+
+Notice that we've used a couple of attributes on the `EnthusasticBot` class which aren't mentioned in the [Cookbook](https://github.com/ajrowr/RoboOp/blob/master/docs/cookbook.md).
+
+* `welcome_message` is used to show a starting message in the chatbox. Note that this is not generated by the model (even though for UX reasons it comes in as chunks as if it were) - the model isn't engaged until a message is sent by the user.
+* `soft_start` is related - when the first message in the conversation is sent by the user, if `soft_start` is set then the conversation history will start with the `welcome_message`, which in effect "tricks" the model into thinking that it started the conversation by saying what's in the welcome message. This can help to set the tone (but your mileage may vary - tone should principally be the domain of the system prompt). 
+
+If you don't set a welcome message, then a default one will be displayed in the chatbox.
+
