@@ -1,0 +1,1 @@
+from .paste_to_clipboard import PasteToClipboard
