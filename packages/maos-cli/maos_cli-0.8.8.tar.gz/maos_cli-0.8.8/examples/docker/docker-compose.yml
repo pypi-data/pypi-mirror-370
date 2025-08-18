@@ -1,0 +1,184 @@
+version: '3.8'
+
+services:
+  # MAOS Backend API Service
+  maos-api:
+    build:
+      context: ../..
+      dockerfile: examples/docker/Dockerfile
+      target: production
+    container_name: maos-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MAOS_ENV=production
+      - LOG_LEVEL=INFO
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - SECURITY_REQUIRE_ENCRYPTION=true
+      - SECURITY_REQUIRE_AUTH=true
+    volumes:
+      - maos_data:/app/data
+      - maos_logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - maos-network
+
+  # Redis for caching and message queuing
+  redis:
+    image: redis:7-alpine
+    container_name: maos-redis
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - maos-network
+
+  # PostgreSQL for persistent storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: maos-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=maos
+      - POSTGRES_USER=maos
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-maos_password}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maos -d maos"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - maos-network
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: maos-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - maos-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: maos-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    restart: unless-stopped
+    networks:
+      - maos-network
+
+  # NGINX reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: maos-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - maos-api
+    restart: unless-stopped
+    networks:
+      - maos-network
+
+  # Development services (use with docker-compose.dev.yml)
+  maos-dev:
+    build:
+      context: ../..
+      dockerfile: examples/docker/Dockerfile
+      target: development
+    container_name: maos-dev
+    ports:
+      - "8001:8000"
+    environment:
+      - MAOS_ENV=development
+      - LOG_LEVEL=DEBUG
+      - REDIS_HOST=redis
+      - SECURITY_REQUIRE_ENCRYPTION=false
+      - SECURITY_REQUIRE_AUTH=false
+    volumes:
+      - ../../src:/app/src
+      - ../../examples:/app/examples
+      - ../../config:/app/config
+      - ../../tests:/app/tests
+      - maos_dev_data:/app/data
+    depends_on:
+      - redis
+    restart: "no"
+    profiles:
+      - development
+    networks:
+      - maos-network
+
+volumes:
+  maos_data:
+    driver: local
+  maos_logs:
+    driver: local
+  maos_dev_data:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  maos-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
