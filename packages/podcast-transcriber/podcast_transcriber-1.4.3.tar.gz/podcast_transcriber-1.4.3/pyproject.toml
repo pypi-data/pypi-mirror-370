@@ -1,0 +1,130 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "podcast-transcriber"
+version = "1.4.3"
+description = "CLI tool to transcribe podcasts from a URL using pluggable services (Whisper, AWS, GCP)."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Johan Caripson" }]
+license = { text = "MIT" }
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+aws = ["boto3>=1.28.0"]
+gcp = ["google-cloud-speech>=2.24.0"]
+whisper = ["openai-whisper>=20231117"]
+docs = ["mkdocs>=1.5.0", "mkdocs-material>=9.1.0"]
+dev = [
+  "pytest>=7.4.0",
+  "black>=23.0.0",
+  "ruff>=0.4.0",
+  "pytest-cov>=4.1.0",
+]
+export = ["fpdf2>=2.7.0", "ebooklib>=0.18", "Pillow>=9.5.0"]
+docx = ["python-docx>=0.8.11"]
+orchestrator = ["PyYAML>=6.0"]
+ingest = ["feedparser>=6.0.10"]
+nlp = ["sentence-transformers>=2.2.2"]
+scheduler = ["APScheduler>=3.10.4"]
+templates = ["Jinja2>=3.1.2"]
+env = ["python-dotenv>=1.0.0"]
+
+[project.scripts]
+podcast-transcriber = "podcast_transcriber.cli:main"
+podcast-cli = "podcast_transcriber.orchestrator:main"
+podcast-auto-run = "podcast_transcriber.flows.auto_run:main"
+
+[project.entry-points."podcast_transcriber.services"]
+whisper = "podcast_transcriber.services:WhisperService"
+aws = "podcast_transcriber.services:AWSTranscribeService"
+gcp = "podcast_transcriber.services:GCPSpeechService"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+include = "src|tests"
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+extend-exclude = [
+  "site",
+  ".venv",
+  "tests/test_cli_config_fallback.py",
+  "tests/test_exporters_docx_more.py",
+  "tests/test_exporters_pdf_more.py",
+  "tests/test_ingestion_more.py",
+  "tests/test_nlp_segment_topics.py",
+  "tests/test_export_book_other_formats.py",
+  "tests/test_services_gcp_requires_pkg.py",
+  "tests/test_services_plugins_bad_factory.py",
+  "tests/test_services_aws_missing_bucket.py",
+  "tests/test_services_plugins_old_api.py",
+  "tests/test_templates_render_error.py",
+  "tests/test_orchestrator_load_yaml_errors.py",
+  "tests/test_orchestrator_process_semantic_takeaways.py",
+  "tests/test_orchestrator_quality_and_ingest.py",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+]
+ignore = [
+  "E501", # line length handled by Black; permit long help strings
+  "UP045", # keep Optional[X] for Python 3.9 compatibility
+  "UP006", # built-in generics optional for now
+  "UP035", # typing.* deprecated aliases optional for now
+  "I001",  # import sort minor friction; handled gradually
+]
+
+[tool.coverage.run]
+branch = true
+source = ["podcast_transcriber"]
+omit = [
+  "src/podcast_transcriber/__main__.py",
+  "src/podcast_transcriber/exporters/themes.py",
+  "src/podcast_transcriber/services/whisper.py",
+  "src/podcast_transcriber/delivery/send_to_kindle.py",
+  # Integration-heavy or CLI entry modules that are hard to cover fully in CI
+  "src/podcast_transcriber/orchestrator.py",
+  "src/podcast_transcriber/cli.py",
+  "src/podcast_transcriber/ingestion/feed.py",
+  "src/podcast_transcriber/nlp/segment_topics.py",
+  "src/podcast_transcriber/services/aws_transcribe.py",
+  "src/podcast_transcriber/services/gcp_speech.py",
+  "src/podcast_transcriber/exporters/exporter.py",
+  "src/podcast_transcriber/utils/downloader.py",
+  "src/podcast_transcriber/storage/state.py",
+  "src/podcast_transcriber/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+  "except Exception:",
+  "pass",
+]
