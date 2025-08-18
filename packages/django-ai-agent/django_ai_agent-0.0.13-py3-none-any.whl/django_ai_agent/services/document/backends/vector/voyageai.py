@@ -1,0 +1,7 @@
+from django_ai_agent.services.embedding import VoyageAIEmbeddingService
+
+from .abstract import AbstractVectorStoreDocumentBackend
+
+
+class VoyageAIVectorStoreDocumentBackend(AbstractVectorStoreDocumentBackend):
+    _embedding_service: VoyageAIEmbeddingService
