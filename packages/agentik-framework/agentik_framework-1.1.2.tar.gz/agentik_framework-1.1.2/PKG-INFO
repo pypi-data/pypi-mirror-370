@@ -1,0 +1,771 @@
+Metadata-Version: 2.4
+Name: agentik-framework
+Version: 1.1.2
+Summary: Agentik — a CLI-first, modular agent framework that runs LLMs via OpenRouter.
+Author-email: Vinay Joshi <joshivinay822@gmail.com>, Avinash Raghuvanshi <avi95461@gmail.com>
+License: MIT
+Keywords: agents,cli,llm,openrouter,framework,automation
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Utilities
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENCE
+Requires-Dist: typer>=0.12.3
+Requires-Dist: rich>=13.7.1
+Requires-Dist: pydantic>=2.7
+Requires-Dist: pyyaml>=6.0.1
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: jinja2>=3.1.3
+Requires-Dist: jsonschema>=4.22.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.2; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: ruff>=0.5.5; extra == "dev"
+Requires-Dist: black>=24.4.2; extra == "dev"
+Requires-Dist: build>=1.2.1; extra == "dev"
+Requires-Dist: twine>=5.1.1; extra == "dev"
+Requires-Dist: mypy>=1.10; extra == "dev"
+Dynamic: license-file
+
+# Agentik
+
+A CLI‑first, modular agent framework that runs LLMs via **OpenRouter**. Agentik focuses on developer ergonomics: clean YAML configs, a batteries‑included CLI, safe tool execution, rich transcripts, and a **dev watcher** for rapid iteration.
+
+---
+
+## Highlights
+
+* **CLI‑first workflow:** `agentik run`, `agentik dev watch`, `agentik tools ...`
+* **OpenRouter integration:** one key → many models
+* **Agent loop:** *plan → (optional tool) → reflect → finalize*
+* **Pluggable tooling** (via entry points) with built‑ins:
+
+  * `http_fetch` — GET with caching + limits
+  * `html_to_text` — HTML → text
+  * `write_file` — safe file writer
+* **Policies** enforced per tool call: `allow_network`, `allow_filesystem`
+* **Transcripts:** JSONL with timing, token stats, tags, cost estimates
+* **Run profiles:** `fast`, `thorough`, `deterministic`, `creative`, `cheap`, `dev`
+* **Dev watcher:** auto‑rerun on save (no extra deps)
+* **Memory:** file‑backed minimal memory (`json`) or in‑memory `dict`
+
+---
+
+## Prerequisites
+
+* **Python 3.10+**
+
+---
+
+## Installation
+
+### 1) Install the package
+
+**Windows (PowerShell)**
+
+```powershell
+pip install agentik-framework
+```
+
+**macOS/Linux**
+
+```bash
+pip install agentik-framework
+```
+
+> For local development inside the repo:
+>
+> ```bash
+> pip install -e .[dev]
+> ```
+
+### 2) Set your OpenRouter API key (one‑time)
+
+**Windows (PowerShell)**
+
+```powershell
+setx OPENROUTER_API_KEY "sk-or-XXXXXXXXXXXXXXXX"
+# reopen your PowerShell window afterwards
+```
+
+**macOS/Linux (bash/zsh)**
+
+```bash
+echo 'export OPENROUTER_API_KEY="sk-or-XXXXXXXXXXXXXXXX"' >> ~/.bashrc
+source ~/.bashrc   # or: source ~/.zshrc
+```
+
+Or store via Agentik’s RC:
+
+```powershell
+agentik keys set openrouter sk-or-XXXXXXXXXXXXXXXX --global
+```
+
+### 3) Verify your setup
+
+**Windows (PowerShell)**
+
+```powershell
+agentik self-test
+agentik models list --filter gpt --refresh   # optional
+```
+
+**macOS/Linux**
+
+```bash
+agentik self-test
+agentik models list --filter gpt --refresh
+```
+
+---
+
+## Quick Start
+
+### A) Initialize a project
+
+**Windows (PowerShell)**
+
+```powershell
+mkdir my-agent; cd my-agent
+agentik init . --template basic --name "My Agent Project"
+```
+
+**macOS/Linux**
+
+```bash
+mkdir my-agent && cd my-agent
+agentik init . --template basic --name "My Agent Project"
+```
+
+### B) Scaffold an agent
+
+**PowerShell**
+
+```powershell
+agentik new agent research `
+  --template basic `
+  --tools http_fetch,html_to_text,write_file `
+  --with-tests `
+  --to .
+```
+
+**macOS/Linux**
+
+```bash
+agentik new agent research \
+  --template basic \
+  --tools http_fetch,html_to_text,write_file \
+  --with-tests \
+  --to .
+```
+
+### C) Minimal config (paste into `agents/agent.yaml`)
+
+```yaml
+agent:
+  name: ResearchBot
+  goal: "Research and summarize information."
+  loop:
+    max_steps: 3
+    reflect: true
+
+llm:
+  model: openai/gpt-4o-mini
+  temperature: 0.3
+
+memory:
+  type: json
+  path: ./memory/research.json
+
+policies:
+  allow_network: true
+  allow_filesystem: true
+
+tools:
+  - http_fetch
+  - html_to_text
+  - write_file
+```
+
+### D) Run your agent
+
+**PowerShell**
+
+```powershell
+agentik run .\agents\agent.yaml `
+  -p "Summarize the main differences between GPT-4o and small LLMs in 5 bullets." `
+  --profile fast `
+  --stream `
+  --save-transcript .\runs\first-run.jsonl
+```
+
+**macOS/Linux**
+
+```bash
+agentik run ./agents/agent.yaml \
+  -p "Summarize the main differences between GPT-4o and small LLMs in 5 bullets." \
+  --profile fast \
+  --stream \
+  --save-transcript ./runs/first-run.jsonl
+```
+
+### E) Use the dev watcher (auto re‑run on file save)
+
+> PowerShell tip: **quote your globs** (e.g., `'**/*.py'`) to avoid expansion.
+
+**PowerShell**
+
+```powershell
+agentik dev watch .\agents\agent.yaml `
+  --prompt "Summarize this project in 3 bullets." `
+  --path . `
+  --include '**/*.py' --include '**/*.yaml' --include 'templates/**' `
+  --exclude '.venv/**' --exclude 'runs/**' `
+  --save-transcripts .\runs `
+  --profile dev `
+  --stream
+```
+
+**macOS/Linux**
+
+```bash
+agentik dev watch ./agents/agent.yaml \
+  --prompt "Summarize this project in 3 bullets." \
+  --path . \
+  --include '**/*.py' --include '**/*.yaml' --include 'templates/**' \
+  --exclude '.venv/**' --exclude 'runs/**' \
+  --save-transcripts ./runs \
+  --profile dev \
+  --stream
+```
+
+### F) Run tools directly (no agent loop)
+
+**PowerShell**
+
+```powershell
+agentik tools run http_fetch --arg url=https://example.com --arg ttl=3600 --arg allow_network=true --json
+agentik tools run html_to_text --arg "html=<p>Hello</p>" --arg keep_newlines=true --json
+agentik tools run write_file --arg path=out\hello.txt --arg "content=Hello" --arg allow_filesystem=true --json
+```
+
+**macOS/Linux**
+
+```bash
+agentik tools run http_fetch --arg url=https://example.com --arg ttl=3600 --arg allow_network=true --json
+agentik tools run html_to_text --arg 'html=<p>Hello</p>' --arg keep_newlines=true --json
+agentik tools run write_file --arg path=out/hello.txt --arg 'content=Hello' --arg allow_filesystem=true --json
+```
+
+### G) Memory helpers
+
+**PowerShell**
+
+```powershell
+agentik memory init --type json --path .\memory\agentik.json
+agentik memory recall --n 10 --config .\agents\agent.yaml
+agentik memory summarize --n 20 --max-chars 1200 --config .\agents\agent.yaml
+```
+
+**macOS/Linux**
+
+```bash
+agentik memory init --type json --path ./memory/agentik.json
+agentik memory recall --n 10 --config ./agents/agent.yaml
+agentik memory summarize --n 20 --max-chars 1200 --config ./agents/agent.yaml
+```
+
+### H) Batch prompts from a file
+
+**PowerShell**
+
+```powershell
+agentik batch run .\prompts.jsonl --column prompt --out .\results.jsonl --model openai/gpt-4o-mini
+```
+
+**macOS/Linux**
+
+```bash
+agentik batch run ./prompts.jsonl --column prompt --out ./results.jsonl --model openai/gpt-4o-mini
+```
+
+`prompts.jsonl` example:
+
+```json
+{"prompt": "Write a haiku about summer."}
+{"prompt": "One sentence on the solar eclipse."}
+```
+
+---
+
+## CLI Reference (Concise)
+
+### `agentik version`
+
+Print the current CLI version.
+
+### `agentik self-test`
+
+Environment checks (Python, OS, OpenRouter key, RC path).
+
+### `agentik init`
+
+Initialize a project directory.
+
+```bash
+agentik init [PATH] --template basic --force --name "Project Name"
+```
+
+### `agentik new`
+
+Scaffold from templates.
+
+* **Agent**
+
+**PowerShell**
+
+```powershell
+agentik new agent NAME `
+  --template basic `
+  --tools "t1,t2" `
+  --memory json `
+  --memory-path ./memory/agent.json `
+  --to . `
+  --with-tests `
+  --force
+```
+
+**macOS/Linux**
+
+```bash
+agentik new agent NAME \
+  --template basic \
+  --tools "t1,t2" \
+  --memory json \
+  --memory-path ./memory/agent.json \
+  --to . \
+  --with-tests \
+  --force
+```
+
+* **Tool**
+
+**PowerShell**
+
+```powershell
+agentik new tool NAME `
+  --template python `
+  --to . `
+  --with-tests `
+  --force
+```
+
+**macOS/Linux**
+
+```bash
+agentik new tool NAME \
+  --template python \
+  --to . \
+  --with-tests \
+  --force
+```
+
+### `agentik template`
+
+**PowerShell**
+
+```powershell
+agentik template list
+
+agentik template apply kind/name `
+  --to . `
+  --force `
+  --name MyArtifact
+
+agentik template pull <git-or-zip-url> `
+  --to .
+```
+
+**macOS/Linux**
+
+```bash
+agentik template list
+
+agentik template apply kind/name \
+  --to . \
+  --force \
+  --name MyArtifact
+
+agentik template pull <git-or-zip-url> \
+  --to .
+```
+
+### `agentik run`
+
+Run the agent loop with profiles and run metadata.
+
+**PowerShell**
+
+```powershell
+agentik run CONFIG `
+  -p "Prompt text" `
+  --model TEXT `
+  --temperature FLOAT `
+  --stream `
+  --dry-run `
+  --save-transcript PATH `
+  --profile [fast|thorough|deterministic|creative|cheap|dev|none] `
+  --tag TAG `
+  --note TEXT `
+  --run-id TEXT `
+  --obs-max-chars INT
+```
+
+**macOS/Linux**
+
+```bash
+agentik run CONFIG \
+  -p "Prompt text" \
+  --model TEXT \
+  --temperature FLOAT \
+  --stream \
+  --dry-run \
+  --save-transcript PATH \
+  --profile [fast|thorough|deterministic|creative|cheap|dev|none] \
+  --tag TAG \
+  --note TEXT \
+  --run-id TEXT \
+  --obs-max-chars INT
+```
+
+### `agentik dev watch`
+
+Watch files and auto‑rerun.
+
+**PowerShell**
+
+```powershell
+agentik dev watch CONFIG `
+  -p "Prompt text" `
+  --prompt-file PATH `
+  --path PATH `            # repeatable (default .)
+  --include GLOB `         # repeatable
+  --exclude GLOB `         # repeatable
+  --interval 0.6 `
+  --debounce 0.5 `
+  --clear/--no-clear `
+  --stream/--no-stream `
+  --profile dev `
+  --save-transcripts DIR `
+  --obs-max-chars 800 `
+  --no-initial-run `
+  --tag TAG `              # repeatable
+  --note TEXT
+```
+
+**macOS/Linux**
+
+```bash
+agentik dev watch CONFIG \
+  -p "Prompt text" \
+  --prompt-file PATH \
+  --path PATH \            # repeatable (default .)
+  --include GLOB \         # repeatable
+  --exclude GLOB \         # repeatable
+  --interval 0.6 \
+  --debounce 0.5 \
+  --clear/--no-clear \
+  --stream/--no-stream \
+  --profile dev \
+  --save-transcripts DIR \
+  --obs-max-chars 800 \
+  --no-initial-run \
+  --tag TAG \              # repeatable
+  --note TEXT
+```
+
+### `agentik keys`
+
+**PowerShell**
+
+```powershell
+agentik keys set openrouter sk-or-... [--global|--local]
+agentik keys show
+```
+
+**macOS/Linux**
+
+```bash
+agentik keys set openrouter sk-or-... [--global|--local]
+agentik keys show
+```
+
+### `agentik models`
+
+**PowerShell**
+
+```powershell
+agentik models list [--filter TEXT] [--refresh]
+```
+
+**macOS/Linux**
+
+```bash
+agentik models list [--filter TEXT] [--refresh]
+```
+
+### `agentik tools`
+
+**PowerShell**
+
+```powershell
+agentik tools list
+agentik tools info NAME
+
+agentik tools run NAME `
+  --arg key=value `
+  --arg key2=value2 `
+  [--json]
+```
+
+**macOS/Linux**
+
+```bash
+agentik tools list
+agentik tools info NAME
+
+agentik tools run NAME \
+  --arg key=value \
+  --arg key2=value2 \
+  [--json]
+```
+
+### `agentik validate`
+
+**PowerShell**
+
+```powershell
+agentik validate file CONFIG.yaml `
+  --show-effective `
+  --model TEXT `
+  --temperature FLOAT `
+  --max-steps INT
+```
+
+**macOS/Linux**
+
+```bash
+agentik validate file CONFIG.yaml \
+  --show-effective \
+  --model TEXT \
+  --temperature FLOAT \
+  --max-steps INT
+```
+
+### `agentik batch`
+
+Process prompts from CSV/JSONL.
+
+**PowerShell**
+
+```powershell
+agentik batch run FILE `
+  --column prompt `
+  --out results.jsonl `
+  --model TEXT `
+  --temperature FLOAT
+```
+
+**macOS/Linux**
+
+```bash
+agentik batch run FILE \
+  --column prompt \
+  --out results.jsonl \
+  --model TEXT \
+  --temperature FLOAT
+```
+
+### `agentik memory`
+
+**PowerShell**
+
+```powershell
+agentik memory init --type json --path ./memory/agentik.json
+agentik memory recall --n 10 [--config CONFIG.yaml]
+agentik memory summarize --n 20 --max-chars 1200 [--config CONFIG.yaml]
+agentik memory clear [--config CONFIG.yaml]
+agentik memory path [--config CONFIG.yaml]
+```
+
+**macOS/Linux**
+
+```bash
+agentik memory init --type json --path ./memory/agentik.json
+agentik memory recall --n 10 [--config CONFIG.yaml]
+agentik memory summarize --n 20 --max-chars 1200 [--config CONFIG.yaml]
+agentik memory clear [--config CONFIG.yaml]
+agentik memory path [--config CONFIG.yaml]
+```
+
+### `agentik eval`
+
+Tiny harness to check expected substrings/regex.
+
+**PowerShell**
+
+```powershell
+agentik eval run FILE.jsonl `
+  --config CONFIG.yaml `
+  --out eval_results.jsonl
+```
+
+**macOS/Linux**
+
+```bash
+agentik eval run FILE.jsonl \
+  --config CONFIG.yaml \
+  --out eval_results.jsonl
+```
+
+### `agentik config`
+
+Locate RC paths.
+
+**PowerShell**
+
+```powershell
+agentik config path --global
+agentik config path --local
+```
+
+**macOS/Linux**
+
+```bash
+agentik config path --global
+agentik config path --local
+```
+
+---
+
+## Built‑in Tools & Policies
+
+**Selected built‑ins**
+
+* `http_fetch(url, ttl, timeout, max_bytes, headers, allow_network)` → `{ok, data, error, meta}` with `data.text`, `data.status`, cache hints
+* `html_to_text(html, keep_newlines, drop_links, max_chars)` → plaintext
+* `write_file(path, content, encoding, overwrite, allow_abs, allow_filesystem)` → safe writer with sandboxing/system‑path guards
+
+**Policies (YAML)**
+
+```yaml
+policies:
+  allow_network: true
+  allow_filesystem: false
+```
+
+If a tool requires a disabled capability, Agentik blocks it and records an observation.
+
+---
+
+## Transcripts & Cost
+
+Each run can append JSONL records via `--save-transcript`. A transcript includes:
+
+* `meta_start`: run id, profile, tags, agent, model, policies, memory path
+* Tool calls and assistant responses
+* `meta_end`: timings (planner/tools/reflect), tokens (prompt/completion/total), **estimated cost**
+
+Override pricing via env vars (USD per 1K tokens):
+**PowerShell**
+
+```powershell
+$env:AGENTIK_PRICE_PROMPT_PER_1K = "0.50"
+$env:AGENTIK_PRICE_COMPLETION_PER_1K = "1.50"
+```
+
+**macOS/Linux**
+
+```bash
+export AGENTIK_PRICE_PROMPT_PER_1K="0.50"
+export AGENTIK_PRICE_COMPLETION_PER_1K="1.50"
+```
+
+---
+
+## Configuration Reference
+
+```yaml
+agent:
+  name: my-agent
+  goal: "Help with tasks."
+  loop:
+    max_steps: 4
+    reflect: true
+
+llm:
+  model: openai/gpt-4o-mini
+  temperature: 0.2
+
+memory:
+  type: json         # json | dict
+  path: ./memory/agent.json
+
+policies:
+  allow_network: true
+  allow_filesystem: false
+
+tools:
+  - http_fetch
+  - html_to_text
+```
+
+---
+
+## Troubleshooting
+
+* **“Network error talking to OpenRouter.”** Confirm your key in the current shell:
+
+  * PowerShell: `echo $env:OPENROUTER_API_KEY`
+  * macOS/Linux: `echo $OPENROUTER_API_KEY`
+    Then try: `agentik models list --refresh`. Behind a proxy? Set `HTTP_PROXY`/`HTTPS_PROXY`.
+
+* **Dev watcher: “unexpected extra arguments …”**
+
+  * Quote globs in PowerShell: `--include '**/*.py'` (single quotes).
+
+* **Edited code but CLI didn’t change?**
+
+  * Reinstall editable: `pip install -e .[dev]` from project root.
+
+---
+
+## Development
+
+* **Lint/format:** `ruff check .` and `black .`
+* **Tests:** `pytest -q`
+* **Build:** `python -m build`
+* **Publish:** `twine upload dist/*`
+
+---
+
+## Authors
+
+* Vinay Joshi — [joshivinay822@gmail.com](mailto:joshivinay822@gmail.com)
+* Avinash Raghuvanshi — [avi95461@gmail.com](mailto:avi95461@gmail.com)
+
+## License
+
+[MIT](LICENSE)
+
+---
+
+**Happy building with Agentik!**
