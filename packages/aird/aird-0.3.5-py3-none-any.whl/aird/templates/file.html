@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ filename }}</title>
+    <meta id="page-flags" data-open-editor="{{ open_editor }}">
+    <style>
+        body {
+            background-color: white;
+            color: black;
+            font-family: monospace;
+        }
+        .header {
+            border-bottom: 2px solid black;
+            padding: 10px 0;
+            margin-bottom: 10px;
+        }
+        .breadcrumb a {
+            color: black;
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        .download-btn, button {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            background-color: white;
+            color: black;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid black;
+            font-family: monospace;
+            margin: 0;
+        }
+        .download-btn:hover, button:hover {
+            background-color: #f0f0f0;
+        }
+        .toolbar { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            gap: 10px; 
+            flex-wrap: wrap; 
+            margin: 10px 0;
+            padding: 8px 0;
+        }
+        .toolbar-left, .toolbar-right { 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+        }
+        .toolbar input[type="text"] {
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .line-numbers {
+            text-align: right;
+            
+            border-right: 1px solid #ccc;
+            user-select: none;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        td pre {
+            margin: 0;
+            padding: 0;
+        }
+        /* Hide line numbers when toggled */
+        .line-numbers.hidden {
+            display: none;
+        }
+        /* Ensure content takes full width when line numbers are hidden */
+        .line-numbers.hidden + td {
+            padding-left: 0;
+        }
+        /* Ensure empty lines are visible */
+        td pre {
+            min-height: 1.2em;
+        }
+        #editor-container {
+            display: flex;
+            height: 60vh;
+        }
+        #line-numbers-editor {
+            width: 40px;
+            padding: 5px 5px 5px 2px; /* top, right, bottom, left */
+            text-align: right;
+            background-color: #f0f0f0;
+            color: #999;
+            border: 1px solid #ccc;
+            border-right: none;
+            overflow-y: hidden;
+            resize: none;
+            font-family: monospace;
+            font-size: 1em;
+            line-height: 1.2em;
+        }
+        #editor {
+            width: calc(100% - 40px);
+            height: 100%; /* Fill the container */
+            border: 1px solid #ccc;
+            resize: none;
+            font-family: monospace;
+            font-size: 1em;
+            line-height: 1.2em;
+            padding: 5px;
+        }
+        .streaming-indicator span {
+            animation: blink 1.4s infinite both;
+        }
+        .streaming-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .streaming-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes blink {
+            0%, 80%, 100% {
+                opacity: 0;
+            }
+            40% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="breadcrumb">
+            <a href="/files/">🏠 Home</a>
+        </div>
+    </div>
+    <h2>{{ filename }}</h2>
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <a href="/files/{{ path }}?download=1" class="download-btn" data-feature="file_download">Download</a>
+                <button id="copy-btn">Copy Content</button>
+                <button id="toggle-lines-btn">Hide Line Numbers</button>
+                <button id="edit-btn" data-feature="file_edit">Edit</button>
+                <button id="save-btn" style="display:none;">Save</button>
+            </div>
+            <div class="toolbar-right">
+                <input type="text" id="last-n" inputmode="numeric" pattern="[0-9]*" placeholder="Last N (100)">
+                <button id="stream-btn">▶ Stream</button>
+                <button id="stop-stream-btn" style="display:none;">⏹ Stop</button>
+            </div>
+        </div>
+
+    
+    <div style="margin: 10px 0; padding: 10px; border: 1px solid #ccc; background-color: #f9f9f9;">
+        <label for="start">Start:</label>
+        <input type="text" id="start" value="{{ start_line or 1 }}" style="width: 80px; margin-right: 10px;" title="Press Enter to submit">
+        <label for="end">End:</label>
+        <input type="text" id="end" value="{{ end_line or 100 }}" style="width: 80px; margin-right: 10px;" title="Press Enter to submit">
+        <button id="submit-btn">Submit</button>
+    <button id="show-all-btn">Show All</button>
+    {% if start_line and end_line %}
+    <span style="margin-left: 10px; color: #0066cc;">Showing lines {{ start_line }} to {{ end_line }} ; reached EOF: {{ reached_EOF }}</span>
+    {% end %}
+    </div>
+    <hr>
+    <div id="editor-container" style="display:none;">
+        <textarea id="line-numbers-editor" readonly></textarea>
+        <textarea id="editor">{% if open_editor %}{{ full_file_content }}{% end %}</textarea>
+    </div>
+    <table id="file-content">
+        <tbody>
+            {% for item in lines %}
+            <tr>
+                <td class="line-numbers">{{ item['n'] }}</td>
+                <td><pre>{{ item['text'] or '\u00A0' }}</pre></td>
+            </tr>
+            {% end %}
+        </tbody>
+        <tfoot id="streaming-indicator" style="display:none;">
+            <tr>
+                <td class="line-numbers streaming-indicator">
+                    <span>.</span><span>.</span><span>.</span>
+                </td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+    <script>
+    const openEditor = (document.getElementById('page-flags')?.dataset.openEditor || 'False') === 'True';
+    const streamBtn = document.getElementById('stream-btn');
+    const lastNInput = document.getElementById('last-n');
+    const stopStreamBtn = document.getElementById('stop-stream-btn');
+    const copyBtn = document.getElementById('copy-btn');
+    const toggleLinesBtn = document.getElementById('toggle-lines-btn');
+    const editBtn = document.getElementById('edit-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const submitBtn = document.getElementById('submit-btn');
+    const showAllBtn = document.getElementById('show-all-btn');
+    const startLineInput = document.getElementById('start');
+    const endLineInput = document.getElementById('end');
+    const editorContainer = document.getElementById('editor-container');
+    const editor = document.getElementById('editor');
+    const lineNumbersEditor = document.getElementById('line-numbers-editor');
+    const tableBody = document.querySelector('#file-content tbody');
+    const streamingIndicator = document.getElementById('streaming-indicator');
+    let ws = null;
+    let originalContent = tableBody.innerHTML;
+    let lineCount = tableBody.rows.length;
+    let lineNumbersVisible = true;
+
+    const featureSocket = new WebSocket(`ws://${window.location.host}/features`);
+
+    featureSocket.onmessage = function(event) {
+        const features = JSON.parse(event.data);
+        updateFeatureVisibility(features);
+    };
+
+    function updateFeatureVisibility(features) {
+        document.querySelectorAll('[data-feature]').forEach(el => {
+            const feature = el.dataset.feature;
+            if (features[feature]) {
+                el.style.display = '';
+            } else {
+                el.style.display = 'none';
+            }
+        });
+    }
+
+    function updateLineNumbers() {
+        const lineCount = editor.value.split('\n').length;
+        const lines = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+        lineNumbersEditor.value = lines;
+        lineNumbersEditor.scrollTop = editor.scrollTop;
+    }
+
+    editor.addEventListener('scroll', () => {
+        lineNumbersEditor.scrollTop = editor.scrollTop;
+    });
+
+    editor.addEventListener('input', updateLineNumbers);
+
+    // Handle line range functionality
+    function applyLineRange() {
+        const startLine = parseInt(startLineInput.value);
+        const endLine = parseInt(endLineInput.value);
+        
+        if (!Number.isFinite(startLine) || !Number.isFinite(endLine) || startLine < 1) {
+            alert('Please enter valid numeric start and end values (start >= 1).');
+            return;
+        }
+        if (startLine > endLine) {
+            alert('Start line cannot be greater than end line');
+            return;
+        }
+        
+        const currentUrl = new URL(window.location);
+        currentUrl.searchParams.set('start_line', startLine);
+        currentUrl.searchParams.set('end_line', endLine);
+        window.location.href = currentUrl.toString();
+    }
+
+    submitBtn.onclick = applyLineRange;
+
+    // Allow Enter key to apply range
+    startLineInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            applyLineRange();
+        }
+    });
+
+    endLineInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            applyLineRange();
+        }
+    });
+
+    showAllBtn.onclick = function() {
+        const currentUrl = new URL(window.location);
+        currentUrl.searchParams.delete('start_line');
+        currentUrl.searchParams.delete('end_line');
+        window.location.href = currentUrl.toString();
+    };
+
+    // Update end line input when start line changes
+    // Keep fields sane locally but let server clamp to file length
+    startLineInput.addEventListener('input', function() {
+        const v = parseInt(this.value);
+        if (!Number.isFinite(v) || v < 1) this.value = 1;
+    });
+    endLineInput.addEventListener('input', function() {
+        const v = parseInt(this.value);
+        if (!Number.isFinite(v) || v < 1) this.value = 1;
+    });
+
+
+    editBtn.onclick = function() {
+        window.location.href = `/edit/{{ path }}`;
+    };
+
+    saveBtn.onclick = function() {
+        const content = editor.value;
+        fetch('/edit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `path={{ path }}&content=${encodeURIComponent(content)}`
+        })
+        .then(response => response.text())
+        .then(data => {
+            alert(data);
+            if (data === "File saved successfully.") {
+                window.location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while saving the file.');
+        });
+    };
+
+    streamBtn.onclick = function() {
+        let url = `ws://${window.location.host}/stream/{{ path }}`;
+        const nVal = (lastNInput?.value || '').trim();
+        if (nVal && /^\d+$/.test(nVal)) {
+            url += `?n=${nVal}`;
+        }
+        ws = new WebSocket(url);
+        tableBody.innerHTML = '';
+    lineCount = (parseInt('{{ start_line or 1 }}') - 1) || 0;
+        streamBtn.style.display = 'none';
+        stopStreamBtn.style.display = '';
+        streamingIndicator.style.display = '';
+        ws.onmessage = function(event) {
+            // Server sends one line per message, including trailing \n
+            let line = event.data;
+            if (line.endsWith('\n')) line = line.slice(0, -1);
+
+            lineCount++;
+            const row = tableBody.insertRow();
+
+            // Always create both cells to maintain structure
+            const lineNumCell = row.insertCell(0);
+            const lineContentCell = row.insertCell(1);
+
+            lineNumCell.className = 'line-numbers';
+            lineNumCell.textContent = lineCount;
+            // Ensure empty lines are preserved by using non-breaking space if line is empty
+            lineContentCell.innerHTML = `<pre>${line || '\u00A0'}</pre>`;
+
+            // Apply line number visibility state to new rows
+            if (!lineNumbersVisible) {
+                lineNumCell.classList.add('hidden');
+            }
+
+            // Apply alternating row styling for dynamically added rows
+            if (lineCount % 2 === 1) {
+                row.style.backgroundColor = '#f8f8f8';
+            }
+
+            // Debug: Log row creation
+            console.log(`Created row ${lineCount} with ${row.cells.length} cells, line numbers visible: ${lineNumbersVisible}, line content: "${line}"`);
+            window.scrollTo(0, document.body.scrollHeight);
+        };
+        ws.onclose = function() {
+            stopStreamBtn.style.display = 'none';
+            streamBtn.style.display = '';
+            streamingIndicator.style.display = 'none';
+            ws = null;
+        };
+    };
+
+    stopStreamBtn.onclick = function() {
+        if (ws) {
+            ws.close();
+        }
+    };
+
+    toggleLinesBtn.onclick = function() {
+        const lineNumberCells = document.querySelectorAll('.line-numbers');
+        lineNumbersVisible = !lineNumbersVisible;
+        
+        lineNumberCells.forEach(cell => {
+            if (lineNumbersVisible) {
+                cell.classList.remove('hidden');
+            } else {
+                cell.classList.add('hidden');
+            }
+        });
+        
+        // Reapply alternating row highlighting after toggling line numbers
+        const rows = tableBody.querySelectorAll('tr');
+        rows.forEach((row, index) => {
+            if (index % 2 === 0) {
+                row.style.backgroundColor = '';
+            } else {
+                row.style.backgroundColor = '#f8f8f8';
+            }
+        });
+        
+        // Debug: Log the current state
+        console.log('Line numbers visible:', lineNumbersVisible);
+        console.log('Total rows:', rows.length);
+        
+        toggleLinesBtn.textContent = lineNumbersVisible ? 'Hide Line Numbers' : 'Show Line Numbers';
+    };
+
+    copyBtn.onclick = function () {
+        const content = Array.from(tableBody.rows).map(row => {
+            // Get the content cell - it's either cells[1] (with line numbers) or cells[0] (without line numbers)
+            const contentCell = lineNumbersVisible ? row.cells[1] : row.cells[0];
+            return contentCell.textContent;
+        }).join('\n');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(content).then(() => {
+                alert('Content copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy content: ', err);
+            });
+        } else {
+            // Fallback for unsupported browsers
+            const textarea = document.createElement('textarea');
+            textarea.value = content;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                alert('Content copied to clipboard!');
+            } catch (err) {
+                alert('Failed to copy content');
+            }
+            document.body.removeChild(textarea);
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Apply alternating row highlighting on page load
+        const rows = tableBody.querySelectorAll('tr');
+        rows.forEach((row, index) => {
+            if (index % 2 === 1) {
+                row.style.backgroundColor = '#f8f8f8';
+            }
+        });
+        // Enforce numeric-only input
+        lastNInput?.addEventListener('input', () => {
+            lastNInput.value = lastNInput.value.replace(/[^0-9]/g, '');
+        });
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('stream')) {
+            streamBtn.click();
+        }
+    // Dedicated edit view now handles editor UI
+    });
+    </script>
+</body>
+</html>
