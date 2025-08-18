@@ -1,0 +1,68 @@
+.. _spkg_singular_jupyter:
+
+singular_jupyter: Jupyter kernel for Singular
+=============================================
+
+Description
+-----------
+
+This is a beta version of a jupyter kernel for Singular.
+
+License
+-------
+
+GPL version 2 or later
+
+
+Upstream Contact
+----------------
+
+-  https://github.com/sebasguts/jupyter_kernel_singular
+
+
+Type
+----
+
+optional
+
+
+Dependencies
+------------
+
+- $(PYTHON)
+- $(PYTHON_TOOLCHAIN)
+- :ref:`spkg_ipython`
+- :ref:`spkg_ipywidgets`
+- :ref:`spkg_jupyter_client`
+- :ref:`spkg_sagemath_singular`
+
+Version Information
+-------------------
+
+package-version.txt::
+
+    0.9.9
+
+version_requirements.txt::
+
+    jupyter-kernel-singular
+
+Equivalent System Packages
+--------------------------
+
+.. tab:: conda-forge:
+
+   .. CODE-BLOCK:: bash
+
+       $ conda install jupyter-kernel-singular
+
+.. tab:: Fedora/Redhat/CentOS:
+
+   .. CODE-BLOCK:: bash
+
+       $ sudo dnf install python3-jupyter-kernel-singular
+
+# See https://repology.org/project/jupyter-singular/versions, https://repology.org/project/python:jupyter-kernel-singular/versions
+
+If the system package is installed and if the (experimental) option
+``--enable-system-site-packages`` is passed to ``./configure``, then ``./configure`` will check if the system package can be used.
