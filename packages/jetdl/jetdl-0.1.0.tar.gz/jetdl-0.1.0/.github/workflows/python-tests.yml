@@ -1,0 +1,63 @@
+name: Run JetDL Tests
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  test:
+    name: Test on ${{ matrix.runner }} with Python ${{ matrix.python-version }}
+    strategy:
+      matrix:
+        runner:
+          - ubuntu-latest
+          - macos-latest
+        python-version:
+          - 3.11
+          - 3.12
+          - 3.13
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm gdb
+          sudo apt-get install -y build-essential cmake
+          sudo apt-get install -y libopenblas-dev
+          sudo apt-get install pybind11-dev
+
+      - name: Install build dependencies (MacOS)
+        if: runner.os == 'MacOS'
+        run: |
+          brew install llvm openblas cmake
+  
+      - name: Install dependencies
+        run: |
+          pip install -U pip
+          pip install -r requirements.txt
+          
+      - name: Build shared library(s)
+        run: |
+          pip install -e .
+          
+      - name: Run tests
+        run: | 
+          pytest -v --disable-warnings
