@@ -1,0 +1,138 @@
+![Aydie Banner](https://aydie.in/banner.jpg)
+
+# aydie-prompt-forge
+
+[![PyPI version](https://badge.fury.io/py/aydie-prompt-forge.svg)](https://badge.fury.io/py/aydie-prompt-forge)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Versions](https://img.shields.io/pypi/pyversions/aydie-prompt-forge.svg)](https://pypi.org/project/aydie-prompt-forge/)
+
+**A modern toolkit for creating, managing, and testing LLM prompts as code.**
+
+---
+
+`aydie-prompt-forge` is a lightweight but powerful Python library designed to bring standard software engineering discipline to the world of prompt engineering. It helps you move away from messy, hardcoded strings and manage your prompts in a structured, version-controlled, and testable way.
+
+This library is part of the **Aydie** family of developer tools.
+
+## Why `aydie-prompt-forge`?
+
+In modern AI applications, prompts are not just text—they are a critical part of your application's logic. They deserve to be treated like code. `aydie-prompt-forge` provides the framework to do just that.
+
+- **Reliability & Reproducibility**: Stop guessing how a prompt change will affect your app. With a structured repository, you can version and test your prompts to ensure consistent, high-quality outputs.
+- **Improved Collaboration**: Enable product managers, developers, and QA engineers to collaborate seamlessly. Prompts are defined in simple, human-readable YAML files, separate from the application code.
+- **Increased Efficiency**: Automate the loading, templating, and management of your prompts. Spend less time on boilerplate and more time on crafting the perfect prompt.
+- **Robust Error Handling**: With custom, branded exceptions (`AydieException`), you can write clean, predictable error-handling logic for all prompt-related operations.
+
+## Core Features
+
+- **Structured Prompt Repository**: Define all your prompts in a clean, simple `YAML` file with rich metadata like `version`, `author`, `tags`, and `description`.
+- **Powerful Templating**: Easily load prompts and fill them with dynamic data using a simple, intuitive `.fill()` method.
+- **Version Control Friendly**: Because your prompts are stored as text, you can use Git to track changes, review diffs, and manage your prompt history just like any other codebase.
+- **Lightweight & Dependency-Free**: With only `PyYAML` as a dependency, `aydie-prompt-forge` is easy to add to any project without unnecessary bloat.
+
+## Installation
+
+You can install `aydie-prompt-forge` directly from PyPI:
+
+```bash
+pip install aydie-prompt-forge
+```
+
+## Quick Start Guide
+
+Getting started with `aydie-prompt-forge` is easy.
+
+### 1. Create your `prompts.yml` file
+
+First, create a `prompts.yml` file to store your prompts. This file should contain a list of prompt objects.
+
+**`prompts.yml`:**
+```yaml
+- id: summarize_article_v1.1
+  author: "Aydie"
+  version: "1.1"
+  description: "Summarizes a long article into three concise bullet points."
+  tags: [summarization, production]
+  model_parameters:
+    temperature: 0.6
+    max_tokens: 150
+  template: |
+    You are a world-class editor. Summarize the following article into
+    exactly three concise bullet points.
+
+    ARTICLE:
+    ---
+    {article_text}
+    ---
+
+- id: sentiment_analysis_v1
+  author: "Aydie"
+  version: "1.0"
+  description: "Analyzes the sentiment of a user's comment."
+  tags: [classification, beta]
+  template: "Is the sentiment of the following comment positive, negative, or neutral?\n\nCOMMENT: {user_comment}"
+```
+
+### 2. Load and use your prompts in Python
+
+Now, you can use the `load()` function to parse your repository and use your prompts.
+
+**`main.py`:**
+```python
+import aydie_prompt_forge
+
+# Define the path to your prompt repository
+PROMPT_FILE = "prompts.yml"
+
+try:
+    # 1. Load the entire repository from the file.
+    repo = aydie_prompt_forge.load(PROMPT_FILE)
+    print("Repository loaded successfully!")
+
+    # 2. Get a specific prompt by its unique ID.
+    summarize_prompt = repo.get("summarize_article_v1.1")
+
+    if summarize_prompt:
+        # 3. Prepare your dynamic data.
+        long_article = "Generative AI is a type of artificial intelligence technology that can produce various types of content, including text, imagery, audio and synthetic data."
+
+        # 4. Fill the prompt template with your data.
+        final_prompt = summarize_prompt.fill(article_text=long_article)
+
+        # The final_prompt is now ready to be sent to an LLM API!
+        print("\n--- Generated Prompt ---")
+        print(final_prompt)
+        print("------------------------")
+
+        # You can also access the metadata
+        print(f"\nModel parameters to use: {summarize_prompt.model_parameters}")
+
+except aydie_prompt_forge.AydieException as e:
+    # Catch any errors from the aydie-prompt-forge library, like a malformed file.
+    print(f"An error occurred with aydie-prompt-forge: {e}")
+except FileNotFoundError:
+    print(f"Error: The file '{PROMPT_FILE}' was not found.")
+
+```
+
+## Contributing
+
+Contributions are welcome! If you have an idea for a new feature, find a bug, or want to improve the documentation, please open an issue or submit a pull request on our [GitHub repository](https://github.com/aydiegithub/aydie-prompt-forge).
+
+## License
+
+This project is licensed under the **MIT License**. See the `LICENSE` file for details.
+
+---
+
+## Connect with Me
+
+[![GitHub](https://img.shields.io/badge/GitHub-Profile-181717?logo=github&logoColor=white)](https://github.com/aydiegithub)
+[![Source Code](https://img.shields.io/badge/Source_Code-PromptForge-2f80ed?logo=github&logoColor=white)](https://github.com/aydiegithub/aydie-prompt-forge)
+[![Website](https://img.shields.io/badge/Website-aydie.in-2ea44f?logo=googlechrome&logoColor=white)](https://aydie.in)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Profile-0a66c2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/aydiemusic)
+[![X](https://img.shields.io/badge/X-Profile-black?logo=x&logoColor=white)](https://x.com/aydiemusic)
+[![Instagram](https://img.shields.io/badge/Instagram-Profile-e4405f?logo=instagram&logoColor=white)](https://instagram.com/aydiemusic)
+[![YouTube](https://img.shields.io/badge/YouTube-Channel-ff0000?logo=youtube&logoColor=white)](https://youtube.com/@aydiemusic)
+[![GitLab](https://img.shields.io/badge/GitLab-Profile-fca121?logo=gitlab&logoColor=white)](https://gitlab.com/aydie)
+[![Email](https://img.shields.io/badge/Email-developer@aydie.in-d14836?logo=gmail&logoColor=white)](mailto:developer@aydie.in)
