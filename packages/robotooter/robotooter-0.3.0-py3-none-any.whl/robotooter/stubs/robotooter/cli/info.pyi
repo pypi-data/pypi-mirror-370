@@ -1,0 +1,3 @@
+from robotooter import RoboTooter as RoboTooter
+
+def run_info(rt: RoboTooter) -> None: ...
