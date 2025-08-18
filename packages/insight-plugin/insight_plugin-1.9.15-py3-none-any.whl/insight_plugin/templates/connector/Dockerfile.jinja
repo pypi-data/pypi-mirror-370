@@ -1,0 +1,37 @@
+FROM --platform=linux/amd64 {{ sdk_type }}:{{ sdk_version }}
+
+LABEL organization={{ vendor }}
+LABEL sdk=python
+{% if packages %}
+RUN {{ install_package_command }}{% for package in packages %} {{ package }}{% endfor %}{% if "slim" in sdk_type %} -y{% endif %}
+{% endif %}
+WORKDIR /python/src
+{% if archived_packages %}
+{% for package in archived_packages %}COPY {{package}} /python/src/
+RUN pip install {{package}}
+
+{% endfor %}
+{% endif -%}
+
+ENV ORCHESTRATOR=true
+
+ADD ./plugin.spec.yaml /plugin.spec.yaml
+ADD ./requirements.txt /python/src/requirements.txt
+ADD ./entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# NOTE: each connector should have its own requirements.txt file
+# and it should contain either noetic_connector_api or the r7_surcom_api
+RUN pip install -r requirements.txt --extra-index-url "https://artifacts.corp.rapid7.com/artifactory/api/pypi/pypi-local/simple"
+
+ADD . /python/src
+
+RUN pip install .
+
+# NOTE: we are working around orchestrators not having the right permissions on the bind mounts
+# the entrypoint creates the directories with the right permissions then runs the connectors as nobody with gosu
+USER root
+
+RUN apt-get update && apt-get install -y gosu
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

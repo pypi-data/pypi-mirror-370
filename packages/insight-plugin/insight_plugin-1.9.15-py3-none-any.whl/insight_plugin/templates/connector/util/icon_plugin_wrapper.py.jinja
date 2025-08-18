@@ -1,0 +1,902 @@
+import aiofiles
+import asyncio
+import base64
+import datetime
+import hashlib
+import inspect
+import json
+import logging
+import os
+import sqlite3
+import sys
+import tempfile
+import threading
+import time
+import uuid
+
+from contextlib import contextmanager
+from cryptography.fernet import Fernet
+from logstash_formatter import LogstashFormatterV1
+from typing import Union, Callable, Optional, Tuple, AsyncGenerator, Generator
+
+MORE_DATA_THRESHOLD = 32 * 1024  # 32k
+CACHED_FILE_EXPIRY_HOURS = 4
+
+# ICON plugins run in a multi-threaded runtime
+# so we need to have a mutex in certain sections
+encryption_lock = threading.RLock()
+
+# this lock is because we maintain global state about the running import functions
+import_function_lock = threading.RLock()
+
+# Track the running import functions
+_RUNNING_IMPORT_FUNCTIONS: dict[str, "ImportFunctionTracker"] = {}
+
+reaper: Optional[threading.Thread] = None
+secret: Union[None, str] = None
+
+logger = logging.getLogger(__name__)
+_BASE_CACHE_DIR = '/var/cache/surcom'
+_SETTINGS_PARAM = 'settings'
+_CUSTOM_IMPORT_PARAMETERS_PARAM = 'custom_import_parameters'
+_CONFIGURATION_ITEMS_PARAM = 'import_configuration_items'
+_HIGH_WATER_MARK_PARAM = 'high_water_mark'
+_BYTES_PER_UPDATE = 5 * 1024 * 1024  # 5MB
+
+import_function_reaper: Optional[threading.Thread] = None
+
+
+def get_encryption_key():
+    global secret
+    global reaper
+
+    # Since we are running in a multi-threaded runtime,
+    # acquire a lock since we can mutate a global variable
+    with encryption_lock:
+        if secret is None:
+            password = str(uuid.uuid4()).encode()
+            # Even though md5 gets flagged by bandit, we're just using
+            # it to generate a encryption key and Fernet
+            # library requires it to be 32 bytes in size
+            key = hashlib.md5(password).hexdigest()  # nosec
+            secret = base64.urlsafe_b64encode(key.encode("utf-8"))
+
+        # Also, start up the reaper thread which will
+        # delete old (presumably orphaned) *.cached files
+        if reaper is None:
+            logger.info("Starting .cached file reaper thread")
+            reaper = threading.Thread(target=cached_files_reaper, daemon=True)
+            reaper.start()
+
+        return secret
+
+
+def encrypt(data, filename, key):
+    # write the encrypted file
+    with open(filename, "wb") as file:
+        file.write(Fernet(key).encrypt(json.dumps(data).encode("utf-8")))
+
+
+def decrypt(filename, key):
+    with open(filename, "rb") as file:
+        # read the encrypted data
+        return json.loads(Fernet(key).decrypt(file.read()).decode("utf-8"))
+
+
+# taken from https://stackoverflow.com/questions/45393694/size-of-a-dictionary-in-bytes
+def get_size(obj, seen=None):
+    """Recursively finds size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
+
+
+class LevelFilter(logging.Filter):
+    def filter(self, record):
+        setattr(record, 'level', record.levelname)
+        return True  # Always allow the record to proceed
+
+
+class SQLiteLogHandler(logging.Handler):
+    """Custom log handler that writes to SQLite database in logstash format"""
+    _logs_manager: "ImportFunctionLogManager"
+
+    def __init__(
+        self,
+        logs_manager: "ImportFunctionLogManager",
+    ):
+        super().__init__()
+        self._logs_manager = logs_manager
+        self.addFilter(LevelFilter())
+        self.setFormatter(LogstashFormatterV1())
+
+    def emit(self, record):
+        self.acquire()
+        try:
+            formatted_message = self.format(record)
+            self._logs_manager.write_log(formatted_message)
+        except Exception as e:
+            logger.warning("Error in SQLiteLogHandler.emit", exc_info=e)
+        finally:
+            self.release()
+
+
+def _create_sqlite_db(db_path: str) -> None:
+    """Create SQLite database with logs and items tables"""
+    with sqlite3.connect(db_path) as conn:
+        # Disable WAL mode and use DELETE journal mode
+        conn.execute("PRAGMA journal_mode = DELETE")
+
+        # Create logs table with json_data as BLOB for compact storage
+        conn.execute("""
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    json_data BLOB NOT NULL,
+                    byte_size INTEGER NOT NULL
+                )
+            """)
+
+        # Create items table with json_data as BLOB for compact storage
+        conn.execute("""
+                CREATE TABLE IF NOT EXISTS items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    json_data BLOB NOT NULL,
+                    byte_size INTEGER NOT NULL
+                )
+            """)
+
+        conn.commit()
+
+
+def _create_generator_logger(
+    execution_id: str,
+    logs_manager: "ImportFunctionLogManager",
+    level: Union[int, str],
+) -> logging.Logger:
+    generator_logger = logging.getLogger(execution_id)
+
+    # Clear any existing configuration
+    generator_logger.handlers.clear()
+    generator_logger.filters.clear()
+
+    # Set the logger level first
+    generator_logger.setLevel(level)
+
+    # Add SQLite handler
+    sqlite_handler = SQLiteLogHandler(logs_manager)
+    sqlite_handler.setLevel(level)
+    generator_logger.addHandler(sqlite_handler)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    generator_logger.addHandler(stdout_handler)
+
+    # Prevent propagation to avoid duplicate logs
+    generator_logger.propagate = False
+
+    return generator_logger
+
+
+def call_connector_import_function(
+    func: Callable,
+    user_log: logging.Logger,
+    params: dict,
+) -> dict:
+    if not os.path.exists(_BASE_CACHE_DIR):
+        os.mkdir(_BASE_CACHE_DIR)
+
+    with import_function_lock:
+        # first check if we need to start the reaper thread
+        _start_import_function_reaper()
+
+        execution_id: str = params['execution_id']
+        import_function_tracker = _RUNNING_IMPORT_FUNCTIONS.get(execution_id)
+        # only start a new import function if it is not already running or stoppped
+        if import_function_tracker and import_function_tracker.status != 'stopped':
+            user_log.info(
+                "Import function for execution '%s' is already %s",
+                execution_id,
+                import_function_tracker.status,
+            )
+
+            return {
+                'import_function_status': import_function_tracker.status,
+            }
+        elif not import_function_tracker:
+            import_function_tracker = ImportFunctionTracker(
+                execution_id=execution_id,
+            )
+
+        _RUNNING_IMPORT_FUNCTIONS[execution_id] = import_function_tracker
+
+        import_function_tracker.start(
+            func,
+            user_log,
+            params,
+        )
+
+        return {
+            'import_function_status': 'running',
+        }
+
+
+def _resume_extract(
+    user_log: logging.Logger,
+    generator_state_file: str,
+) -> Optional[dict]:
+    # Load the resumable state of the generator if it exists
+    try:
+        with open(generator_state_file, 'r') as state_file:
+            last_state = json.load(state_file)
+            user_log.info("Resuming extract generator from last state")
+            return last_state
+    except FileNotFoundError:
+        user_log.info("No previous generator state found, starting fresh.")
+    except json.decoder.JSONDecodeError:
+        user_log.warning("Invalid generator state file, starting fresh.")
+
+
+def _get_extract_generator(
+    func: Callable,
+    resumable_state: Optional[dict],
+    params: dict,
+    generator_logger: logging.Logger,
+    generator_state_file: str,
+) -> Tuple[bool, Union[AsyncGenerator[dict, None], Generator[dict, None, None]]]:
+    # Check if the function is async before calling it
+    is_async_func = inspect.iscoroutinefunction(func)
+
+    args = inspect.signature(func).parameters.keys()
+    kwargs = {}
+    for arg in args:
+        if arg == _SETTINGS_PARAM:
+            kwargs[arg] = params.get(_SETTINGS_PARAM, {})
+        elif arg == 'user_log':
+            kwargs[arg] = generator_logger
+        elif arg == _HIGH_WATER_MARK_PARAM:
+            kwargs[arg] = params.get(_HIGH_WATER_MARK_PARAM, {})
+        elif arg == _CONFIGURATION_ITEMS_PARAM:
+            kwargs[arg] = params.get(_CONFIGURATION_ITEMS_PARAM, [])
+        elif arg == _CUSTOM_IMPORT_PARAMETERS_PARAM:
+            kwargs[arg] = params.get(_CUSTOM_IMPORT_PARAMETERS_PARAM, {})
+        elif arg == 'resumable_state':
+            # if resumable state is provided, pass it, otherwise pass an empty dictionary
+            kwargs[arg] = resumable_state if resumable_state else {}
+        elif arg == 'resumable_state_callback':
+            if is_async_func:
+                async def _handle_resumable_state(
+                    state: dict,
+                ) -> None:
+                    # Save the resumable state of the generator
+                    async with aiofiles.open(generator_state_file, 'w') as state_file:
+                        # For large state objects, use ensure_ascii=False and separators for more compact JSON
+                        json_str = json.dumps(state, ensure_ascii=False, separators=(',', ':'))
+                        await state_file.write(json_str)
+            else:
+                def _handle_resumable_state(
+                    state: dict
+                ) -> None:
+                    # Save the resumable state of the generator
+                    with open(generator_state_file, 'w') as state_file:
+                        # Use compact JSON format for large states
+                        json.dump(state, state_file, ensure_ascii=False, separators=(',', ':'))
+
+            kwargs[arg] = _handle_resumable_state
+
+    return is_async_func, func(**kwargs)
+
+
+def get_orchestrator_update(
+    user_log: logging.Logger,
+    execution_id: str,
+) -> dict:
+    with import_function_lock:
+        # first check if we need to start the reaper thread
+        _start_import_function_reaper()
+
+        import_function_tracker = _RUNNING_IMPORT_FUNCTIONS.get(execution_id)
+        if import_function_tracker:
+            items, type_counts = import_function_tracker.read_items(_BYTES_PER_UPDATE)
+            if type_counts:
+                type_summary = ', '.join(f"{type_name}: {count}" for type_name, count in type_counts.items())
+
+                user_log.info(
+                    "Returning %d item(s): %s",
+                    len(items),
+                    type_summary,
+                )
+            else:
+                user_log.info("No items available")
+            return {
+                'import_function_status': import_function_tracker.status,
+                'items': items,
+                'x-r7-logs': import_function_tracker.read_logs(_BYTES_PER_UPDATE),
+            }
+        else:
+            return {
+                'import_function_status': 'stopped',
+            }
+
+
+def stop_import_function(
+    user_log: logging.Logger,
+    execution_id: str,
+) -> dict:
+    with import_function_lock:
+        import_function_tracker = _RUNNING_IMPORT_FUNCTIONS.get(execution_id)
+        if import_function_tracker:
+            import_function_tracker.stop()
+            return {
+                'import_function_status': import_function_tracker.status,
+            }
+    return {
+        'import_function_status': 'stopped',
+    }
+
+
+#
+# Helper function that wraps a SurfaceCommand function and does a few things
+# specific to this integration:
+#
+# 1) If the size of 'more_data' is greater than a certain threshold, write the dictionary to
+#    disk (after encryption) and format a new 'more_data' which contains a reference
+#    to the cached data on disk.
+#
+# 2) Strip away None/null fields in the return result payload. We've seen problems
+#    where a None/null field causes the plugin output validation step to fail,
+#    e.g. 'None is not type dict'. Ideally, we'd change the insight plugin library
+#    to be more flexible with nullable fields, but for the time being, we should
+#    just remove them.
+#
+def call_connector_function(func, user_log, params: dict,
+                            max_bytes: int = MORE_DATA_THRESHOLD):
+    to_delete = None
+
+    try:
+        # if input parameter has a "more_data" and the more_data
+        # references some cached data stored on localdisk, go fetch and decypt it now
+        if "more_data" in params and isinstance(params["more_data"], dict) and "__localcache__" in params["more_data"]:
+            filename = params["more_data"]["__localcache__"]
+            more_data = decrypt(filename, get_encryption_key())
+            params["more_data"] = more_data
+            to_delete = filename
+
+        # call connector function
+        result = func(user_log, **params)
+
+        if "more_data" in result and isinstance(result["more_data"], dict):
+            # if the "more_data" that we want to return to the
+            # caller exceed a threshold, just store it locally
+            # on disk and format a reference to it, so we can pick
+            # it back up later
+            more_data_size = get_size(result["more_data"])
+
+            if more_data_size > max_bytes:
+                offload_filename = f"{tempfile.gettempdir()}/{str(uuid.uuid4()).replace('-', '')}.cached"
+                encrypt(result["more_data"], offload_filename, get_encryption_key())
+                result["more_data"] = {
+                    "__localcache__": offload_filename
+                }
+
+        # also, remove all null/None output fields which can cause
+        # problems with plugin return validation, e.g. None is not an instance of dict
+        return {
+            k: v for k, v in result.items() if v is not None
+        }
+
+    finally:
+        if to_delete is not None:
+            try:
+                os.remove(to_delete)
+            except Exception as ex:
+                logger.error(f"Could not delete {to_delete}", exc_info=ex)
+
+
+def clean_old_cached_files(hours_old):
+    logger.info("Purging old .cached files...")
+    now = time.time()
+    directory = tempfile.gettempdir()
+    for filename in os.listdir(directory):
+        try:
+            if filename.endswith(".cached"):
+                filepath = os.path.join(directory, filename)
+                if os.path.isfile(filepath):
+                    file_age = now - os.path.getmtime(filepath)
+                    if file_age > hours_old * 3600:
+                        try:
+                            os.remove(filepath)
+                            logger.info(f"Deleted {filepath}")
+                        except OSError as e:
+                            logger.error(f"Reaper: Could not delete {filepath}: {e}")
+        except Exception as ex:
+            logger.error(f"Reaper: Could not inspect {filename}: {ex}")
+
+
+def cached_files_reaper():
+    while True:
+        clean_old_cached_files(CACHED_FILE_EXPIRY_HOURS)
+        time.sleep(5.0 * 60.0)
+
+
+class SqliteAccess:
+    _db_file: str
+    _db_connection: Optional[sqlite3.Connection]
+    _db_lock: threading.RLock
+
+    def __init__(
+        self,
+        execution_id: str,
+    ):
+        self._db_file = os.path.join(_BASE_CACHE_DIR, f'{execution_id}.db')
+        _create_sqlite_db(self._db_file)
+
+        # Establish persistent connection and create lock
+        self._db_connection = sqlite3.connect(self._db_file, check_same_thread=False)
+        self._db_connection.execute("PRAGMA journal_mode = DELETE")
+        self._db_lock = threading.RLock()
+
+    @contextmanager
+    def get_connection(self) -> Generator[Optional[sqlite3.Connection], None, None]:
+        with self._db_lock:
+            yield self._db_connection
+
+    def close(self) -> None:
+        with self._db_lock:
+            if self._db_connection:
+                self._db_connection.close()
+                self._db_connection = None
+            if os.path.exists(self._db_file):
+                try:
+                    os.remove(self._db_file)
+                except OSError:
+                    logger.exception(
+                        "Failed to delete database file: %s",
+                        self._db_file,
+                    )
+
+class ImportFunctionLogManager:
+    _sqlite_access: SqliteAccess
+
+    def __init__(
+        self,
+        sqlite_access: SqliteAccess,
+    ):
+        self._sqlite_access = sqlite_access
+
+    def write_log(self, log: str) -> None:
+        with self._sqlite_access.get_connection() as connection:
+            if connection:
+                try:
+                    # Convert to compact JSON bytes directly
+                    log_bytes = log.encode('utf-8')
+                    connection.execute(
+                        "INSERT INTO logs (json_data, byte_size) VALUES (?, ?)",
+                        (log_bytes, len(log_bytes))
+                    )
+                    connection.commit()
+                except Exception:
+                    logger.exception("Failed to write log record to SQLite database")
+
+    def read_logs(
+        self,
+        max_bytes: int,
+    ) -> list[dict]:
+        # Fetch raw data while holding the lock
+        raw_records = []
+        with self._sqlite_access.get_connection() as connection:
+            if connection:
+                try:
+                    # Use fetchone() in a loop for memory efficiency
+                    cursor = connection.execute(
+                        """
+                        SELECT rowid, json_data, byte_size FROM logs
+                        ORDER BY rowid
+                        """
+                    )
+
+                    rowids_to_delete = []
+                    total_bytes = 0
+
+                    # Fetch records one by one until we hit the byte limit
+                    while True:
+                        row = cursor.fetchone()
+                        if row is None:
+                            # No more records
+                            break
+
+                        rowid, json_data, byte_size = row
+                        if total_bytes + byte_size > max_bytes and raw_records:
+                            # Would exceed limit and we already have some records
+                            break
+
+                        raw_records.append(json_data)
+                        rowids_to_delete.append(str(rowid))
+                        total_bytes += byte_size
+
+                    if rowids_to_delete:
+                        # Delete the selected records
+                        connection.execute(
+                            f"DELETE FROM logs WHERE rowid IN ({','.join('?' * len(rowids_to_delete))})",
+                            rowids_to_delete
+                        )
+                        connection.commit()
+
+                except sqlite3.Error:
+                    logger.exception(f"Failed to read logs from SQLite database")
+                    return []
+
+        # Process the raw data outside the lock
+        if raw_records:
+            try:
+                return [json.loads(record) for record in raw_records]
+            except json.JSONDecodeError:
+                logger.exception(f"Failed to decode log records")
+        return []
+
+    def has_logs(self) -> bool:
+        with self._sqlite_access.get_connection() as connection:
+            if connection:
+                try:
+                    cursor = connection.execute("SELECT COUNT(*) FROM logs")
+                    count = cursor.fetchone()[0]
+                    return count > 0
+                except sqlite3.Error:
+                    logger.exception(f"Failed to check logs in SQLite database")
+        return False
+
+
+class ImportFunctionItemManager:
+    _sqlite_access: SqliteAccess
+    _batch_items: list[tuple[bytes, int]]
+    _batch_size: int
+
+    def __init__(
+        self,
+        sqlite_access: SqliteAccess,
+    ):
+        self._sqlite_access = sqlite_access
+        self._batch_items = []
+        self._batch_size = 0
+
+    def write_item(self, item: dict) -> None:
+        # Compact serialization
+        json_bytes = json.dumps(item, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+
+        with self._sqlite_access.get_connection() as connection:
+            if connection:
+                # Add to batch
+                size = len(json_bytes)
+                self._batch_items.append((json_bytes, size))
+                self._batch_size += size
+
+                # flush if batch is full
+                if self._batch_size >= _BYTES_PER_UPDATE:
+                    self._flush(connection)
+
+    def flush(self) -> None:
+        """Force flush any pending items in the batch"""
+        with self._sqlite_access.get_connection() as connection:
+            self._flush(connection)
+
+    def _flush(
+        self,
+        connection: sqlite3.Connection,
+    ) -> None:
+        if self._batch_items:
+            # Use executemany for efficient batch insert
+            connection.executemany(
+                "INSERT INTO items (json_data, byte_size) VALUES (?, ?)",
+                self._batch_items
+            )
+            connection.commit()
+
+            self._batch_items.clear()
+            self._batch_size = 0
+
+    def read_items(self, max_bytes: int) -> tuple[list[dict], dict[str, int]]:
+        # Fetch raw data while holding the lock
+        records = []
+        type_counts = {}
+        with self._sqlite_access.get_connection() as connection:
+            if connection:
+                try:
+                    # Use fetchone() in a loop for memory efficiency
+                    cursor = connection.execute(
+                        """
+                        SELECT rowid, json_data, byte_size FROM items
+                        ORDER BY rowid
+                        """
+                    )
+
+                    rowids_to_delete = []
+                    total_bytes = 0
+
+                    # Fetch records one by one until we hit the byte limit
+                    while True:
+                        row = cursor.fetchone()
+                        if row is None:
+                            # No more records
+                            break
+
+                        rowid, json_data, byte_size = row
+                        if total_bytes + byte_size > max_bytes and records:
+                            # Would exceed limit and we already have some records
+                            break
+
+                        item = json.loads(json_data)
+                        type_counts[item["type"]] = type_counts.get(item["type"], 0) + 1
+                        records.append(item)
+                        rowids_to_delete.append(str(rowid))
+                        total_bytes += byte_size
+
+                    if rowids_to_delete:
+                        # Delete the selected records
+                        connection.execute(
+                            f"DELETE FROM items WHERE rowid IN ({','.join('?' * len(rowids_to_delete))})",
+                            rowids_to_delete
+                        )
+                        connection.commit()
+                except json.JSONDecodeError:
+                    logger.exception(f"Failed to decode item records")
+                    return [], {}
+                except sqlite3.Error:
+                    logger.exception(f"Failed to read items from SQLite database")
+                    return [], {}
+
+        return records, type_counts
+
+    def has_items(self) -> bool:
+        with self._sqlite_access.get_connection() as connection:
+            if connection:
+                try:
+                    cursor = connection.execute("SELECT COUNT(*) FROM items")
+                    count = cursor.fetchone()[0]
+                    return count > 0
+                except sqlite3.Error:
+                    logger.exception(f"Failed to check items in SQLite database")
+        return False
+
+
+class ImportFunctionTracker:
+    _db_file: str
+    _execution_id: str
+    _thread: Optional[threading.Thread]
+    _status: Optional[str]
+    _generator_state_file: str
+    _generator_complete_file: str
+    _sqlite_access: SqliteAccess
+    _logs_manager: ImportFunctionLogManager
+    _items_manager: ImportFunctionItemManager
+    _start_date: Optional[datetime.datetime]
+    _stop_event: Optional[threading.Event]
+
+    def __init__(
+        self,
+        execution_id: str,
+    ):
+        self._sqlite_access = SqliteAccess(
+            execution_id=execution_id,
+        )
+        self._execution_id = execution_id
+        self._thread = None
+        self._status = None
+        self._generator_state_file = os.path.join(_BASE_CACHE_DIR, f'{execution_id}.generator-state.json')
+        self._generator_complete_file = os.path.join(_BASE_CACHE_DIR, f'{execution_id}.generator-complete')
+        self._logs_manager = ImportFunctionLogManager(self._sqlite_access)
+        self._items_manager = ImportFunctionItemManager(self._sqlite_access)
+        self._start_date = None
+        self._stop_event = None
+
+    def start(
+        self,
+        func: Callable,
+        user_log: logging.Logger,
+        params: dict,
+    ):
+        if self._thread and self._thread.is_alive():
+            user_log.error(
+                "Import function is already running. Cannot start a new import function execution."
+            )
+            raise RuntimeError("Import function is already running")
+
+        # Check if generator already completed previously
+        if os.path.exists(self._generator_complete_file):
+            user_log.info(
+                "Import function for execution '%s' has already completed. Skipping restart.",
+                self._execution_id,
+            )
+            self._status = "completed"
+            return
+
+        # Clean up completion file from any previous runs when starting fresh
+        try:
+            if os.path.exists(self._generator_complete_file):
+                os.remove(self._generator_complete_file)
+        except OSError:
+            logger.warning(f"Failed to remove completion file: {self._generator_complete_file}")
+
+        # Create logger that writes to SQLite database
+        log_level = params.get(_CUSTOM_IMPORT_PARAMETERS_PARAM, {}).get('log_level', logging.INFO)
+        if isinstance(log_level, str):
+            log_level = getattr(logging, log_level.upper())
+        generator_logger = _create_generator_logger(
+            self._execution_id,
+            self._logs_manager,
+            log_level,
+        )
+
+        generator_logger.info("Preparing to start import function execution")
+
+        resumable_state = _resume_extract(
+            generator_logger,
+            self._generator_state_file,
+        )
+
+        is_async_func, generator = _get_extract_generator(
+            func,
+            resumable_state,
+            params,
+            generator_logger,
+            self._generator_state_file,
+        )
+
+        def _run_generator():
+            async def _run_async_generator(thread_loop: asyncio.BaseEventLoop):
+                generator_logger.info("Import function started")
+                if is_async_func:
+                    item: dict
+                    async for item in generator:
+                        if self._stop_event.is_set():
+                            break
+
+                        # Write item to SQLite database
+                        await thread_loop.run_in_executor(
+                            None,
+                            self._items_manager.write_item,
+                            item,
+                        )
+
+                    # Always flush any remaining items in the batch
+                    self._items_manager.flush()
+                else:
+                    for item in generator:
+                        if self._stop_event.is_set():
+                            break
+
+                        # Write item to SQLite database
+                        self._items_manager.write_item(item)
+
+                    # Always flush any remaining items in the batch
+                    self._items_manager.flush()
+
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(_run_async_generator(loop))
+                if self._stop_event.is_set():
+                    generator_logger.warning("Import function execution stopped")
+                    self._status = "stopped"
+                else:
+                    generator_logger.info("Import function completed successfully")
+                    self._status = "completed"
+            except Exception:
+                generator_logger.exception(f"Import function failed")
+                self._status = "failed"
+            finally:
+                loop.close()
+
+                # Create completion file to mark generator as done
+                if not self._stop_event.is_set():
+                    try:
+                        with open(self._generator_complete_file, 'w') as f:
+                            f.write(str(datetime.datetime.now(datetime.timezone.utc).isoformat()))
+                        generator_logger.info("Generator completion file created")
+                    except OSError:
+                        generator_logger.exception(f"Failed to create completion file: {self._generator_complete_file}")
+
+        # Create and store the thread for this execution
+        self._thread = threading.Thread(target=_run_generator, daemon=True)
+        self._start_date = datetime.datetime.now(datetime.timezone.utc)
+        self._stop_event = threading.Event()
+        self._thread.start()
+
+    def stop(self):
+        if self._thread and self._thread.is_alive():
+            logger.warning("Stopping import function execution")
+            self._stop_event.set()
+            # don't wait too long for the thread to stop, because we are holding a lock
+            self._thread.join(timeout=10.0)
+            if self._thread.is_alive():
+                logger.error("Failed to stop import function execution within timeout")
+
+        # Clean up completion file when stopping
+        try:
+            if os.path.exists(self._generator_complete_file):
+                os.remove(self._generator_complete_file)
+        except OSError:
+            logger.exception(f"Failed to remove completion file during stop: {self._generator_complete_file}")
+
+        self._sqlite_access.close()
+
+    @property
+    def status(self) -> str:
+        if (
+            self._thread and self._thread.is_alive()
+            or self._items_manager.has_items()
+            or self._logs_manager.has_logs()
+        ):
+            return 'running'
+
+        return self._status or 'stopped'
+
+    @property
+    def start_time(self) -> Optional[datetime.datetime]:
+        return self._start_date
+
+    def read_logs(
+        self,
+        max_bytes: int,
+    ) -> list[dict]:
+        return self._logs_manager.read_logs(max_bytes)
+
+    def read_items(
+        self,
+        max_bytes: int,
+    ) -> tuple[list[dict], dict[str, int]]:
+        return self._items_manager.read_items(max_bytes)
+
+
+def _start_import_function_reaper():
+    global import_function_reaper
+
+    with import_function_lock:
+        if not import_function_reaper or not import_function_reaper.is_alive():
+            logger.info("Starting import function reaper thread")
+            import_function_reaper = threading.Thread(target=_reap_import_functions, daemon=True)
+            import_function_reaper.start()
+
+
+def _reap_import_functions():
+    while True:
+        time.sleep(60.0)  # Check every minute
+        with import_function_lock:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            # Reap import functions that have been running for more than 24 hours
+            reap_running_before = now - datetime.timedelta(hours=24)
+            # Reap everything else after 1 hour
+            reap_others = now - datetime.timedelta(hours=1)
+            # Capture the executions to remove
+            executions_to_remove = []
+            for execution_id, tracker in _RUNNING_IMPORT_FUNCTIONS.items():
+                tracker_status = tracker.status
+                if (
+                    tracker_status == 'completed'
+                    or (tracker_status == 'running' and tracker.start_time < reap_running_before)
+                    or (tracker_status != 'running' and tracker.start_time < reap_others)
+                ):
+                    executions_to_remove.append(execution_id)
+                    try:
+                        tracker.stop()
+                    except Exception:
+                        logger.exception(
+                            "Failed to stop import function: %s",
+                            execution_id,
+                        )
+            for execution_id in executions_to_remove:
+                logger.info(
+                    "Removing import function tracker for execution: %s",
+                    execution_id,
+                )
+                del _RUNNING_IMPORT_FUNCTIONS[execution_id]

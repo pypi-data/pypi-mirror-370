@@ -1,0 +1,56 @@
+import {{ base_module }}
+
+from {{ base_module }}.telemetry import auto_instrument
+from {{ base_module }}.exceptions import PluginException
+
+from .schema import {{ upper_camel_case(task) }}Input, {{ upper_camel_case(task) }}Output, {{ upper_camel_case(task) }}State, Input, Output, Component, State
+# Custom imports below
+import asyncio
+from rapidkit.utils.core import RapidkitException
+
+event_source_task = __import__('rapidkit.sources.{{ event_source_name }}.{{ task }}_task', fromlist=[''])
+FAST_FOLLOW_THRESHOLD = event_source_task.FAST_FOLLOW_THRESHOLD
+EventSource = event_source_task.EventSource
+
+class {{ upper_camel_case(task) }}({{ base_module }}.Task):
+
+    def __init__(self):
+        super(self.__class__, self).__init__(
+                name="{{ task }}",
+                description=Component.DESCRIPTION,
+                input={{ upper_camel_case(task) }}Input(),
+                output={{ upper_camel_case(task) }}Output(),
+                state={{ upper_camel_case(task) }}State())
+
+    @auto_instrument
+    def run(self, params={}, state={}, custom_config={}):
+        
+        async def async_run():
+            event_source = EventSource(name="plugin", task="{{ task }}_task", logger=self.logger)
+            secrets = self.connection.secrets
+            state["custom_config"] = custom_config
+            output, new_state = await event_source.run(state=state, secrets=secrets)
+            has_more_pages = new_state["has_more_pages"] if "has_more_pages" in new_state else len(output) >= FAST_FOLLOW_THRESHOLD
+            new_state.pop("custom_config", None)
+            new_state.pop("has_more_pages", None)
+            return output, new_state, has_more_pages, 200, None
+ 
+        try:
+            return asyncio.run(async_run())
+        except RapidkitException as exception:
+            self.logger.info(f"Error: An event source exception has occurred: {exception.message}")
+            self.logger.info(f"Error: Status code returned {exception.code}")
+            plugin_exception = PluginException(
+                cause=exception.message,
+                assistance=f"Error: {str(exception)} returned status code {exception.code}",
+                data=exception
+            )
+            code = exception.code if exception.code else 500
+            return [], state, False, code, plugin_exception
+        except Exception as exception:
+            self.logger.info(f"An error has occurred: {exception}")
+            plugin_exception = PluginException(
+                preset=PluginException.Preset.UNKNOWN,
+                data=exception,
+            )
+            return [], state, False, 500, plugin_exception

@@ -1,0 +1,69 @@
+import {{ base_module }}
+import asyncio
+import re
+
+from {{ base_module }}.exceptions import PluginException, ConnectionTestException
+from .schema import ConnectionSchema
+from rapidkit.utils.core import RapidkitException
+from typing import Any, Dict
+from flask import request
+
+
+class Connection({{ base_module }}.Connection):
+
+    def __init__(self):
+        super(self.__class__, self).__init__(input=ConnectionSchema())
+        self.params = {}
+        self.secrets = {}
+
+    def connect(self, params={}):
+        self.secrets = {}
+        for key, value in params.items():
+            if isinstance(value, dict) and "privateKey" in value:
+                self.secrets[key] = value["privateKey"]
+            elif isinstance(value, dict) and "secretKey" in value:
+                self.secrets[key] = value["secretKey"]
+            else:
+                self.secrets[key] = value
+        pass
+
+    def test(self):
+        return {"success": True}, "Connection test passed"
+
+    def test_task(self) -> Dict[str, Any]:
+        async def async_test_task():
+
+            # Extracting task name from request path
+            match = re.match(r'.*/tasks/([^/]+)/test', request.path)
+            task = match.group(1) if match else ""
+            task_name = f"{task}_task"
+
+            event_source_task = __import__(f'rapidkit.sources.{{ event_source_name }}.{task_name}', fromlist=[''])
+            FAST_FOLLOW_THRESHOLD = event_source_task.FAST_FOLLOW_THRESHOLD
+            EventSource = event_source_task.EventSource
+
+            event_source = EventSource(name="plugin", task=task_name, logger=self.logger)
+            _, _ = await event_source.run({}, secrets=self.secrets)
+            self.logger.info("Connection test passed")
+            return {"success": True}, "Connection test passed"
+        try:
+            self.logger.info("Running a connection test")
+            return asyncio.run(async_test_task())
+        except RapidkitException as exception:
+            self.logger.info("Connection test failed")
+            self.logger.info(f"Error cause: {exception.message}")
+            self.logger.info(f"Error code: {exception.code}")
+            raise ConnectionTestException(
+                cause="The connection test has failed.",
+                assistance="Please ensure credentials have required permissions.",
+                data=exception.message,
+            )
+        except Exception as exception:
+            self.logger.info("Connection test failed")
+            self.logger.info(f"Error cause: {PluginException.causes[PluginException.Preset.UNKNOWN]}")
+            self.logger.info(f"Error details: {exception}")
+            raise ConnectionTestException(
+                cause="The connection test has failed.",
+                assistance="Please ensure credentials have required permissions and view logs for details.",
+                data=exception,
+            )
