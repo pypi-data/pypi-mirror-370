@@ -1,0 +1,281 @@
+Metadata-Version: 2.4
+Name: cw-rpa
+Version: 1.2.0
+Summary: The cw-rpa package provides reusable functions/common utilities for developing CW RPA bots.
+Author: ConnectWise
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests
+Dynamic: author
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
+
+# RPA Library : A custom Python Library for Building (RPA) bots Solutions for Partners
+
+RPA Library is a comprehensive Python library designed to empower partners 
+to efficiently development of Robotic Process Automation (RPA) solutions.
+This library provides essential functionalities and utilities, simplifying the RPA development process.
+This library provides a set of modules that streamline the process of automating tasks, managing inputs, logging, and interacting with web services.
+
+
+## Modules Overview
+
+The RPA Library consists of several key modules, each designed to offer specific functionalities that aid in the development of RPA solutions. Below is an overview of the available modules and their primary features.
+
+### Input Module
+
+The Input Module is designed to handle user inputs efficiently. It provides functionalities for collecting, and processing inputs from form data.
+
+```python
+
+#Import the library.
+from cw_rpa import Input
+
+#Initialize the module.
+input = Input()
+
+#Calling the input method.
+input.get_value("<variable name>")
+
+E.g.
+username = input.get_value("username")
+
+```
+Note:  If the variable is missing, it defaults to None.
+
+### Logger Module
+
+The Logger Module offers advanced logging capabilities, making it easier to track the execution flow, debug issues, and maintain operational records.
+
+```python
+
+#Import the library.
+from cw_rpa import Logger
+
+#Initializing the logger
+log = Logger() 
+
+#Call log method to log in Result.txt
+
+#To log an info message 
+log.info("Logging info statement")
+#To log an error message 
+log.error("Logging error statement")
+#To log an exception message 
+log.exception("Logging exception statement")
+
+Additionally, it supports logging warnings, critical and fatal into Result.txt
+
+Note: A fatal log will exit the program.
+
+#Call log method to log in result.json
+
+#To log success message 
+log.result_success_message("log success message")
+
+#To log failure message 
+log.result_failed_message ("log failed message")
+
+Additionally import ResultLevel
+
+from cw_rpa import Logger,ResultLevel
+
+and use result_message to update the message level on result.json
+
+SUCCESS 
+FAILED 
+ERROR 
+INFO 
+WARNING 
+
+log.result_message(ResultLevel.SUCCESS,"message")
+log.result_message(ResultLevel.FAILED,"message")
+log.result_message(ResultLevel.ERROR,"message")
+log.result_message(ResultLevel.INFO,"message")
+log.result_message(ResultLevel.WARNING,"message")
+
+#Call result_data to log the values into the data field in result.json which is used by workflow.
+
+data_to_log = {"<key>" : <value>} #data_to_log is a json object
+log.result_data(data_to_log) 
+
+```
+
+### HttpClient Module
+
+The HttpClient Module simplifies interactions with web services. It provides a straightforward way to send HTTP requests and handle responses. It Support for various HTTP methods (GET, POST, PUT, DELETE, etc.) and provides mechanisms for managing authentication tokens, essential for interacting with secured APIs.
+
+```python
+
+#Import library 
+from cw_rpa import httpclient
+
+#Initialize the module.
+http_client = HttpClient()
+
+#Validate url.
+http_client.validate_url("https://www.cw.com")
+
+#Validate payload
+#Ensures the payload or request body contains all necessary fields through validation.
+
+E.g. 
+request_body = {
+        "accountEnabled": input.get_value("accountEnabled"), 
+        "displayName": input.get_value("displayName"),
+        "mailNickname": input.get_value("mailNickname")
+    }
+
+#Here, request_body must include displayName and mailNickname. Their absence will result in an error.
+http_client.validate_payload(request_body, ["displayName","mailNickname" ])
+
+
+#Third party integration
+#Enables integration connectivity and API execution.
+
+Syntax:
+
+http_client.third_party_integration("<integrationName>").<method>(url=<endpoint url/api>,json=<request body>)
+
+```
+# Benefits for Partners:
+
+Faster Development: Pre-built components and utilities accelerate the development lifecycle.
+
+Improved Code Quality: Standardized functions promote code maintainability and reusability.
+
+Focus on Core Logic: Partners can concentrate on building the unique logic of their bots, leveraging the foundation provided by RPA Library.
+
+# Getting Started
+
+To get started with the RPA Library, you need to install it in your Python environment. You can do this by installing it directly via pip.
+
+Installation:
+
+if hosted in public repo:
+
+    pip install cw_rpa
+
+From wheel file:
+
+    pip install cw_rpa-0.1.0-py3-none-any
+
+
+# Example
+
+Here are example demonstrating how to create the bot using the cw_rpa library:
+
+### Create O365 User Bot Sample Code:
+
+```python
+    # import the rpa library modules
+    from cw_rpa import (
+        Logger, 
+        ResultLevel, 
+        Input, 
+        HttpClient, 
+    )
+
+    def main():
+        log = Logger()
+
+        try:
+            input = Input()
+            # The following keys should be present in the fromSchema.json file
+            userPrincipalName = input.get_value("userPrincipalName")
+            new_user_payload = {
+                "accountEnabled": input.get_value("accountEnabled"),  # Default value is True if not provided
+                "displayName": input.get_value("displayName"),
+                "mailNickname": input.get_value("mailNickname"),
+                "userPrincipalName": userPrincipalName,
+                "passwordProfile": {
+                    "forceChangePasswordNextSignIn": input.get_value("forceChangePasswordNextSignIn"),
+                    "password": input.get_value("password"),
+                },
+            }
+        except Exception as e:
+            log.exception(e, "An error occurred while getting input values")
+            log.result_failed_message("An error occurred while getting input values")
+            return
+
+        if not userPrincipalName:
+            log.error("userPrincipalName not provided")
+            log.result_failed_message("userPrincipalName not provided")
+            return
+        
+        log.info(f"creating user details for userPrincipalName: {userPrincipalName}")
+
+        try: 
+
+            # Create an HTTP client for making requests to the Microsoft Graph API
+            http_client = HttpClient()
+
+            # Define the endpoint for retrieving user details       
+            endpoint = "https://graph.microsoft.com/v1.0/users"
+
+            if check_user_exists(log, http_client, userPrincipalName):
+                log.error(f"User already exists: {userPrincipalName}")
+                log.result_failed_message(f"User already exists: {userPrincipalName}")
+                return
+
+            log.info(f"Creating user: {userPrincipalName}")
+            log.result_message(ResultLevel.INFO,f"Creating user: {userPrincipalName}")
+
+            # validating new user payload
+            http_client.validate_payload(new_user_payload, ["displayName","accountEnabled", "passwordProfile.forceChangePasswordNextSignIn", "passwordProfile.password"])
+            
+            # Make a GET request to the endpoint
+            response = http_client.third_party_integration("azure_o365").post(url=endpoint, json=new_user_payload)
+
+            if response.status_code == 201:        
+                log.info(f"User created successfully: {userPrincipalName}.")
+                log.result_success_message(f"Successfully created user: {userPrincipalName}.")
+                log.result_data(data=response.json())       
+                
+            else:
+                log.error(f"Failed to create user {userPrincipalName}. Status code: {response.status_code}, Response: {response.text}")
+                log.result_failed_message(f"User creation failed for user {userPrincipalName}.")
+
+        except Exception as e:
+            log.exception(e, "An unexpected error occurred while creating the user")
+            log.result_failed_message(f"An error occurred while creating the user {userPrincipalName}.")
+            return
+
+
+    def check_user_exists(log:Logger, http_client: HttpClient, userPrincipalName: str) -> bool:
+        
+        try:
+            # Define the endpoint for retrieving user details
+            endpoint = f"https://graph.microsoft.com/v1.0/users/{userPrincipalName}"
+            response = http_client.third_party_integration("azure_o365").get(endpoint)
+            
+            if response.status_code == 200:
+                log.info(f"User exists: {userPrincipalName}")
+                return True
+            elif response.status_code == 404:
+                log.info(f"User does not exist: {userPrincipalName}")
+                return False
+            else:
+                log.error(f"Failed to check if user exists: {response.text}")
+                return False
+            
+        except Exception as e:
+            log.exception(e, "An error occurred while checking if user exists")
+            return False
+
+
+    if __name__ == "__main__":
+        main()
+  
+```
+
+# Additional Resources
+
+Custom Bot Development Documentation:
+    https://docs.connectwise.com/ConnectWise/Asio/Hyperautomation/ConnectWise_RPA/Using_ConnectWise_RPA_Bots_in_PSA/How_to_Write_a_Custom_Bot
+
+Sample Custom Bot Documentation:
+    https://docs.connectwise.com/ConnectWise/Asio/Hyperautomation/ConnectWise_RPA/Using_ConnectWise_RPA_Bots_in_PSA/How_to_Write_a_Custom_Bot/Sample_Custom_Bots_-_Asio_Workflows
