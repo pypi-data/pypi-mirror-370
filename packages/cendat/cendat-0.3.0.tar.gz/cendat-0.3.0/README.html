@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>readme</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="README_files/libs/clipboard/clipboard.min.js"></script>
+<script src="README_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="README_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="README_files/libs/quarto-html/popper.min.js"></script>
+<script src="README_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="README_files/libs/quarto-html/anchor.min.js"></script>
+<link href="README_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="README_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="README_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="README_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="README_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+
+
+
+<section id="cendat-a-python-helper-for-the-census-api" class="level1">
+<h1>cendat: A Python Helper for the Census API</h1>
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>cendat is a Python library designed to simplify the process of exploring and retrieving data from the U.S. Census Bureau’s API. It provides a high-level, intuitive workflow for discovering available datasets, filtering geographies and variables, and fetching data concurrently.</p>
+<p>The library handles the complexities of the Census API’s structure, such as geographic hierarchies and inconsistent product naming, allowing you to focus on getting the data you need.</p>
+</section>
+<section id="workflow" class="level2">
+<h2 class="anchored" data-anchor-id="workflow">Workflow</h2>
+<p>The library is designed around a simple, four-step “List -&gt; Set -&gt; Get -&gt; Convert” workflow:</p>
+<p>List: Use the list_* methods (list_products, list_geos, list_variables) with patterns to explore what’s available and filter down to what you need.</p>
+<p>Set: Use the set_* methods (set_products, set_geos, set_variables) to lock in your selections. You can call these methods without arguments to use the results from your last “List” call.</p>
+<p>Get: Call the get_data() method to build and execute all the necessary API calls. This method handles complex geographic requirements automatically and utilizes thread pooling for speed. Thread pooling is controlled through the <code>max_workers</code> parameter. Note that for requests that will generate many (thousands or more) API calls, setting <code>max_workers</code> explicitly and at low values (say, &lt; 100) will reduce the probability of errors due to server-side intervention.</p>
+<p>Convert: Use the to_polars() or to_pandas() methods on the response object to get your data in a ready-to-use DataFrame format.</p>
+</section>
+</section>
+<section id="installation" class="level1">
+<h1>Installation</h1>
+<p>You can install cendat using pip.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install cendat</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The library has optional dependencies for converting the response data into pandas or polars DataFrames. You can install the support you need:</p>
+<section id="install-with-pandas-support" class="level2">
+<h2 class="anchored" data-anchor-id="install-with-pandas-support">Install with pandas support</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install cendat<span class="pp">[</span><span class="ss">pandas</span><span class="pp">]</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="install-with-polars-support" class="level2">
+<h2 class="anchored" data-anchor-id="install-with-polars-support">Install with polars support</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install cendat<span class="pp">[</span><span class="ss">polars</span><span class="pp">]</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="install-with-both" class="level2">
+<h2 class="anchored" data-anchor-id="install-with-both">Install with both</h2>
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install cendat<span class="pp">[</span><span class="ss">all</span><span class="pp">]</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+</section>
+<section id="usage" class="level1">
+<h1>Usage</h1>
+<p>The intended workflow is a step-by-step process of refining your data query. You start by selecting dataset products, then geographies, and finally the specific variables you need.</p>
+<ol type="1">
+<li><strong>Initialize</strong>: Create an instance of <code>CenDatHelper</code>, optionally setting the year(s) and API key.</li>
+<li><strong>Select Product</strong>: Use <code>list_products()</code> to find products and <code>set_products()</code> to select them.</li>
+<li><strong>Select Geography</strong>: Use <code>list_geos()</code> to see available geographic levels and <code>set_geos()</code> to choose them.</li>
+<li><strong>Select Variables</strong>: Use <code>list_variables()</code> to explore available variables and <code>set_variables()</code> to select them.</li>
+<li><strong>Get Data</strong>: Call <code>get_data()</code> to concurrently execute the required queries. This returns a <code>CenDatResponse</code> object.</li>
+<li><strong>Convert</strong>: Use <code>.to_pandas()</code> or <code>.to_polars()</code> on the response object to get a ready-to-use DataFrame.</li>
+</ol>
+<hr>
+<section id="cendathelper-class" class="level2">
+<h2 class="anchored" data-anchor-id="cendathelper-class"><code>CenDatHelper</code> Class</h2>
+<section id="init__self-yearsnone-keynone" class="level3">
+<h3 class="anchored" data-anchor-id="init__self-yearsnone-keynone"><code>__init__(self, years=None, key=None)</code></h3>
+<p>Initializes the helper object.</p>
+<ul>
+<li><strong><code>years</code></strong> (<code>int</code> | <code>list[int]</code>, optional): The year or years of interest. Can be a single integer or a list of integers. Defaults to <code>None</code>.</li>
+<li><strong><code>key</code></strong> (<code>str</code>, optional): Your Census API key. Providing a key is recommended to avoid strict rate limits. Defaults to <code>None</code>.</li>
+</ul>
+</section>
+<section id="set_yearsself-years" class="level3">
+<h3 class="anchored" data-anchor-id="set_yearsself-years"><code>set_years(self, years)</code></h3>
+<p>Sets the primary year or years for data queries.</p>
+<ul>
+<li><strong><code>years</code></strong> (<code>int</code> | <code>list[int]</code>): The year or years to set.</li>
+</ul>
+</section>
+<section id="load_keyself-keynone" class="level3">
+<h3 class="anchored" data-anchor-id="load_keyself-keynone"><code>load_key(self, key=None)</code></h3>
+<p>Loads a Census API key for authenticated requests.</p>
+<ul>
+<li><strong><code>key</code></strong> (<code>str</code>, optional): The API key to load.</li>
+</ul>
+</section>
+<section id="list_productsself-yearsnone-patternsnone-to_dictstrue-logicall-match_intitle" class="level3">
+<h3 class="anchored" data-anchor-id="list_productsself-yearsnone-patternsnone-to_dictstrue-logicall-match_intitle"><code>list_products(self, years=None, patterns=None, to_dicts=True, logic=all, match_in='title')</code></h3>
+<p>Lists available data products, filtered by year and search patterns.</p>
+<ul>
+<li><strong><code>years</code></strong> (<code>int</code> | <code>list[int]</code>, optional): Filters products available for the specified year(s). Defaults to the years set on the object.</li>
+<li><strong><code>patterns</code></strong> (<code>str</code> | <code>list[str]</code>, optional): Regex pattern(s) to search for within the product metadata.</li>
+<li><strong><code>to_dicts</code></strong> (<code>bool</code>): If <code>True</code> (default), returns a list of dictionaries with full product details. If <code>False</code>, returns a list of product titles.</li>
+<li><strong><code>logic</code></strong> (<code>callable</code>): The logic to use when multiple patterns are provided. Can be <code>all</code> (default) or <code>any</code>.</li>
+<li><strong><code>match_in</code></strong> (<code>str</code>): The field to match patterns against. Can be <code>'title'</code> (default) or <code>'desc'</code>.</li>
+</ul>
+</section>
+<section id="set_productsself-titlesnone" class="level3">
+<h3 class="anchored" data-anchor-id="set_productsself-titlesnone"><code>set_products(self, titles=None)</code></h3>
+<p>Sets the active data products for the session.</p>
+<ul>
+<li><strong><code>titles</code></strong> (<code>str</code> | <code>list[str]</code>, optional): The title or list of titles of the products to set. If <code>None</code>, it sets all products from the last <code>list_products()</code> call.</li>
+</ul>
+</section>
+<section id="list_geosself-to_dictsfalse-patternsnone-logicall" class="level3">
+<h3 class="anchored" data-anchor-id="list_geosself-to_dictsfalse-patternsnone-logicall"><code>list_geos(self, to_dicts=False, patterns=None, logic=all)</code></h3>
+<p>Lists available geographies for the currently set products.</p>
+<ul>
+<li><strong><code>to_dicts</code></strong> (<code>bool</code>): If <code>True</code>, returns a list of dictionaries with full geography details. If <code>False</code> (default), returns a list of unique summary level (<code>sumlev</code>) strings.</li>
+<li><strong><code>patterns</code></strong> (<code>str</code> | <code>list[str]</code>, optional): Regex pattern(s) to search for within the geography description.</li>
+<li><strong><code>logic</code></strong> (<code>callable</code>): The logic to use when multiple patterns are provided. Can be <code>all</code> (default) or <code>any</code>.</li>
+</ul>
+</section>
+<section id="set_geosself-valuesnone-bysumlev" class="level3">
+<h3 class="anchored" data-anchor-id="set_geosself-valuesnone-bysumlev"><code>set_geos(self, values=None, by='sumlev')</code></h3>
+<p>Sets the active geographies for the session.</p>
+<ul>
+<li><strong><code>values</code></strong> (<code>str</code> | <code>list[str]</code>, optional): The geography values to set. If <code>None</code>, sets all geos from the last <code>list_geos()</code> call.</li>
+<li><strong><code>by</code></strong> (<code>str</code>): The key to use for matching <code>values</code>. Must be either <code>'sumlev'</code> (default) or <code>'desc'</code>.</li>
+</ul>
+</section>
+<section id="list_variablesself-to_dictstrue-patternsnone-logicall-match_inlabel" class="level3">
+<h3 class="anchored" data-anchor-id="list_variablesself-to_dictstrue-patternsnone-logicall-match_inlabel"><code>list_variables(self, to_dicts=True, patterns=None, logic=all, match_in='label')</code></h3>
+<p>Lists available variables for the currently set products.</p>
+<ul>
+<li><strong><code>to_dicts</code></strong> (<code>bool</code>): If <code>True</code> (default), returns a list of dictionaries with full variable details. If <code>False</code>, returns a list of unique variable names.</li>
+<li><strong><code>patterns</code></strong> (<code>str</code> | <code>list[str]</code>, optional): Regex pattern(s) to search for within the variable metadata.</li>
+<li><strong><code>logic</code></strong> (<code>callable</code>): The logic to use when multiple patterns are provided. Can be <code>all</code> (default) or <code>any</code>.</li>
+<li><strong><code>match_in</code></strong> (<code>str</code>): The field to match patterns against. Can be <code>'label'</code> (default), <code>'name'</code> or <code>'concept'</code>.</li>
+</ul>
+</section>
+<section id="set_variablesself-namesnone" class="level3">
+<h3 class="anchored" data-anchor-id="set_variablesself-namesnone"><code>set_variables(self, names=None)</code></h3>
+<p>Sets the active variables for the session.</p>
+<ul>
+<li><strong><code>names</code></strong> (<code>str</code> | <code>list[str]</code>, optional): The name or list of names of the variables to set. If <code>None</code>, sets all variables from the last <code>list_variables()</code> call.</li>
+</ul>
+</section>
+<section id="get_dataself-withinus-max_workers100" class="level3">
+<h3 class="anchored" data-anchor-id="get_dataself-withinus-max_workers100"><code>get_data(self, within='us', max_workers=100)</code></h3>
+<p>Executes the API calls based on the set parameters and retrieves the data.</p>
+<ul>
+<li><strong><code>within</code></strong> (<code>str</code> | <code>dict</code> | <code>list[dict]</code>, optional): Defines the geographic scope of the query.
+<ul>
+<li>For <strong>aggregate</strong> data, this can be a dictionary filtering parent geographies (e.g., <code>{'state': '06'}</code> for California).</li>
+<li>For <strong>microdata</strong>, this must be a dictionary specifying the target geography and its codes (e.g., <code>{'public use microdata area': ['7701', '7702']}</code>).</li>
+<li>Defaults to <code>'us'</code> for nationwide data where applicable.</li>
+</ul></li>
+<li><strong><code>max_workers</code></strong> (<code>int</code>, optional): The maximum number of concurrent threads to use for making API calls. Defaults to <code>100</code>.</li>
+</ul>
+<hr>
+</section>
+</section>
+<section id="cendatresponse-class" class="level2">
+<h2 class="anchored" data-anchor-id="cendatresponse-class"><code>CenDatResponse</code> Class</h2>
+<p>A container for the data returned by <code>CenDatHelper.get_data()</code>.</p>
+<section id="to_polarsself-schema_overridesnone-concatfalse" class="level3">
+<h3 class="anchored" data-anchor-id="to_polarsself-schema_overridesnone-concatfalse"><code>to_polars(self, schema_overrides=None, concat=False)</code></h3>
+<p>Converts the raw response data into a list of Polars DataFrames.</p>
+<ul>
+<li><p><strong><code>schema_overrides</code></strong> (<code>dict</code>, optional): A dictionary mapping column names to Polars data types to override the inferred schema. Example: <code>{'POP': pl.Int64}</code>.</p></li>
+<li><p><strong><code>concat</code></strong> (<code>bool</code>): If <code>True</code>, DataFrames are concatenated across response list items.</p></li>
+</ul>
+</section>
+<section id="to_pandasself-dtypesnone-concatfalse" class="level3">
+<h3 class="anchored" data-anchor-id="to_pandasself-dtypesnone-concatfalse"><code>to_pandas(self, dtypes=None, concat=False)</code></h3>
+<p>Converts the raw response data into a list of Pandas DataFrames.</p>
+<ul>
+<li><p><strong><code>dtypes</code></strong> (<code>dict</code>, optional): A dictionary mapping column names to Pandas data types, which is passed to the <code>.astype()</code> method. Example: <code>{'POP': 'int64'}</code>.</p></li>
+<li><p><strong><code>concat</code></strong> (<code>bool</code>): If <code>True</code>, DataFrames are concatenated across response list items.</p></li>
+</ul>
+</section>
+</section>
+</section>
+<section id="usage-examples" class="level1">
+<h1>Usage Examples</h1>
+<section id="example-1-acs-microdata-pums-request" class="level2">
+<h2 class="anchored" data-anchor-id="example-1-acs-microdata-pums-request">Example 1: ACS Microdata (PUMS) Request</h2>
+<p>This example demonstrates a complete workflow for retrieving Public Use Microdata Sample (PUMS) data from the ACS for specific geographic areas in Alabama and Arizona.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> polars <span class="im">as</span> pl</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dotenv <span class="im">import</span> load_dotenv</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> cendat <span class="im">import</span> CenDatHelper</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pprint <span class="im">import</span> pprint</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Load environment variables (e.g., for CENSUS_API_KEY)</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>load_dotenv()</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Initialize the helper for a set of years and provide API key</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>cd <span class="op">=</span> CenDatHelper(years<span class="op">=</span>[<span class="dv">2017</span>], key<span class="op">=</span>os.getenv(<span class="st">"CENSUS_API_KEY"</span>))</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Find and select the desired data product</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Use patterns to find the 5-year ACS PUMS product for 2017</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>potential_products <span class="op">=</span> cd.list_products(</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    patterns<span class="op">=</span>[</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"american community|acs"</span>,</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"public use micro|pums"</span>,</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">"5-year"</span>,</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">"^(?!.*puerto rico).*$"</span>,</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> product <span class="kw">in</span> potential_products:</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(product[<span class="st">"title"</span>], product[<span class="st">"vintage"</span>])</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a><span class="co"># Call set_products() with no arguments to use the filtered results</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>cd.set_products()</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Find and select the desired geography</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a><span class="co"># For PUMAs we can use 'public use microdata area' (sumlev 795)</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>cd.list_geos(to_dicts<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>cd.set_geos(<span class="st">"795"</span>)</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Find and select variables</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a><span class="co"># Find variables related to income, weights, or PUMA</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>potential_vars <span class="op">=</span> cd.list_variables(</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    to_dicts<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    patterns<span class="op">=</span>[<span class="st">"income"</span>, <span class="st">"person weight"</span>, <span class="st">"public.*area"</span>],</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    logic<span class="op">=</span><span class="bu">any</span>,</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> var <span class="kw">in</span> potential_vars:</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(var[<span class="st">"name"</span>], var[<span class="st">"label"</span>])</span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>cd.set_variables([<span class="st">"PUMA"</span>, <span class="st">"PWGTP"</span>, <span class="st">"HINCP"</span>, <span class="st">"ADJINC"</span>])</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. Get the data</span></span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Provide a list of dictionaries to `within` to make multiple</span></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a><span class="co">#  specific geographic requests in one call.</span></span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a><span class="co"># For microdata requests - due to the volume of data returned - this</span></span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a><span class="co">#  level of specificity is required.</span></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a>response <span class="op">=</span> cd.get_data(</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>    within<span class="op">=</span>[</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>        {<span class="st">"state"</span>: <span class="st">"1"</span>, <span class="st">"public use microdata area"</span>: [<span class="st">"400"</span>, <span class="st">"2500"</span>]},</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>        {<span class="st">"state"</span>: <span class="st">"4"</span>, <span class="st">"public use microdata area"</span>: <span class="st">"105"</span>},</span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a><span class="co"># 6. Review subscriptable attributes</span></span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> detail <span class="kw">in</span> [<span class="st">"products"</span>, <span class="st">"geos"</span>, <span class="st">"variables"</span>]:</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">'-'</span><span class="op">*</span><span class="dv">20</span>, detail, <span class="st">'-'</span><span class="op">*</span><span class="dv">20</span>)</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>    pprint(cd[detail])</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a><span class="co"># 7. Convert to a DataFrame</span></span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a><span class="co"># The response object can be converted to a list of Polars DataFrames </span></span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a><span class="co">#  which itself is easily concatenated (assuming the products are compatible)</span></span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>pums_df <span class="op">=</span> response.to_polars(concat<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="example-2-aggregate-data-request" class="level2">
+<h2 class="anchored" data-anchor-id="example-2-aggregate-data-request">Example 2: Aggregate Data Request</h2>
+<p>This example shows how to retrieve aggregate data for a more complex geography–county (or part)–that requires API calls nested within parent-level geographies (place and state, in this case). API calls are constructed automatically for all nested parent geographies below either the entire nation (default) or parent geographies provided explicitly and at any legitimate level of granularity through the <code>within</code> parameter in the <code>get_data()</code> method.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> polars <span class="im">as</span> pl</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dotenv <span class="im">import</span> load_dotenv</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> cendat <span class="im">import</span> CenDatHelper</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>load_dotenv()</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Initialize for multiple years</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>cdh <span class="op">=</span> CenDatHelper(years<span class="op">=</span>[<span class="dv">2022</span>, <span class="dv">2023</span>], key<span class="op">=</span>os.getenv(<span class="st">"CENSUS_API_KEY"</span>))</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Find and select products</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Find the standard 5-year detailed tables</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>potential_products <span class="op">=</span> cdh.list_products(</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    to_dicts<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    patterns<span class="op">=</span>[</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"american community|acs"</span>,</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"5-year"</span>,</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"detailed"</span>,</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> product <span class="kw">in</span> potential_products:</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(product[<span class="st">"title"</span>], product[<span class="st">"vintage"</span>])</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Further filter out special population products</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>potential_products <span class="op">=</span> cdh.list_products(</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>    to_dicts<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>    patterns<span class="op">=</span>[</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">"american community|acs"</span>,</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>        <span class="st">"5-year"</span>,</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        <span class="st">"detailed"</span>,</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="st">"^(?!.*(alaska|aian|selected)).*$"</span>,</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> product <span class="kw">in</span> potential_products:</span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(product[<span class="st">"title"</span>], product[<span class="st">"vintage"</span>])</span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>cdh.set_products()</span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Find and select geography</span></span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> geo <span class="kw">in</span> cdh.list_geos(to_dicts<span class="op">=</span><span class="va">True</span>):</span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(geo)</span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Set the geography to 'county (or part)' (sumlev 155). The success</span></span>
+<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a><span class="co">#  message will inform us that this geography requires 'state and </span></span>
+<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a><span class="co">#  place' to be specified in the `within` clause.</span></span>
+<span id="cb6-48"><a href="#cb6-48" aria-hidden="true" tabindex="-1"></a>cdh.set_geos([<span class="st">"155"</span>])</span>
+<span id="cb6-49"><a href="#cb6-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-50"><a href="#cb6-50" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Find and select variables</span></span>
+<span id="cb6-51"><a href="#cb6-51" aria-hidden="true" tabindex="-1"></a>potential_variables <span class="op">=</span> cdh.list_variables(</span>
+<span id="cb6-52"><a href="#cb6-52" aria-hidden="true" tabindex="-1"></a>    to_dicts<span class="op">=</span><span class="va">True</span>, patterns<span class="op">=</span>[<span class="st">"total"</span>, <span class="st">"less.*high"</span>]</span>
+<span id="cb6-53"><a href="#cb6-53" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-54"><a href="#cb6-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-55"><a href="#cb6-55" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> var <span class="kw">in</span> potential_variables:</span>
+<span id="cb6-56"><a href="#cb6-56" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(var[<span class="st">"name"</span>], var[<span class="st">"label"</span>])</span>
+<span id="cb6-57"><a href="#cb6-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-58"><a href="#cb6-58" aria-hidden="true" tabindex="-1"></a><span class="co"># Manually set variables after inspecting the list output</span></span>
+<span id="cb6-59"><a href="#cb6-59" aria-hidden="true" tabindex="-1"></a>cdh.set_variables([<span class="st">"B07009_002E"</span>, <span class="st">"B16010_009E"</span>])</span>
+<span id="cb6-60"><a href="#cb6-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-61"><a href="#cb6-61" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. Get the data - specify all parts in two places from one state </span></span>
+<span id="cb6-62"><a href="#cb6-62" aria-hidden="true" tabindex="-1"></a><span class="co">#  and parts from all places in another state. This yields 3,233 API </span></span>
+<span id="cb6-63"><a href="#cb6-63" aria-hidden="true" tabindex="-1"></a><span class="co">#  queries!</span></span>
+<span id="cb6-64"><a href="#cb6-64" aria-hidden="true" tabindex="-1"></a><span class="co"># It's important to not set `max_workers` too high to avoid having</span></span>
+<span id="cb6-65"><a href="#cb6-65" aria-hidden="true" tabindex="-1"></a><span class="co">#  Census block the connection. If that happens (you'll probably </span></span>
+<span id="cb6-66"><a href="#cb6-66" aria-hidden="true" tabindex="-1"></a><span class="co">#  see an error with 'An existing connection was forcibly closed </span></span>
+<span id="cb6-67"><a href="#cb6-67" aria-hidden="true" tabindex="-1"></a><span class="co">#  by the remote host'), lower the `max_workers` value and try again </span></span>
+<span id="cb6-68"><a href="#cb6-68" aria-hidden="true" tabindex="-1"></a><span class="co">#  after a short wait.</span></span>
+<span id="cb6-69"><a href="#cb6-69" aria-hidden="true" tabindex="-1"></a>response <span class="op">=</span> cdh.get_data(</span>
+<span id="cb6-70"><a href="#cb6-70" aria-hidden="true" tabindex="-1"></a>    max_workers<span class="op">=</span><span class="dv">50</span>,</span>
+<span id="cb6-71"><a href="#cb6-71" aria-hidden="true" tabindex="-1"></a>    within<span class="op">=</span>[</span>
+<span id="cb6-72"><a href="#cb6-72" aria-hidden="true" tabindex="-1"></a>        {<span class="st">"state"</span>: <span class="st">"36"</span>, <span class="st">"place"</span>: [<span class="st">"61797"</span>, <span class="st">"61621"</span>]},</span>
+<span id="cb6-73"><a href="#cb6-73" aria-hidden="true" tabindex="-1"></a>        {<span class="st">"state"</span>: <span class="st">"06"</span>},</span>
+<span id="cb6-74"><a href="#cb6-74" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb6-75"><a href="#cb6-75" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-76"><a href="#cb6-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-77"><a href="#cb6-77" aria-hidden="true" tabindex="-1"></a><span class="co"># 6. Convert and combine DataFrames, forcing estimate variables </span></span>
+<span id="cb6-78"><a href="#cb6-78" aria-hidden="true" tabindex="-1"></a><span class="co">#  to be integers</span></span>
+<span id="cb6-79"><a href="#cb6-79" aria-hidden="true" tabindex="-1"></a>estimates <span class="op">=</span> response.to_polars(</span>
+<span id="cb6-80"><a href="#cb6-80" aria-hidden="true" tabindex="-1"></a>    schema_overrides<span class="op">=</span>{</span>
+<span id="cb6-81"><a href="#cb6-81" aria-hidden="true" tabindex="-1"></a>        <span class="st">"B07009_002E"</span>: pl.Int64,</span>
+<span id="cb6-82"><a href="#cb6-82" aria-hidden="true" tabindex="-1"></a>        <span class="st">"B16010_009E"</span>: pl.Int64,</span>
+<span id="cb6-83"><a href="#cb6-83" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb6-84"><a href="#cb6-84" aria-hidden="true" tabindex="-1"></a>    concat<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-85"><a href="#cb6-85" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-86"><a href="#cb6-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-87"><a href="#cb6-87" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-88"><a href="#cb6-88" aria-hidden="true" tabindex="-1"></a><span class="co"># 7. Inspect</span></span>
+<span id="cb6-89"><a href="#cb6-89" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(estimates.head())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="example-3.-microdata-request" class="level2">
+<h2 class="anchored" data-anchor-id="example-3.-microdata-request">Example 3. Microdata Request</h2>
+<p>This example pulls monthly CPS microdata.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> polars <span class="im">as</span> pl</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dotenv <span class="im">import</span> load_dotenv</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> cendat <span class="im">import</span> CenDatHelper</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>load_dotenv()</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Initialize without specifying years</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>cdh <span class="op">=</span> CenDatHelper(key<span class="op">=</span>os.getenv(<span class="st">"CENSUS_API_KEY"</span>))</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Explore available products without much restriction</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>potential_products <span class="op">=</span> cdh.list_products(patterns<span class="op">=</span>[<span class="st">"cps"</span>])</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> product <span class="kw">in</span> potential_products:</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(product[<span class="st">"title"</span>], product[<span class="st">"vintage"</span>], product[<span class="st">"is_microdata"</span>], product[<span class="st">"url"</span>])</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Set to a specific year</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>cdh.set_years(<span class="dv">2019</span>)</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Explore products again with more spcificity</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>potential_products <span class="op">=</span> cdh.list_products(patterns<span class="op">=</span>[<span class="st">"cps basic"</span>])</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> product <span class="kw">in</span> potential_products:</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(product[<span class="st">"title"</span>], product[<span class="st">"vintage"</span>], product[<span class="st">"is_microdata"</span>], product[<span class="st">"url"</span>])</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. Set the products based on the last (more specific) product listing</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>cdh.set_products()</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a><span class="co"># 6. Explore variables for employment, education, and age </span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a><span class="co">#  (also need to identify weight vars)</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>potential_variables <span class="op">=</span> cdh.list_variables(</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>    patterns<span class="op">=</span>[</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        <span class="st">"unemployed"</span>,<span class="st">"school"</span>,<span class="st">"weight"</span>,<span class="st">"age"</span>,</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>    ],</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>    logic<span class="op">=</span><span class="bu">any</span>,</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> variable <span class="kw">in</span> potential_variables:</span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(variable[<span class="st">"name"</span>], variable[<span class="st">"label"</span>], variable[<span class="st">"vintage"</span>])</span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a><span class="co"># 7. Set the variables</span></span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>cdh.set_variables([<span class="st">"PELKAVL"</span>, <span class="st">"PEEDUCA"</span>, <span class="st">"PRTAGE"</span>, <span class="st">"PWCMPWGT"</span>, <span class="st">"PWLGWGT"</span>])</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a><span class="co"># 8. Explore geographies</span></span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a>cdh.list_geos(to_dicts<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a><span class="co"># 9. Set to state - for microdata, we then need to provide </span></span>
+<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a><span class="co">#  specific state[s] in the `within` clause</span></span>
+<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a>cdh.set_geos(<span class="st">"040"</span>)</span>
+<span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a><span class="co"># 10. Get the data for Colorado (12 concurrent API queries)</span></span>
+<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a>response <span class="op">=</span> cdh.get_data(</span>
+<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>    within<span class="op">=</span>{<span class="st">'state'</span>: <span class="st">'08'</span>}</span>
+<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-56"><a href="#cb7-56" aria-hidden="true" tabindex="-1"></a><span class="co"># 11. Convert to polars df and stack</span></span>
+<span id="cb7-57"><a href="#cb7-57" aria-hidden="true" tabindex="-1"></a>microdata <span class="op">=</span> response.to_polars(</span>
+<span id="cb7-58"><a href="#cb7-58" aria-hidden="true" tabindex="-1"></a>    schema_overrides<span class="op">=</span>{</span>
+<span id="cb7-59"><a href="#cb7-59" aria-hidden="true" tabindex="-1"></a>        <span class="st">'PELKAVL'</span>: pl.Int64,</span>
+<span id="cb7-60"><a href="#cb7-60" aria-hidden="true" tabindex="-1"></a>        <span class="st">'PEEDUCA'</span>: pl.Int64,</span>
+<span id="cb7-61"><a href="#cb7-61" aria-hidden="true" tabindex="-1"></a>        <span class="st">'PRTAGE'</span>: pl.Int64,</span>
+<span id="cb7-62"><a href="#cb7-62" aria-hidden="true" tabindex="-1"></a>        <span class="st">'PWCMPWGT'</span>: pl.Float64,</span>
+<span id="cb7-63"><a href="#cb7-63" aria-hidden="true" tabindex="-1"></a>        <span class="st">'PWLGWGT'</span>: pl.Float64,</span>
+<span id="cb7-64"><a href="#cb7-64" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb7-65"><a href="#cb7-65" aria-hidden="true" tabindex="-1"></a>    concat<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb7-66"><a href="#cb7-66" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-67"><a href="#cb7-67" aria-hidden="true" tabindex="-1"></a></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
