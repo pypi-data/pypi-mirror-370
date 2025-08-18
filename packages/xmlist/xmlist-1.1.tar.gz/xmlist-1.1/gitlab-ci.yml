@@ -1,0 +1,107 @@
+image: alpine:3.22.1
+
+variables:
+  PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
+  PIP_PROGRESS_BAR: 'off'
+  PIP_DISABLE_PIP_VERSION_CHECK: 'yes'
+
+cache:
+  paths:
+    - .cache/pip
+
+stages:
+  - prepare
+  - test
+  - build
+  - release
+
+before_script:
+  - apk add python3 git curl jq jo
+  - python -m venv env
+  - . env/bin/activate
+  - python -m pip install -U pip~=25.1 # for PEP 735 support; can remove this Later™
+
+# [prepare] generate version number
+generate-version:
+  stage: prepare
+  script:
+    - python -m pip install --group build
+    - echo XMLIST_VERSION=$(python -m setuptools_scm) | tee version.env
+  artifacts:
+    reports:
+      dotenv: version.env
+
+# [test] run tests
+run-tests:
+  stage: test
+  script:
+    - python -m pip install --group test
+    - python -m pytest -v
+
+# [build] build sdist and wheel and sign them with sigstore
+build-package:
+  stage: build
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
+  script:
+    - python -m pip install --group build
+    - python -m build
+    - python -m pypi_attestations sign dist/*
+  artifacts:
+    paths:
+      - dist/
+
+# [deploy] deploy to test.pypi.org and pypi.org
+.deploy-base:
+  id_tokens:
+    PYPI_ID_TOKEN:
+      aud: $PYPI_OIDC_AUD
+  variables:
+    TWINE_USERNAME: __token__
+    TWINE_REPOSITORY_URL: $PYPI_REPO_URL
+  script:
+    - python -m pip install --group publish
+    - >-
+      export TWINE_PASSWORD=$(curl -s --json "{\"token\": \"${PYPI_ID_TOKEN}\"}" $PYPI_OIDC_URL | jq -r .token)
+    - python -m twine upload --verbose --disable-progress-bar --attestations dist/*
+
+release-testpypi:
+  stage: release
+  environment:
+    name: release-test
+  variables:
+    PYPI_OIDC_AUD: testpypi
+    PYPI_OIDC_URL: https://test.pypi.org/_/oidc/mint-token
+    PYPI_REPO_URL: https://test.pypi.org/legacy/
+  extends: .deploy-base
+
+release-pypi:
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG
+  environment:
+    name: release
+  variables:
+    PYPI_OIDC_AUD: pypi
+    PYPI_OIDC_URL: https://pypi.org/_/oidc/mint-token
+    PYPI_REPO_URL: https://upload.pypi.org/legacy/
+  extends: .deploy-base
+
+release-gitlab:
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG
+  variables:
+    REL_URL: $CI_API_V4_URL/projects/$CI_PROJECT_ID/releases
+    PYPI_URL: https://pypi.org/project/xmlist/$XMLIST_VERSION/
+  script:
+    - export description="$(echo "$CI_COMMIT_TAG_MESSAGE" | sed '/BEGIN SSH SIGNATURE/,$d' | tee /dev/stderr)"
+    - >-
+      export json="$(jo name=xmlist-$XMLIST_VERSION \
+                        tag_name=$CI_COMMIT_TAG \
+                        description="$description" \
+                        assets=$(jo links=$(jo -a $(jo name=$PYPI_URL url=$PYPI_URL link_type=package))) \
+                         | jq . \
+                         | tee /dev/stderr)"
+    - curl --silent --verbose --fail-with-body --oauth2-bearer "$GITLAB_API_PAT" --json "$json" $REL_URL
