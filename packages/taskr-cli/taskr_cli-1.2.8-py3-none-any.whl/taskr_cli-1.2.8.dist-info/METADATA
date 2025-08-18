@@ -1,0 +1,314 @@
+Metadata-Version: 2.1
+Name: taskr_cli
+Version: 1.2.8
+Summary: A language agnostic make-like tool meant for python projects
+Keywords: cli,utility
+Author-Email: Kyle Peasley <Kyle.Peasley@gmail.com>
+License: MIT License
+         
+         Copyright (c) 2021 Kyle Peasley
+         
+         Permission is hereby granted, free of charge, to any person obtaining a copy
+         of this software and associated documentation files (the "Software"), to deal
+         in the Software without restriction, including without limitation the rights
+         to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+         copies of the Software, and to permit persons to whom the Software is
+         furnished to do so, subject to the following conditions:
+         
+         The above copyright notice and this permission notice shall be included in all
+         copies or substantial portions of the Software.
+         
+         THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+         IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+         FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+         AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+         LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+         OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+         SOFTWARE.
+         
+Classifier: Environment :: Console
+Classifier: Programming Language :: Python :: 3
+Project-URL: Homepage, https://gitlab.com/peasleyk/taskr
+Project-URL: Repository, https://gitlab.com/peasleyk/taskr
+Project-URL: Documentation, https://gitlab.com/peasleyk/taskr
+Requires-Python: >3.8
+Provides-Extra: dev
+Requires-Dist: build; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+Description-Content-Type: text/markdown
+
+# Taskr
+
+[![PyPI version](https://badge.fury.io/py/taskr-cli.svg)](https://badge.fury.io/py/taskr-cli)
+
+A magical, zero dependency, easy to use task runner with an original name. Inspired by [Mage](https://github.com/magefile/mage), a make-like tool for go. Made for python projects, but usable for any.
+
+All that's needed is a tasks.py file.
+
+A few highlights:
+
+- Basically make(1) without a build system
+- Zero dependencies
+- Auto load environment variable files
+- Run commands from any subdirectory, they will run from the project's root (task.py location)
+- Easily pass arguments to tasks from the command line
+- Auto generated cli documentation
+- Usable in any subdirectory of your project
+- Built in functions to easily run system commands inside virtual environments
+- Built in helper functions for python development
+
+## Installing
+
+```shell
+pip install taskr-cli
+```
+
+Check the version
+
+```shell
+taskr --version
+```
+
+Generate a default tasks file
+
+```shell
+taskr --init
+```
+
+## Using
+
+Make sure you have a tasks.py file defined in the root of your repo.
+`taskr` can be used from any sub directory of the project.
+
+CLI:
+
+```shell
+[master●] » taskr -h
+usage: taskr [-h] [-d] [-i] [-l] [-p] [-v]
+
+A cli utility to run generic tasks
+
+options:
+  -h, --help     show this help message and exit
+  -i, --init     generate a template task file
+  -l, --list     show defined tasks
+  -v, --version  show the version number
+
+```
+
+When listing tasks, taskr will attempt to grab either the docblock or a single # comment above the function name and show it for cli documentation. Taskr will prefer the single # comment over the docblock to display if both exist.
+
+Also note, any functions in `tasks.py` that start with an underscore are ignored when listing. Bellow's an example print out of taskr with a valid `task.py` file.
+
+```shell
+[master●] » taskr -l
+
+Tasks:
+ build       : Builds a wheel file
+ check       : Run all static analysis tools
+ clean       : Remove build artifacts, cache, etc.
+ fmt         : Run black
+ mypy        : Check types
+ *reinstall  : Re-installs taskr
+ ruff        : Run ruff
+ sort        : Sort imports
+ test        : Run tests
+ upload      : Upload project to PYPI
+
+* = default
+```
+
+To run a task, just pass the name of a function after `taskr`. Output from a task will be displayed
+
+```shell
+[master●] » taskr format
+All done! ✨ 🍰 ✨
+11 files left unchanged.
+```
+
+## Configuration Variables
+
+There are a few configuration setting, set in tasks.py itself. They are all uppercase and generally should be at the top of the file
+
+`VENV_REQUIRED = True` in your tasks.py file, taskr will only run if it detects it's running in a virtual environment. You can delete it otherwise
+
+`DEFAULT = "some_func"` marks the task as default. Default tasks are run when `taskr` is run without any arguments
+
+`ENV = path/to/file.env` will load that environment file before every task
+
+```python
+from taskr import runners
+
+DEFAULT = "test"
+VENV_REQUIRED = True
+ENVS = "dev.env"
+
+# Run tests, and passed dev.env vars when running 'taskr' in the cli
+def test
+  runners.run("python -m pytest tests/")
+```
+
+## Helpful functions for running tasks
+
+A few task running methods are provided for system running tasks. Taskr expects task functions to return either `True` (The task was successful) for `False`it failed. To determine if a subprocess/system call was successful or not, taskr looks at the return code of the called program. 0 is success, anything else fails.
+
+Taskr will auto copy your existing environment variables when running tasks, so running tasks with programs installed in a virual environment (i.e. dev tools though pip) will work.
+
+You can also run any code you want as well under a task, these are just helpful wrappers around subprocess that work nicely with taskr.
+
+### run
+
+`run`'s argument can be either a list, or a string. A list is parsed into one command, not multiple
+
+Optionally pass a an environment dictionary to be used at runtime.
+
+```python
+from taskr import runners
+
+# Run flake8
+def flake_list() -> bool:
+    return runners.run(["python", "-m", "flake8", "taskr/*.py"])
+
+# Run tests
+def flake() -> bool:
+    return runners.run("python -m pytest tests/ -v")
+
+# Build a wheel
+def build():
+  ENV = {
+    "PRODUCTION": "true"
+  }
+  return runners.run("python setup.py install", ENV)
+
+```
+
+### run_conditional
+
+`run_conditional` is a way to run tasks (functions) in order, as long as the previous task returns a non failure return code (False).
+You can throw normal python functions in here to. As of the current release, you cannot pass arguments to functions passed to `run_conditional`.
+
+```python
+from taskr import runners
+import some_package as sp
+
+# Run black
+def fmt():
+    return runners.run("python -m black .")
+
+# Check flake8
+def ruff():
+    return runners.run("python -m ruff")
+
+# Run all static tools
+def all():
+    return runners.run_conditional(flake, fmt, sp.function)
+```
+
+### run_output
+
+`run_output`' will run a command and return the output
+
+```python
+from taskr import runners
+
+# Get the number of env variables
+def get_count():
+    ret = runners.run_output("env | wc -l")
+    print(ret.status) # True
+    print(ret.stdout) # "90"
+    print(ret.sterr)  # ""
+```
+
+You can an environment dict to this function.
+
+## Passing arguments to functions
+
+You can also pass arbitrary arguments to any defined function. For example, passing the environment to starting a server.
+This requires the function to have a default argument set.
+
+```python
+def start(env: str = "Dev"):
+  ENVS = {
+    "ENV": env
+    "WATCH": "true"
+  }
+  return taskr.run("python start.py", ENVS)
+
+```
+
+And from the command line
+
+```shell
+taskr start dev
+# Or
+taskr start
+# Or
+taskr start prod
+
+```
+
+You can also use key word arguments so pass only selected arguments. This requires all previous arguments to have a default value.
+
+```python
+def start(env: str = "dev", timeout: int = 180):
+  ENVS = {
+    "ENV": env
+    "WATCH": "true"
+    "TIMEOUT": timeout
+  }
+  return taskr.run("python start.py", ENVS)
+
+```
+
+Only passing timeout in this example, and keeping env to be the default `dev`
+
+```shell
+taskr start timeout=60
+```
+
+## Utilities
+
+There are a few utility functions included, mostly for python package development. These are not the main focus of the package and more will probably not be added, rather spun out into a different package
+
+```python
+from taskr import utils
+
+# Removes dist/build folders
+utils.cleanBuilds()
+
+# Remove compiled files and folders (.pyc, __pycache__)
+utils.cleanCompiles()
+
+# In a venv or not
+utils.inVenv()
+
+# In a container (docker, podman) or not
+utils.inContainer()
+
+# Transforms an ENV file into a dict
+utils.readEnvFile(filename = None)
+
+# Bumps setup.py's version number by 0.0.1, or replaces it with argument
+utils.bumpVersion(version = None, variable = "version", filename = "setup.py"):
+
+# Adds `export TASKR_DIR=CWD' to your VENV activation, so
+# you can use taskr from any location in the VENV (e.g. sub directories)
+# Probably don't use this
+utils.addTaskrToEnv()
+```
+
+## Developing
+
+This project uses pipenv. Make sure it's installed. Then call
+
+```shell
+python -m pipenv shell
+pipenv install --dev
+taskr check
+taskr test
+```
+
+There are numerous tests in `taskr/tests` which cover most functionality that's testable, as well as examples
