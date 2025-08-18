@@ -1,0 +1,404 @@
+# askp - Perplexity CLI (Python)
+
+![askp demo](gif/askp.gif)
+
+A tiny command-line tool to query Perplexity’s API with optional search filters and structured/text output.
+
+## Modes
+
+askp supports two main modes:
+
+- **Interactive mode:**  
+  Start a conversational REPL for multi-turn chat and advanced features. Just run `askp` with no arguments.
+
+- **Single-shot mode:**  
+  Ask a single question and get a response immediately. Run `askp "your question"` with optional flags for output format, filters, and model selection.
+  Defaults to raw json to work with other model as a researcher.
+
+If you only want to run it, install to PATH and simply run `askp "your question"` after setting your API key.
+
+---
+
+## Features
+
+- **Interactive chat mode** (REPL) with slash commands for advanced control
+- **Single-shot mode** for quick answers or scripting
+- **Simple one-file CLI** in Python, no build step required
+- **Search filters**:
+  - Academic-only search: `-a/--academic`
+  - Restrict to a domain: `-d/--domain`
+  - Recency filter: `--recency {day|week|month}`
+- **Output modes**:
+  - Raw JSON (default, great for piping to `jq`)
+  - Text-only output: `-t/--text`
+  - Structured JSON with `--json-schema`
+  - Optional `--usage` and `--citations` summaries
+- **Model selection** with validation: `-m/--model {sonar, sonar-pro, sonar-reasoning, sonar-reasoning-pro}`
+- **Async API support** for long-running jobs (`--async`, `/async`)
+- **File and directory attachment** in chat (`/attach`, `/ocr`), including OCR for images
+- **Slash commands** for model switching, system prompts, filters, pruning, and more
+- **Piping and scripting**: designed for shell integration and automation
+- **Verbose logging** with `-v/--verbose` for debugging
+- **Cross-platform**: works on macOS, Linux, and Windows
+- **Easy install**: venv, pipx, or single-line user install
+- **API key fallback**: supports both `PPLX_API_KEY` and `PERPLEXITY_API_KEY`
+- **Extensible**: supports additional Python packages for enhanced features (e.g., BeautifulSoup for HTML, pytesseract for OCR)
+
+## Requirements
+
+- Python 3.8+
+- `requests` Python package
+
+Install dependencies one of two ways:
+
+- With a venv and requirements.txt:
+
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
+
+## Install
+
+### Recommended: Install from PyPI
+
+```bash
+pip install askp-cli
+```
+
+After installation, you can use the `askp` command directly:
+
+```bash
+askp --help
+```
+
+### Alternative: Install with pipx (isolated environment)
+
+```bash
+pipx install askp-cli
+```
+
+### Development: Install from source
+
+If you want to contribute or use the latest development version:
+
+```bash
+git clone https://github.com/LienSimen/perplexity-cli.git
+cd perplexity-cli
+pip install -e .
+```
+
+Or install directly from Git with pipx:
+
+```bash
+pipx install git+https://github.com/LienSimen/perplexity-cli.git
+```
+
+## Get an API key
+
+- You need a Perplexity API key. See Perplexity’s docs/pricing for obtaining an API key.
+
+## Configure your API key (PPLX_API_KEY with fallback)
+
+askp.py checks these environment variables in order:
+
+1. `PPLX_API_KEY` (preferred)
+2. `PERPLEXITY_API_KEY` (fallback)
+
+Below are platform-specific instructions to set environment variables.
+
+### macOS and Linux (bash/zsh)
+
+- Current shell only:
+
+  ```bash
+  export PPLX_API_KEY="your_api_key_here"
+  ```
+
+- Persist for future shells (append to your shell profile):
+
+  - For bash: `echo 'export PPLX_API_KEY="your_api_key_here"' >> ~/.bashrc`
+  - For zsh: `echo 'export PPLX_API_KEY="your_api_key_here"' >> ~/.zshrc`
+  - Then reload: `source ~/.bashrc` or `source ~/.zshrc`
+
+- fish shell (universal variable):
+
+  ```fish
+  set -Ux PPLX_API_KEY "your_api_key_here"
+  ```
+
+- System-wide (Debian/Ubuntu):
+
+  ```bash
+  echo 'PPLX_API_KEY="your_api_key_here"' | sudo tee -a /etc/environment
+  # log out and back in for changes to take effect
+  ```
+
+### Windows (PowerShell)
+
+- Current session only:
+
+  ```powershell
+  $env:PPLX_API_KEY = "your_api_key_here"
+  ```
+
+- Persist for your user profile:
+
+  ```powershell
+  setx PPLX_API_KEY "your_api_key_here"
+  # Restart your shell to see the change
+  ```
+
+- GUI method:
+  - Start > search "Environment Variables" > Edit the system environment variables
+  - Click "Environment Variables…"
+  - Under "User variables", New…
+  - Name: `PPLX_API_KEY`, Value: your key, OK
+
+If you already have `PERPLEXITY_API_KEY` set, that works too -- no changes needed.
+
+## Usage
+
+To start interactive mode:
+
+```bash
+askp
+```
+
+Basic (raw JSON by default):
+
+```bash
+askp "What are the key differences between SQL and NoSQL?"
+```
+
+Text-only output:
+
+```bash
+askp -t "Explain RAG in simple terms"
+```
+
+Academic-only search:
+
+```bash
+askp -a -t "Latest research on diffusion models vs transformers"
+```
+
+Restrict to a domain:
+
+```bash
+askp -t -d arxiv.org "Chain of thought prompting"
+```
+
+Recency filter:
+
+```bash
+askp -t --recency week "Best LLM fine-tuning guides"
+```
+
+Structured JSON response (example schema for startups):
+
+```bash
+askp --json-schema "List 5 notable AI infrastructure startups and their focus areas"
+```
+
+Choose a model:
+
+```bash
+askp -t -m sonar-pro "Summarize latest LLM evals"
+# Note: the async API only supports 'sonar-deep-research'; prefer -m sonar-deep-research with --async
+```
+
+Show usage and citations (when available) with text output:
+
+```bash
+askp -t --usage --citations "Provide sources for your answer on LoRA vs QLoRA"
+```
+
+Piping to jq (optional, when using raw JSON):
+
+```bash
+askp "Explain vector databases" | jq .
+```
+
+## Interactive chat mode
+
+Slash commands overview (type `/` to see suggestions):
+
+- /help — list commands
+- `/model <name>`, `/models` — change model or list available models
+- `/system <text>` — set a system prompt; typing `/system` and pressing Enter pre-fills it
+- `/academic on|off` — toggle or set academic search filter
+- `/domain [host]` — set or clear domain filter
+- `/recency day|week|month|off` — set or clear recency filter
+- `/jsonschema on|off` — toggle structured output
+- `/citations on|off` — toggle citation display (non-stream)
+- `/usage on|off` — toggle usage display (non-stream)
+- `/stream on|off` — toggle streaming output
+- `/attach [path] [summarize|full|all] [--as-user] [--max-files N] [--pattern ".py,.md"] [--include-hidden]` — attach a local file or directory (supports txt, md, pdf, docx, html, images via OCR). Default: summarize. If [path] is omitted, it uses the current directory. Use `all` to skip selection UI and include all shown.
+- `/async submit [prompt]|list|get <id>|wait <id>` — async helpers for chat sessions
+- `/attachlimit <N>` — set truncation limit for `/attach --as-user` (default 8000)
+- /settings — show current settings
+- /prune [N] — summarize the conversation and restart with the summary as system prompt (default N=200 words)
+- /clear — clear screen and start new conversation
+- /new, /reset — new conversation (preserve /system)
+- /exit, /quit — exit chat
+
+Run askp with no arguments to start a conversational REPL:
+
+```bash
+askp
+```
+
+### Attach files in chat (/attach and /ocr)
+
+Attach local files into the chat to provide context:
+
+- Supported: .txt, .md, .pdf, .docx, .html/.htm, .py, .json, .yaml/.yml, .toml, .ini/.cfg, .csv/.tsv, .sh, .ps1, .bat/.cmd, .ipynb
+- Images with OCR: .png, .jpg, .jpeg, .tif, .tiff (requires Tesseract OCR installed)
+- Default behavior is summarize, which adds a brief summary as a system note.
+- Use full to insert the entire text as a user message (only if reasonably small).
+- Use --as-user to force inserting as a user message with truncation if very long. Adjust with `/attachlimit <N>` or `--attach-limit <N>` CLI flag.
+
+Examples:
+
+```text
+/attach                         # no path: uses current directory, summarizes supported files
+/attach notes.md                # summarize by default
+/attach report.pdf summarize    # explicit summarize
+/attach "docs/plan v2.txt" full   # include full content if small enough
+/attach "huge.pdf" --as-user      # attach as user with truncation if long
+/attach ./project-notes/          # attach a directory; auto-summarize supported files
+/attach ./project-notes/ all      # attach all shown files without selection UI
+
+/ocr ./images                    # OCR images in a directory; interactive selection
+/ocr ./images all                # OCR all shown images without selection UI
+/ocr ./images --pattern ".png"    # limit to PNGs
+/ocr ./scan.jpg --as-user        # OCR a single file and insert as user message
+```
+
+Notes on OCR: pytesseract requires the Tesseract binary.
+
+- macOS (Homebrew): brew install tesseract
+- Debian/Ubuntu: sudo apt-get install tesseract-ocr
+- Windows: Install from <https://github.com/tesseract-ocr/tesseract> and ensure it’s on PATH.
+
+Notes on HTML extraction (optional BeautifulSoup):
+
+- If the beautifulsoup4 package is installed, askp uses it for more accurate HTML-to-text extraction (ignores scripts/styles, preserves text order better).
+- If not installed, askp falls back to a basic tag-stripper using regular expressions.
+- To install: pip install beautifulsoup4
+
+### Async usage
+
+askp supports the Perplexity Async API for single-shot requests and within chat. Only the model `sonar-deep-research` is supported by the async API.
+
+Single-shot (CLI) price around 0.40$:
+
+```bash
+# Takes 3-5 min, aprox $0.40
+askp --async --wait -t -m sonar-deep-research "Survey recent academic literature on applications of large language models in scientific research"
+# or fire-and-forget without --wait
+askp --async -t -m sonar-deep-research "Outline key strategies for global poverty reduction"
+```
+
+Example cost for above:
+
+```bash
+      "prompt_tokens": 9,
+      "completion_tokens": 9895,
+      "total_tokens": 9904,
+      "search_context_size": null,
+      "citation_tokens": 8417,
+      "num_search_queries": 20,
+      "reasoning_tokens": 62953,
+      "cost":
+        "input_tokens_cost": 0.0,
+        "output_tokens_cost": 0.08,
+        "reasoning_tokens_cost": 0.19,
+        "total_cost": 0.38
+```
+
+Tunables available with --async:
+
+- --search-mode {web|none}
+- --reasoning-effort {low|medium|high}
+- --return-images
+- --return-related-questions
+
+In chat, you can use helpers:
+
+```text
+/async submit            # submit current conversation as async job
+/async list              # list async jobs
+/async get <id>          # fetch a job by id
+/async wait <id>         # poll until completed
+```
+
+Notes:
+
+- In chat mode, replies are printed as plain text. You can pass `--usage` and/or `--citations` at startup to show those when available.
+- Startup flags like `-a/--academic`, `-d/--domain`, `--recency`, and `-m/--model` apply to the whole chat session. You can change the model mid-chat using `:model`.
+
+## Command-line flags
+
+- `--attach-limit <N>`: Set truncation limit used by /attach --as-user
+- `query` (positional): Your question/prompt
+- `-a, --academic`: Use academic search filter
+- `-d, --domain <host>`: Restrict search to a domain (e.g., `arxiv.org`)
+- `--recency {day|week|month}`: Search recency filter
+- `--json-schema`: Enable structured JSON response for the included schema example
+- `-m, --model {sonar, sonar-pro, sonar-reasoning, sonar-reasoning-pro}`: Select model (default: `sonar`)
+- `-t, --text`: Print only the assistant text (instead of raw JSON)
+- `-u, --usage`: Show token usage summary if available (only with `--text`)
+- `-c, --citations`: Show citations if available (only with `--text`)
+- `--async`: Use the async API for single-shot requests
+- `--wait`: When used with `--async`, poll for the result and print it when completed
+- `--search-mode {web|none}`: Search mode (async only)
+- `--reasoning-effort {low|medium|high}`: Reasoning effort (async only)
+- `--return-images`: Return images in the async response (async only)
+- `--return-related-questions`: Return related questions (async only)
+- `-v, --verbose`: Enable debug logging
+
+## Making it a global command (optional)
+
+### macOS/Linux
+
+Option A: Shebang + executable + PATH
+
+1. Make the script executable: `chmod +x askp.py`
+2. Put it somewhere on your PATH, e.g.: `cp askp.py /usr/local/bin/askp`
+3. Alternatively, use the included wrapper scripts for Windows/macOS/Linux; once on PATH, invoke `askp` everywhere.
+
+Option B: Use the included wrapper script
+
+- The included `askp` bash wrapper uses a relative path to the adjacent `askp.py`. Once the wrapper is on your PATH (`chmod +x askp`), just run `askp`.
+
+Option C: Alias
+
+```bash
+alias askp='python /absolute/path/to/askp.py'
+```
+
+Add that line to your shell profile to persist.
+
+### Windows
+
+- If you installed from PyPI (`pip install askp-cli`) the installer will place an `askp` launcher in your Python Scripts folder (for example, `Scripts` under your virtualenv or `%USERPROFILE%\AppData\Roaming\Python\PythonXY\Scripts`). Make sure that folder is on your PATH, then run:
+
+```powershell
+askp "your question"
+```
+
+- Alternatively, to run the local copy from this repository you can use the included `askp.bat` (it calls the `askp.py` next to it). Add the repository folder to your PATH or copy `askp.bat` into a folder already on your PATH.
+
+## Troubleshooting
+
+- Error: `Error: API key not found. Set PPLX_API_KEY (preferred) or PERPLEXITY_API_KEY.`
+  - Ensure you exported/set the variable and restarted your shell.
+- Error: `ModuleNotFoundError: No module named 'requests'`
+  - Run `pip install requests` or `pip install -r requirements.txt` in your virtual environment.
+- HTTP 401 Unauthorized
+  - Check that your API key is valid and has access.
+- Other HTTP errors
+  - The CLI prints server responses on errors to help diagnose issues (rate limits, malformed payloads, etc.).
