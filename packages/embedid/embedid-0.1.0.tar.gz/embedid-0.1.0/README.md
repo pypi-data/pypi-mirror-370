@@ -1,0 +1,221 @@
+# 📝 EmbedID README Manifesto — Maverick Edition
+
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)  
+![Build: Passing](https://img.shields.io/badge/build-passing-brightgreen)  
+[![GitHub](https://img.shields.io/badge/GitHub-james--the--giblet%2Fembedid-blue?logo=github)](https://github.com/james-the-giblet/embedid)
+
+Watermark protocol for authorship, remix lineage, and builder sovereignty.  
+Modular. Hackable. Unlicensed.
+
+---
+
+## 📦 Install
+
+Install via pip:
+
+```bash
+pip install embedid
+```
+
+Or for local development:
+
+```bash
+pip install -e .
+```
+
+---
+
+## ⚙️ Protocol Logic
+
+EmbedID isn’t a library. It’s a protocol.
+
+It encodes authorship into your files—source, manifest, or remix—using tamper-resistant watermarks.
+
+No central registry. No hidden handshake. Just raw identity, embedded.
+
+---
+
+## 🧬 Remix Rules
+
+This edition is free to fork, override, and mutate.
+
+- Rewrite the CLI.  
+- Swap the manifest logic.  
+- Add your own signature scheme.  
+- Strip it down or layer it up.
+
+Remixers aren’t users. They’re sovereign builders.  
+Declare your lineage or burn it. Your call.
+
+---
+
+## 🪪 Sovereignty Manifest
+
+EmbedID respects authorship. It doesn’t enforce it.
+
+You choose what to watermark.  
+You choose how to verify.  
+You choose when to declare lineage.
+
+The protocol is modular because sovereignty demands override.
+
+---
+
+## 🧨 Usage
+
+### Add watermark
+
+```bash
+embedid add path/to/file.py --author "James The Giblet"
+```
+
+### Verify watermark
+
+```bash
+embedid verify path/to/file.py
+```
+
+---
+
+## 📖 Full CLI Reference
+
+### embedid add
+
+Usage:  
+`embedid add <path> [--author <name>] [--timestamp <ISO>] [--manifest <file>]`
+
+Options:  
+
+- `--author`     specify the author string  
+- `--timestamp`  override auto-timestamp  
+- `--manifest`   output JSON manifest to a file  
+
+#### embedid verify
+
+Usage:  
+`embedid verify <path> [--manifest <file>]`
+
+Options:  
+
+- `--manifest`   read manifest from external JSON  
+
+#### embedid inspect
+
+Usage:  
+`embedid inspect <path>`
+
+Description:  
+Prints parsed manifest fields (author, date, hash, signature).
+
+#### embedid remove
+
+Usage:  
+`embedid remove <path>`
+
+Description:  
+Strips watermark and manifest data from the file.
+
+#### embedid test
+
+Usage:  
+`embedid test`
+
+Description:  
+Runs the built-in self-test suite for all CLI surfaces.
+
+---
+
+## 📄 Manifest Schema
+
+The JSON schema lets you parse or diff manifests programmatically:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "author":    { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "hash":      { "type": "string" },
+    "signature": { "type": "string" }
+  },
+  "required": ["author", "timestamp", "hash", "signature"]
+}
+```
+
+You can embed this inline in your file or as a separate `.manifest.json`.  
+Schema versions let you evolve without breaking older badges.
+
+---
+
+## 🚀 Example Workflows
+
+1. Fork the repo  
+2. Write `hello_embedid.py`  
+3. Watermark it  
+4. Verify locally  
+5. Push to GitHub and see CI reject on failed verify  
+
+```bash
+git clone https://github.com/james-the-giblet/embedid.git
+cd embedid
+echo 'print("hi")' > hello.py
+embedid add hello.py --author "Alice"
+embedid verify hello.py
+```
+
+---
+
+## ❓ Troubleshooting & FAQ
+
+- Q: Why did `verify` fail on CRLF files?  
+  A: Normalize line endings or use `--manifest` to bypass inline checks.  
+
+- Q: How do I rotate keys?  
+  A: Swap out `~/.embedid/keys.json` then run `embedid test`.  
+
+- Q: How to output manifest externally?  
+  A: Use `--manifest path/to/out.json` on the `add` or `verify` commands.
+
+---
+
+## 🌐 Community & Governance
+
+Join the discussion:
+
+- Discord/Matrix channel (link coming soon)  
+- Propose protocol changes via GitHub Issues  
+- Follow the Code of Conduct in `CODE_OF_CONDUCT.md`  
+- Check the full roadmap in `ROADMAP.md`
+
+---
+
+## 📜 Changelog & Releases
+
+Maintain history in `CHANGELOG.md`. Example entry:
+
+```markdown
+## [0.1.0] – 2025-08-16
+### Added
+- Basic add/verify/inspect/remove/test
+- JSON manifest schema v1.0.0
+
+### Fixed
+- Timestamp formatting bug on Windows PowerShell
+```
+
+See GitHub Releases for prebuilt wheels and source archives.
+
+---
+
+## 🔮 Roadmap
+
+- Signature verification (`v0.2.0`)  
+- Remix registry (`v0.3.0`)  
+- AI agent deployment (`v0.4.0`)  
+- Paid tiers for advanced watermarking (`v1.0.0+`)
+
+---
+
+Built by James ‘The Giblet’ Mavric.  
+Protocol architect. Brand strategist.  
+Unlicensed by design.
