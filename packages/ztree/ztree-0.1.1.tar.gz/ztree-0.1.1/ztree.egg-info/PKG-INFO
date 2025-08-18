@@ -1,0 +1,121 @@
+Metadata-Version: 2.4
+Name: ztree
+Version: 0.1.1
+Summary: ZTree is a Python wrapper around a Java decision tree algorithm.
+Author: Eric Cheng
+Author-email: Eric R <you@example.com>
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: scikit-learn
+Requires-Dist: jpype1
+Dynamic: author
+Dynamic: requires-python
+
+# ZTree
+
+ZTree is a Python wrapper around a Java-based decision tree algorithm using JPype.
+
+## Features
+
+- Classification and regression via Java backend.
+- Classification and regression tasks will be auto-detected via the inputted target array
+- tree = ZTree(feature_names=col_names, z_thresh=0.2) to insantiate a model.
+- If no feauture names provided, dummy names will be made. If no z_thresh provided, it will default to 0.5.
+- tree.fit(X, y) to fit a decision tree with X as the instance array and y as the target array.
+- tree.optimal_fit(X, y) to fit a decision tree with optimized z_thresh.
+- tree.search_optimal_z_thresh(X, y) to return the optimal z_thresh.
+- tree.predict(X) returns the predicted class labels for the input features X.
+- tree.predict_proba(X) returns the predicted class probabilities for classification tasks.
+  For each input sample in X, it returns the probability of belonging to each class (e.g., [0.25, 0.75] for class 0 and class 1).
+- print_tree() to print out the trained tree
+- more features to be added in the future, i.e. JSON
+
+## Installation
+
+Install via pip:
+bash
+pip install ztree
+
+## Requirements
+
+To use **ZTree**, ensure the following dependencies are available in your environment.
+
+### Python
+- Python >= 3.8
+
+### Python Dependencies  
+These will be installed automatically when using `pip install ztree`:
+
+- numpy – Array and numerical operations  
+- scikit-learn – ML utilities and estimator API  
+- jpype1 – Bridge to call Java from Python
+
+### Java
+- Java Development Kit (JDK) 8 or higher
+- Make sure `java` is available in your system `PATH` or set `JAVA_HOME`
+
+Note: JPype requires a working Java installation to start the JVM from Python.
+
+### ZTree Parameters
+
+- `z_thresh`: float  
+  Default = 0.5. The Z-statistic threshold used for feature evaluation.
+
+- `feature_names`: list[str]  
+  Optional. Used to map column names to features in Java.
+
+### Basic Usage / Quick start
+```python
+# basic imports
+import pandas as pd
+import numpy as np
+import zipfile
+from sklearn.metrics import roc_auc_score
+from ztree import ZTree
+from sklearn.model_selection import train_test_split
+
+# import dataset, UCI Adult Income for example
+zip_path = "C:/Users/ericr/Downloads/adult.zip"
+with zipfile.ZipFile(zip_path, 'r') as z:
+    with z.open("adult.data") as f1:
+        df1 = pd.read_csv(f1, header=None, sep=",", skipinitialspace=True)
+    with z.open("adult.test") as f2:
+        df2 = pd.read_csv(f2, header=None, sep=",", skipinitialspace=True, skiprows=1)
+datafile = pd.concat([df1, df2], ignore_index=True)
+
+# create column names for printing / preprocessing
+col_names = ["age", "workclass", "fnlwgt", "education", "education-num", "marital-status", "occupation", "relationship",
+             "race", "sex", "capital-gain", "capital-loss",  "hours-per-week", "native-country", "income"]
+datafile.columns = col_names
+datafile['income'] = datafile['income'].apply(lambda x: 1 if x in {'>50K', '>50K.'} else 0)
+datafile = datafile.drop(columns=["fnlwgt"])
+col_names.remove("fnlwgt")
+# notice one-hot encoding is not necessary, force categorical features to strings and continuous features leave as floats/ints
+X = datafile.drop(columns=["income"])
+for col in X.select_dtypes(include=['object', 'category']).columns:
+    X[col] = X[col].astype(str) 
+col_names = list(X.columns)
+y = datafile["income"]
+X = X.values
+y = y.values
+y = y.astype("int64")
+# train/test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.7)
+# make tree
+ztree1 = ZTree(feature_names=col_names, z_thresh=0.5)
+ztree1.fit(X_train, y_train)
+y_pred1 = ztree1.predict_proba(X_test)[:, 1]
+auc = roc_auc_score(y_test, y_pred1)
+print(f"{auc:.6f}")
+ztree1.print_tree()
+ztree2 = ZTree(feature_names=col_names)
+ztree2.fit_optimal(X_train, y_train)
+y_pred2 = ztree2.predict_proba(X_test)[:, 1]
+auc = roc_auc_score(y_test, y_pred2)
+print(f"{auc:.6f}")
+ztree2.print_tree()
