@@ -1,0 +1,691 @@
+---
+tags: [gradio-custom-component, Image]
+title: gradio_imagemeta
+short_description: Image Preview with Metadata for Gradio Interface
+colorFrom: blue
+colorTo: yellow
+sdk: gradio
+pinned: false
+app_file: space.py
+---
+
+# `gradio_imagemeta`
+<a href="https://pypi.org/project/gradio_imagemeta/" target="_blank"><img alt="PyPI - Version" src="https://img.shields.io/pypi/v/gradio_imagemeta"></a>  
+
+Image Preview with Metadata for Gradio Interface
+
+## Installation
+
+```bash
+pip install gradio_imagemeta
+```
+
+## Usage
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Any
+import gradio as gr
+from gradio_imagemeta import ImageMeta
+from gradio_imagemeta.helpers import extract_metadata, add_metadata, transfer_metadata
+from gradio_propertysheet import PropertySheet
+from gradio_propertysheet.helpers import build_dataclass_fields, create_dataclass_instance
+from pathlib import Path
+
+
+output_dir = Path("outputs")
+output_dir.mkdir(exist_ok=True)
+
+@dataclass
+class ImageSettings:
+    """Configuration for image metadata settings."""
+    model: str = field(default="", metadata={"label": "Model"})
+    f_number: str = field(default="", metadata={"label": "FNumber"})
+    iso_speed_ratings: str = field(default="", metadata={"label": "ISOSpeedRatings"})
+    s_churn: float = field(
+        default=0.0,
+        metadata={"component": "slider", "label": "Schurn", "minimum": 0.0, "maximum": 1.0, "step": 0.01},
+    )
+
+@dataclass
+class PropertyConfig:
+    """Root configuration for image properties, including nested image settings."""
+    image_settings: ImageSettings = field(default_factory=ImageSettings)
+    description: str = field(default="", metadata={"label": "Description"})
+
+def infer_type(s: str):
+    """
+    Infers and converts a string to the most likely data type.
+
+    It attempts conversions in the following order:
+    1. Integer
+    2. Float
+    3. Boolean (case-insensitive 'true' or 'false')
+    If all conversions fail, it returns the original string.
+
+    Args:
+        s: The input string to be converted.
+
+    Returns:
+        The converted value (int, float, bool) or the original string.
+    """
+    if not isinstance(s, str):
+        # If the input is not a string, return it as is.
+        return s
+
+    # 1. Try to convert to an integer
+    try:
+        return int(s)
+    except ValueError:
+        # Not an integer, continue...
+        pass
+
+    # 2. Try to convert to a float
+    try:
+        return float(s)
+    except ValueError:
+        # Not a float, continue...
+        pass
+    
+    # 3. Check for a boolean value
+    # This explicit check is important because bool('False') evaluates to True.
+    s_lower = s.lower()
+    if s_lower == 'true':
+        return True
+    if s_lower == 'false':
+        return False
+        
+    # 4. If nothing else worked, return the original string
+    return s
+
+def handle_load_metadata(image_data: ImageMeta | None) -> List[Any]:
+    """
+    Processes image metadata and maps it to output components.
+
+    Args:
+        image_data: ImageMeta object containing image data and metadata, or None.
+
+    Returns:
+        A list of values for output components (Textbox, Slider, or PropertySheet instances).
+    """
+    if not image_data:
+        return [gr.Textbox(value="") for _ in output_fields]
+
+    metadata = extract_metadata(image_data, only_custom_metadata=True)
+    dataclass_fields = build_dataclass_fields(PropertyConfig)
+    raw_values = transfer_metadata(output_fields, metadata, dataclass_fields)
+
+    output_values = [gr.skip()] * len(output_fields)
+    for i, (component, value) in enumerate(zip(output_fields, raw_values)):        
+        if hasattr(component, 'root_label'):
+            output_values[i] = create_dataclass_instance(PropertyConfig, value)
+        else:
+            output_values[i] = gr.update(value=infer_type(value))
+    
+    return output_values
+
+def save_image_with_metadata(image_data: Any, *inputs: Any) -> str | None:
+    """
+    Saves an image with updated metadata to a file.
+
+    Args:
+        image_data: Input image data (e.g., file path or PIL Image).
+        *inputs: Variable number of input values from UI components (Textbox, Slider).
+
+    Returns:
+        The file path of the saved image, or None if no image is provided.
+    """
+    if not image_data:
+        return None
+    
+    params = list(inputs)
+    image_params = dict(zip(input_fields.keys(), params))
+    #dataclass_fields = build_dataclass_fields(PropertyConfig)
+    metadata = {label: image_params.get(label, "") for label in image_params.keys()}
+    
+    new_filepath = output_dir / "image_with_meta.png"
+    
+    add_metadata(image_data, metadata, new_filepath)
+    
+    return str(new_filepath)
+
+initial_property_from_meta_config = PropertyConfig()
+
+with gr.Blocks() as demo:
+    gr.Markdown("# ImageMeta Component Demo")
+    gr.Markdown(
+        """
+        **To Test:**
+        1. Upload an image with EXIF or PNG metadata using either the "Upload Imagem (Custom metadata only)" component or the "Upload Imagem (all metadata)" component.
+        2. Click the 'Info' icon (ⓘ) in the top-left of the image component to view the metadata panel.
+        3. Click 'Load Metadata' in the popup to populate the fields below with metadata values (`Model`, `FNumber`, `ISOSpeedRatings`, `Schurn`, `Description`).
+        4. The section below displays how metadata is rendered in components and the `PropertySheet` custom component, showing the hierarchical structure of the image settings.
+        5. In the "Metadata Viewer" section, you can add field values as metadata to a previously uploaded image in "Upload Image (Custom metadata only)." Then click 'Add metadata and save image' to save a new image with the metadata.
+        """
+    )
+    property_sheet_state = gr.State(value=initial_property_from_meta_config)
+    with gr.Row():
+        img_custom = ImageMeta(
+            label="Upload Image (Custom metadata only)",
+            type="filepath",
+            width=300,
+            height=400,            
+            interactive=True
+        )
+        img_all = ImageMeta(
+            label="Upload Image (All metadata)",
+            only_custom_metadata=False,
+            type="filepath",
+            width=300,
+            height=400,            
+            popup_metadata_height=400,
+            popup_metadata_width=500,
+            interactive=True
+        )
+
+    gr.Markdown("## Metadata Viewer")
+    gr.Markdown("### Individual Components")
+    with gr.Row():
+        model_box = gr.Textbox(label="Model")
+        fnumber_box = gr.Textbox(label="FNumber")
+        iso_box = gr.Textbox(label="ISOSpeedRatings")
+        s_churn = gr.Slider(label="Schurn", value=1.0, minimum=0.0, maximum=1.0, step=0.1)
+        description_box = gr.Textbox(label="Description")
+    
+    gr.Markdown("### PropertySheet Component")
+    with gr.Row():
+        property_sheet = PropertySheet(
+            value=initial_property_from_meta_config,
+            label="Image Settings",
+            width=400,
+            height=550,
+            visible=True,
+            root_label="General"
+        )    
+    gr.Markdown("## Metadata Editor")
+    with gr.Row():
+        save_button = gr.Button("Add Metadata and Save Image")
+        saved_file_output = gr.File(label="Download Image")
+   
+        
+    input_fields = {
+        "Model": model_box,
+        "FNumber": fnumber_box,
+        "ISOSpeedRatings": iso_box,
+        "Schurn": s_churn,
+        "Description": description_box
+    }
+    
+    output_fields = [
+        property_sheet,
+        model_box,
+        fnumber_box,
+        iso_box,
+        s_churn,
+        description_box
+    ]
+    
+    img_custom.load_metadata(handle_load_metadata, inputs=img_custom, outputs=output_fields)
+    img_all.load_metadata(handle_load_metadata, inputs=img_all, outputs=output_fields)
+    
+    def handle_render_change(updated_config: PropertyConfig, current_state: PropertyConfig):
+        """
+        Updates the PropertySheet state when its configuration changes.
+
+        Args:
+            updated_config: The new PropertyConfig instance from the PropertySheet.
+            current_state: The current PropertyConfig state.
+
+        Returns:
+            A tuple of (updated_config, updated_config) or (current_state, current_state) if updated_config is None.
+        """
+        if updated_config is None:
+            return current_state, current_state
+        return updated_config, updated_config
+    
+    property_sheet.change(
+        fn=handle_render_change,
+        inputs=[property_sheet, property_sheet_state],
+        outputs=[property_sheet, property_sheet_state]
+    )
+    save_button.click(
+        save_image_with_metadata,
+        inputs=[img_custom, *input_fields.values()],
+        outputs=[saved_file_output]
+    )
+    
+if __name__ == "__main__":
+    demo.launch()
+```
+
+## `ImageMeta`
+
+### Initialization
+
+<table>
+<thead>
+<tr>
+<th align="left">name</th>
+<th align="left" style="width: 25%;">type</th>
+<th align="left">default</th>
+<th align="left">description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>value</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+str | Image.Image | np.ndarray | Callable | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">A PIL Image, numpy array, path or URL for the default value that Image component is going to take. If a function is provided, the function will be called each time the app loads to set the initial value of this component.</td>
+</tr>
+
+<tr>
+<td align="left"><code>format</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+str
+```
+
+</td>
+<td align="left"><code>"webp"</code></td>
+<td align="left">File format (e.g. "png" or "gif"). Used to save image if it does not already have a valid format (e.g. if the image is being returned to the frontend as a numpy array or PIL Image). The format should be supported by the PIL library. Applies both when this component is used as an input or output. This parameter has no effect on SVG files.</td>
+</tr>
+
+<tr>
+<td align="left"><code>height</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+int | str | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">The height of the component, specified in pixels if a number is passed, or in CSS units if a string is passed. This has no effect on the preprocessed image file or numpy array, but will affect the displayed image.</td>
+</tr>
+
+<tr>
+<td align="left"><code>width</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+int | str | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">The width of the component, specified in pixels if a number is passed, or in CSS units if a string is passed. This has no effect on the preprocessed image file or numpy array, but will affect the displayed image.</td>
+</tr>
+
+<tr>
+<td align="left"><code>image_mode</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+Literal[
+        "1",
+        "L",
+        "P",
+        "RGB",
+        "RGBA",
+        "CMYK",
+        "YCbCr",
+        "LAB",
+        "HSV",
+        "I",
+        "F",
+    ]
+    | None
+```
+
+</td>
+<td align="left"><code>"RGB"</code></td>
+<td align="left">The pixel format and color depth that the image should be loaded and preprocessed as. "RGB" will load the image as a color image, or "L" as black-and-white. See https://pillow.readthedocs.io/en/stable/handbook/concepts.html for other supported image modes and their meaning. This parameter has no effect on SVG or GIF files. If set to None, the image_mode will be inferred from the image file type (e.g. "RGBA" for a .png image, "RGB" in most other cases).</td>
+</tr>
+
+<tr>
+<td align="left"><code>type</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+Literal["numpy", "pil", "filepath"]
+```
+
+</td>
+<td align="left"><code>"numpy"</code></td>
+<td align="left">The format the image is converted before being passed into the prediction function. "numpy" converts the image to a numpy array with shape (height, width, 3) and values from 0 to 255, "pil" converts the image to a PIL image object, "filepath" passes a str path to a temporary file containing the image. To support animated GIFs in input, the `type` should be set to "filepath" or "pil". To support SVGs, the `type` should be set to "filepath".</td>
+</tr>
+
+<tr>
+<td align="left"><code>label</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+str | I18nData | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">The label for this component. Appears above the component and is also used as the header if there are a table of examples for this component. If None and used in a `gr.Interface`, the label will be the name of the parameter this component is assigned to.</td>
+</tr>
+
+<tr>
+<td align="left"><code>every</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+Timer | float | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">Continously calls `value` to recalculate it if `value` is a function (has no effect otherwise). Can provide a Timer whose tick resets `value`, or a float that provides the regular interval for the reset Timer.</td>
+</tr>
+
+<tr>
+<td align="left"><code>inputs</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+Component | Sequence[Component] | set[Component] | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">Components that are used as inputs to calculate `value` if `value` is a function (has no effect otherwise). `value` is recalculated any time the inputs change.</td>
+</tr>
+
+<tr>
+<td align="left"><code>show_label</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">If True, will display label.</td>
+</tr>
+
+<tr>
+<td align="left"><code>show_download_button</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool
+```
+
+</td>
+<td align="left"><code>True</code></td>
+<td align="left">If True, will display button to download image. Only applies if interactive is False (e.g. if the component is used as an output).</td>
+</tr>
+
+<tr>
+<td align="left"><code>container</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool
+```
+
+</td>
+<td align="left"><code>True</code></td>
+<td align="left">If True, will place the component in a container - providing some extra padding around the border.</td>
+</tr>
+
+<tr>
+<td align="left"><code>scale</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+int | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">Relative size compared to adjacent Components. For example if Components A and B are in a Row, and A has scale=2, and B has scale=1, A will be twice as wide as B. Should be an integer. scale applies in Rows, and to top-level Components in Blocks where fill_height=True.</td>
+</tr>
+
+<tr>
+<td align="left"><code>min_width</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+int
+```
+
+</td>
+<td align="left"><code>160</code></td>
+<td align="left">Minimum pixel width, will wrap if not sufficient screen space to satisfy this value. If a certain scale value results in this Component being narrower than min_width, the min_width parameter will be respected first.</td>
+</tr>
+
+<tr>
+<td align="left"><code>interactive</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">If True, will allow users to upload and edit an image; if False, can only be used to display images. If not provided, this is inferred based on whether the component is used as an input or output.</td>
+</tr>
+
+<tr>
+<td align="left"><code>visible</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool
+```
+
+</td>
+<td align="left"><code>True</code></td>
+<td align="left">If False, component will be hidden.</td>
+</tr>
+
+<tr>
+<td align="left"><code>elem_id</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+str | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">An optional string that is assigned as the id of this component in the HTML DOM. Can be used for targeting CSS styles.</td>
+</tr>
+
+<tr>
+<td align="left"><code>elem_classes</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+list[str] | str | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">An optional list of strings that are assigned as the classes of this component in the HTML DOM. Can be used for targeting CSS styles.</td>
+</tr>
+
+<tr>
+<td align="left"><code>render</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool
+```
+
+</td>
+<td align="left"><code>True</code></td>
+<td align="left">If False, component will not render be rendered in the Blocks context. Should be used if the intention is to assign event listeners now but render the component later.</td>
+</tr>
+
+<tr>
+<td align="left"><code>key</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+int | str | tuple[int | str, ...] | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">In a gr.render, Components with the same key across re-renders are treated as the same component, not a new component. Properties set in 'preserved_by_key' are not reset across a re-render.</td>
+</tr>
+
+<tr>
+<td align="left"><code>preserved_by_key</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+list[str] | str | None
+```
+
+</td>
+<td align="left"><code>"value"</code></td>
+<td align="left">A list of parameters from this component's constructor. Inside a gr.render() function, if a component is re-rendered with the same key, these (and only these) parameters will be preserved in the UI (if they have been changed by the user or an event listener) instead of re-rendered based on the values provided during constructor.</td>
+</tr>
+
+<tr>
+<td align="left"><code>show_share_button</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">If True, will show a share icon in the corner of the component that allows user to share outputs to Hugging Face Spaces Discussions. If False, icon does not appear. If set to None (default behavior), then the icon appears if this Gradio app is launched on Spaces, but not otherwise.</td>
+</tr>
+
+<tr>
+<td align="left"><code>placeholder</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+str | None
+```
+
+</td>
+<td align="left"><code>None</code></td>
+<td align="left">Custom text for the upload area. Overrides default upload messages when provided. Accepts new lines and `#` to designate a heading.</td>
+</tr>
+
+<tr>
+<td align="left"><code>show_fullscreen_button</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool
+```
+
+</td>
+<td align="left"><code>True</code></td>
+<td align="left">If True, will show a fullscreen icon in the corner of the component that allows user to view the image in fullscreen mode. If False, icon does not appear.</td>
+</tr>
+
+<tr>
+<td align="left"><code>only_custom_metadata</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool
+```
+
+</td>
+<td align="left"><code>True</code></td>
+<td align="left">If True, extracts only custom metadata, excluding technical metadata like ImageWidth or ImageHeight. Defaults to True.</td>
+</tr>
+
+<tr>
+<td align="left"><code>disable_preprocess</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+bool
+```
+
+</td>
+<td align="left"><code>True</code></td>
+<td align="left">If True, skips preprocessing and returns the raw ImageMetaData payload. Defaults to True.</td>
+</tr>
+
+<tr>
+<td align="left"><code>popup_metadata_width</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+int | str
+```
+
+</td>
+<td align="left"><code>400</code></td>
+<td align="left">Metadata popup width in pixels or CSS units. Defaults to 400.</td>
+</tr>
+
+<tr>
+<td align="left"><code>popup_metadata_height</code></td>
+<td align="left" style="width: 25%;">
+
+```python
+int | str
+```
+
+</td>
+<td align="left"><code>300</code></td>
+<td align="left">Metadata popup height in pixels or CSS units. Defaults to 300.</td>
+</tr>
+</tbody></table>
+
+
+### Events
+
+| name | description |
+|:-----|:------------|
+| `clear` | This listener is triggered when the user clears the ImageMeta using the clear button for the component. |
+| `change` | Triggered when the value of the ImageMeta changes either because of user input (e.g. a user types in a textbox) OR because of a function update (e.g. an image receives a value from the output of an event trigger). See `.input()` for a listener that is only triggered by user input. |
+| `select` | Event listener for when the user selects or deselects the ImageMeta. Uses event data gradio.SelectData to carry `value` referring to the label of the ImageMeta, and `selected` to refer to state of the ImageMeta. See EventData documentation on how to use this event data |
+| `upload` | This listener is triggered when the user uploads a file into the ImageMeta. |
+| `input` | This listener is triggered when the user changes the value of the ImageMeta. |
+| `load_metadata` | Triggered when the user clicks the 'Load Metadata' button, expecting ImageMetaData as input. |
+
+
+
+### User function
+
+The impact on the users predict function varies depending on whether the component is used as an input or output for an event (or both).
+
+- When used as an Input, the component only impacts the input signature of the user function.
+- When used as an output, the component only impacts the return signature of the user function.
+
+The code snippet below is accurate in cases where the component is used as both an input and an output.
+
+- **As output:** Is passed, preprocessed image as a NumPy array, PIL Image, filepath, ImageMetaData, or None.
+- **As input:** Should return, input image as a NumPy array, PIL Image, string (file path or URL), Path object, or None.
+
+ ```python
+ def predict(
+     value: numpy.ndarray | PIL.Image.Image | str | ImageMetaData | None
+ ) -> numpy.ndarray | PIL.Image.Image | str | pathlib.Path | None:
+     return value
+ ```
+ 
+
+## `ImageMetaData`
+```python
+class ImageMetaData(ImageData):
+    pass
+```
