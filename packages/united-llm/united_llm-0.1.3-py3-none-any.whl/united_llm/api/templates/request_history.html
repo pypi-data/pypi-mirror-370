@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Request History - Unified LLM{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Page Header -->
+    {% set header_data = {
+        'title': 'Request History',
+        'subtitle': 'View and manage LLM request logs',
+        'icon': 'fas fa-history',
+        'breadcrumb': 'Request History',
+        'show_send_request_btn': true,
+        'show_export_buttons': true
+    } %}
+    {% include "components/header.html" %}
+    
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div class="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+            <div class="flex flex-wrap gap-4 flex-1">
+                <!-- Provider Filter -->
+                <div class="min-w-40">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Provider</label>
+                    <select id="providerFilter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">All Providers</option>
+                        {% for provider in available_providers %}
+                        <option value="{{ provider }}" {% if current_filters.provider == provider %}selected{% endif %}>
+                            {{ provider|title }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Model Filter -->
+                <div class="min-w-48">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                    <select id="modelFilter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">All Models</option>
+                        {% for model in available_models %}
+                        <option value="{{ model.id }}" {% if current_filters.model == model.id %}selected{% endif %}>
+                            {{ model.display_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Search Type Filter -->
+                <div class="min-w-40">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Search Type</label>
+                    <select id="searchTypeFilter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">All Types</option>
+                        <option value="duckduckgo" {% if current_filters.search_type == 'duckduckgo' %}selected{% endif %}>DuckDuckGo</option>
+                        <option value="anthropic" {% if current_filters.search_type == 'anthropic' %}selected{% endif %}>Anthropic Web</option>
+                    </select>
+                </div>
+                
+                <!-- Status Filter -->
+                <div class="min-w-32">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select id="statusFilter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">All Status</option>
+                        <option value="success" {% if current_filters.status == 'success' %}selected{% endif %}>Success</option>
+                        <option value="error" {% if current_filters.status == 'error' %}selected{% endif %}>Error</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Filter Actions -->
+            <div class="flex gap-2">
+                <button id="applyFilters" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-filter"></i> Apply
+                </button>
+                <button id="clearFilters" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-times"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Results Summary -->
+    {% if total_count > 0 %}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="text-gray-700">
+                Showing {{ ((page - 1) * per_page + 1) }} - {{ [page * per_page, total_count]|min }} of {{ total_count }} requests
+                {% if current_filters.provider or current_filters.model or current_filters.search_type or current_filters.status %}
+                <span class="text-blue-600 font-medium">(filtered)</span>
+                {% endif %}
+            </div>
+            
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="flex gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page - 1 }}{{ filter_params }}" 
+                   class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded transition-colors">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+                {% endif %}
+                
+                <span class="bg-blue-500 text-white px-3 py-1 rounded">{{ page }}</span>
+                
+                {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}{{ filter_params }}" 
+                   class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded transition-colors">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Request Table -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        {% if requests %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prompt</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tokens</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for request in requests %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ request.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center gap-2">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {{ request.provider }}
+                                </span>
+                                <span class="text-sm text-gray-600">{{ model_display_names.get(request.model, request.model) }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs">
+                            <div class="truncate" title="{{ request.prompt }}">
+                                {{ request.prompt[:100] }}{% if request.prompt|length > 100 %}...{% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if request.error %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                <i class="fas fa-exclamation-circle mr-1"></i>
+                                Error
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <i class="fas fa-check-circle mr-1"></i>
+                                Success
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {% if request.duration_ms %}
+                            {{ request.duration_ms|round|int }}ms
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {% if request.tokens_used %}
+                            {{ request.tokens_used|number_format }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button class="text-blue-600 hover:text-blue-900 transition-colors view-details-btn" 
+                                    data-request-id="{{ request.id }}">
+                                <i class="fas fa-eye"></i> View
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <i class="fas fa-inbox text-gray-400 text-4xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No requests found</h3>
+            <p class="text-gray-500">
+                {% if current_filters.provider or current_filters.model or current_filters.search_type or current_filters.status %}
+                Try adjusting your filters or <button id="clearAllFilters" class="text-blue-600 hover:text-blue-800 underline">clear all filters</button>.
+                {% else %}
+                Start by sending your first LLM request.
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Include Modal -->
+{% include "components/modal.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% include "components/modal_scripts.html" %}
+{% endblock %}
