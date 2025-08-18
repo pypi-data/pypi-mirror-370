@@ -1,0 +1,87 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ startsWith(matrix.os, 'macos-') && 'macOS' || startsWith(matrix.os, 'windows-') && 'Windows' || 'Linux' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.8"
+
+      - uses: extractions/setup-just@v3
+        with:
+          just-version: "1.42.4" # optional semver specification, otherwise latest
+
+      - name: Install libpostal
+        run: |
+             if [ "$RUNNER_OS" != "Windows" ]; then
+                just install-libpostal
+             else
+                echo "Postal installation not supported on $RUNNER_OS"
+             fi
+        shell: bash
+
+      - name: Install dev environment
+        run: just install
+
+      - name: Run tests
+        run: uv run just test
+  lint-and-docs:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.8"
+
+      - uses: extractions/setup-just@v3
+        with:
+          just-version: "1.42.4" # optional semver specification, otherwise latest
+
+      - name: Run linters
+        run: just lint
+
+      - name: Build docs
+        run: just docs-build
+      
+      - name: Publish docs
+        if: github.repository == 'NickCrews/mismo' && github.ref == 'refs/heads/main'  && github.event_name == 'push'
+        run: just docs-publish
+

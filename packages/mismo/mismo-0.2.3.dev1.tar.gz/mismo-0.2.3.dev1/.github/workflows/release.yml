@@ -1,0 +1,58 @@
+name: Release to PyPI
+
+on:
+  schedule:
+    # weekly on Sunday. This will 
+    - cron: "4 23 * * 0"
+
+  # as needed by clicking through the github actions UI
+  workflow_dispatch:
+
+# we do not want more than one release workflow executing at the same time, ever
+concurrency:
+  group: release
+  # cancelling in the middle of a release would create incomplete releases
+  # so cancel-in-progress is false
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository_owner == 'NickCrews'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.8"
+
+      - uses: extractions/setup-just@v3
+        env:
+          just-version: "1.42.4"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump ibis version
+        id: get-version
+        run: echo "value=$(just set-version)" | tee -a "$GITHUB_OUTPUT"
+
+      - name: build wheel and source dist
+        run: uv build
+
+      - name: publish wheel to pypi
+        uses: pypa/gh-action-pypi-publish@e9ccbe5a211ba3e8363f472cae362b56b104e796
+
+      - name: create GH release
+        run: gh release create v${{ steps.get-version.outputs.value }} dist/* --title "Release v${{ steps.get-version.outputs.value }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
