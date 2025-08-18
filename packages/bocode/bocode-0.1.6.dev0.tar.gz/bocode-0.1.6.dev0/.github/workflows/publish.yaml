@@ -1,0 +1,65 @@
+name: Build Pypi for BOCoDe
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+jobs:
+  build:
+    name: "Build distribution"
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build toml
+      - name: Remove non-PyPI dependencies for publishing
+        run: |
+          python -c "
+          import toml
+          
+          pyproject_path = 'pyproject.toml'
+          
+          with open(pyproject_path, 'r') as f:
+              data = toml.load(f)
+          
+          # Remove the 'full' optional dependency group
+          if 'project' in data and 'optional-dependencies' in data['project']:
+              if 'full' in data['project']['optional-dependencies']:
+                  del data['project']['optional-dependencies']['full']
+                  print('Removed [project.optional-dependencies.full]')
+          
+          with open(pyproject_path, 'w') as f:
+              toml.dump(data, f)
+          "
+          
+      - name: Build wheels and a source tarball
+        run: python -m build
+      - name: Store the distribution packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+  publish-to-pypi:
+    name: "Publish to PyPI"
+    # This job only runs when you create a new release in GitHub's UI
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/bocode # The URL for your package on PyPI
+    permissions:
+      id-token: write # This is required for trusted publishing
+    steps:
+      - name: Download all distribution packages
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
