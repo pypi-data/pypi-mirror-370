@@ -1,0 +1,385 @@
+"""
+NetList.py
+"""
+# Copyright (c) 2021 Nubis Communications, Inc.
+# Copyright (c) 2018-2020 Teledyne LeCroy, Inc.
+# All rights reserved worldwide.
+#
+# This file is part of SignalIntegrity.
+#
+# SignalIntegrity is free software: You can redistribute it and/or modify it under the terms
+# of the GNU General Public License as published by the Free Software Foundation, either
+# version 3 of the License, or any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with this program.
+# If not, see <https://www.gnu.org/licenses/>
+
+import copy
+
+import SignalIntegrity.App.Project
+
+class NetList(object):
+    def __init__(self,schematic):
+        self.textToShow=[]
+        self.outputNames=[]
+        self.waveformNames=[]
+        self.measureNames=[]
+        self.sourceNames=[]
+        self.sourceNamesToShow=[]
+        self.stimNames=[]
+        self.definingStimList=[]
+        deviceList = schematic.deviceList
+
+        wires_list = copy.deepcopy(SignalIntegrity.App.Project['Drawing.Schematic'].dict['Wires'])
+
+        # filter out the devices whose state is 'disabled'
+        new_deviceList=[]
+        for device in deviceList:
+            if device['element_state'] == None:
+                new_deviceList.append(device)
+            else:
+                state = device['element_state'].GetValue()
+                if state == 'disabled':
+                    pass
+                elif state == 'thru_wires':
+                    from SignalIntegrity.App.Device import DeviceThru
+                    wires=DeviceThru.ConvertDeviceToThruWires(device)
+                    if wires is None:
+                        from SignalIntegrity.App.Device import DeviceThru
+                        device=DeviceThru.ConvertDeviceToThru(device)
+                        new_deviceList.append(device)
+                    else:
+                        wires_list['Wires'].extend(wires)
+                elif state == 'thru':
+                    from SignalIntegrity.App.Device import DeviceThru
+                    device=DeviceThru.ConvertDeviceToThru(device)
+                    new_deviceList.append(device)
+                else:
+                    new_deviceList.append(device)
+        deviceList = new_deviceList
+        # done filtering out disabled devices
+
+        equiPotentialWireList=wires_list.EquiPotentialWireList()
+        # put in system variables
+        self.textToShow+=SignalIntegrity.App.Project['Variables'].NetListLines()
+        # put all devices in the net list
+        for device in deviceList:
+            if not device['partname'].GetValue() in ['Port','Measure','Output','Stim','NetName','EyeProbe']:
+                self.textToShow.append(device.NetListLine())
+                if device.netlist['DeviceName'] in ['networkanalyzerport','voltagesource','currentsource']:
+                    self.sourceNames.append(device['ref'].GetValue())
+                    if not device['show'] == None:
+                        if device['show']['Value'] == 'true':
+                            self.sourceNamesToShow.append(device['ref'].GetValue())
+        # gather up all device pin coordinates
+        devicePinCoordinateList = [device.PinCoordinates() for device in deviceList]
+        devicePinNeedToCheckList = [[True for pinIndex in range(len(devicePinCoordinateList[deviceIndex]))] for deviceIndex in range(len(devicePinCoordinateList))]
+        deviceConnectionList = []
+        for deviceIndex in range(len(devicePinCoordinateList)):
+            devicePinConnectionList = []
+            for pinIndex in range(len(devicePinCoordinateList[deviceIndex])):
+                thisDevicePinCoordinate = devicePinCoordinateList[deviceIndex][pinIndex]
+                thisListOfConnectedDevicePins=[]
+                if devicePinNeedToCheckList[deviceIndex][pinIndex]:
+                    # search all device pins and wire vertices for this coordinate
+                    for deviceCheckIndex in range(len(devicePinCoordinateList)):
+                        for pinCheckIndex in range(len(devicePinCoordinateList[deviceCheckIndex])):
+                            thisDevicePinCheckCoordinate = devicePinCoordinateList[deviceCheckIndex][pinCheckIndex]
+                            if thisDevicePinCoordinate == thisDevicePinCheckCoordinate:
+                                thisListOfConnectedDevicePins.append((deviceCheckIndex,pinCheckIndex))
+                    for wire in equiPotentialWireList:
+                        thisWireConnectedToThisDevicePin = False
+                        for vertex in wire:
+                            if vertex['Coord'] == thisDevicePinCoordinate:
+                                thisWireConnectedToThisDevicePin = True
+                                break
+                        if thisWireConnectedToThisDevicePin:
+                            for vertex in wire:
+                                for deviceCheckIndex in range(len(devicePinCoordinateList)):
+                                    for pinCheckIndex in range(len(devicePinCoordinateList[deviceCheckIndex])):
+                                        thisDevicePinCheckCoordinate = devicePinCoordinateList[deviceCheckIndex][pinCheckIndex]
+                                        if vertex['Coord'] == thisDevicePinCheckCoordinate:
+                                            thisListOfConnectedDevicePins.append((deviceCheckIndex,pinCheckIndex))
+                    thisListOfConnectedDevicePins=list(set(thisListOfConnectedDevicePins))
+                    for connectedDevicePins in thisListOfConnectedDevicePins:
+                        connectedDeviceIndex=connectedDevicePins[0]
+                        connectedPinIndex=connectedDevicePins[1]
+                        devicePinNeedToCheckList[connectedDeviceIndex][connectedPinIndex]=False
+                devicePinConnectionList.append(thisListOfConnectedDevicePins)
+            deviceConnectionList.append(devicePinConnectionList)
+        netList = []
+        for deviceConnection in deviceConnectionList:
+            for devicePinConnection in deviceConnection:
+                if len(devicePinConnection) > 1:
+                    netList.append(devicePinConnection)
+        # netList is a list of lists of tuples where each list of tuples contains a device index and pin index
+        # where each device/pin index in a given list are all connected.
+        #
+        # at this point, net name part/pins may also be listed in there.  Here, the goal is to determine all
+        # of the net names that are common (i.e. join these lists).
+        #
+        # resolve net names
+        netNameDeviceIndexList=[]; netNames=[]
+        for deviceIndex in range(len(deviceList)):
+            thisDevice=deviceList[deviceIndex]
+            if thisDevice['partname'].GetValue()=='NetName':
+                netName=thisDevice['netname'].GetValue()
+                netNames.append(netName)
+                netNameDeviceIndexList.append((deviceIndex,netName))
+        netNames=list(set(netNames))
+        # netNames is a list of net names
+        # netNameDeviceIndexList is a list of tuples where each tuple contains a device index and a net name
+        #
+        # determine the net name devices that imply connection together
+        connectedNetNameDeviceIndexListList = []
+        for netName in netNames:
+            thisConnectedNetNameDeviceIndexList=[]
+            for (netNameDeviceIndex,deviceNetName) in netNameDeviceIndexList:
+                if netName == deviceNetName:
+                    thisConnectedNetNameDeviceIndexList.append(netNameDeviceIndex)
+            if len(thisConnectedNetNameDeviceIndexList)>1:
+                connectedNetNameDeviceIndexListList.append(thisConnectedNetNameDeviceIndexList)
+        # connectedNetNameDeviceIndexList is a list of lists where each list is a list of net list device
+        # names that are connected together (i.e. have the same net name)
+        #
+        # form a new net list the resolves the new device interconnections
+        for connectedNetNameDeviceIndexList in connectedNetNameDeviceIndexListList:
+            # connectedNetNameDeviceIndexList is a list of connected device indices (i.e. is a list of
+            # device indices representing net names with the same name).
+            thisNetConnectedList=[]
+            for connectedDevicePinsList in netList:
+                thisNetConnected=False
+                for (deviceIndex,pinIndex) in connectedDevicePinsList:
+                    for connectedNetNameDeviceIndex in connectedNetNameDeviceIndexList:
+                        if connectedNetNameDeviceIndex==deviceIndex:
+                            thisNetConnected=True
+                thisNetConnectedList.append(thisNetConnected)
+            if thisNetConnectedList.count(True) > 1:
+                # some nets in this netlist are connected and need to be joined
+                oldNetList=copy.deepcopy(netList); netList=[]
+                newlyconnectedDevicePinsList=[]
+                for connectedDevicePinsListIndex in range(len(oldNetList)):
+                    connectedDevicePinsList=oldNetList[connectedDevicePinsListIndex]
+                    if thisNetConnectedList[connectedDevicePinsListIndex] == False:
+                        netList.append(connectedDevicePinsList)
+                    else:
+                        newlyconnectedDevicePinsList=newlyconnectedDevicePinsList+connectedDevicePinsList
+                netList.append(newlyconnectedDevicePinsList)
+        # now that the netlist has resolved all net name connections, remove the net name devices from the
+        # net list
+        oldNetList=copy.deepcopy(netList); netList=[]
+        for oldConnectedDevicePinsList in oldNetList:
+            connectedDevicePinsList=[]
+            for (deviceIndex,pinIndex) in oldConnectedDevicePinsList:
+                isNetNameDevice=False
+                for (netNameDeviceIndex,netName) in netNameDeviceIndexList:
+                    if deviceIndex==netNameDeviceIndex:
+                        isNetNameDevice=True
+                        break
+                if not isNetNameDevice:
+                    connectedDevicePinsList.append((deviceIndex,pinIndex))
+            if len(connectedDevicePinsList)>0:
+                netList.append(connectedDevicePinsList)
+        # the net list should now be clear of net list devices
+        for net in netList:
+            measureList=[]
+            outputList=[]
+            portList=[]
+            stimList=[]
+            # gather up list of all measures, outputs, and ports
+            accumulatedNet=[]
+            for devicePin in net:
+                deviceIndex=devicePin[0]
+                pinIndex=devicePin[1]
+                thisDevice=deviceList[deviceIndex]
+                thisDevicePartName = thisDevice['partname'].GetValue()
+                if thisDevicePartName == 'Port':
+                    portList.append(devicePin)
+                    accumulatedNet.append(devicePin)
+                elif thisDevicePartName in ['Output','EyeProbe','DifferentialVoltageOutput','DifferentialEyeProbe']:
+                    if thisDevice['state'] == None: # pragma: no cover
+                        outputList.append(devicePin) 
+                        accumulatedNet.append(devicePin)
+                    else:
+                        if thisDevice['state']['Value']=='on':
+                            if not thisDevicePartName in ['DifferentialVoltageOutput','DifferentialEyeProbe']:
+                                outputList.append(devicePin)
+                            accumulatedNet.append(devicePin)
+                elif thisDevicePartName == 'Measure':
+                    measureList.append(devicePin)
+                    accumulatedNet.append(devicePin)
+                elif thisDevicePartName == 'Stim':
+                    stimList.append(devicePin)
+                    accumulatedNet.append(devicePin)
+                else:
+                    accumulatedNet.append(devicePin)
+            net=accumulatedNet
+            #remove all of the ports, outputs, measures and stims from the net
+            net = list(set(net)-set(measureList)-set(portList)-set(outputList)-set(stimList))
+            if len(net) > 0:
+                # for the measures, outputs and ports, we just need one device/port, so we use the first one
+                deviceIndexOfFirstDeviceInNet = net[0][0]
+                pinIndexOfFirstDeviceInNet = net[0][1]
+                firstDeviceName = deviceList[deviceIndexOfFirstDeviceInNet]['ref'].GetValue()
+                firstDevicePinNumber = deviceList[deviceIndexOfFirstDeviceInNet].partPicture.current.pinList[pinIndexOfFirstDeviceInNet]['Number']
+                devicePinString = firstDeviceName + ' ' + str(firstDevicePinNumber)
+                for measure in measureList:
+                    deviceIndex = measure[0]
+                    self.textToShow.append(deviceList[deviceIndex].NetListLine() + ' ' + devicePinString)
+                    self.measureNames.append(deviceList[deviceIndex]['ref'].GetValue())
+                for output in outputList:
+                    deviceIndex = output[0]
+                    self.textToShow.append(deviceList[deviceIndex].NetListLine() + ' ' + devicePinString)
+                    self.outputNames.append(deviceList[deviceIndex]['ref'].GetValue())
+                for port in portList:
+                    deviceIndex = port[0]
+                    line=deviceList[deviceIndex].NetListLine() + ' ' + devicePinString
+                    line=line.replace('td 0.0 ','')
+                    self.textToShow.append(line)
+            if len(net) > 1:
+                # list the connections
+                thisConnectionString = 'connect'
+                for devicePortIndex in net:
+                    deviceIndex = devicePortIndex[0]
+                    pinIndex = devicePortIndex[1]
+                    deviceName = deviceList[deviceIndex]['ref'].GetValue()
+                    pinNumber = deviceList[deviceIndex].partPicture.current.pinList[pinIndex]['Number']
+                    thisConnectionString = thisConnectionString + ' '+ str(deviceName) +' '+str(pinNumber)
+                self.textToShow.append(thisConnectionString)
+            if len(stimList)>0: # there is at least one stim on this net
+                # stims fall into three categories
+                # stims whose pin 1 is connected directly to a device port, and whose pin 2 is connected to port 1 of another stim.
+                # this type is a stim that depends on another. This is called a dependent stim
+                # stims whose pin 1 is connected directly to a device port, and whose pin 2 is unconnected.
+                # this type of stim is independent. this is called an independent stim
+                # stims whose pin 1 is connected to pin 2 of another stim and whose pin 2 is unconnected
+                # this is a stim that others depend on. This is called a defining stim
+                directStimListThisNet=[]
+                definingStimListThisNet=[]
+                if len(net) == 0: # there are only stims on this net
+                    # one and only one of these stims better be a defining stim
+                    # this is indicated by a pin 1 connection to the net
+                    # and the rest of the stims with a pin 2 connection
+                    for stim in stimList:
+                        if deviceList[stim[0]].partPicture.current.pinList[stim[1]]['Number']==1:
+                            definingStimListThisNet.append(stim)
+                        else:
+                            directStimListThisNet.append(stim)
+                    if len(definingStimListThisNet) != 1: # this is an error
+                        directStimListThisNet=[]
+                        definingStimListThisNet=[]
+                    elif len(directStimListThisNet) < 1: # this is an error
+                        directStimListThisNet=[]
+                        definingStimListThisNet=[]
+                else: # there are stims and devices on this net
+                    # all of the stim pins must be pin 1
+                    # and the pin 1 must be connected directly to one of the device ports on the net
+                    if all(deviceList[stim[0]].partPicture.current.pinList[stim[1]]['Number']==1 for stim in stimList): # all of the stim pins are pin 1
+                        directStimListThisNet=stimList
+                # okay - now that we're here, we either have one defining stim and one or more direct stims
+                # which implies that this is a stim net used to define a stimdef or...
+                # we have no defining stim and one or more direct stims which implies that these are
+                # stimdef definitions
+                if len(definingStimListThisNet)==0: # stim
+                    for (stimDeviceIndex,stimPinIndex) in directStimListThisNet: # generate the stim for each stim
+                        stimPin1Coordinate=deviceList[stimDeviceIndex].PinCoordinates()[stimPinIndex]
+                        for (deviceIndex,devicePinIndex) in net: # find the device pin connected to this stim
+                            devicePinCoordinate=deviceList[deviceIndex].PinCoordinates()[devicePinIndex]
+                            if stimPin1Coordinate==devicePinCoordinate:
+                                stimNameString=''
+                                for stimNameIndex in range(len(self.stimNames)):
+                                    if stimDeviceIndex == self.stimNames[stimNameIndex]:
+                                        stimNameString = 'm'+str(stimNameIndex+1)
+                                        break
+                                if stimNameString=='':
+                                    self.stimNames.append(stimDeviceIndex)
+                                    stimNameString = 'm'+str(len(self.stimNames))
+                                deviceName = deviceList[deviceIndex]['ref'].GetValue()
+                                devicePinNumber = deviceList[deviceIndex].partPicture.current.pinList[devicePinIndex]['Number']
+                                devicePinString = deviceName + ' ' + str(devicePinNumber)
+                                self.textToShow.append(deviceList[stimDeviceIndex].NetListLine() + ' ' + stimNameString + ' ' + devicePinString)
+                elif len(definingStimListThisNet)==1: #stimdef
+                    (definingStimDeviceIndex,definingStimPinIndex) = definingStimListThisNet[0]
+                    directStimDeviceIndexList=[directStimDevice[0] for directStimDevice in directStimListThisNet]
+                    self.definingStimList.append((definingStimDeviceIndex,tuple(directStimDeviceIndexList)))
+        # generate the stimdef if required
+        if len(self.definingStimList) > 0: # need a stimdef
+            # for now, if there is at least one defining stim, meaning there must be a stimdef, then all stims must be derived from the
+            # defining stims
+            stimdef=[[0 for j in self.definingStimList] for i in self.stimNames]
+            for c in range(len(self.definingStimList)):
+                determinesStimsDevicesIndexes=self.definingStimList[c][1]
+                for determinesStimDeviceIndex in determinesStimsDevicesIndexes:
+                    for r in range(len(self.stimNames)):
+                        dependentStimDeviceIndex=self.stimNames[r]
+                        if determinesStimDeviceIndex == dependentStimDeviceIndex:
+                            stimdef[r][c]=deviceList[dependentStimDeviceIndex]['weight'].GetValue()
+            self.textToShow.append('stimdef '+str(stimdef))
+
+        # clean up everything to deal with special case current probes and differential voltage probes
+        endinglines=[]
+        textToShow=[]
+        for line in self.textToShow:
+            tokens = line.split(' ')
+            if tokens[0] in ['currentoutput','differentialvoltageoutput','differentialeyeprobe','eyewaveform','waveform']:
+
+                # need to see if these are actually on, for whether to attach the output into the netlist
+                probeDevice = None
+                for device in deviceList:
+                    if not device['ref'] == None:
+                        if tokens[1] == device['ref']['Value']:
+                            probeDevice = device
+                            break
+
+                if probeDevice['state'] == None: 
+                    connectIt = True # pragma: no cover
+                else:
+                    if probeDevice['state']['Value']=='on':
+                        connectIt=True
+                    else:
+                        connectIt=False
+
+                if tokens[0] == 'currentoutput':
+                    if connectIt:
+                        line = 'device '+tokens[1]+' 3 currenttovoltageconverter'
+                    else:
+                        line = 'device '+tokens[1]+' 2 tline zc 50 td 0'
+                if tokens[0] in ['differentialvoltageoutput','differentialeyeprobe']:
+                    if connectIt:
+                        line = 'device '+tokens[1]+' 3 voltagetovoltageconverter'
+                if tokens[0] in ['currentoutput','differentialvoltageoutput','differentialeyeprobe']:
+                    if connectIt:
+                        endinglines.append('device '+tokens[1]+'_3 1 open')
+                        endinglines.append('connect '+tokens[1]+' 3 '+tokens[1]+'_3 1')
+                if connectIt:
+                    if tokens[0] in ['currentoutput','differentialvoltageoutput']:
+                        self.outputNames.append(tokens[1])
+                        endinglines.append('voltageoutput '+tokens[1]+' '+tokens[1]+' 3')
+                    if tokens[0] == 'differentialeyeprobe':
+                        self.outputNames.append(tokens[1])
+                        endinglines.append('eyeprobe '+tokens[1]+' '+tokens[1]+' 3')
+                    if tokens[0] in ['eyewaveform','waveform']:
+                        self.waveformNames.append(tokens[1])
+                else:
+                    if tokens[0] in ['differentialvoltageoutput','differentialeyeprobe','eyewaveform','waveform']:
+                        line = None
+            if not line == None:
+                textToShow.append(line)
+        self.textToShow=textToShow+endinglines+SignalIntegrity.App.Project['PostProcessing'].NetListLines()
+
+    def Text(self):
+        return self.textToShow
+    def OutputNames(self):
+        return self.outputNames
+    def SourceNames(self):
+        return self.sourceNames
+    def MeasureNames(self):
+        return self.measureNames
+    def WaveformNames(self):
+        return self.waveformNames
+    def SourceNamesToShow(self):
+        return self.sourceNamesToShow
