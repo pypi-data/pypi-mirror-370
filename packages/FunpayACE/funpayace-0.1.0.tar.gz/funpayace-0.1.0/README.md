@@ -1,0 +1,185 @@
+# FunpayACE 0.1.0
+
+\
+Библиотека для продавцов Funpay: «вечный онлайн», автоподнятие лотов и получение баланса — теперь надёжнее и дружелюбнее к продакшену.
+
+---
+
+## 🚀 Установка
+
+```bash
+pip install -U funpayace
+```
+
+Python 3.9+
+
+---
+
+## ⚡️ Что нового в 0.1.0
+
+- Устойчивее авторизация: `CookieJar` + дублирование заголовка `Cookie`, «разогрев» сессии и авто-поиск CSRF.
+- Экспоненциальные ретраи с джиттером для всех запросов.
+- Единый `ClientSession` с корректным лайфсайклом (`async with` / `aclose()`).
+- Живучий парсер баланса (HTML/текст/встроенный JSON).
+- Удобные раннеры: запуск как фоновые **таски** или в **отдельной нити**.
+- Конфиг через `FunpayConfig` (таймауты, частоты, ssl, debug).
+- Акуратные логи, без вмешательства в конфиг приложения.
+
+---
+
+## 🔧 Быстрый старт
+
+### Асинхронный вариант (рекомендуется)
+
+```python
+import asyncio
+import logging
+from funpayace import FunpayAce, FunpayConfig
+
+logging.basicConfig(level=logging.INFO)
+
+GOLDEN_KEY = "ваш_golden_key"
+GAME_ID = 224
+NODE_ID = 2424
+
+async def main():
+    client = FunpayAce(golden_key=GOLDEN_KEY, config=FunpayConfig())
+    async with client:
+        # Запускаем фоновые процессы
+        client.start_forever_online_task()
+        client.start_lot_auto_boost_task(GAME_ID, NODE_ID)
+
+        # Периодический опрос баланса
+        try:
+            while True:
+                try:
+                    balance = await client.get_balance()
+                    print("Баланс:", balance)
+                except Exception as e:
+                    logging.exception("Не удалось получить баланс: %s", e)
+                await asyncio.sleep(30)
+        finally:
+            await client.cancel_background_tasks()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Синхронный запуск в отдельной нити
+
+```python
+import time
+from funpayace import FunpayAce
+
+client = FunpayAce(golden_key="ваш_golden_key")
+# «Вечный онлайн» и автоподнятие — в фоновых нитях
+client.run_forever_online_in_thread()
+client.run_lot_auto_boost_in_thread(game_id=224, node_id=2424)
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    pass
+```
+
+> ❗️ `golden_key` — cookie вашей авторизованной сессии Funpay. Он может протухать или быть привязан к устройству. Если видите `HTTP 403: Необходимо авторизоваться`, обновите ключ.
+
+---
+
+## 📘 API
+
+### Класс
+
+```python
+FunpayAce(golden_key: str, config: FunpayConfig = FunpayConfig())
+```
+
+### Методы (async)
+
+- `await forever_online()` — поддерживает онлайн (POST `/runner/`) в бесконечном цикле.
+- `await lot_auto_boost(game_id: int, node_id: int)` — автоподнятие лотов (POST `/lots/raise`) в цикле.
+- `await get_balance() -> dict[str, float]` — возвращает балансы, например:
+  ```python
+  {"RUB": 123.45, "USD": 12.34, "EUR": 5.67}
+  ```
+
+### Запуск в фоне
+
+- `start_forever_online_task()` / `start_lot_auto_boost_task(game_id, node_id)`
+- `run_forever_online_in_thread()` / `run_lot_auto_boost_in_thread(game_id, node_id)`
+
+### Завершение
+
+- `await aclose()` — закрыть HTTP-сессию.
+- `await cancel_background_tasks()` — отменить все фоновые таски клиента.
+
+---
+
+## 🛠 Конфигурация
+
+```python
+from funpayace import FunpayConfig
+
+cfg = FunpayConfig(
+    base_url="https://funpay.com",
+    user_agent="Mozilla/5.0 ...",   # браузерный UA
+    request_timeout=20.0,
+    connector_limit=10,
+    max_retries=4,
+    backoff_base=0.75,
+    backoff_max=8.0,
+    ping_interval_min=45.0,
+    ping_interval_max=100.0,
+    raise_interval_min=60.0,
+    raise_interval_max=300.0,
+    ssl=True,
+    send_cookie_header_always=True,
+    debug_auth=False
+)
+```
+
+---
+
+## 🧩 Обработка ошибок
+
+- `RequestError` — сетевые/HTTP ошибки после ретраев (включая `403`).
+- `BalanceParseError` — не удалось распарсить баланс.
+
+---
+
+## 🔄 Миграция с 0.0.x → 0.1.0
+
+- Теперь всё асинхронно → используйте один event loop и `start_*_task()`.
+- Авторизация стала строже → warm-up + CSRF делаются автоматически.
+- Парсер баланса стал гибче.
+
+---
+
+## 📦 Версии
+
+### 0.1.0 — 2025-08-17
+
+- Авторизация: warm-up, CSRF, CookieJar + заголовок `Cookie`.
+- Ретраи с экспоненциальным бэк-оффом.
+- Новый живучий парсер `get_balance`.
+- Удобные фоновые раннеры (таски/нити).
+- Конфиг `FunpayConfig` + режим `debug_auth`.
+
+### 0.0.5 — 2025-06-02
+
+- Улучшено логирование; добавлен `get_balance()`.
+
+---
+
+## 📜 Лицензия
+
+MIT — см. файл LICENSE.
+
+---
+
+## ☕ Поддержка
+
+Если библиотека полезна — звезда на GitHub очень помогает ⭐\
+Телеграм-канал: [https://t.me/funpayace](https://t.me/funpayace)
+
