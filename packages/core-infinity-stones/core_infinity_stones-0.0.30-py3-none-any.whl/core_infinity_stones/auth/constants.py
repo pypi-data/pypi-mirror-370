@@ -1,0 +1,1 @@
+S2S_TOKEN_CACHE_KEY = 's2s_token'
