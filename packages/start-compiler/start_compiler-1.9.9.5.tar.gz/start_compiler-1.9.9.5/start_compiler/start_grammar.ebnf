@@ -1,0 +1,100 @@
+start: (NEWLINE|include|import|instruction)+
+	
+include		:"include" file nl
+import		:"import" package nl
+package		:CNAME
+file		:CNAME
+
+instruction:  variable_declaration  
+            | type_declaration        
+            | function_declaration  	
+            | statement 				
+
+
+variable_declaration : ("var" name "is" type) nl
+
+argument_declaration : ("arg" name "is" type) nl
+
+type_declaration   : "type" type ((START nl ((indexable index_type_member*) | type_member+) END nl))
+
+indexable			: (type  "[" length "]") nl
+
+index_type_member	: function_declaration
+type_member			: variable_declaration | function_declaration
+
+function_declaration : "function" name ["is" type] [nl] function_argument* START nl function_member* END nl
+function_argument 	: argument_declaration
+function_member		: variable_declaration | statement
+
+statement           : 	atomic_statement nl
+						| if_block | if_else_block | while_block | when_block
+
+atomic_statement	: assignment | function_call | break | exit | return
+					
+assignment			: variable  assign_operator  right_hand
+
+function_call		: [type "."] function   "("  argument (","  argument)*  ")"
+					| [type "."] function   "("  ")" 
+					| argument  operator  argument 
+					| "("  argument  operator  argument  ")"
+
+break				:"break"
+
+exit				:"exit"
+
+return				: "return" [return_expression]
+
+variable			: name | (variable  "["  expression  "]") | (variable "." attr)
+
+return_expression	: function_call | constant | variable
+right_hand			: function_call | constant | variable
+expression			: function_call | constant | variable
+argument			: function_call | constant | variable
+
+
+constant			: number | null | text
+
+null				: "null"
+number				: SIGNED_NUMBER
+text				: ESCAPED_STRING
+
+if_block        	: "if" expression START nl block END nl
+if_else_block       : "if" expression START nl block END [nl] "else" START nl else_block END nl
+while_block     	: "while" expression START nl block END nl
+when_block        	: "when" expression START nl block END nl
+
+else_block			: statement+
+block				: statement+
+
+assign_operator		: ASSIGN_OP
+
+function			: OPS | CNAME 
+operator			: OPS
+
+START				:"{" | "start"
+END					:"}" | "end"
+ASSIGN_OP			: "=" | "->" | ":=" 
+OPS					:  "+" | "++" | "-" | "*" | "/" | "%" | "^" | "==" | "===" | ">" | "<" | ">=" | "<=" | "&" | "|" | "!"
+
+attr				: CNAME
+name 				: CNAME
+length 				: DIGITS | WILDCARD
+type 				: CNAME | "null"
+
+DIGITS				: DIGIT+
+WILDCARD 			: "*"
+
+CNAME				: (LETTER) ("_"|LETTER|DIGIT)*
+
+nl					: NEWLINE+
+
+%import common.SH_COMMENT
+%import common.WS_INLINE
+%import common.NEWLINE
+%import common.LETTER
+%import common.DIGIT
+%import common.ESCAPED_STRING
+%import common.SIGNED_NUMBER
+%import common.INT
+%ignore SH_COMMENT
+%ignore WS_INLINE
