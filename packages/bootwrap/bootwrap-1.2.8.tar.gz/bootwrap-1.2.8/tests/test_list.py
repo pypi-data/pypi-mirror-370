@@ -1,0 +1,240 @@
+"""
+Test for bootwrap/components/collection.py
+"""
+
+import pytest
+
+from bootwrap import List, Button, Icon, Text
+from .helper import HelperHTMLParser
+
+
+@pytest.mark.list
+def test_list_item():
+    # Tests a default list item.
+    item = List.Item(
+        "sometitle",
+        description="somedescr",
+        figure=Icon("someicon"),
+        marker="somemarker",
+    ).as_selected()
+    actual = HelperHTMLParser.parse(str(item))
+    expected = HelperHTMLParser.parse(
+        f"""
+        <div id="{item.identifier}"
+            class="list-group-item list-group-item-action flex-column
+                   align-items-start active">
+            <div class="d-flex w-100 justify-content-between">
+                <div class="d-flex flex-grow-1"  style="cursor: default;">
+                    <i id="..." class="someicon"> </i>
+                    <div class="ms-2 me-2 w-100">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 id="...">sometitle</h5>
+                            <small id="...">somemarker</small>
+                        </div>
+                        somedescr
+                    </div>
+                </div>    
+            </div>
+        </div>
+    """
+    )
+    assert actual == expected
+
+    # Tests a custom list item.
+    item = List.Item(
+        Text("sometitle"),
+        description=Text("somedescr"),
+        figure=Icon("someicon"),
+        marker=Text("somemarker"),
+    ).as_selected()
+    actual = HelperHTMLParser.parse(str(item))
+    expected = HelperHTMLParser.parse(
+        f"""
+        <div id="{item.identifier}"
+            class="list-group-item list-group-item-action flex-column
+                   align-items-start active">
+            <div class="d-flex w-100 justify-content-between">
+                <div class="d-flex flex-grow-1"  style="cursor: default;">
+                    <i id="..." class="someicon"> </i>
+                    <div class="ms-2 me-2 w-100">
+                        <div class="d-flex w-100 justify-content-between">
+                            <span id="...">sometitle</span>
+                            <span id="...">somemarker</span>
+                        </div>
+                        <span id="...">somedescr</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    """
+    )
+    assert actual == expected
+
+    # Tests a list item with an associated link.
+    item = List.Item(
+        Text("sometitle"),
+        description=Text("somedescr"),
+        figure=Icon("someicon"),
+        marker=Text("somemarker"),
+    ).link("to/somewhere")
+    actual = HelperHTMLParser.parse(str(item))
+    expected = HelperHTMLParser.parse(
+        f"""
+        <div id="{item.identifier}"
+            class="list-group-item list-group-item-action flex-column
+                   align-items-start">
+            <div class="d-flex w-100 justify-content-between">
+                <div class="d-flex flex-grow-1" onclick="location.href='to/somewhere'; return false;" style="cursor: pointer;">
+                    <i id="..." class="someicon"> </i>
+                    <div class="ms-2 me-2 w-100">
+                        <div class="d-flex w-100 justify-content-between">
+                            <span id="...">sometitle</span>
+                            <span id="...">somemarker</span>
+                        </div>
+                        <span id="...">somedescr</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    """
+    )
+    assert actual == expected
+
+    # Tests an unpacked list item actions.
+    actions = [Button("A"), Button("B")]
+    item = List.Item("sometitle").add_menu(*actions)
+    actual = HelperHTMLParser.parse(str(item))
+    expected = HelperHTMLParser.parse(
+        f"""
+        <div id="{item.identifier}"
+            class="list-group-item list-group-item-action flex-column
+                   align-items-start">
+            <div class="d-flex w-100 justify-content-between">
+                <div class="d-flex flex-grow-1"  style="cursor: default;">
+                    <div class="ms-2 me-2 w-100">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 id="...">sometitle</h5>
+                        </div>
+                    </div>
+                </div>    
+                <div class="d-flex align-items-start">
+                    <button id="..."
+                        class="ms-1 btn"
+                        onclick="return false;">
+                        A
+                    </button>
+                    <button id="..."
+                        class="ms-1 btn"
+                        onclick="return false;">
+                        B
+                    </button>
+                </div>
+            </div>
+        </div>
+    """
+    )
+    assert actual == expected
+
+    # Tests a packed list item actions.
+    actions = [Button("A"), Button("B")]
+    item = List.Item("sometitle").add_menu(*actions).pack_actions()
+    actual = HelperHTMLParser.parse(str(item))
+    expected = HelperHTMLParser.parse(
+        f"""
+        <div id="{item.identifier}"
+            class="list-group-item list-group-item-action flex-column
+                   align-items-start">
+            <div class="d-flex w-100 justify-content-between">
+                <div class="d-flex flex-grow-1"  style="cursor: default;">
+                    <div class="ms-2 me-2 w-100">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 id="...">sometitle</h5>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-start">
+                    <div class="btn-group">
+                        <i id="..."
+                            class="btn fas fa-ellipsis-v"
+                            style="cursor: pointer"
+                            data-bs-toggle="dropdown"
+                            onclick="return false;">
+                        </i>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <button id="..."
+                                class="dropdown-item btn"
+                                onclick="return false;">
+                                A
+                            </button>
+                            <button id="..."
+                                class="dropdown-item btn"
+                                onclick="return false;">
+                                B
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    """
+    )
+    assert actual == expected
+
+
+@pytest.mark.list
+def test_list():
+    ls = List(
+        List.Item("sometitle1").as_selected(),
+        List.Item("sometitle2"),
+        List.Item("sometitle3"),
+    )
+    actual = HelperHTMLParser.parse(str(ls))
+    expected = HelperHTMLParser.parse(
+        f"""
+        <div id="{ls.identifier}" class="list-group">
+            <div id="..."
+                class="list-group-item list-group-item-action flex-column
+                       align-items-start active">
+                <div class="d-flex w-100 justify-content-between">
+                    <div class="d-flex flex-grow-1"  style="cursor: default;">
+                        <div class="ms-2 me-2 w-100">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 id="...">sometitle1</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="..."
+                class="list-group-item list-group-item-action flex-column
+                       align-items-start">
+                <div class="d-flex w-100 justify-content-between">
+                    <div class="d-flex flex-grow-1"  style="cursor: default;">
+                        <div class="ms-2 me-2 w-100">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 id="...">sometitle2</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="..."
+                class="list-group-item list-group-item-action flex-column
+                       align-items-start">
+                <div class="d-flex w-100 justify-content-between">
+                    <div class="d-flex flex-grow-1"  style="cursor: default;">
+                        <div class="ms-2 me-2 w-100">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 id="...">sometitle3</h5>
+                            </div>
+                        </div>
+                    </div>    
+                </div>
+            </div>
+        </div>
+    """
+    )
+    assert actual == expected
+
+    with pytest.raises(TypeError):
+        List("someitem")
