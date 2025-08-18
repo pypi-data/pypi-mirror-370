@@ -1,0 +1,569 @@
+
+# 🏒 NHL Scraper (Comprehensive Data Pipeline)
+
+This project provides a powerful suite of Python classes and pipeline functions for scraping and processing NHL data using asynchronous APIs and HTML parsing. It's structured to be friendly for Jupyter Notebooks and script usage with a modern, self-contained architecture.
+
+💡 Example usage is provided in the notebook: [integrations/notebooks/dev_sandbox.ipynb](integrations/notebooks/dev_sandbox.ipynb).
+
+---
+
+## ✨ **New Features** 
+
+🎉 **FULLY INTEGRATED ESPN SUPPORT**: Enhanced data collection with ESPN as a fallback source for coordinates and player name normalization!
+
+```python
+# Modern ESPN Integration (Built-in)
+from hockey_scraper.src.leagues.nhl.pipeline import (
+    scrape_pbp_with_espn_fallback, 
+    comprehensive_game_scrape,
+    normalize_player_name,
+    validate_coordinates
+)
+
+# Enhanced PBP scraping with ESPN fallback
+pbp_data = await scrape_pbp_with_espn_fallback(["2023020001"])
+
+# Comprehensive scraping with multiple sources
+data = await comprehensive_game_scrape(
+    ["2023020001"], 
+    include_espn_fallback=True,
+    include_shifts=True
+)
+
+# Player name standardization
+clean_name = normalize_player_name("ALEXANDRE OVECHKIN")  # Returns: "ALEX OVECHKIN"
+
+# Coordinate validation
+is_valid = validate_coordinates(25, 15)  # Returns: True
+```
+
+🏒 **HTML SHIFTS SCRAPING**: Complete player shift data with timing and summary statistics!
+
+🔧 **SELF-CONTAINED ARCHITECTURE**: No external dependencies on legacy modules!
+
+---
+
+## 🚀 Quick Start
+
+```python
+# Modern Pipeline Functions (Recommended)
+from hockey_scraper.src.leagues.nhl.pipeline import (
+    scrape_html_shifts, scrape_pbp_complete_async, 
+    scrape_teams, scrape_standings,
+    scrape_pbp_with_espn_fallback,
+    normalize_player_name
+)
+
+# Get team data
+teams = scrape_teams(format="pandas")
+
+# Get current standings  
+standings = scrape_current_standings(format="pandas")
+
+# Get detailed shift data with ESPN integration
+shifts = await scrape_html_shifts(2023020001, format="pandas")
+
+# Enhanced PBP with ESPN coordinates
+pbp = await scrape_pbp_with_espn_fallback(["2023020001"], format="pandas")
+
+# Get complete play-by-play with all enhancements
+pbp = await scrape_pbp_complete_async(2023020001, format="pandas")
+```
+
+---
+
+```python
+# Modern Pipeline Functions (Recommended)
+from hockey_scraper.src.leagues.nhl.pipeline import (
+    scrape_html_shifts, scrape_pbp_complete_async, 
+    scrape_teams, scrape_standings
+)
+
+# Get team data
+teams = scrape_teams(format="pandas")
+
+# Get current standings
+standings = scrape_current_standings(format="pandas")
+
+# Get detailed shift data (new!)
+shifts = await scrape_html_shifts(2023020001, format="pandas")
+
+# Get complete play-by-play with all enhancements
+pbp = await scrape_pbp_complete_async(2023020001, format="pandas")
+```
+
+---
+
+## 📋 Complete Function Reference
+
+### 🆕 **HTML Shifts Functions** (New & Featured)
+
+Comprehensive player shift data with detailed timing and summary statistics:
+
+```python
+from hockey_scraper.src.leagues.nhl.pipeline import scrape_html_shifts, scrape_html_shifts_sync
+
+# Async usage (recommended for Jupyter notebooks)
+shifts_data = await scrape_html_shifts(2023020001, format="dict")
+print(f"Total shifts: {shifts_data['parsing_metadata']['total_shifts']}")
+
+# Pandas DataFrame output for analysis
+shifts_df = await scrape_html_shifts(2023020001, format="pandas")
+
+# Sync usage (for scripts)
+shifts_data = scrape_html_shifts_sync(2023020001, format="dict")
+```
+
+**Key Features:**
+- ✅ **Individual Player Shifts**: Detailed shift timing, duration, and events
+- ✅ **Summary Statistics**: Period-by-period time-on-ice totals
+- ✅ **Multiple Formats**: dict, pandas, polars, json, list output options
+- ✅ **Both Teams**: Home and away team data in single call
+- ✅ **Async/Sync Support**: Works in Jupyter notebooks and scripts
+
+### 🎯 **Play-by-Play Functions**
+
+#### **Complete Integrated PBP** (Recommended)
+```python
+# Most comprehensive PBP data (API + HTML + Shifts + Analytics)
+pbp_complete = await scrape_pbp_complete_async(2023020001, format="pandas")
+pbp_sync = scrape_pbp_complete_sync(2023020001, format="pandas")
+
+# Advanced integrated PBP with custom options
+pbp_advanced = await scrape_pbp_integrated_async(
+    game=2023020001,
+    output_format="pandas",
+    clean=True,
+    include_shifts=True,
+    include_coordinates=True,
+    include_strength=True
+)
+```
+
+#### **HTML PBP Functions**
+```python
+# HTML play-by-play (detailed on-ice data)
+html_pbp = await scrape_html_pbp_async(2023020001, format="pandas")
+html_pbp_sync = scrape_html_pbp_sync(2023020001, format="pandas")
+html_pbp_smart = scrape_html_pbp_smart(2023020001, format="pandas")  # Auto-detects context
+```
+
+#### **Basic PBP Functions**
+```python
+# Simple PBP parsing
+pbp_basic = scrape_pbp(2023020001, format="pandas")
+```
+
+### � **ESPN Integration Functions** (New!)
+
+Built-in ESPN integration for enhanced data quality and coverage:
+
+```python
+from hockey_scraper.src.leagues.nhl.pipeline import (
+    scrape_pbp_with_espn_fallback,
+    get_espn_game_id,
+    normalize_player_name,
+    validate_coordinates,
+    comprehensive_game_scrape
+)
+
+# Enhanced PBP with ESPN coordinate fallback
+pbp_enhanced = await scrape_pbp_with_espn_fallback(
+    ["2023020001"], 
+    format="pandas",
+    include_espn_coordinates=True
+)
+
+# Get ESPN game ID for cross-referencing
+espn_id = await get_espn_game_id(2023020001)
+
+# Normalize player names using ESPN data
+normalized_name = normalize_player_name("Alex Ovechkin")
+
+# Validate coordinate data quality
+is_valid = validate_coordinates(x=50, y=25)
+
+# Complete game data with all sources
+complete_data = await comprehensive_game_scrape(
+    2023020001,
+    include_espn=True,
+    include_coordinates=True,
+    format="pandas"
+)
+```
+
+**ESPN Integration Features:**
+- ✅ **Automatic Fallback**: ESPN data used when NHL API is missing coordinates
+- ✅ **Player Name Normalization**: Consistent player naming across data sources
+- ✅ **Coordinate Validation**: Quality checks for shot/hit location data
+- ✅ **Cross-Source Validation**: ESPN data validates NHL API information
+- ✅ **Self-Contained**: No external dependencies on legacy nhl_scraper module
+
+### �🏒 **Team & League Functions**
+
+#### **Teams Data**
+```python
+# All teams with multiple source options
+teams = scrape_teams(source="default", format="pandas", clean=True)
+teams_all = scrape_all_teams(format="pandas")
+```
+
+#### **Schedule Data**
+```python
+# Team schedule
+schedule = scrape_schedule(team="MTL", season="20242025", format="pandas")
+team_schedule = scrape_team_schedule("MTL", "20242025", format="pandas")
+```
+
+#### **Roster Data**
+```python
+# Team roster
+roster = scrape_roster(team="MTL", season="20242025", format="pandas")
+
+# Game-specific rosters (HTML)
+game_rosters = await scrape_html_rosters_async(2023020001, format="pandas")
+game_rosters_sync = scrape_html_rosters_sync(2023020001, format="pandas")
+game_rosters_smart = scrape_html_rosters_smart(2023020001, format="pandas")
+```
+
+#### **Standings Data**
+```python
+# Current or historical standings
+standings = scrape_standings(date="2024-12-01", format="pandas")
+current_standings = scrape_current_standings(format="pandas")
+```
+
+#### **Team Statistics**
+```python
+# Team performance stats
+team_stats = scrape_team_stats(team="MTL", season="20242025", format="pandas")
+```
+
+### 👥 **Player Functions**
+
+#### **Player Career Statistics**
+```python
+# Individual player career data
+player_stats = scrape_player_career_stats(player="8481540", format="pandas")
+```
+
+### 🎓 **Draft Functions**
+
+#### **Draft Data**
+```python
+# Annual draft data
+draft_data = scrape_draft_data(year=2024, round="all", format="pandas")
+
+# Records-based draft data
+records_draft = scrape_records_draft(year="2024", output_format="pandas")
+
+# Team draft history
+team_draft = scrape_team_draft_history(franchise=1, output_format="pandas")
+```
+
+### 🎮 **Game Functions**
+
+#### **Complete Game Data**
+```python
+# All available data for a game
+complete_game = await scrape_game_complete_async(
+    game=2023020001, 
+    include_html=True, 
+    output_format="dict"
+)
+
+complete_game_sync = scrape_game_complete_sync(
+    game=2023020001, 
+    include_html=True, 
+    output_format="dict"
+)
+
+# Quick game data
+game_data = await scrape_game_async(2023020001, output_format="pandas")
+game_data_sync = scrape_game_sync(2023020001, output_format="pandas")
+```
+
+#### **Specific Game Data Components**
+```python
+# Game API data
+game_api = scrape_game_api(game=2023020001, output_format="pandas")
+
+# Shifts data
+shifts = scrape_shifts(game=2023020001, output_format="pandas")
+```
+
+### 🏢 **Team Complete Data**
+```python
+# All data for a team/season
+team_complete = await scrape_team_complete_async(
+    team="MTL", 
+    season="20242025", 
+    output_format="dict"
+)
+```
+
+### 🔧 **Function Categories Summary**
+
+| Category | Async Functions | Sync Functions | Smart Functions |
+|----------|----------------|----------------|-----------------|
+| **HTML Shifts** | `scrape_html_shifts` | `scrape_html_shifts_sync` | - |
+| **PBP Complete** | `scrape_pbp_complete_async` | `scrape_pbp_complete_sync` | - |
+| **PBP Integrated** | `scrape_pbp_integrated_async` | `scrape_pbp_integrated_sync` | - |
+| **HTML PBP** | `scrape_html_pbp_async` | `scrape_html_pbp_sync` | `scrape_html_pbp_smart` |
+| **HTML Rosters** | `scrape_html_rosters_async` | `scrape_html_rosters_sync` | `scrape_html_rosters_smart` |
+| **Game Complete** | `scrape_game_complete_async` | `scrape_game_complete_sync` | - |
+| **Team Complete** | `scrape_team_complete_async` | - | - |
+
+### 📊 **Output Format Options**
+
+All pipeline functions support multiple output formats:
+- `"dict"` - Python dictionary (default)
+- `"pandas"` - Pandas DataFrame
+- `"polars"` - Polars DataFrame  
+- `"json"` - JSON string
+- `"list"` - Python list
+
+---
+
+## 📂 **Data Structure Examples**
+
+### HTML Shifts Data Structure
+```python
+{
+    "home": {
+        "shifts": [
+            {
+                "player_name": "34 MATTHEWS, AUSTON",
+                "jersey_number": 34,
+                "period": "1",
+                "duration": "1:23",
+                "duration_seconds": 83,
+                "event": "FO"
+            }
+        ],
+        "summary": [
+            {
+                "player_name": "34 MATTHEWS, AUSTON",
+                "period": "1", 
+                "shifts_count": 8,
+                "total_ice_time": "6:42",
+                "total_ice_time_seconds": 402
+            }
+        ],
+        "team_name": "TORONTO MAPLE LEAFS"
+    },
+    "away": { /* similar structure */ },
+    "parsing_metadata": {
+        "total_shifts": 743,
+        "total_summary_records": 113
+    }
+}
+```
+
+---
+
+## 🧰 Setup
+
+### 1. Clone the repository and set up the virtual environment (using [uv](https://github.com/astral-sh/uv)):
+
+```bash
+uv venv
+source .venv/bin/activate  # or `.venv\Scripts\activate` on Windows
+uv pip install requirements.txt
+```
+
+> Don't forget to run this once to install the scraping browser:
+```bash
+playwright install chromium
+```
+
+---
+
+## ⚙️ Legacy Classes (Pandas Interface)
+
+For compatibility, the original pandas-based classes are still available:
+
+### 🏒 NHLTeamScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLTeamScraper
+
+scraper = NHLTeamScraper()
+df = scraper.scrape_teams(source="records")  # Options: "active", "records", None
+```
+
+- `active`: pulls only currently active teams. It's the default.
+- `records`: pulls historical data with franchise IDs.
+- Returns `pandas.DataFrame` with team metadata.
+
+### 📅 NHLScheduleScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLScheduleScraper
+
+scraper = NHLScheduleScraper(teams=["MTL"], seasons=["20232024"])
+df = scraper.scrape_schedules()
+```
+
+- Scrapes full season schedule for given team and season(s).
+- Supports async fetching and merging of home/away team data.
+
+### 📊 NHLStandingsScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLStandingsScraper
+
+df = NHLStandingsScraper().scrape_standings()
+```
+
+- Optional: `scrape_standings(date="2024-12-01")`
+- Only returns the standings for regular season dates.
+- Returns `pandas.DataFrame` with team standings.
+
+### 👥 NHLTeamRosterScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLTeamRosterScraper
+
+scraper = NHLTeamRosterScraper(teams=["MTL"], seasons=["20232024"])
+df = scraper.scrape_team_rosters()
+```
+
+- Includes player ID, height/weight, birthdate, position, handedness, and more.
+
+### 📈 NHLTeamStatsScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLTeamStatsScraper
+
+scraper = NHLTeamStatsScraper(
+    teams=["MTL"],
+    seasons=["20232024"],
+    sessions=["regular"],  # Can be "regular", "playoffs", or "preseason"
+)
+df = scraper.scrape_team_stats()
+```
+
+- Pass `goalies=True` to collect goaltender stats.
+
+### 📋 NHLDraftScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLDraftScraper
+
+scraper = NHLDraftScraper(years=[2022, 2023])
+df = scraper.scrape_draft()
+```
+
+- Uses official NHL API (you can also call `scrape_records_draft()` or `scrape_team_draft()`).
+
+### 📊 NHLDraftRankingsScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLDraftRankingsScraper
+
+scraper = NHLDraftRankingsScraper(
+    years=[2023],
+    categories=[1, 2]  # 1 = North American Skater, 2 = International Skater, etc.
+)
+df = scraper.scrape_rankings()
+```
+
+### 🧑 NHLPlayerScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLPlayerScraper
+
+scraper = NHLPlayerScraper(players=["8478402"], key="seasonTotals")
+df = scraper.scrape_player_data()
+```
+
+- `key` options include: `"playerId"`, `"currentTeamId"`, `"seasonTotals"`, `"draftDetails"`, `"careerStats"`, `"careerSplits"`, `"careerPlayoffs"`, `"careerPlayoffsSplits"`.
+- `players` can be a list of player IDs.
+
+### 🧵 NHLGameScraper
+
+```python
+from nhl_scraper.scraper_pandas import NHLGameScraper
+
+scraper = NHLGameScraper()
+pbp_df = scraper.scrape_pbp(gameId="2023020185")
+```
+
+- Combines HTML and API parsing of Play-by-Play data.
+- Adds time-on-ice shifts, event coordinates, on-ice player IDs, strength states (e.g., "5v4").
+- `gameId` can only be a single game ID.
+- Does not support async fetching yet.
+- Returns `pandas.DataFrame` with play-by-play data.
+
+#### 🆕 Modern Alternative - Pipeline Functions
+
+For comprehensive data with better performance, use the new pipeline functions:
+
+```python
+# Modern approach - HTML Shifts Pipeline
+from hockey_scraper.src.leagues.nhl.pipeline import scrape_html_shifts
+
+# Get detailed shift data for analysis
+shifts = await scrape_html_shifts(2023020185, format="pandas")
+
+# Access individual shifts and summary data
+home_shifts = shifts['home']['shifts']  # Individual shift records
+home_summary = shifts['home']['summary']  # Period summaries
+```
+
+**Benefits of modern pipeline approach:**
+- ✅ More detailed shift timing data
+- ✅ Player-level time-on-ice breakdowns  
+- ✅ Both individual shifts and period summaries
+- ✅ Full async/sync support for all environments
+- ✅ Multiple output format options
+- ✅ Better error handling and validation
+
+---
+
+## 📦 Base Utilities
+
+### ⚙️ Helper Functions
+
+- `run_async(coro)`: Runs an async coroutine synchronously, useful for notebooks.
+- `convert_str_to_seconds(time_str)`: Converts "MM:SS" to seconds.
+- `replace_list(series, mapping_dict)`: Maps lists of jersey numbers to names, positions, or IDs.
+- `split_time_range(value)`: Extracts two time strings from one field (e.g., "05:00 / 15:00").
+
+---
+
+## 🧪 Testing
+
+Use `test_scrape.py` or notebooks inside `notebooks/` to explore.
+
+```bash
+pytest
+```
+
+---
+
+## ⚠️ Issues/Bugs/Feature Requests/Suggestions
+
+If you encounter any issues or have suggestions for improvements, please open an issue on the GitHub repository. Your feedback is invaluable in making this project better!
+
+Thank you for using and contributing to the NHL Scraper! We hope it enhances your data analysis experience. If you have any questions or need assistance, feel free to reach out.
+
+## 🎯 Future Plans
+
+- Add more examples
+- Add more leagues
+- Add aggregate functions
+- Add Polars integration  
+- Categorize shot danger levels
+- ✅ **COMPLETED**: Comprehensive HTML shifts scraper with async/sync support
+- ✅ **COMPLETED**: Modern pipeline functions with multiple output formats
+- Add more data sources
+- Make it faster
+- Add documentation
+
+---
+
+## 📣 Contact
+
+Made by [@woumaxx](https://x.com/woumaxx). Questions, bugs, or suggestions? Feel free to DM!
