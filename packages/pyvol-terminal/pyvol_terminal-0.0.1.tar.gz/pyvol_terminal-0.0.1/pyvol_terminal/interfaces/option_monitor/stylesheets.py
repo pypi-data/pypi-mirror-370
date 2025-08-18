@@ -1,0 +1,197 @@
+
+
+def get_settings_stylesheets(style_sheet):
+    match style_sheet:
+
+        case "QPushButton":
+            style_sheet_str = """
+                        QPushButton {background-color: #464646;
+                                    color: white;
+                                    border: 1px solid black;
+                                    padding: 5px;
+                                    }
+                        QPushButton:checked {background-color: #9e9e9f;
+                                            color: black;
+                                            }
+                    """
+        case "QComboBox":
+            style_sheet_str = """
+
+                            QComboBox {
+                                background-color: #464646;
+                                color: white;
+                            }
+                            QComboBox::drop-down {
+                                border-color: #464646;
+                                background-color: #464646;
+                            }
+                            QComboBox::item {
+                                background-color: #464646;
+                                color: white; 
+                            }
+                            QComboBox::item:selected {
+                                background-color:  #9e9e9f;
+                                color: black; 
+                            }
+                            QComboBox QAbstractItemView {
+                                background-color: #464646;
+                                color: white; 
+                            }
+                            """
+                
+        case "QMenu":
+            style_sheet_str = """
+                            QMenu::item {
+                                        background-color: #464646;
+                                        color: white
+                                        }
+                            QMenu::item:selected {
+                                                background-color: #9e9e9f; 
+                                                color: black;
+                                                }
+                            """
+
+
+        case "QToolButton":
+            style_sheet_str = """
+                                QToolButton {
+                                            color: white;
+                                            background-color: #464646;
+                                            }
+                                            
+                                QToolButton::selected {
+                                                        color: black;
+                                                        background-color: #9e9e9f;
+                                                        }
+
+                                QToolButton::hover {
+                                                        color: black;
+                                                        background-color: #9e9e9f;
+                                                        }
+
+                                """
+        case "QTableWidget":
+            style_sheet_str = """
+                            QTableView {
+                                        border-style: none;
+                                        background-color: black;
+                                        padding: 0px;
+                                        margin: 0px;
+                                        color: white;
+                                        border-left: 2px solid #414141;
+                                        border-right: 2px solid #414141;
+                                        selection-background-color: #9e9e9f;
+                                        gridline-color: black;
+                                        }
+                            QTableWidget::item {
+                                                padding: 0px;
+                                                margin: 0px;
+                                                border-bottom: 1px solid black;  
+                                                border-top: 1px solid black;
+                                                }
+                            QTableWidget::item:selected {
+                                                        background-color: #9e9e9f;
+                                                        padding: 0px;
+                                                        margin: 0px;
+                                                        color: white;
+                                                        border-bottom: 1px solid black;  
+                                                        border-top: 1px solid black;
+                                                        }
+                            """                   
+            
+        case "SubQTableWidget":
+            style_sheet_str = """
+                QTableView {
+                    border-style: none;
+                    background-color: black;
+                    padding: 0px;
+                    margin: 0px;
+                    color: white;
+                    border-left: 2px solid #414141;
+                    border-right: 2px solid #414141;
+                    selection-background-color: #9e9e9f;
+                }
+                QTableWidget::item {
+                    padding: 0px;
+                    margin: 0px;
+                    border-top: 1px solid #414141;
+                    border-bottom: 1px solid #414141;
+
+                }
+                QTableWidget::item:selected {
+                    background-color: #414141;
+                    padding: 0px;
+                    margin: 0px;
+                    color: white;
+                }
+            """                   
+            
+        case "QLabel":
+            style_sheet_str = """background-color : #232323;
+                                color : white;
+                                padding: 0px;
+                                margin: 0px; 
+                                
+                                """
+        
+        
+        case "QLineEdit":
+            style_sheet_str = """
+                            QLineEdit {
+                                    background-color: #fb8b1e;
+                                    color: black;
+                                }
+                            QLineEdit:focus {
+                                    background-color: #fb8b1e;
+                                    border: 2px solid black;
+                                            }
+                            QLineEdit::selection {
+                                                    background-color:  lightblue;
+                                                    color: #ffffff;                                  
+                                                    }
+                            """
+        case "SpotQLabel":
+            style_sheet_str = """
+                            QLabel {
+                                        background-color: black;
+                                        color: #fb8b1e;
+                                    }
+                              """
+                              
+        case "StrikeOptionsComboBox":
+            style_sheet_str = """
+                            QComboBox {
+                                background-color: #fb8b1e;
+                                color: black;
+                                border: None;
+                                text-align: right;
+                            }
+                            QComboBox:focus {
+                                background-color: #fb8b1e;
+                                border: 2px solid black;
+                                text-align: right;
+                            }
+                            QComboBox::drop-down {
+                                border-color: black;
+                                background-color: #fb8b1e;
+                                text-align: right;
+                            }
+                            QComboBox::item {
+                                background-color: #fb8b1e;
+                                color: black;
+                                text-align: right;
+                            }
+                            QComboBox::item:selected {
+                                background-color: #d97d1a; 
+                                color: black;
+                                text-align: right;
+                            }
+                            QComboBox QAbstractItemView {
+                                background-color: #fb8b1e;
+                                color: black;
+                                border: None;
+                                text-align: right;
+                            }
+                        """
+        
+    return style_sheet_str
