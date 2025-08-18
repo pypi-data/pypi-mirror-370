@@ -1,0 +1,37 @@
+pr:
+  branches:
+    include:
+      - "*"
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  python.version: '3.10'
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      addToPath: true
+  
+  - task: PipAuthenticate@1
+    inputs:
+      artifactFeeds: 'A365/SynapseML-Enya, A365/synapseml-agent'
+    displayName: 'Pip Authenticate'
+
+  - script: |
+      python -m pip install --upgrade pip
+      pip install .[test]
+    displayName: 'Install dependencies'
+
+  - script: |
+      pytest -s tests --disable-warnings --cov=fabric --cov-report=xml --cov-report=html
+    displayName: 'Run unit tests with coverage'
+
+  - task: PublishCodeCoverageResults@2
+    inputs:
+      codeCoverageTool: 'Cobertura'
+      summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
+      reportDirectory: '$(System.DefaultWorkingDirectory)/htmlcov'
+    displayName: 'Publish code coverage report'

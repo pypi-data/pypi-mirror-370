@@ -1,0 +1,129 @@
+trigger:
+  tags:
+    include:
+    - /^([0-9]+)\.([0-9]+)\.([0-9]+)$/ # this matches tags like 1.2.3, 4.5.6, etc.
+
+parameters:
+- name: dry_run
+  displayName: 'Dry run (does not publish to ESRP)'
+  type: boolean
+  default: true
+- name: enforce_changelog_check
+  displayName: '(Recommended) Enforce changelog checking'
+  type: boolean
+  default: true
+
+variables:
+  CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)]
+  LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0'
+  DEBIAN_FRONTEND: noninteractive
+  ob_outputDirectory: '$(Build.SourcesDirectory)/out'
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    globalSdl:
+      tsa:
+        enabled: false
+      credscan:
+        enabled: true
+      policheck:
+        break: true
+
+    stages:
+    - stage: Build
+      jobs:
+      - job: Build
+        timeoutInMinutes: 120
+        cancelTimeoutInMinutes: 0
+
+        pool:
+          type: linux
+
+        variables:
+          ob_outputDirectory: '$(Build.SourcesDirectory)/out'
+
+        steps:
+        - checkout: self
+
+        - script: |
+            TAG_NAME=$(git describe --tags --exact-match 2> /dev/null)
+            if [ -z "$TAG_NAME" ]; then
+              echo "No tag found for the current commit. Continue."
+              exit 0 # Exit successfully as this is not an error condition
+            else
+              echo "Tag found: $TAG_NAME."
+              # Proceed with checking the README.md for the changelog
+              CHANGELOG_PRESENT=$(grep -c "## $TAG_NAME" README.md || true)
+              if [ "$CHANGELOG_PRESENT" -eq 0 ]; then
+                echo "Error: Changelog for tag $TAG_NAME not found in README.md. Abort release."
+                exit 1
+              fi
+              echo "Changelog of $TAG_NAME found. Continue."
+            fi
+          condition: eq(${{ parameters.enforce_changelog_check }}, true)
+          workingDirectory: SynapseML-Agent-SDK
+          displayName: 'Verify Changelog Presence for Tagged Commit'
+
+        - task: PipAuthenticate@1
+          displayName: 'Private Conda Feed Authentication'
+          inputs:
+            artifactFeeds: 'A365/Synapse-Conda'
+
+        - bash: |
+            python3 -m pip install build
+          workingDirectory: SynapseML-Agent-SDK
+          displayName: 'Install Build'
+
+        - bash: |
+            python3 -m build
+          workingDirectory: SynapseML-Agent-SDK
+          displayName: 'Build SynapseML-Agent-SDK'
+
+        - task: CopyFiles@2
+          displayName: 'Copy Wheels'
+          inputs:
+            Contents: '$(System.DefaultWorkingDirectory)/SynapseML-Agent-SDK/dist/*.whl'
+            TargetFolder: ${{ variables['ob_outputDirectory'] }}
+
+        - task: EsrpRelease@9
+          ${{ if eq(parameters.dry_run, false) }}:
+            condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+          ${{ else }}:
+            condition: false
+          inputs:
+            # Certified ADO ConnectionService
+            # See https://msdata.visualstudio.com/A365/_settings/adminservices?resourceId=3472afec-ef7a-495e-b70e-dc75d85ef77c
+            connectedservicename: 'SynapseML-ESRP-Service-Connection'
+            # Set to true to use managed identity
+            usemanagedidentity: true
+            # Key vault that stores the signing certificate.
+            # This is under subscription SynapseML_Libraries_Prod (8831f306-981d-4a79-ba0a-8f15c51b1198) on AME.
+            # JIT access is required to view/manage this key vault.
+            keyvaultname: 'esrp-kv-ame'
+            signcertname: 'esrp-release-mi-cert'
+            # ESRP client ID (also as known as App Registration ID)
+            # See https://portal.esrp.microsoft.com/Onboarding/AccountDetails?clientId=1fc1c0d1-5a85-4081-8f1e-12a8c225b9a6
+            clientid: '1fc1c0d1-5a85-4081-8f1e-12a8c225b9a6'
+            # Should be maven, pypi or npm
+            # contenttype: maven  # use maven to test the authentication but won't release to pypi
+            contenttype: pypi
+            # Path to the folder which contains package to publish.
+            # This should be a path to the package and not the file.
+            folderlocation: '$(System.DefaultWorkingDirectory)/SynapseML-Agent-SDK/dist'
+            owners: 'marcozo@microsoft.com'
+            approvers: 'markus.weimer@microsoft.com,negust@microsoft.com'
+            mainpublisher: synapseml
+            # Should the one of the following three, we are using the AME tenant.
+            # 1. 975f013f-7f24-47e8-a7d3-abc4752bf346 (PME)
+            # 2. 33e01921-4d64-4f8c-a055-5bdaffd5e33d (AME)
+            # 3. cdc5aeea-15c5-4db6-b079-fcadd2505dc2 (Torus)
+            domaintenantid: '33e01921-4d64-4f8c-a055-5bdaffd5e33d'
+          displayName: 'ESRP Publish SynapseML Agent SDK'
