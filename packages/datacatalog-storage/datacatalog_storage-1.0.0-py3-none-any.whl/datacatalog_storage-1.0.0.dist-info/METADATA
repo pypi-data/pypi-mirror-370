@@ -1,0 +1,102 @@
+Metadata-Version: 2.4
+Name: datacatalog-storage
+Version: 1.0.0
+Summary: Catalog-based data storage system with pluggable serializers
+Author-email: DataCat Team <datacat@example.com>
+Maintainer-email: DataCat Team <datacat@example.com>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/papasaidfine/datacat
+Project-URL: Repository, https://github.com/papasaidfine/datacat
+Project-URL: Bug Reports, https://github.com/papasaidfine/datacat/issues
+Project-URL: Documentation, https://github.com/papasaidfine/datacat#readme
+Keywords: data,storage,serialization,catalog,numpy,scipy
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: scipy>=1.7.0
+Requires-Dist: duckdb>=0.8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: black>=22.0.0; extra == "dev"
+Requires-Dist: flake8>=4.0.0; extra == "dev"
+Dynamic: license-file
+
+# DataCat - Data Storage System
+
+[![PyPI version](https://badge.fury.io/py/datacat.svg)](https://pypi.org/project/datacat/)
+[![GitHub tag](https://img.shields.io/github/v/tag/papasaidfine/datacat?sort=semver)](https://github.com/papasaidfine/datacat/tags)
+
+A data storage system with catalog storage and pluggable serializers.
+
+## Features
+
+- **CatalogStorage**: Manages DuckDB catalog with hashed file paths
+- **Serializer Interface**: Pluggable serialization system
+- **SparseMatrixSerializer**: Handles scipy sparse matrices and numpy arrays
+- **NumpyArraySerializer**: Pure numpy arrays without pickle dependency
+
+## Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+
+### With Sparse Matrices
+
+```python
+from datacat import CatalogStorage, SparseMatrixSerializer
+import numpy as np
+import scipy.sparse as sp
+
+# Initialize with sparse matrix support
+serializer = SparseMatrixSerializer()
+storage = CatalogStorage(
+    catalog_columns=['dim1', 'dim2', 'date'],
+    serializer=serializer
+)
+
+# Save mixed data
+data = {
+    'returns': sp.csr_matrix([[1, 2, 0], [0, 0, 3]]),
+    'stock_names': np.array(['AAPL', 'MSFT']),
+    'weights': np.array([0.5, 0.5])
+}
+storage.save(data, dim1="v1", dim2="v2", date="2024-01-01")
+```
+
+### With Pure NumPy Arrays
+
+```python
+from datacat import CatalogStorage, NumpyArraySerializer
+import numpy as np
+
+# Initialize with numpy-only support (no pickle)
+serializer = NumpyArraySerializer()
+storage = CatalogStorage(
+    catalog_columns=['experiment', 'model', 'date'],
+    serializer=serializer
+)
+
+# Save pure numpy data
+data = {
+    'features': np.random.rand(100, 10).astype(np.float32),
+    'labels': np.array(['class_A', 'class_B'] * 50),
+    'timestamps': np.array(['2024-01-01', '2024-01-02'], dtype='datetime64[D]')
+}
+storage.save(data, experiment="classification", model="cnn", date="2024-01-01")
+```
