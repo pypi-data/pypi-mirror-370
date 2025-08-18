@@ -1,0 +1,75 @@
+!# fetch_all_device_data.fn v2.2
+!# This script fetches all device data required to initialize the entities without affecting the duty cycle.
+!#
+!# Original script: https://github.com/ioBroker/ioBroker.hm-rega/blob/master/regascripts/datapoints.fn
+!# datapoints.fn 1.9
+!# 3'2013-9'2014 hobbyquaker https://github.com/hobbyquaker
+!#
+!# Dieses Homematic-Script gibt eine Liste aller Datenpunkte, die zur Laufzeit einen validen Zeitstempel haben, als JSON String aus.
+!#
+!# modified by: SukramJ https://github.com/SukramJ && Baxxy13 https://github.com/Baxxy13
+!# v2.2 - 09/2023
+!#
+!# Das Interface wird durch die Integration an 'sUse_Interface' übergeben.
+!# Nutzbare Interfaces: BidCos-RF, BidCos-Wired, HmIP-RF, VirtualDevices
+!# Zum Testen direkt auf der Homematic-Zentrale muss das Interface wie folgt eingetragen werden: sUse_Interface = "HmIP-RF";
+
+string sUse_Interface = "##interface##";
+string sDevId;
+string sChnId;
+string sDPId;
+string sDPId;
+var vDPValue;
+boolean bDPFirst = true;
+object oInterface = interfaces.Get(sUse_Interface);
+
+Write('{');
+if (oInterface) {
+    integer iInterface_ID = interfaces.Get(sUse_Interface).ID();
+    string sAllDevices = dom.GetObject(ID_DEVICES).EnumUsedIDs();
+    foreach (sDevId, sAllDevices) {
+       object oDevice = dom.GetObject(sDevId);
+        if ((oDevice) && (oDevice.ReadyConfig()) && (oDevice.Interface() == iInterface_ID)) {
+            foreach (sChnId, oDevice.Channels()) {
+                object oChannel = dom.GetObject(sChnId);
+                foreach(sDPId, oChannel.DPs().EnumUsedIDs()) {
+                    object oDP = dom.GetObject(sDPId);
+                    if (oDP && oDP.Timestamp()) {
+                        if (oDP.TypeName() != "VARDP") {
+                            if (bDPFirst) {
+                              bDPFirst = false;
+                            } else {
+                              WriteLine(',');
+                            }
+                            integer sValueType = oDP.ValueType();
+                            Write('"');
+                            WriteURL(oDP.Name());
+                            Write('":');
+                            if (sValueType == 20) {
+                                Write('"');
+                                WriteURL(oDP.Value());
+                                Write('"');
+                            } else {
+                                vDPValue = oDP.Value();
+                                if (sValueType == 2) {
+                                    if (vDPValue) {
+                                        Write("true");
+                                    } else {
+                                        Write("false");
+                                    }
+                                } else {
+                                   if (vDPValue == "") {
+                                        Write("0");
+                                   } else {
+                                        Write(vDPValue);
+                                   }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+Write('}');
