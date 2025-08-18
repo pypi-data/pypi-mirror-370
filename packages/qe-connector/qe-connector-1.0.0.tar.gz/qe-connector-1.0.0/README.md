@@ -1,0 +1,540 @@
+# Quantum Execute Python SDK
+
+[![Python Version](https://img.shields.io/pypi/pyversions/qe-connector)](https://pypi.org/project/qe-connector/)
+[![PyPI Version](https://img.shields.io/pypi/v/qe-connector)](https://pypi.org/project/qe-connector/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+这是 Quantum Execute 公共 API 的官方 Python SDK，为开发者提供了一个轻量级、易于使用的接口来访问 Quantum Execute 的交易服务。
+
+## 功能特性
+
+- ✅ 完整的 Quantum Execute API 支持
+- ✅ 交易所 API 密钥管理
+- ✅ 主订单创建与管理（TWAP、VWAP 等算法）
+- ✅ 订单查询和成交明细
+- ✅ 多种认证方式支持（HMAC、RSA、Ed25519）
+- ✅ 支持生产环境和测试环境
+- ✅ 异步和同步调用支持
+- ✅ 完善的错误处理和日志记录
+
+## 安装
+
+```bash
+pip install qe-connector
+```
+
+或者从源码安装：
+
+```bash
+git clone https://github.com/Quantum-Execute/qe-connector-python.git
+cd qe-connector-python
+pip install -e .
+```
+
+## 快速开始
+
+### 初始化客户端
+
+```python
+from qe.user import User as Client
+import logging
+
+# 配置日志（可选）
+logging.basicConfig(level=logging.INFO)
+
+# 创建生产环境客户端
+client = Client(
+    api_key="your-api-key",
+    api_secret="your-api-secret"
+)
+
+# 创建测试环境客户端
+client = Client(
+    api_key="your-api-key",
+    api_secret="your-api-secret",
+    base_url="https://testapi.quantumexecute.com"
+)
+```
+
+### 管理交易所 API
+
+#### 列出交易所 API 密钥
+
+```python
+# 获取所有交易所 API 密钥
+apis = client.list_exchange_apis()
+print(f"共有 {apis['total']} 个 API 密钥")
+
+for api in apis['items']:
+    print(f"账户: {api['accountName']}, 交易所: {api['exchange']}, 状态: {api['status']}")
+
+# 带分页和过滤
+apis = client.list_exchange_apis(
+    page=1,
+    pageSize=10,
+    exchange="binance"
+)
+```
+
+#### 添加交易所 API 密钥
+
+```python
+result = client.add_exchange_api(
+    accountName="我的币安账户",
+    exchange="binance",
+    apiKey="your-exchange-api-key",
+    apiSecret="your-exchange-api-secret",
+    enableTrading=True  # 启用交易权限
+)
+
+if result['success']:
+    print(f"API Key 添加成功，ID: {result['id']}")
+```
+
+### 创建主订单
+
+#### TWAP 订单示例
+
+```python
+# 创建一个 TWAP 订单，在 30 分钟内分批买入价值 $10,000 的 BTC
+response = client.create_master_order(
+    algorithm="TWAP",
+    algorithmType="TIME_WEIGHTED",
+    exchange="binance",
+    symbol="BTCUSDT",
+    marketType="SPOT",
+    side="BUY",
+    apiKeyId="your-api-key-id",  # 从 list_exchange_apis 获取
+    orderNotional=10000,          # $10,000 名义价值
+    startTime="2024-01-01T10:00:00Z",
+    endTime="2024-01-01T10:30:00Z",
+    executionDuration="60",       # 每 60 秒执行一次
+    mustComplete=True,            # 必须完成全部订单
+    worstPrice=-1,               # -1 表示无最差价格限制
+    clientId="my-order-001"      # 自定义订单 ID
+)
+
+if response.get('success'):
+    print(f"主订单创建成功，ID: {response['masterOrderId']}")
+```
+
+#### VWAP 订单示例
+
+```python
+# 创建 VWAP 订单，根据市场成交量分布执行
+response = client.create_master_order(
+    algorithm="VWAP",
+    algorithmType="VOLUME_WEIGHTED",
+    exchange="binance",
+    symbol="ETHUSDT",
+    marketType="SPOT",
+    side="SELL",
+    apiKeyId="your-api-key-id",
+    totalQuantity=5.0,            # 卖出 5 ETH
+    strategyType="AGGRESSIVE",     # 激进策略
+    startTime="2024-01-01T09:00:00Z",
+    endTime="2024-01-01T17:00:00Z",
+    makerRateLimit=0.3,           # 最多 30% Maker 订单
+    povLimit=0.1,                 # 最多占市场成交量的 10%
+    notes="VWAP 卖出 ETH"         # 订单备注
+)
+```
+
+#### 期货订单示例
+
+```python
+# 创建期货 TWAP 订单
+response = client.create_master_order(
+    algorithm="TWAP",
+    algorithmType="TIME_WEIGHTED",
+    exchange="binance",
+    symbol="BTCUSDT",
+    marketType="FUTURES",
+    side="BUY",
+    apiKeyId="your-api-key-id",
+    totalQuantity=0.1,            # 0.1 BTC
+    executionDuration="1800",     # 30 分钟
+    marginType="CROSS",           # 全仓模式（或 "ISOLATED" 逐仓）
+    reduceOnly=False,             # 非只减仓
+    worstPrice=55000.0,          # 最差价格限制
+    upTolerance="0.001",         # 向上容差 0.1%
+    lowTolerance="0.001",        # 向下容差 0.1%
+    strictUpBound=True           # 严格上限
+)
+```
+
+### 查询订单
+
+#### 查询主订单列表
+
+```python
+# 查询所有主订单
+orders = client.get_master_orders()
+
+# 带过滤条件查询
+orders = client.get_master_orders(
+    page=1,
+    pageSize=20,
+    status="ACTIVE",              # 活跃订单
+    symbol="BTCUSDT",
+    startTime="2024-01-01T00:00:00Z",
+    endTime="2024-01-31T23:59:59Z"
+)
+
+# 打印订单信息
+for order in orders['items']:
+    print(f"""
+    订单 ID: {order['masterOrderId']}
+    算法: {order['algorithm']}
+    交易对: {order['symbol']}
+    方向: {order['side']}
+    状态: {order['status']}
+    完成度: {order['completionProgress'] * 100:.2f}%
+    平均价格: {order['averagePrice']}
+    已成交数量: {order['filledQuantity']} / {order['totalQuantity']}
+    """)
+```
+
+#### 查询成交明细
+
+```python
+# 查询特定主订单的成交明细
+fills = client.get_order_fills(
+    masterOrderId="your-master-order-id",
+    page=1,
+    pageSize=50
+)
+
+# 查询所有成交
+fills = client.get_order_fills(
+    symbol="BTCUSDT",
+    startTime="2024-01-01T00:00:00Z",
+    endTime="2024-01-01T23:59:59Z"
+)
+
+# 计算总成交额和手续费
+total_value = 0
+total_fee = 0
+
+for fill in fills['items']:
+    print(f"""
+    成交时间: {fill['orderCreatedTime']}
+    交易对: {fill['symbol']}
+    方向: {fill['side']}
+    成交价格: {fill['price']}
+    成交数量: {fill['filledQuantity']}
+    成交金额: {fill['filledValue']}
+    手续费: {fill['fee']}
+    """)
+    total_value += fill['filledValue']
+    total_fee += fill['fee']
+
+print(f"总成交额: ${total_value:.2f}, 总手续费: ${total_fee:.2f}")
+```
+
+### 取消订单
+
+```python
+response = client.cancel_master_order(
+    masterOrderId="your-master-order-id",
+    reason="用户手动取消"  # 可选的取消原因
+)
+
+if response.get('success'):
+    print("订单取消成功")
+else:
+    print(f"订单取消失败: {response.get('message')}")
+```
+
+## 错误处理
+
+SDK 提供了详细的错误类型，方便进行精确的错误处理：
+
+```python
+from qe.error import ClientError, APIError
+
+try:
+    response = client.create_master_order(
+        # ... 订单参数
+    )
+except APIError as error:
+    # API 返回的业务错误
+    print(f"API 错误 - 代码: {error.code}, 原因: {error.reason}, 消息: {error.message}")
+    print(f"追踪 ID: {error.trace_id}")  # 用于技术支持
+except ClientError as error:
+    # 客户端错误（如参数错误、网络错误等）
+    print(f"客户端错误 - 状态码: {error.status_code}, 错误消息: {error.error_message}")
+except Exception as error:
+    # 其他未预期的错误
+    print(f"未知错误: {error}")
+```
+
+## 高级配置
+
+### 配置超时和代理
+
+```python
+client = Client(
+    api_key="your-api-key",
+    api_secret="your-api-secret",
+    timeout=30,  # 30 秒超时
+    proxies={
+        'https': 'http://proxy.example.com:8080'
+    }
+)
+```
+
+### 使用 RSA 或 Ed25519 签名
+
+```python
+# 使用 RSA 私钥
+with open('private_key.pem', 'r') as f:
+    private_key = f.read()
+
+client = Client(
+    api_key="your-api-key",
+    private_key=private_key,
+    private_key_pass="your-password"  # 如果私钥有密码
+)
+
+# 使用 Ed25519 私钥
+with open('ed25519_key.pem', 'r') as f:
+    ed25519_key = f.read()
+
+client = Client(
+    api_key="your-api-key",
+    private_key=ed25519_key
+)
+```
+
+### 显示请求限制使用情况
+
+```python
+client = Client(
+    api_key="your-api-key",
+    api_secret="your-api-secret",
+    show_limit_usage=True,
+    show_header=True
+)
+
+# API 响应将包含限制信息
+response = client.get_master_orders()
+if isinstance(response, dict) and 'limit_usage' in response:
+    print(f"限制使用情况: {response['limit_usage']}")
+    print(f"实际数据: {response['data']}")
+```
+
+### 配置日志
+
+```python
+import logging
+from qe.lib.utils import config_logging
+
+# 配置详细日志
+config_logging(logging, logging.DEBUG)
+
+# 只记录警告和错误
+config_logging(logging, logging.WARNING)
+```
+
+## 完整示例
+
+### 完整的交易流程示例
+
+```python
+import logging
+from qe.user import User as Client
+from qe.error import ClientError, APIError
+from qe.lib.utils import config_logging
+import time
+
+# 配置日志
+config_logging(logging, logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 初始化客户端
+client = Client("your-api-key", "your-api-secret")
+
+try:
+    # 1. 获取可用的 API 密钥
+    apis = client.list_exchange_apis(exchange="binance")
+    if not apis['items']:
+        logger.error("没有找到可用的币安 API 密钥")
+        exit(1)
+    
+    api_key_id = apis['items'][0]['id']
+    logger.info(f"使用 API 密钥: {api_key_id}")
+    
+    # 2. 创建 TWAP 订单
+    order_response = client.create_master_order(
+        algorithm="TWAP",
+        algorithmType="TIME_WEIGHTED",
+        exchange="binance",
+        symbol="BTCUSDT",
+        marketType="SPOT",
+        side="BUY",
+        apiKeyId=api_key_id,
+        orderNotional=1000,  # $1000
+        startTime="2024-01-01T10:00:00Z",
+        endTime="2024-01-01T10:10:00Z",
+        executionDuration="30",  # 每 30 秒执行一次
+        mustComplete=True,
+        clientId=f"test_order_{int(time.time())}"
+    )
+    
+    if not order_response.get('success'):
+        logger.error(f"创建订单失败: {order_response.get('message')}")
+        exit(1)
+    
+    master_order_id = order_response['masterOrderId']
+    logger.info(f"订单创建成功，ID: {master_order_id}")
+    
+    # 3. 监控订单状态
+    while True:
+        orders = client.get_master_orders(
+            page=1,
+            pageSize=1,
+            status="ACTIVE"
+        )
+        
+        if not orders['items']:
+            logger.info("订单已完成或取消")
+            break
+        
+        order = orders['items'][0]
+        logger.info(f"订单进度: {order['completionProgress'] * 100:.2f}%, "
+                   f"已成交: {order['filledQuantity']}/{order['totalQuantity']}")
+        
+        # 检查是否需要取消
+        if order['completionProgress'] > 0.5:  # 完成超过 50%
+            logger.info("演示：取消订单")
+            cancel_response = client.cancel_master_order(
+                masterOrderId=master_order_id,
+                reason="演示取消"
+            )
+            if cancel_response.get('success'):
+                logger.info("订单已取消")
+            break
+        
+        time.sleep(10)  # 每 10 秒检查一次
+    
+    # 4. 获取最终成交明细
+    fills = client.get_order_fills(masterOrderId=master_order_id)
+    logger.info(f"总成交笔数: {fills['total']}")
+    
+    for fill in fills['items']:
+        logger.info(f"成交: {fill['side']} {fill['filledQuantity']} {fill['symbol']} "
+                   f"@ {fill['price']}, 手续费: {fill['fee']}")
+
+except APIError as error:
+    logger.error(f"API 错误: {error}")
+except ClientError as error:
+    logger.error(f"客户端错误: {error}")
+except Exception as error:
+    logger.error(f"未知错误: {error}")
+```
+
+## API 文档
+
+完整的 API 文档请参考 [Quantum Execute API 文档](https://docs.quantumexecute.com)
+
+## 支持的算法类型
+
+- **TWAP (Time Weighted Average Price)**: 时间加权平均价格算法
+- **VWAP (Volume Weighted Average Price)**: 成交量加权平均价格算法
+- **POV (Percentage of Volume)**: 成交量百分比算法
+- **IMPLEMENTATION_SHORTFALL**: 执行缺口算法
+- 更多算法类型请参考 API 文档
+
+## 示例代码
+
+更多示例代码请参考 [examples](./examples) 目录：
+
+- [添加交易所 API](examples/user/add_exchange_api.py)
+- [创建主订单](examples/user/create_master_order.py)
+- [取消主订单](examples/user/cancel_master_order.py)
+- [查询订单列表](examples/user/get_master_orders.py)
+- [查询成交明细](examples/user/get_order_fills.py)
+
+## 开发和测试
+
+### 安装开发依赖
+
+```bash
+pip install -r requirements/requirements-dev.txt
+```
+
+### 运行测试
+
+```bash
+python -m pytest tests/
+```
+
+### 代码格式化
+
+```bash
+black qe/
+flake8 qe/
+```
+
+## 常见问题
+
+### 1. 如何获取 API 密钥？
+
+请登录 Quantum Execute 平台，在用户设置中创建 API 密钥。确保保管好您的密钥，不要将其提交到版本控制系统中。
+
+### 2. 时间戳错误怎么处理？
+
+如果遇到时间戳相关的错误，可能是您的系统时间与服务器时间不同步。请确保系统时间准确。
+
+### 3. 如何处理大量数据的分页？
+
+```python
+def get_all_orders(client):
+    all_orders = []
+    page = 1
+    page_size = 100
+    
+    while True:
+        result = client.get_master_orders(page=page, pageSize=page_size)
+        all_orders.extend(result['items'])
+        
+        if len(result['items']) < page_size:
+            break
+        page += 1
+    
+    return all_orders
+```
+
+### 4. 如何设置订单的时间？
+
+时间格式使用 ISO 8601 标准，例如：
+- UTC 时间：`2024-01-01T10:00:00Z`
+- 带时区：`2024-01-01T18:00:00+08:00`
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！请确保：
+
+1. 代码符合 PEP 8 规范
+2. 添加适当的测试
+3. 更新相关文档
+
+## 更新日志
+
+### v1.0.0 (2024-01-01)
+- 初始版本发布
+- 支持完整的 Quantum Execute API
+- 支持多种认证方式
+- 完善的错误处理
+
+## 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
+
+## 联系我们
+
+- 官网：[https://quantumexecute.com](https://quantumexecute.com)
+- 邮箱：support@quantumexecute.com
+- GitHub：[https://github.com/Quantum-Execute/qe-connector-python](https://github.com/Quantum-Execute/qe-connector-python)
+
