@@ -1,0 +1,352 @@
+"""
+    Copyright 2025 Guillaume Everarts de Velp
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: edvgui@gmail.com
+"""
+import std
+import exec
+import files
+
+
+SystemdService.file_resources [0:] -- std::Resource
+"""
+Relation containing all the file resources managed by this service.
+"""
+
+SystemdService.runtime_resources [0:] -- std::Resource
+"""
+Relation containing all the runtime resources, these are exec commands
+starting and stopping the service.
+"""
+
+SystemdService.configuration_resources [0:] -- std::Resource
+"""
+Relation containing all the configuration resources, these are the resources
+making sure that the service ready to be deployed.
+"""
+
+SystemdService._systemd_config_dir [1] -- files::Directory
+SystemdService._container_config_dir [0:1] -- files::Directory
+SystemdService._enable_command [0:1] -- exec::Run
+SystemdService._activate_command [0:1] -- exec::Run
+SystemdService._reload_command [1] -- exec::Run
+
+
+implementation timer_name for SystemdService:
+    """
+    Calculate an assign the timer unit name.
+    """
+    self.timer_name = removesuffix(self.service_name, ".service") + ".timer"
+end
+
+
+implementation socket_name for SystemdService:
+    """
+    Calculate an assign the timer unit name.
+    """
+    self.socket_name = removesuffix(self.service_name, ".service") + ".socket"
+end
+
+
+implementation unit_name for SystemdService:
+    """
+    Calculate the main unit name.
+    """
+    self.unit_name = self.on_calendar is defined
+        ? self.timer_name
+        : self.listen_stream is defined
+            ? self.socket_name
+            : self.service_name
+end
+
+
+implementation service_configuration for SystemdService:
+    """
+    Deploy and cleanup all the configuration files required by our service.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    # Make sure that the systemd directory exists
+    self._systemd_config_dir = files::Directory(
+        path=self.systemd_unit_dir,
+        permissions=755,
+        owner=user,
+        group=user,
+        create_parents=true,
+        host=host,
+        via=self._resource.via is defined ? self._resource.via : null,
+        send_event=true,
+        # requires=self.requires,  # We don't need this directory to be created after our requires
+        provides=self.provides,  # But we need to make sure it is created before our provides
+    )
+    self.file_resources += self._systemd_config_dir
+
+    if self.systemd_container_dir != null:
+        self._container_config_dir = files::Directory(
+            path=self.systemd_container_dir,
+            permissions=755,
+            owner=user,
+            group=user,
+            create_parents=true,
+            host=host,
+            via=self._resource.via is defined ? self._resource.via : null,
+            send_event=true,
+            # requires=self.requires,  # We don't need this directory to be created after our requires
+            provides=self.provides,  # But we need to make sure it is created before our provides
+        )
+        self.file_resources += self._container_config_dir
+    end
+
+    # Run systemctl daemon-reload after any config file change
+    reload = exec::Run(
+        command=shlex_join([self.systemctl_command, "daemon-reload"]),
+        reload_only=true,
+        host=host,
+        via=self._resource.via is defined ? self._resource.via : null,
+        send_event=true,
+        requires=[
+            self.requires,  # We don't want to run this command before any of our requires
+            self.file_resources,  # We need to run this command every time the files have been changed
+        ],
+        # provides=self.provides,  # We don't need to run this command before any of our provides
+    )
+    self._reload_command = reload
+    self.configuration_resources += reload
+
+    # All file resources are configuration resources
+    self.configuration_resources += self.file_resources
+
+    # All configuration resources are resources of the service
+    self.resources += self.configuration_resources
+
+    # All runtime resources are resources of the service
+    self.resources += self.runtime_resources
+
+    # In most cases, the runtime resources (start/restart/stop) of the service
+    # should be deployed once the files have been placed on the system
+    # The only exception is the removed state, which ensure that the service
+    # is both stopped and removed, in this case we first stop it then remove it.
+    for resource in self.runtime_resources:
+        if self.state == "removed":
+            resource.provides += self.configuration_resources
+        else:
+            resource.requires += self.configuration_resources
+        end
+    end
+end
+
+
+implementation service_timer for SystemdService:
+    """
+    Setup a timer file when the service should be executed periodically.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    if self.on_calendar is defined:
+        self.timer = files::SystemdUnitFile(
+            path=files::path_join(self._systemd_config_dir.path, self.timer_name),
+            permissions=644,
+            owner=user,
+            group=user,
+            host=host,
+            via=self._resource.via is defined ? self._resource.via : null,
+            unit=Unit(
+                description=self.description is defined ? self.description : f"Podman {self.timer_name}",
+                documentation=["https://github.com/edvgui/inmanta-module-podman"],
+                requires=[self.service_name],
+                on_failure=self.on_failure,
+            ),
+            timer=Timer(
+                on_calendar=self.on_calendar,
+                unit=self.service_name,
+            ),
+            install=Install(
+                wanted_by=["timers.target"],
+            ),
+            send_event=true,
+            purged=self.state == "removed",
+            requires=self.requires,
+            provides=self.provides,
+        )
+        self.timer.requires += self._systemd_config_dir
+        self.file_resources += self.timer
+    else:
+        self.timer = null
+    end
+end
+
+
+implementation service_socket for SystemdService:
+    """
+    Setup a timer file when the service should be executed periodically.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    if self.listen_stream is defined:
+        self.socket = files::SystemdUnitFile(
+            path=files::path_join(self._systemd_config_dir.path, self.socket_name),
+            permissions=644,
+            owner=user,
+            group=user,
+            host=host,
+            via=self._resource.via is defined ? self._resource.via : null,
+            unit=Unit(
+                description=self.description is defined ? self.description : f"Podman {self.socket_name}",
+                documentation=["https://github.com/edvgui/inmanta-module-podman"],
+                requires=[self.service_name],
+            ),
+            socket=Socket(
+                listen_stream=self.listen_stream,
+                service=self.service_name,
+            ),
+            install=Install(
+                wanted_by=["sockets.target"],
+            ),
+            send_event=true,
+            purged=self.state == "removed",
+            requires=self.requires,
+            provides=self.provides,
+        )
+        self.socket.requires += self._systemd_config_dir
+        self.file_resources += self.socket
+    else:
+        self.socket = null
+    end
+end
+
+
+implementation run_service for SystemdService:
+    """
+    Make sure that the service is running.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    # If the service is not active, we start it
+    self._activate_command = exec::Run(
+        command=shlex_join([self.systemctl_command, "start", self.unit_name]),
+        unless=shlex_join([self.systemctl_command, "is-active", self.unit_name]),
+        host=host,
+        via=self._resource.via is defined ? self._resource.via : null,
+        send_event=true,
+        reload="true",  # Dummy command, we don't want to execute our command twice
+        requires=self.requires,
+        provides=self.provides,
+    )
+
+    self.runtime_resources += self._activate_command
+end
+
+
+implementation restart_service for SystemdService:
+    """
+    Make sure the the service is restarted.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    # If the service is not active, we start it
+    self._activate_command = exec::Run(
+        command=shlex_join([self.systemctl_command, "restart", self.unit_name]),
+        host=host,
+        via=self._resource.via is defined ? self._resource.via : null,
+        send_event=true,
+        reload="true",  # Dummy command, we don't want to execute our command twice
+        requires=self.requires,
+        provides=self.provides,
+    )
+
+    self.runtime_resources += self._activate_command
+end
+
+
+implementation stop_service for SystemdService:
+    """
+    Make sure that the service is not running.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    # If the service is active, we stop it
+    self._activate_command = exec::Run(
+        command=shlex_join([self.systemctl_command, "stop", self.unit_name]),
+        onlyif=shlex_join([self.systemctl_command, "is-active", self.unit_name]),
+        host=host,
+        via=self._resource.via is defined ? self._resource.via : null,
+        send_event=true,
+        reload="true",  # Dummy command, we don't want to execute our command twice
+        requires=self.requires,
+        provides=self.provides,
+    )
+
+    self.runtime_resources += self._activate_command
+end
+
+
+implementation enable_service for SystemdService:
+    """
+    Make sure that the service is enabled.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    # If the service is not enabled, we enable it
+    self._enable_command = exec::Run(
+        command=shlex_join([self.systemctl_command, "enable", self.unit_name]),
+        unless=shlex_join([self.systemctl_command, "is-enabled", self.unit_name]),
+        host=host,
+        via=self._resource.via is defined ? self._resource.via : null,
+        send_event=true,
+        reload="true",  # Dummy command, we don't want to execute our command twice
+        requires=self.requires,
+        provides=self.provides,
+    )
+
+    self.runtime_resources += self._enable_command
+end
+
+
+implementation disable_service for SystemdService:
+    """
+    Make sure that the service is disabled.
+    """
+    user = self._resource.owner
+    host = self._resource.host
+
+    # If the service is enabled, we disable it
+    self._enable_command = exec::Run(
+        command=shlex_join([self.systemctl_command, "disable", self.unit_name]),
+        onlyif=shlex_join([self.systemctl_command, "is-enabled", self.unit_name]),
+        host=host,
+        via=self._resource.via is defined ? self._resource.via : null,
+        send_event=true,
+        reload="true",  # Dummy command, we don't want to execute our command twice
+        requires=self.requires,
+        provides=self.provides,
+    )
+
+    self.runtime_resources += self._enable_command
+end
+
+
+implement SystemdService using service_configuration, timer_name, socket_name, unit_name, service_timer, service_socket
+implement SystemdService using run_service when self.state == "running"
+implement SystemdService using restart_service when self.state == "restart"
+implement SystemdService using stop_service when self.state in ["stopped", "removed"]
+implement SystemdService using enable_service when self.state in ["running", "restart", "stopped"] and self.enabled
+implement SystemdService using disable_service when self.state in ["removed"] or not self.enabled

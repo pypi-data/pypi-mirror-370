@@ -1,0 +1,204 @@
+"""
+    Copyright 2025 Guillaume Everarts de Velp
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: edvgui@gmail.com
+"""
+import podman
+
+typedef podman_command_t as string matching self in [
+    "podman-run",
+    "podman-stop",
+    "podman-rm",
+    "podman-pod-create",
+    "podman-pod-start",
+    "podman-pod-stop",
+    "podman-pod-rm",
+]
+"""
+Name of podman commands or subcommands which are used to manage containers
+and pods.
+"""
+
+
+entity Network:
+    """
+    Configure the networking for a container or pod.  Each implementation knows
+    how to refine itself into the corresponding cli_option that can
+    be used to connect the container or pod to the network when the container
+    or pod is created.
+
+    :attr cli_option: The argument passed to the network cli option.
+    """
+    string cli_option
+end
+
+entity BridgeNetwork extends Network:
+    """
+    Create or connect to a user-defined network bridge.
+
+    :attr name: The name of the network.  If the string is non-empty,
+        it will refer to an already existing network.  If the string is
+        empty, a default network for the contianer or pod is created.
+    :attr alias: Add network-scoped alias for the container.
+    :attr ip: Specify a static ipv4/ipv4 address for this container.
+    :attr mac: Specify a static mac address for this container.
+    :attr interface_name: Specify a name for the created network interface
+        inside the container.
+    """
+    string name = ""
+    string? alias = null
+    string? ip = null
+    string? mac = null
+    string? interface_name = null
+end
+
+
+entity Host:
+    """
+    Add a custom host-to-IP mapping (host:ip).
+
+    Add a line to /etc/hosts. The format is hostname:ip. The --add-host option can be set multiple times.
+    Conflicts with the --no-hosts option.
+    """
+    string host
+    string ip
+
+    string cli_option
+end
+
+
+entity Publish:
+    """
+    Publish a container's port, or range of ports, within this container or 
+    pod to the host.
+
+    Both hostPort and containerPort can be specified as a range of ports. When
+    specifying ranges for both, the number of container ports in the range must
+    match the number of host ports in the range.
+
+    If host IP is set to 0.0.0.0 or not set at all, the port is bound on all IPs on the host.
+
+    :attr ip: The ip to bind the port to
+    :attr host_port: A port, or range of ports (in the format 123-456) to map on the
+        host side to container ports.
+    :attr container_port: A port, or range of ports (in the format 123-456) to map
+        on the container side to host ports.
+    :attr protocol: The transport protocol to enable on this port.
+    """
+    string? ip = null
+    string? host_port = null
+    string container_port
+    string? protocol = null
+
+    string cli_option
+end
+
+index Publish(container_like, container_port)
+
+
+entity IdMap:
+    """
+    This option provides a way to map host UIDs to container UIDs.
+    It can be passed several times to map different ranges.
+
+    The amount value is optional and assumed to be 1 if not given.
+
+    :attr container_id: The uid/gid inside of the container
+    :attr host_id: The uid/gid on the host
+    :attr amount: The amount specifies the number of consecutive UIDs that is mapped.
+    """
+    string container_id
+    string host_id
+    string? amount = null
+
+    string cli_option
+end
+
+
+entity ExtraArg:
+    """
+    An extra argument to add to the create command of the container/pod.
+    The argument will be serialized as `--{name}={value}` if value is defined,
+    and as `--{name}` otherwise.
+
+    :attr cmd: The name of the podman command for which the option is relevant
+    :attr name: The name of the option
+    :attr value: The value for the option, if it is left to null, we consider the
+        option to be a flag.
+    """
+    podman_command_t cmd = "podman-run"
+    string name
+    string? value = null
+end
+
+
+implementation bridge_cli_option for BridgeNetwork:
+    """
+    Compose the cli option required to connect the container or pod to a bridge.
+    """
+    network_name = self.name == "" ? "bridge" : self.name
+
+    options = podman::inline_options(
+        {
+            "alias": self.alias,
+            "ip": self.ip,
+            "mac": self.mac,
+            "interface_name": self.interface_name,
+        }
+    )
+
+    self.cli_option = options == "" ? network_name : f"{network_name}:{options}"
+end
+
+
+implementation host_cli_option for Host:
+    """
+    Compose the cli option requried to add a host entry into the container's
+    /etc/hosts file.
+    """
+    self.cli_option = f"{self.host}:{self.ip}"
+end
+
+
+implementation publish_cli_option for Publish:
+    """
+    Compose the cli option required to expose some container port
+    to the host network.
+    """
+    host = self.host_port is defined ? f"{self.host_port}:" : ":"
+    host_with_ip = self.ip is defined ? f"{self.ip}:{host}" : host
+    port = host_with_ip != ":" ? f"{host_with_ip}{self.container_port}" : self.container_port
+
+    self.cli_option = self.protocol is defined ? f"{port}/{self.protocol}" : port
+end
+
+
+implementation id_map_cli_option for IdMap:
+    """
+    Compose the cli option required to map some container id to some ids
+    on the host.
+    """
+    mapping_start = f"{self.container_id}:{self.host_id}"
+
+    self.cli_option = self.amount is defined ? f"{mapping_start}:{self.amount}" : mapping_start
+end
+
+
+implement Network using std::none
+implement BridgeNetwork using bridge_cli_option
+implement Host using host_cli_option
+implement Publish using publish_cli_option
+implement IdMap using id_map_cli_option
+implement ExtraArg using std::none
