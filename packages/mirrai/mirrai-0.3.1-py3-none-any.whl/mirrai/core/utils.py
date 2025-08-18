@@ -1,0 +1,148 @@
+import math
+import platform
+import random
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Generic, Optional, Tuple, TypeVar
+
+from mirrai.core.constants import (
+    MAX_MOVE_DURATION,
+    MIN_MOVE_DURATION,
+    PIXELS_PER_SECOND,
+)
+
+T = TypeVar("T")
+
+
+class Singleton(type):
+    """Metaclass for creating singleton classes."""
+
+    _instances: Dict[type, Any] = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            instance = super().__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        return cls._instances[cls]
+
+    def reset_instance(cls) -> None:
+        """Reset the singleton instance."""
+        if cls in cls._instances:
+            del cls._instances[cls]
+
+
+class PlatformFactory(Generic[T], ABC):
+    """Base class for platform-specific factory implementations.
+
+    This provides a common pattern for creating singleton instances
+    of platform-specific implementations (Windows, macOS, Linux).
+    """
+
+    _instance: Optional[T] = None
+
+    @classmethod
+    @abstractmethod
+    def _create_windows(cls) -> T:
+        """Create Windows implementation. Must be overridden by subclasses."""
+        pass
+
+    @classmethod
+    def _create_macos(cls) -> T:
+        """Create macOS implementation. Override when macOS is supported."""
+        raise NotImplementedError(f"macOS {cls.__name__} not yet implemented")
+
+    @classmethod
+    def _create_linux(cls) -> T:
+        """Create Linux implementation. Override when Linux is supported."""
+        raise NotImplementedError(f"Linux {cls.__name__} not yet implemented")
+
+    @classmethod
+    def get(cls) -> T:
+        """Get the platform-specific instance."""
+        if cls._instance is None:
+            system = platform.system()
+
+            if system == "Windows":
+                cls._instance = cls._create_windows()
+            elif system == "Darwin":  # macOS
+                cls._instance = cls._create_macos()
+            elif system == "Linux":
+                cls._instance = cls._create_linux()
+            else:
+                raise NotImplementedError(f"Platform {system} is not supported")
+
+        return cls._instance
+
+    @classmethod
+    def reset(cls) -> None:
+        """Reset the cached instance. Useful for testing."""
+        cls._instance = None
+
+
+def format_bytes(size_bytes: int) -> str:
+    size = float(size_bytes)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} TB"
+
+
+def get_primary_display_size() -> Tuple[int, int]:
+    system = platform.system()
+
+    if system == "Windows":
+        import win32api
+
+        return (
+            win32api.GetSystemMetrics(0),  # SM_CXSCREEN
+            win32api.GetSystemMetrics(1),  # SM_CYSCREEN
+        )
+    elif system == "Darwin":  # macOS
+        # Quartz/AppKit
+        raise NotImplementedError("macOS display size not yet implemented")
+    elif system == "Linux":
+        # X11/Wayland
+        raise NotImplementedError("Linux display size not yet implemented")
+    else:
+        raise NotImplementedError(f"Platform {system} is not supported")
+
+
+def calc_distance(x1: float, y1: float, x2: float, y2: float) -> float:
+    """Calculate Euclidean distance between two points.
+
+    Args:
+        x1, y1: First point coordinates
+        x2, y2: Second point coordinates
+
+    Returns:
+        Distance in pixels
+    """
+    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+
+def calc_move_duration(
+    target_x: int,
+    target_y: int,
+    current_x: Optional[int] = None,
+    current_y: Optional[int] = None,
+) -> float:
+    """Calculate human-like movement duration based on distance.
+
+    Args:
+        target_x, target_y: Target coordinates
+        current_x, current_y: Current coordinates (if None, returns minimum duration)
+
+    Returns:
+        Duration in seconds for the movement
+    """
+    if current_x is None or current_y is None:
+        return MIN_MOVE_DURATION
+
+    distance = calc_distance(current_x, current_y, target_x, target_y)
+    base_duration = distance / PIXELS_PER_SECOND
+
+    # ±10% variation for more human-like movement
+    variation = random.uniform(0.9, 1.1)
+    duration = base_duration * variation
+
+    return max(MIN_MOVE_DURATION, min(duration, MAX_MOVE_DURATION))
