@@ -1,0 +1,44 @@
+name: Run Python Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.10', '3.11', '3.12']  
+
+    steps:
+      - name: 🧾 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 📦 Upgrade pip and install build tools
+        run: |
+          python -m pip install --upgrade pip --no-cache-dir
+          pip install build hatch pytest --no-cache-dir
+
+      - name: 🧪 Validate metadata and build wheel
+        run: |
+          python -m build --wheel
+
+      - name: 📥 Install package
+        run: |
+          pip install .
+
+      - name: ▶️ Run tests
+        run: |
+          pytest
+        continue-on-error: true
