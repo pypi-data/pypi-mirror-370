@@ -1,0 +1,514 @@
+# .circleci/config.yml or project settings
+# Python CircleCI 2.1 configuration file
+#
+# https://circleci.com/docs/
+# Check https://circleci.com/docs/2.1/language-python/ for more details
+#
+# https://github.com/Cadair/giles
+# giles only need "Job Completed" events.
+# https://giles.cadair.dev/circleci/v2
+#
+# “run-ci” label added to PR
+#
+# 🔍 You can test this by visiting a raw artifact link directly in your browser:
+# https://app.circleci.com/pipelines/github/<org>/<repo>
+# <org>  = the provider ("github", "gh", "bitbucket", "bb", "circleci", etc.)
+# <repo> = unique ID (org/repo hash, base64-like unique ID)
+# https://app.circleci.com/pipelines/<org>/<repo>/<pipeline_number>/workflows/<workflow_id>/jobs/<job_id>/artifacts
+# https://app.circleci.com/pipelines/github/scikit-plots/scikit-plots
+# https://app.circleci.com/organization/github/scikit-plots
+# → click on a pipeline → job → Artifacts tab
+# If you're not logged in and still can view the artifact, it's public ✅
+#
+# Redirected Artifact URL
+# Internal: "https://*-*********-gh.circle-artifacts.com/0/docs/build/html/stable/index.html"
+# Redirected: "https://output.circle-artifacts.com/output/job/[JOB-ID]/artifacts/0/docs/build/html/stable/index.html"
+# Redirected: "https://output.circle-artifacts.com/output/job/********-****-****-****-************/artifacts/0/docs/build/html/stable/index.html"
+#   curl -H "Circle-Token: $CIRCLE_TOKEN" \
+#   https://circleci.com/api/v2/project/gh/scikit-plots/scikit-plots/job/<job_number>/artifacts
+#   https://circleci.com/api/v2/me
+#   {
+#   "items": [
+#     {
+#       "path": "docs/build/html/stable/index.html",
+#       "url": "https://circle-production.s3.amazonaws.com/...."
+#     }
+#   ]
+# }
+#
+# https://circleci.com/docs/set-environment-variable/#set-an-environment-variable-in-a-project
+# https://app.codecov.io/gh/scikit-plots/scikit-plots/new/circle-ci
+---
+version: 2.1
+
+##########################################
+# Here is where the real jobs are defined.
+##########################################
+
+# https://support.circleci.com/hc/en-us/articles/360043638052-Conditional-steps-in-jobs-and-conditional-workflows
+# Add a Pipeline Parameter and Trigger
+# Project Settings → Triggers → Add Trigger
+# Fill out:
+# Trigger Source: GitHub App
+# Event: "Label added to PR"
+# Label: run-ci (your label name)
+# Parameters:
+# {
+#   "run_docs_build": true
+# }
+# This tells CircleCI:
+# When a PR gets the label run-ci, start a pipeline with run_docs_build: true.
+parameters:
+  run_docs_build:
+    type: boolean
+    default: false
+
+# Aliases to reuse
+_defaults: &defaults
+  ## https://circleci.com/docs/install-machine-runner-3-on-linux/
+  # machine: true
+  ## https://circleci.com/docs/container-runner-installation/
+  docker:
+    # CircleCI maintains a library of pre-built images
+    # - image: cimg/base:current-22.04
+    # documented at https://circleci.com/developer/images/image/cimg/python
+    - image: cimg/python:3.11
+  # environment:
+  #   - MKL_NUM_THREADS: 2
+  #   - OPENBLAS_NUM_THREADS: 2
+  #   - CONDA_ENV_NAME: testenv
+  #   - LOCK_FILE: build_tools/circle/doc_linux-64_conda.lock
+  #   # Make sure that we fail if the documentation build generates warnings with
+  #   # recent versions of the dependencies.
+  #   - SKLEARN_WARNINGS_AS_ERRORS: '1'
+  working_directory: ~/repo
+  ## https://circleci.com/docs/configuration-reference/#resourceclass
+  # resource_class: scikit-plots/documentation  # large
+
+# https://github.com/codecov/example-javascript/blob/main/.circleci/config.yml
+# orbs:
+#   codecov: codecov/codecov-action@v5
+
+commands:
+  # check-label-run-ci:
+  #   description: Check if labels contain "run-ci" keyword; skip if not present or on error
+  #   steps:
+  #     - run:
+  #         name: Check for 'run-ci' label
+  #         command: |
+  #           set -euo pipefail  # safer bash: fail on error, undefined var, and fail pipe if any step fails
+
+  #           # Extract PR number from CIRCLE_PULL_REQUEST URL, if empty skip gracefully
+  #           if [ -z "${CIRCLE_PULL_REQUEST:-}" ]; then
+  #             echo "No pull request context detected; skipping label check."
+  #             exit 0
+  #           fi
+  #           PR_NUMBER=$(echo "$CIRCLE_PULL_REQUEST" | awk -F/ '{print $NF}')
+
+  #           # Use GitHub API to fetch labels; handle errors gracefully without failing job
+  #           LABELS=$(curl -sSf -H "Authorization: token $GITHUB_TOKEN" \
+  #             "https://api.github.com/repos/your-org/your-repo/issues/$PR_NUMBER/labels" || echo "")
+
+  #           if [ -z "$LABELS" ]; then
+  #             echo "Warning: Unable to fetch labels or no labels found; proceeding with job."
+  #             exit 0
+  #           fi
+
+  #           # Parse labels safely with jq; handle jq errors without failing
+  #           RUN_CI=$(echo "$LABELS" | jq -r '.[].name' 2>/dev/null || echo "" | grep -q "run-ci" && echo "true" || echo "false")
+
+  #           if [ "$RUN_CI" != "true" ]; then
+  #             echo "Label 'run-ci' not found. Skipping job."
+  #             circleci-agent step halt
+  #           fi
+  check-skip:
+    description: Check if commit message contains skip keyword
+    steps:
+      - run:
+          name: "🔍 Check skip"
+          command: |
+            if [ ! -d "scikitplot" ]; then
+              echo "Build was not run due to skip, exiting job ${CIRCLE_JOB} for PR ${CIRCLE_PULL_REQUEST}."
+              # Exit early without error — skip the rest of the job if condition is met.
+              circleci-agent step halt;
+            fi
+
+            export GIT_LOG=$(git log --max-count=1 --pretty=format:"%B" | tr "\n" " ")
+            echo "Got commit message:"
+            echo "${GIT_LOG}"
+            if [[ -v CIRCLE_PULL_REQUEST ]] && \
+               ([[ "$GIT_LOG" == *"[skip circle]"* ]] || \
+                [[ "$GIT_LOG" == *"[circle skip]"* ]] || \
+                [[ "$GIT_LOG" == *"[lint only]"* ]] \
+               ); then
+              echo "Skip detected, exiting job ${CIRCLE_JOB} for PR ${CIRCLE_PULL_REQUEST}."
+              # Exit early without error — skip the rest of the job if condition is met.
+              circleci-agent step halt;
+            fi
+  merge:
+    description: Merge with upstream
+    steps:
+      - run:
+          name: Merge with upstream
+          command: |
+            echo $(git log -1 --pretty=%B)    | tee gitlog.txt
+
+            echo ${CI_PULL_REQUEST//*pull\//} | tee merge.txt
+            if [[ $(cat merge.txt) != "" ]]; then
+              echo "Merging $(cat merge.txt)";
+              if ! git remote -v | grep upstream; then
+                git remote add upstream https://github.com/scikit-plots/scikit-plots.git;
+              fi
+              git pull --ff-only upstream "refs/pull/$(cat merge.txt)/merge";
+              git fetch upstream main;
+            fi
+  submodules:
+    description: update submodules
+    steps:
+      - run:
+          name: update submodules
+          command: |
+            ## download submodules
+            # git submodule init
+            # git submodule update
+            git submodule update --init --recursive
+  apt-install:
+    description: Install system dependencies
+    steps:
+      - run:
+          name: "🛠️ Ensure CA certificates are installed and update apt sources to HTTP"
+          command: |
+            # Install CA certs to avoid SSL errors
+            sudo apt-get update || true
+            sudo apt-get install -y --fix-missing ca-certificates
+            sudo update-ca-certificates
+
+            # Replace HTTPS mirrors with HTTP to avoid cert errors in CI
+            sudo sed -i 's|https://ftp.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
+            sudo sed -i 's|https://security.ubuntu.com/ubuntu|http://security.ubuntu.com/ubuntu|g' /etc/apt/sources.list
+
+            # Clean apt cache and update package lists
+            sudo apt-get clean
+            sudo apt-get update --fix-missing -y
+      - run:
+          name: "🛠️ Install system dependencies"
+          command: |
+            sudo apt-get install --fix-missing -y --no-install-recommends \
+              ninja-build \
+              ccache \
+              cm-super \
+              graphviz \
+              ffmpeg \
+              inkscape \
+              make \
+              gfortran \
+              libopenblas-dev \
+              liblapack-dev \
+              libgmp-dev \
+              libmpfr-dev
+  pip-install:
+    description: Upgrade pip and setuptools and wheel to get as clean an install as possible
+    steps:
+      - run:
+          name: "🐍 Setup Python venv upgrade pip, setuptools, wheel"
+          command: |
+            # python -m pip install --upgrade --user --progress-bar=off --pre pip
+            # pip install -r ./requirements/build.txt
+            pip install -r ./requirements/all.txt
+
+            # tf need for documentation examples
+            # pip install -r ./requirements/gpu.txt
+            pip install -r ./requirements/cpu.txt
+  build-scikit-plots:
+    description: build scikit-plots
+    steps:
+      - run:
+          name: "📦 build scikit-plots"
+          command: |
+            # cpu: tensorflow
+            pip install --no-cache-dir .[build,dev,test,doc]
+  # upload-codecov:
+  #   description: Upload coverage results to codecov
+  #   steps:
+  #     - run:
+  #         name: "☂️ Upload coverage results to codecov"
+  #         # https://uploader.codecov.io/linux/latest
+  #         command: |
+  #           curl -Os https://uploader.codecov.io/latest/linux/codecov
+  #           chmod +x codecov
+  #           ./codecov -t ${CODECOV_TOKEN} -f coverage.xml
+  build-docs:
+    description: build documentation scikit-plots
+    steps:
+      - attach_workspace:
+          at: ~/
+      - check-skip  # This calls your custom command
+      - apt-install  # This calls your custom command
+      - run:
+          name: "📘 build docs"
+          # no_output_timeout: 25m
+          command: |
+            export PYTHONPATH=$PWD/build-install/lib/python3.11/site-packages
+            cd docs && make html 2>&1 | tee sphinx_log.txt
+      - run:
+          name: Check sphinx log for warnings (which are treated as errors)
+          when: always
+          command: |
+            ! grep "^.* WARNING: .*$" sphinx_log.txt
+      # you must store the artifact explicitly:
+      - store_artifacts:
+          path: ~/sphinx_log.txt
+          destination: sphinx_log.txt
+      - store_artifacts:
+          # path: docs/build/html/stable/index.html  # index.html
+          path: docs/build/html/stable
+          destination: docs/build/html/stable  # CircleCI to preserve the full directory structure
+          # destination: docs  # (docs/index.html because of destination: docs).
+        # Persists generated documentation so that it can be attached and deployed
+        # in the 'deploy' step.
+      - persist_to_workspace:
+          # root: ~/repo
+          root: docs/build/html
+          paths:
+            # - docs/build/html/stable
+            # - docs/build/html/stable/index.html
+            - .
+      - run:
+          name: "🔗 Docs available at:"
+          # https://app.circleci.com/pipelines/<org>/<repo>/<pipeline_number>/workflows/<workflow_id>/jobs/<job_id>/artifacts
+          command: |
+            echo "🔗 Local artifact URL:"
+            echo "${CIRCLE_BUILD_URL}/artifacts/${CIRCLE_NODE_INDEX}/docs/build/html/stable/index.html"
+  # Run benchmarks
+  # Reference guide checking
+
+##########################################
+# Here is where the real jobs are defined.
+##########################################
+
+jobs:
+  ## Build scikit-plots from source
+  build_scikitplot:
+    <<: *defaults
+    description: "Build new docs"
+
+    steps:
+      - run: echo "🤖 Hi I'm on a Container Runner!"
+
+      - run:
+          name: "🔧 Show run_docs_build flag"
+          command: |
+            echo "run_docs_build: << pipeline.parameters.run_docs_build >>" || true
+
+      ## run built-in
+      - checkout
+      - run: ./tools/circle/checkout_merge_commit.sh
+
+      ## run commands
+      - check-skip  # This calls your custom command
+      - merge
+      - submodules
+      - apt-install
+
+      - restore_cache:
+          keys:
+            - deps_ccache-{{ .Branch }}
+            - deps_ccache
+
+      - pip-install
+      - build-scikit-plots
+      # - upload-codecov
+      # - store_artifacts:
+      #     path: results
+
+      - save_cache:
+          key: deps_ccache-{{ .Branch }}-{{ .BuildNum }}
+          paths:
+            - ~/.ccache
+            - ~/.cache/pip
+      - run:
+          name: ccache performance
+          command: |
+            ccache -vs
+      ## Persists generated files
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - .
+  ## Build scikit-plots docs from source
+  build_docs:
+    <<: *defaults
+    description: "📘 Build new docs"
+    steps:
+      - run: echo "🤖 Hi I'm on a Container Runner!"
+      - build-docs
+
+  # Upload build output to scipy/devdocs repository, using SSH deploy keys.
+  # The keys are only available for builds on main branch.
+  # https://developer.github.com/guides/managing-deploy-keys/
+  # https://circleci.com/docs/2.0/configuration-reference/#add_ssh_keys
+  deploy:
+    <<: *defaults
+    description: "🌐 Deploy new docs"
+    steps:
+      - run: echo "🤖 Hi I'm on Runners!"
+
+      - checkout
+      - run: ./tools/circle/checkout_merge_commit.sh
+
+      # Attach documentation generated in the 'docs' step so that it can be
+      # deployed.
+      - attach_workspace:
+          at: docs/build/html
+      - run: ls -ltrh docs/build/html/stable
+
+      ## Add the SSH key to the environment (this step tells CircleCI to use the private key from the SSH Key settings)
+      - add_ssh_keys:
+          fingerprints:
+            ## INFO: Since CircleCI cannot decrypt SSH keys, every new key must have an empty passphrase.
+            ## https://circleci.com/docs/add-ssh-key/#steps
+            ## https://docs.github.com/en/authentication/connecting-to-github-with-ssh
+            ## https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent?platform=linux
+            ## https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account?platform=linux
+            ##
+            ## Generate the ED25519 SSH Key Pair (with custom name id_ed25519_circleci):
+            ## ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+            ## ssh-keygen -t ed25519 -C "your_email@example.com"
+            ## ssh-keygen -t ed25519-sk -C "your_email@example.com"  # hardware security key
+            ## ssh-keygen -t ed25519 -C "your_email@example.com" -f ~/.ssh/id_ed25519_circleci
+            ##
+            ## apply private key (not the public key) to "chmod 600" in order to ensure that only the owner can read and write the private key
+            ## chmod 600 ~/.ssh/id_ed25519_circleci
+            ## cat ~/.ssh/id_ed25519_circleci
+            ##
+            ## apply public key can have more relaxed permissions, but chmod 644 is commonly used.
+            ## chmod 644 ~/.ssh/id_ed25519_circleci.pub
+            ## cat ~/.ssh/id_ed25519_circleci.pub
+            ##
+            ## Only add the public key to GitHub (id_ed25519_circleci.pub), not the private key (id_ed25519_circleci).
+            ## ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIo9OIfO9BdffgYEKxyg5Zkj7hlX00yV3w1cH2JKpQz your_email@example.com
+            ##
+            ## The fingerprint can be SHA256 or MD5.
+            ## SHA256 fingerprints should be prefixed with SHA256: and MD5 fingerprints should include the colons between character pairs.
+            ## This will give you the MD5 fingerprint that you need for CircleCI.
+            ## ssh-keygen -E md5 -lf ~/.ssh/id_ed25519_circleci.pub
+            ## 256 MD5:1d:47:cf:2e:ea:7c:15:cf:ec:bb:1f:44:e2:56:16:d3 your_email@example.com (ED25519)
+            ##
+            ## you've added the private key to CircleCI's project settings,
+            ## is for identifying the correct private key that CircleCI will use during the build process.
+            ## Also ensure that the private key is added to the CircleCI project
+            ## and that the public key has been added to the additional repositories that you want to checkout from within your job.
+            ## Fingerprint: Used to tell CircleCI which private key to use for SSH connections.
+            ## All fingerprints in the fingerprints list must correspond to keys that have been added through the CircleCI application.
+            ## Fingerprints in CircleCI environment variables will fail.
+            # "1d:47:cf:2e:ea:7c:15:cf:ec:bb:1f:44:e2:56:16:d3"  # Replace with your public key's fingerprint
+            - "fa:a7:3e:10:71:de:f5:31:0e:3a:44:6a:b4:f5:be:8f"  # Add fingerprint here
+
+      ## Add GitHub's SSH key to the known_hosts to avoid verification prompts
+      - run:
+          name: Trust GitHub SSH key
+          command: |
+            mkdir -p ~/.ssh
+            ssh-keyscan github.com >> ~/.ssh/known_hosts  # This step ensures GitHub's public key is trusted.
+            ## Ensure the SSH config file (if used) is only accessible by the user
+            chmod og= ~/.ssh/config  # Set permissions to only allow the user to access the config file.
+
+      # Optionally, you could disable host key checking if you want to bypass the verification (not recommended for security reasons):
+      # - run:
+      #     name: Disable SSH StrictHostKeyChecking
+      #     command: |
+      #       echo -e "Host *\nStrictHostKeyChecking no" > ~/.ssh/config  # Disables SSH host key verification.
+      #       chmod og= ~/.ssh/config  # Ensures the SSH config file is only accessible by the user (security).
+
+      ## Use SSH to clone the repository
+      - run:
+          name: "📥 Upload new docs to cloned the repo over SSH"
+          command: |
+            ## if [[ "${CIRCLE_BRANCH}" =~ ^main$|^[0-9]+\.[0-9]+\.X$ ]]; then
+            if [[ "${CIRCLE_BRANCH}" =~ ^main$|^((maintenance|release)/)?[0-9]+\.[0-9]+(\.x|\.[0-9]+)?$ ]]; then
+              bash ./tools/circle/push_doc.sh docs/build/html/stable
+            fi
+
+      ## Use SSH to clone the repository
+      ## https://github.com/devcontainers/template-starter/blob/main/.github/workflows/release.yaml
+      # - run:
+      #     name: upload new docs via ssh
+      #     command: |
+      #       set -ex;
+      #       mkdir -p ~/.ssh
+      #       echo -e "Host *\nStrictHostKeyChecking no" > ~/.ssh/config
+      #       chmod og= ~/.ssh/config
+      #       git clone git@github.com:scipy/devdocs.git devdocs;
+      #       cd devdocs;
+      #       (git checkout --orphan tmp && git branch -D gh-pages || true);
+      #       git checkout --orphan gh-pages;
+      #       git reset --hard;
+      #       cp -R /tmp/build/html/. .;
+      #       touch .nojekyll;
+      #       git config --global user.email github-actions[bot]@users.noreply.github.com;
+      #       git config --global user.name github-actions[bot];
+      #       git config --global user.email "scipy-circleci-bot@nomail";
+      #       git config --global user.name "scipy-circleci-bot";
+      #       git config --global push.default simple;
+      #       git add . > /dev/null;
+      #       git commit -m "Docs build of $CIRCLE_SHA1";
+      #       git push --set-upstream origin gh-pages --force
+
+#########################################
+# Defining workflows gets us parallelism.
+#########################################
+
+workflows:
+  # version: 2
+
+  # Accept Separatable Workflow
+  default:
+
+    # Conditional run based on parameter:
+    # when: << pipeline.parameters.run_docs_build >>
+    when:
+      equal: [true, << pipeline.parameters.run_docs_build >>]
+
+    jobs:
+      - build_scikitplot
+      # NOTE: If you rename this job, then you must update the `if` condition
+      # and `circleci-jobs` option in `.github/workflows/circleci.yml`.
+      - build_docs:
+          requires:
+            - build_scikitplot
+      - deploy:
+          requires:
+            - build_docs
+          filters:
+            branches:
+              only: main
+              # ignore: gh-pages
+              # - main
+              # - master
+              # - maintenance/**
+              # - release/*
+              # - staging
+              # - gh-pages
+              # - '*.x' # ignore versioned branches
+
+  # # Conditional workflow that runs jobs only if run_docs_build == true
+  # test_workflow:
+  #   # Conditional run based on parameter:
+  #   # when: << pipeline.parameters.run_docs_build >>
+  #   when:
+  #     equal: [true, << pipeline.parameters.run_docs_build >>]
+
+  #   jobs:
+  #     # Conditional steps inside the job
+  #     # steps:
+  #     #   - when:
+  #     #       condition:
+  #     #         equal: [true, << pipeline.parameters.run_docs_build >>]
+  #     #       steps:
+  #     #         - run: echo "Running build_scikitplot job"
+  #     # - run_benchmarks:
+  #     #   requires:
+  #     #     - build_scikitplot
+  #     # - refguide_check:
+  #     #     requires:
+  #     #       - build_scikitplot

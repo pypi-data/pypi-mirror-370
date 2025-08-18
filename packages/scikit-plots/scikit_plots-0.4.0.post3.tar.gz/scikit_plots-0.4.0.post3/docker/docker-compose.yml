@@ -1,0 +1,290 @@
+# Authors: The scikit-plots developers
+# SPDX-License-Identifier: BSD-3-Clause
+
+## Primary File  : docker-compose.yml
+## Override File : docker-compose.override.yml (automatically included if present)
+## docker compose config
+## docker compose up --build
+## https://docs.localstack.cloud/getting-started/installation/#docker-compose
+## docker ps
+## docker logs CONTAINER_ID_OR_NAME
+## docker exec -it CONTAINER_ID_OR_NAME bash
+## docker run -it --rm --user root CONTAINER_ID_OR_NAME bash -c "apt update"
+---
+
+# (Optionally) Docker Compose file format version
+# version: '3.8'
+
+# docker network ls | grep llm-rag-workshop_back_tier
+# docker network create --driver bridge back_tier
+# docker network create --driver bridge front_tier
+# docker network create llm-rag-workshop_back_tier
+# docker network inspect llm-rag-workshop_back_tier
+# docker exec -it "scikit-plots_latest-python-3.11-slim" curl http://ollama:11434
+## Defines networks that can be used by services in the Docker Compose file
+networks:
+  ## Declares a network named "back_tier"
+  back_tier:
+    # driver: bridge  # Use the default bridge network for inter-service communication
+  front_tier: {}  # Docker will auto-create this network if it doesn't exist
+  # llm-rag-workshop_back_tier:  # This defines a custom network named 'llm-rag-workshop_back_tier'
+  #   external: true  # Tells Docker Compose to use an existing external network (not create a new one)
+
+
+# --------------------------------------------------------------------
+# 📝 NOTES:
+# - It mounts the local project directory into the container.
+# - Suitable for development; installs requirements on every run.
+# - Adjust the base image depending on whether you need GPU/CUDA or not.
+#
+# ⚠️ CUDA/GPU NOTES (for machine learning or deep learning):
+# - If the host has CUDA installed and the Docker runtime is configured with NVIDIA,
+#   the container can use the host GPU directly (e.g., with `--gpus all`).
+# - If CUDA is NOT installed on the host, choose an image with CUDA pre-installed.
+#
+# ✅ Recommended base image options based on use case:
+#
+# ▶️ CPU-only development:
+#     ✅ python:3.12-slim               # Small and clean for general Python apps
+#     ✅ ubuntu:latest                  # Use if you want full control (install Python + CUDA manually)
+#
+# ▶️ GPU-enabled development (host has CUDA + NVIDIA runtime):
+#     ✅ python:3.11-slim               # Use host's CUDA; minimal Python install
+#
+# ▶️ Prebuilt CUDA-enabled images (GPU-ready out of the box):
+#     ✅ nvidia/cuda:12.2.0-base        # Official NVIDIA base image with CUDA
+#     ✅ jupyter/tensorflow-notebook   # Includes Python, Jupyter, TensorFlow, and common ML libs
+#
+#   🧠 Tip: For deep learning + Jupyter + GPU, `jupyter/tensorflow-notebook` is a great option.
+# --------------------------------------------------------------------
+# https://jupyter-docker-stacks.readthedocs.io/en/latest/using/selecting.html#image-relationships
+# https://github.com/jupyter/docker-stacks/blob/main/images/base-notebook/Dockerfile#L58
+# Use the official Jupyter Docker Stacks
+# "jupyter/base-notebook:latest"
+# "jupyter/minimal-notebook:latest"
+# "jupyter/scipy-notebook:latest"
+# "jupyter/r-notebook:latest"
+# "jupyter/tensorflow-notebook:latest"
+# "jupyter/pytorch-notebook:latest"
+# "jupyter/pyspark-notebook:latest"
+# --------------------------------------------------------------------
+
+
+## Declares services (containers) that will be run by Docker Compose
+services:
+
+  ## docker compose -f 'docker/docker-compose.yml' up -d --build 'scikit-plots_latest-python-3.12-slim'
+  "scikit-plots_latest-python-3.12-slim":  # Name of the service (can be any name you choose)
+    container_name: "scikit-plots_latest-python-3.12-slim"
+    stdin_open: true  # Keeps STDIN open (for interactive mode)
+    tty: true  # Allocates a pseudo-TTY,  Keeps container running with interactive terminal
+    ## Restart policy: always restart the container if it stops
+    # restart: "always"
+    image: python:3.12-slim  # 130+Mb (No internal CUDA, relies on host CUDA)
+    ## (Optionally) Use Dockerfile
+    # build: ...
+    ## Change User
+    # user: root  # Ensure the container runs as "root", jupyter default "jovyan"
+    ## Adjust the working directory as needed
+    ## by image source default for jupyter images "/home/jovyan/work"
+    ## by image source default for codespaces images "/workspaces"
+    working_dir: /work
+    volumes:
+      - ..:/work  # Optional: bind mount your code for live edits
+    # env_file:
+    #   - .env  # Load environment from file
+    environment:
+      # This overrides the ENV at runtime. So the container will have:
+      # Equivalent to IS_DOCKERENV = os.path.exists("/.dockerenv")
+      - IS_DOCKERENV=true  # 🐳 Used to detect if the app is running inside Docker
+    ports:
+      - "8892:8892"  # Exposing port placeholder for Jupyter Notebook (default 8888)
+    networks:
+      - "back_tier"  # Connect to the defined network for backend services
+      - "front_tier"  # Connect to the defined network for frontend services
+      # - "llm-rag-workshop_back_tier"  # Connect to the external network for LLM RAG workshop
+
+    ## Works only with Docker 20.10.0+ and the host-gateway feature enabled.
+    ## macOS & Windows (host.docker.internal is built-in DNS name that maps to the host machine.)
+    ## Only needed for Linux, You must manually map it using extra_hosts, like this:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Makes host accessible as "host.docker.internal"
+
+    ## if both provided default only work entrypoint so command used to as entrypoint argument
+    # entrypoint: bash  # bash -c "<everything inside the quotes>"
+    # command:
+    # This entrypoint checks if 'curl' is installed; if not, installs it, then opens a bash shell
+    # sudo -n true &&
+    # { ... } runs in current shell — can exit or affect current environment.
+    # ( ... ) runs in a subshell — changes inside don't affect the parent script.
+    # git curl procps build-essential gfortran ninja-build
+    entrypoint: >-
+      bash -c "
+        command -v sudo >/dev/null 2>&1 || {
+          echo '📦 Installing sudo...';
+          { apt-get update -y;
+            apt-get install -y sudo gosu git;
+          } || echo '⚠️ Failed or skipped installing sudo';
+        };
+
+        ## Add bash-first-run-notice.txt
+        [ -f docker/scripts/bash_first_run_notice.sh ] && \
+        { . docker/scripts/bash_first_run_notice.sh; } || true
+        exec bash
+        fi"
+
+    # 👇 if using Compose V2 CLI this enables GPU access (Compose V2+	YAML equivalent of --gpus all)
+    # gpus: all  # ← this is the preferred modern way to request all GPUs
+    # command: nvidia-smi  # GPU test command
+
+    # ⚠️ Deprecated* Alternatively, Compose V1 only (Legacy)
+    # runtime: nvidia  # Enable NVIDIA runtime for GPU access
+
+    # The deploy: block is ignored by docker-compose (used only by Docker Swarm).
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - capabilities: [gpu]
+
+  ## docker compose -f 'docker/docker-compose.yml' up -d --build 'scikit-plots_latest-python-3.11-slim'
+  "scikit-plots_latest-python-3.11-slim":  # Name of the service (can be any name you choose)
+    container_name: "scikit-plots_latest-python-3.11-slim"
+    stdin_open: true  # Keeps STDIN open (for interactive mode)
+    tty: true  # Allocates a pseudo-TTY,  Keeps container running with interactive terminal
+    ## Restart policy: always restart the container if it stops
+    # restart: "always"
+    # image: python:3.11-slim  # 130+Mb (No internal CUDA, relies on host CUDA)
+    ## (Optionally) Use Dockerfile
+    # build: ...
+    build:
+      context: ../
+      dockerfile: ./docker/Dockerfile.python  # fast mini image
+      args:
+        PY_VERSION: "${PY_VERSION:-3.11}"
+        # SCIKITPLOT_VERSION: "${SCIKITPLOT_VERSION:-}"  # for dev or SCIKITPLOT_VERSION=
+        SCIKITPLOT_VERSION: "${SCIKITPLOT_VERSION:-0.4.0.post1}"  # for release
+    ## Change User
+    # user: root  # Ensure the container runs as "root", jupyter default "jovyan"
+    ## Adjust the working directory as needed
+    ## by image source default for jupyter images "/home/jovyan/work"
+    ## by image source default for codespaces images "/workspaces"
+    working_dir: /work
+    volumes:
+      - ..:/work  # Optional: bind mount your code for live edits
+    # env_file:
+    #   - .env  # Load environment from file
+    environment:
+      # This overrides the ENV at runtime. So the container will have:
+      # Equivalent to IS_DOCKERENV = os.path.exists("/.dockerenv")
+      - IS_DOCKERENV=true  # 🐳 Used to detect if the app is running inside Docker
+    ports:
+      - "8891:8891"  # Exposing port placeholder for Jupyter Notebook (default 8888)
+    networks:
+      - "back_tier"  # Connect to the defined network for backend services
+      - "front_tier"  # Connect to the defined network for frontend services
+      # - "llm-rag-workshop_back_tier"  # Connect to the external network for LLM RAG workshop
+
+    ## Works only with Docker 20.10.0+ and the host-gateway feature enabled.
+    ## macOS & Windows (host.docker.internal is built-in DNS name that maps to the host machine.)
+    ## Only needed for Linux, You must manually map it using extra_hosts, like this:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Makes host accessible as "host.docker.internal"
+
+    ## if both provided default only work entrypoint so command used to as entrypoint argument
+    # entrypoint: bash  # bash -c "<everything inside the quotes>"
+    # command:
+
+
+  ## docker compose -f 'docker/docker-compose.yml' up -d --build 'scikit-plots_latest-jupyter'
+  "scikit-plots_latest-jupyter":  # Name of the service (can be any name you choose)
+    container_name: "scikit-plots_latest-jupyter"
+    # stdin_open: true  # Keeps STDIN open (for interactive mode)
+    # tty: true  # Allocates a pseudo-TTY,  Keeps container running with interactive terminal
+    ## Restart policy: always restart the container if it stops
+    restart: "always"
+    ## If the host has CUDA installed, the container can use it without installing CUDA inside.
+    ## If CUDA isn't installed on the host, use an NVIDIA CUDA base image.
+    ## ubuntu:latest  # Use a lightweight base image (No internal CUDA, relies on host CUDA)
+    ## python:3.12-slim  # Use the Python slim image (lightweight) (No internal CUDA, relies on host CUDA)
+    # image: "jupyter/tensorflow-notebook:latest"  # Image compressed 1.8+Gb (No internal CUDA, relies on host CUDA)
+    ## (Optionally) Use Dockerfile
+    # build: ...
+    build:
+      context: ../
+      dockerfile: ./docker/Dockerfile  # 15+Gb compressed image
+      args:
+        BASE_IMAGE: "${BASE_IMAGE:-jupyter/tensorflow-notebook:latest}"
+        NB_PASS: "jovyan"
+        # SCIKITPLOT_VERSION: "${SCIKITPLOT_VERSION:-}"  # for dev or SCIKITPLOT_VERSION=
+        SCIKITPLOT_VERSION: "${SCIKITPLOT_VERSION:-0.4.0.post1}"  # for release
+    ## Change User
+    # user: root  # Ensure the container runs as "root", jupyter default "jovyan"
+    ## Adjust the working directory as needed
+    ## by image source default for jupyter images "/home/jovyan/work"
+    ## by image source default for codespaces images "/workspaces"
+    working_dir: "/home/jovyan/work"
+    volumes:
+      - "../:/home/jovyan/work"  # by jupyter default
+    # env_file:
+    #   - .env  # Load environment from file
+    environment:
+      # This overrides the ENV at runtime. So the container will have:
+      # Equivalent to IS_DOCKERENV = os.path.exists("/.dockerenv")
+      - IS_DOCKERENV=true  # 🐳 Used to detect if the app is running inside Docker
+      - DEBIAN_FRONTEND=noninteractive  # Disable interactive prompts during installation
+    ports:
+      ## Map host port 8888 to container port 8888 (default)
+      - "8888:8888"  # Exposing port for Jupyter Notebook (default 8888)
+      # - "5000:5000"
+      - "9000:9002"
+    networks:
+      - "back_tier"  # Connect to the defined network for backend services
+      - "front_tier"  # Connect to the defined network for frontend services
+
+
+  ## docker compose -f 'docker/docker-compose.yml' up -d --build 'scikit-plots_latest-gpu-jupyter'
+  "scikit-plots_latest-gpu-jupyter":  # Name of the service (can be any name you choose)
+    container_name: "scikit-plots_latest-gpu-jupyter"
+    # stdin_open: true  # Keeps STDIN open (for interactive mode)
+    # tty: true  # Allocates a pseudo-TTY,  Keeps container running with interactive terminal
+    ## Restart policy: always restart the container if it stops
+    restart: "always"
+    ## If the host has CUDA installed, the container can use it without installing CUDA inside.
+    ## If CUDA isn't installed on the host, use an NVIDIA CUDA base image.
+    ## ubuntu:latest  # Use a lightweight base image (No internal CUDA, relies on host CUDA)
+    ## python:3.12-slim  # Use the Python slim image (lightweight) (No internal CUDA, relies on host CUDA)
+    # image: "jupyter/tensorflow-notebook:latest"  # Image compressed 1.8+Gb (No internal CUDA, relies on host CUDA)
+    ## (Optionally) Use Dockerfile
+    # build: ...
+    build:
+      context: ../
+      dockerfile: ./docker/Dockerfile
+      args:
+        BASE_IMAGE: "${BASE_IMAGE:-jupyter/tensorflow-notebook:latest}"
+        NB_PASS: "jovyan"
+    ## Change User
+    # user: root  # Ensure the container runs as "root", jupyter default "jovyan"
+    ## Adjust the working directory as needed
+    ## by image source default for jupyter images "/home/jovyan/work"
+    ## by image source default for codespaces images "/workspaces"
+    working_dir: "/home/jovyan/work"
+    volumes:
+      - "../:/home/jovyan/work"  # by jupyter default
+    # env_file:
+    #   - .env  # Load environment from file
+    environment:
+      # This overrides the ENV at runtime. So the container will have:
+      # Equivalent to IS_DOCKERENV = os.path.exists("/.dockerenv")
+      - IS_DOCKERENV=true  # 🐳 Used to detect if the app is running inside Docker
+      - DEBIAN_FRONTEND=noninteractive  # Disable interactive prompts during installation
+      - JUPYTER_PORT=8889
+      - EXTENDED_PACKAGES=true  # 🏗️ Docker Build with Conditional Argument
+    ports:
+      ## Map host port 8888 to container port 8888 (default)
+      - "8889:8889"  # Exposing port for Jupyter Notebook (default 8888)
+      # - "5000:5000"
+      # - "9000:9000"
+    networks:
+      - "back_tier"  # Connect to the defined network for backend services
+      - "front_tier"  # Connect to the defined network for frontend services

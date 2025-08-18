@@ -1,0 +1,242 @@
+# Authors: The scikit-plots developers
+# SPDX-License-Identifier: BSD-3-Clause
+
+# https://github.com/pre-commit/pre-commit/blob/main/.pre-commit-config.yaml
+# https://github.com/asottile/pyupgrade/pull/365
+ci:
+  autoupdate_schedule: 'monthly'
+  autoupdate_commit_msg: 'chore: update pre-commit hooks'
+  autofix_prs: false
+
+# rm -rf ~/.cache/pre-commit
+# pre-commit clean
+# pre-commit autoupdate
+# pre-commit install
+repos:
+  # Critical Checks: Sensitive data, large files, and merge conflicts
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # - id: requirements-txt-fixer
+      # - id: check-docstring-first
+      - id: no-commit-to-branch  # Default is master and main.
+      - id: check-merge-conflict  # Checks for merge conflict markers in files.
+      - id: detect-private-key  # Checks for the existence of private keys.
+      - id: check-added-large-files  # Prevent giant files from being committed.
+        args: ["--enforce-all", "--maxkb=333"]  # 333 KB is the default size limit.
+        exclude: "^(\
+          benchmarks/.*|\
+          docs/source/logos/.*|\
+          galleries/.*|\
+          third_party/.*|\
+          .*searchindex.dat|\
+          .*CDNOW_master.txt|\
+          .*example_transactions.csv|\
+        )$"
+
+  # Syntax Validation: JSON, YAML, TOML, XML, etc.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-json  # Attempts to load all json files to verify syntax.
+        exclude: "^(settings\\.json|\\.devcontainer/.*\\.json|benchmarks/asv\\.conf\\.json)$"
+      - id: check-yaml  # Attempts to load all yaml files to verify syntax.
+        exclude: "^(\\.conda-forge-recipes/.*/.*\\.yaml)$"
+      - id: check-toml  # Attempts to load all TOML files to verify syntax.
+      - id: check-xml   # Attempts to load all xml files to verify syntax.
+
+  # Conflict Prevention: Filename and symlink issues
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-case-conflict  # Checks for file naming conflicts on case-insensitive filesystems.
+      - id: check-symlinks  # Checks for symlinks which do not point to anything.
+      # - id: name-tests-test
+      # - id: debug-statements
+
+  # Cleanliness and Formatting: Whitespace, line endings, and file endings
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # This hook replaces double quoted strings with single quoted strings.
+      # - id: double-quote-string-fixer
+      - id: end-of-file-fixer  # Ensures files end in a newline.
+        exclude_types: [svg]
+      - id: trailing-whitespace  # Trims trailing whitespace.
+        name: Trim Trailing Whitespace
+        description: This hook trims trailing whitespace.
+        exclude_types: [svg]  # Python Covered by Ruff W291?
+      - id: mixed-line-ending  # Checks for mixed line endings.
+
+  # Code Quality: Formatter flake8 vs ruff-format can be conflict make sure both compatipable
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.2.0
+    hooks:
+      - id: flake8
+        additional_dependencies:
+          - pydocstyle>5.1.0
+          - flake8-docstrings>1.4.0  # --docstring-convention=pep257 is default, numpy and google also allowed.
+          - flake8-force
+          - flake8-bugbear  # Catches common situations that tend to create bugs.
+        args: [--config=.flake8, --docstring-convention=all]  # '--exit-zero' Customize as needed.
+        types: [file, python]
+        # exclude: ^scikitplot/(externals/|_seaborn/)
+
+  # Code Quality: Formatter black vs ruff-format can be conflict make sure both compatipable
+  # - repo: https://github.com/psf/black
+  # Using this mirror lets us use mypyc-compiled black, which is about 2x faster
+  # black --verbose --check --diff .
+  # pre-commit run black --verbose
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 25.1.0
+    hooks:
+      - id: black
+        name: black
+        description: "Black: The uncompromising Python code formatter"
+        entry: black
+        language: python
+        # It is recommended to specify the latest version of Python
+        # supported by your project here, or alternatively use
+        # pre-commit's default_language_version, see
+        # https://pre-commit.com/#top_level-default_language_version
+        # language_version: python3.11
+        types_or: [python, pyi]
+        args:
+          # - --config=pyproject.toml   # Optional: use custom config file
+          # - -t, --target-version
+          - --verbose                 # Show additional debugging or context info.
+          - --check                   # Check if files are formatted. Exit with code 1 if reformatting is needed, but don’t change files.
+          - --diff                    # Show a diff of what would change, without writing changes to disk. Often used with --check.
+          ## Keep Sync: in YAML — pyproject.toml, Black uses pyproject.toml for configuration.
+          - --force-exclude
+          - '/(\.eggs|\.git|\.mypy_cache|\.vscode|benchmarks|build|dist|docs/build|docs/source|galleries|third_party|tools|tests|scikitplot/cexperimental|scikitplot/cexternals|scikitplot/experimental|scikitplot/externals|scikitplot/modelplotpy|scikitplot/visualkeras)/'
+        # verbose: true  # Force Black to show which files were modified
+        # exclude: '/(\.eggs|\.git|\.mypy_cache|\.vscode|benchmarks|build|dist|docs/build|docs/source|galleries|third_party|tools|tests)/'
+
+  # - repo: https://github.com/charliermarsh/ruff
+  #   rev: v0.0.276  # Replace with the latest release version of Ruff
+  #   hooks:
+  #     - id: ruff
+  #       name: ruff (Python linter)
+  #       files: \.py$
+  #       args: ["--config", ".ruff.toml"]  # Point to your custom ruff.toml file
+
+  # Code Quality: Linting and Formating Static Analysis
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.13
+    hooks:
+      - id: ruff  # Run the linter.
+        args: ["--verbose", "--fix", "--show-fixes", "--output-format=full"]  # --unsafe-fixes
+        # types_or: [ python, pyi ]
+      # Formatter: ruff-format vs flake8 can be conflict make sure both compatipable
+      - id: ruff-format  # Run the formatter.
+        args:
+          - --verbose                 # Show additional debugging or context info.
+          # - --check                   # Check if files are formatted. Exit with code 1 if reformatting is needed, but don’t change files.
+          # - --diff                    # Show a diff of what would change, without writing changes to disk. Often used with --check.
+          # - --preview                 # Enables preview formatting features that are experimental or not yet stable.
+          # - --config=pyproject.toml   # Optional: use custom config file
+        # verbose: true  # Force Ruff to show which files were modified
+        # types_or: [ python, pyi ]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.16.0
+    hooks:
+      - id: mypy
+        pass_filenames: false  # Prevent passing filenames to the hook.
+        args: [--config-file=.mypy.ini, --follow-imports=skip]
+        # Use regex to specify the files to check
+        files: scikitplot/externals/_seaborn/_(core|marks|stats)/
+        # additional_dependencies: [pytest==6.2.4]
+        additional_dependencies: [numpy]
+
+  # Documentation and Specialized Linting
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.9.0
+    hooks:
+      - id: zizmor
+
+  # Optional: Custom Hook for RST Errors and Unicode Replacement
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0
+    hooks:
+      - id: rst-directive-colons  # Detect mistake of rst directive not ending with double colon.
+      - id: rst-inline-touching-normal  # Detect mistake of inline code touching normal text in rst.
+      - id: text-unicode-replacement-char  # Forbid files with a UTF-8 Unicode replacement character.
+
+  # Optional: Spell Checking
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: ["--write-changes"]  # "--ignore-words", ".codespellrc-ignore-words"
+        # If one configures codespell using the pyproject.toml file instead use:
+        additional_dependencies:
+          # pyproject.toml (only if the tomli library is available for Python < 3.11)
+          - tomli
+        # exclude: '\.ipynb$'  # Excludes .ipynb files from codespell checks
+
+  # Optional: Cython Linting
+  - repo: https://github.com/MarcoGorelli/cython-lint
+    rev: v0.16.6
+    hooks:
+      # TODO: add the double-quote-cython-strings hook when it's usability has improved:
+      # possibility to pass a directory and use it as a check instead of auto-formatter.
+      - id: cython-lint
+
+  # Optional: Custom Repository Review
+  - repo: https://github.com/scientific-python/cookie
+    rev: 2025.05.02
+    hooks:
+      - id: sp-repo-review
+
+  # - repo: local
+  #   hooks:
+  #     - id: changelogs-rst
+  #       name: changelog filenames
+  #       language: fail
+  #       entry: >-
+  #         changelog files must be named <sub-package>/####.(bugfix|feature|api|perf).rst
+  #         or ####.other.rst (in the root directory only)
+  #       exclude: >-
+  #         ^docs/changes/[\w\.]+/(\d+\.(bugfix|feature|api|perf)(\.\d)?.rst|.gitkeep)
+  #       files: ^docs/changes/[\w\.]+/
+  #     - id: changelogs-rst-other
+  #       name: changelog filenames for other category
+  #       language: fail
+  #       entry: >-
+  #         only "other" changelog files must be placed in the root directory
+  #       exclude: >-
+  #         ^docs/changes/(\d+\.other.rst|README.rst|template.rst)
+  #       files: ^docs/changes/\d+.\w+.rst
+
+  # - repo: https://github.com/asottile/reorder-python-imports
+  #   rev: v3.12.0
+  #   hooks:
+  #     - id: reorder-python-imports
+  #       args: [
+  #         --application-directories, '.:src',
+  #         --py38-plus,
+  #         --add-import, 'from __future__ import annotations',
+  #       ]
+
+  # - repo: https://github.com/PyCQA/isort
+  # rev: "6.0.0"
+  # hooks:
+  #   - id: isort
+
+  ## Pre-commit Hook to Handle .ipynb Files
+  # - repo: 'https://github.com/kynan/nbstripout'
+  #   rev: '0.5.0'
+  #   hooks:
+  #     - id: 'nbstripout'
+
+  # - repo: 'https://github.com/dfm/black_nbconvert'
+  #   rev: '0.1.0'
+  #   hooks:
+  #     - id: 'black-nbconvert'
+
+  # - repo: https://github.com/asottile/setup-cfg-fmt
+  #   rev: v2.8.0
+  #   hooks:
+  #   - id: setup-cfg-fmt

@@ -1,0 +1,74 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Many color libraries just need this to be set to any value, but at least
+  # one distinguishes color depth, where "3" -> "256-bit color".
+  FORCE_COLOR: 3
+
+jobs:
+  pre-commit-and-lint:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
+        with:
+          python-version: "3.13.2"
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+        with:
+          extra_args: --hook-stage manual --all-files
+      - uses: prefix-dev/setup-pixi@dbaed5efa0bd33d6bd6d162bec8a06d8fc43c807 # v0.8.5
+        with:
+          pixi-version: v0.42.1
+          cache: true
+          environments: lint
+      - name: Run Pylint, Mypy & Pyright
+        run: |
+          pixi run -e lint pylint
+          pixi run -e lint mypy
+          pixi run -e lint pyright
+
+  checks:
+    name: Check ${{ matrix.environment }}
+    runs-on: ${{ matrix.runs-on }}
+    needs: [pre-commit-and-lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [tests-py310, tests-py313, tests-numpy1, tests-backends]
+        runs-on: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - uses: prefix-dev/setup-pixi@dbaed5efa0bd33d6bd6d162bec8a06d8fc43c807 # v0.8.5
+        with:
+          pixi-version: v0.42.1
+          cache: true
+          environments: ${{ matrix.environment }}
+
+      - name: Test package
+        run: pixi run -e ${{ matrix.environment }} tests-ci
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

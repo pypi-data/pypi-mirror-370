@@ -1,0 +1,505 @@
+# Git Context	Tags Generated
+# Push to main       	 :latest, :main, :sha-abc1234, :dev
+# Push to dev	         :latest, :dev, :sha-abc1234 (if extended)
+# Push to feature/foo	 :latest, :feature-foo, :sha-abc1234
+# Push tag v1.0.0	     :latest, :v1.0.0, :sha-abc1234
+#
+# Pushing images
+# You can push a new image to this repository using the CLI:
+# docker tag local-image:tagname new-repo:tagname
+# docker push new-repo:tagname
+# Make sure to replace tagname with your desired image repository tag.
+# docker tag <existing_image_name>:<existing_tag> <new_image_name>:<new_tag>
+#
+# https://hub.docker.com/u/scikitplot
+# https://hub.docker.com/r/scikitplot/scikit-plots
+# docker login -u scikitplot
+# Example:
+# scikitplot/<repo>:latest
+# docker build -t scikitplot/scikit-plots:latest .
+# docker push scikitplot/scikit-plots:latest
+# docker build -t scikitplot/scikit-plots:sha-abc1234 .
+# docker push scikitplot/scikit-plots:sha-abc1234
+# docker build -t scikitplot/scikit-plots:dev .
+# docker push scikitplot/scikit-plots:dev
+# docker build -t scikitplot/scikit-plots:v1.0.0 .
+#
+# https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-to-the-container-registry
+# https://github.com/docker/login-action?tab=readme-ov-file#docker-hub
+# https://github.com/docker/login-action?tab=readme-ov-file#github-container-registry
+---
+name: CI 🐋 Docker Image Build and Push Multi-Arch  #  (Auto-Tagging with scikitplot)
+
+# Trigger the workflow on push to any branch or tag
+on:
+  workflow_dispatch: # Allows manual triggering of the workflow
+  # push:
+  #   branches:
+  #     - '**'    # Matches all branches, including main, dev, feature/*
+  #     - main
+  #     - maintenance/**
+  #   tags:
+  #     - '*'     # Matches all Git tags (e.g., v1.0.0)
+  #     - 'v*.*.*'
+
+
+## simultaneity
+## This ensures that only one deployment to "production" can happen at a time.
+## If a new commit is pushed before the current job finishes, the in-progress job is canceled.
+concurrency:
+  ## Ensures that only one instance of this workflow runs per branch or PR at a time.
+  ## The 'group' key defines a unique concurrency group:
+  ## - github.workflow: Name of the workflow file.
+  ## - github.head_ref: (Only on pull_request) The name of the branch from which the PR was created (source branch). Example: "feature/add-login"
+  ## - github.run_id: (Always) A unique numeric ID for each run of a workflow. Useful as a fallback for uniqueness. Example: 6432789156
+  ## - github.ref: (Always) The full ref path of the branch or tag that triggered the workflow. Examples: For a push to a branch: "refs/heads/main" For a PR: "refs/pull/42/merge" For a tag: "refs/tags/v1.0.0"
+  ## - github.ref_name: (Always) Just the final part of the ref path (branch or tag name, does not exist for PRs). Examples: For a push to a branch: "main" For a tag: "v1.0.0"
+  ## This ensures: PRs use head_ref, Pushes/Tags use ref or ref_name, Fallback to run_id in edge cases
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref || github.run_id }}
+  ## If you push multiple times quickly, older runs would continue even though newer ones have started.
+  ## Canceling previous runs reduces resource usage and speeds up feedback.
+  ## If a new run is triggered for the same group, cancel the in-progress one.
+  cancel-in-progress: true
+
+
+## Top-level permissions (outside jobs)
+## Job-level permissions (inside a specific job)
+## Restrict the permissions granted to the use of secrets.GITHUB_TOKEN in this
+## github actions workflow:
+## https://docs.github.com/en/actions/security-guides/automatic-token-authentication
+permissions:
+  ## only required for workflows in private repositories
+  contents: read  # for actions/checkout to fetch code
+
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest  # Use Ubuntu runner for Docker tasks
+
+    ## https://docs.github.com/en/actions/reference/evaluate-expressions-in-workflows-and-actions
+    # if: startsWith-endsWith( matrix.service[0], 'jupyter' ), contains( matrix.service[0], 'python-3.11' )
+    # if: contains( matrix.service[0], matrix.tag[0] ) if: contains( matrix.service[0], matrix.tag.tag )  # Optional: Runtime Filtering Instead
+    strategy:
+      fail-fast: false  # Allow all jobs to run even if one fails
+      matrix:
+        # Matrix Inputs (multi-line object):
+        service:
+          # [compose_service_name, dockerhub_org, dockerhub_image]
+          - [scikit-plots_latest-python-3.11-slim, scikitplot, scikit-plots]  # install latest release on PyPI
+          - [scikit-plots_latest-jupyter, scikitplot, scikit-plots]  # install latest release on PyPI
+        # Matrix Inputs (inline object):
+        tag: [
+          # Branches main maintenance/0.3.x  maintenance/0.3.7
+          # [tag_name, optional_tag_only_suffix, alias, ...]
+          # [python-3.11, ref_tags-python-3.11, latest-python-3.11],  # if based on service Python 3.11
+          # [jupyter, ref_tags-jupyter, latest-jupyter, latest],  # if based on service Jupyter
+          # { tag: "python-3.14", ref_tag: "ref_tags-python-3.14", alias: "latest-python-3.14", alias2: "latest" },  # Python-based tags
+          { tag: "python-3.11", ref_tag: "ref_tags-python-3.11", alias: "latest-python-3.11", alias2: "latest" },  # Python-based tags
+          { tag: "jupyter", ref_tag: "ref_tags-jupyter", alias: "latest-jupyter" },  # Jupyter-based tags
+        ]
+        exclude:
+          # (Optional) Don't build Exclusion (multi-line object):
+          - service: [scikit-plots_latest-python-3.11-slim, scikitplot, scikit-plots]
+            tag:
+              tag: "jupyter"
+              ref_tag: "ref_tags-jupyter"
+              alias: "latest-jupyter"
+          # (Optional) Don't build Exclusion (inline object):
+          - service: [scikit-plots_latest-jupyter, scikitplot, scikit-plots]
+            tag: {
+              tag: "python-3.11",
+              ref_tag: "ref_tags-python-3.11",
+              alias: "latest-python-3.11",
+              alias2: "latest"  # <-- This key is **not required to match** unless you include it in `exclude`
+            }
+
+    # Set your DockerHub username as a fixed env var
+    # https://github.com/docker/login-action?tab=readme-ov-file#docker-hub
+    env:
+      # REPO_NAME: ${{ github.event.repository.name }}  # or in shell: $(basename "$GITHUB_REPOSITORY")
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN : ${{ secrets.DOCKERHUB_TOKEN }}
+      COMPOSE_FILE: docker/docker-compose.yml
+      PY_VERSION: 3.11
+      SCIKITPLOT_VERSION: 0.4.0.post1  # install latest release on PyPI
+
+    ## To enable this workflow on a fork, comment out:
+    if: github.repository == 'scikit-plots/scikit-plots'
+
+    steps:
+      ## Checkout the Git repository into the runner
+      - name: "📥 Checkout (cloned) repository with full history"
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false  # Prevents accidental credential exposure
+          submodules: true  # Fetch Hugo themes (true OR recursive)
+          fetch-depth: 0    # Fetch all history for .GitInfo and .Lastmod
+          lfs: true
+          ## Gets the correct commit message for pull request
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: 🧠 Extract Git context
+        id: gitref
+        run: |
+          REF_TYPE=""
+          VERSION_TAG=""
+          BRANCH_TAG=""
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            REF_TYPE="tag"
+            VERSION_TAG="${GITHUB_REF#refs/tags/v}"  # strip leading 'v'
+          elif [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+            REF_TYPE="branch"
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            BRANCH_TAG="${BRANCH_NAME//\//-}"  # Replace slashes with dashes
+          fi
+
+          echo "ref_type=$REF_TYPE" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+          echo "branch_tag=$BRANCH_TAG" >> "$GITHUB_OUTPUT"
+
+      ## Authenticate with Docker Hub (scikitplot user)
+      ## https://github.com/docker/login-action?tab=readme-ov-file#docker-hub
+      ## Ensure required secrets exist
+      # - name: Check Docker Hub secrets
+      #   run: |
+      #     if [[ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]]; then
+      #       echo "❌ Missing DOCKERHUB_TOKEN"
+      #       exit 0
+      #     fi
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        continue-on-error: true
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      ################################################################
+      ## DockerFile (Multi-Arch Docker Builds)
+      ################################################################
+      ## ✅ Migrate to docker buildx for Multi-Arch Docker Builds in GitHub Actions
+      ## ✅ Use "docker buildx build" or "docker buildx bake + docker-bake.hcl" instead of docker compose build to produce a multi-architecture image.
+      ## Set up Docker Buildx (build engine)
+      - name: 🧱 Set up Docker Buildx
+        continue-on-error: true
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      ## Cache Docker layers to speed up build (optional but speeds things up)
+      # - name: Cache Docker layers
+      #   uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      #   with:
+      #     path: /tmp/.buildx-cache
+      #     key: ${{ runner.os }}-docker-${{ github.sha }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-docker-
+
+      - name: 🏗️ Build and Push Multi-Arch Docker Image
+        if: contains(matrix.service[0], matrix.tag.tag)
+        env:
+          REF_TYPE: ${{ steps.gitref.outputs.ref_type }}
+          VERSION: ${{ steps.gitref.outputs.version_tag }}
+          BRANCH: ${{ steps.gitref.outputs.branch_tag }}
+        run: |
+          set -euo pipefail
+
+          CONTEXT_PATH=$(realpath ./)
+          IMAGE_NAME=${{ matrix.service[1] }}/${{ matrix.service[2] }}
+          TAG_NAME="${{ matrix.tag.tag }}"
+
+          # SERVICE=${{ matrix.service[0] }}
+          # DOCKERFILE_PATH=docker/${SERVICE}/Dockerfile
+
+          if [[ "$TAG_NAME" == "python-3.11" ]]; then
+            DOCKERFILE_PATH=docker/Dockerfile.python
+          elif [[ "$TAG_NAME" == "jupyter" ]]; then
+            DOCKERFILE_PATH=docker/Dockerfile
+          else
+            # fallback default dockerfile
+            DOCKERFILE_PATH=docker/Dockerfile.python
+          fi
+
+          echo "🔧 Dockerfile: $DOCKERFILE_PATH"
+          echo "📦 Image: $IMAGE_NAME"
+
+          MATRIX_JSON='${{ toJSON(matrix.tag) }}'
+          FORMATTED_JSON=$(echo "$MATRIX_JSON" | jq -c 'if type=="array" then . else [.] end')
+
+          echo "$FORMATTED_JSON" | jq -c '.[]' | while read -r entry; do
+            TAG=$(echo "$entry" | jq -r '.tag')
+            REF_TAG=$(echo "$entry" | jq -r '.ref_tag')
+            ALIAS=$(echo "$entry" | jq -r '.alias // empty')
+            ALIAS2=$(echo "$entry" | jq -r '.alias2 // empty')
+
+            if [[ "$REF_TAG" == ref_tags-* && "$REF_TYPE" == "tag" ]]; then
+              SUFFIX="${REF_TAG#ref_tags-}"
+              FINAL_TAG="${VERSION}-${SUFFIX}"
+            elif [[ "$BRANCH" == "main" ]]; then
+              FINAL_TAG="$ALIAS"
+            elif [[ "$BRANCH" == maintenance-* ]]; then
+              BRANCH_VERSION="${BRANCH#maintenance-}"
+              FINAL_TAG="${BRANCH_VERSION}-${TAG}"
+            else
+              echo "⏭️ Skipping: unrecognized branch pattern $BRANCH"
+              continue
+            fi
+
+            TAGS=(--tag "$IMAGE_NAME:$FINAL_TAG")
+            [[ -n "$ALIAS2" ]] && TAGS+=(--tag "$IMAGE_NAME:$ALIAS2")
+
+            echo "🚀 Building and pushing:"
+            printf '  - %s\n' "${TAGS[@]}"
+
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              --file "$DOCKERFILE_PATH" \
+              "${TAGS[@]}" \
+              --push \
+              "$CONTEXT_PATH"
+          done
+
+          echo "✅ All applicable tags pushed."
+          echo "🔗 View at: https://hub.docker.com/r/$IMAGE_NAME/tags"
+
+      - name: 🧹 Cleanup (optional)
+        if: always()
+        continue-on-error: true
+        run: docker system prune -f
+
+      ################################################################
+      ## Docker Compose file (only host-native architecture)
+      ################################################################
+      ## Define the Docker Compose file path and service name
+      ## ❗ Problem:
+      ## docker compose build builds only for the current architecture (e.g. amd64 on Intel Mac/PC, or arm64 on M1/M2 Mac).
+      ## Unfortunately, Docker Compose does not support multi-platform builds directly (as of 2025).
+      # - name: 🔧 Build Docker image via Compose service
+      #   # correctly filters for valid combinations
+      #   if: contains( matrix.service[0], matrix.tag.tag )
+      #   continue-on-error: true
+      #   run: |
+      #     set -euo pipefail
+
+      #     SERVICE=${{ matrix.service[0] }}
+      #     IMAGE_NAME=${{ matrix.service[1] }}/${{ matrix.service[2] }}
+      #     echo "🔨 Building $IMAGE_NAME from service $SERVICE..."
+
+      #     ## Build and run container detached
+      #     ## docker compose -f "$COMPOSE_FILE" build "$SERVICE"
+      #     ## docker compose -f "$COMPOSE_FILE" up -d "$SERVICE"
+      #     ## SCIKITPLOT_VERSION=${SCIKITPLOT_VERSION:-} so for dev use SCIKITPLOT_VERSION= docker compose ...??
+      #     docker compose -f "$COMPOSE_FILE" up -d --build "$SERVICE"
+
+      #     ## then we pushing created containers image
+      #     ##
+      #     ## docker ps -a --format '{{.Names}}'
+      #     ## echo $(docker inspect --format='{{.Image}}' "scikit-plots_latest-jupyter")
+      #     ## echo $(docker inspect --format='{{index .Config.Image}}' "scikit-plots_latest-jupyter")
+      #     ##
+      #     ## (Optionally) Save the Container as a New Image as service name (If Needed)
+      #     ## This commits current container state, but it doesn't include volumes or changes outside the container filesystem.
+      #     ## If container name is not unique, you might need to include container ID in the tag.
+      #     ## docker commit my-python-container my-custom-image:tagname
+      #     # timestamp=$(date +%Y%m%d_%H%M%S)
+      #     # for id in $(docker ps -aq); do
+      #     #   # Get compose service name
+      #     #   name=$(docker inspect --format='{{.Name}}' "$id" | sed 's|/||')
+      #     #   # docker commit "$id" "${name}:backup-${timestamp}"
+      #     #   docker commit "$id" "${name}"
+      #     #   echo "Committed $id as ${name}"
+      #     # done
+
+      ## Build the Docker image and apply all necessary (multiple) tags
+      # - name: 🐳 Tag and Push Docker Compose Image
+      #   # correctly filters for valid combinations
+      #   if: contains( matrix.service[0], matrix.tag.tag )
+      #   env:
+      #     REF_TYPE: ${{ steps.gitref.outputs.ref_type }}
+      #     VERSION: ${{ steps.gitref.outputs.version_tag }}
+      #     BRANCH: ${{ steps.gitref.outputs.branch_tag }}
+      #   run: |
+      #     set -euo pipefail
+
+      #     SERVICE=${{ matrix.service[0] }}
+      #     IMAGE_NAME=${{ matrix.service[1] }}/${{ matrix.service[2] }}
+
+      #     ## Returns the ID of the thing you're inspecting.
+      #     ## If $SERVICE is a container, it returns the container ID.
+      #     ## If $SERVICE is an image, it returns the image ID (e.g. sha256:abcd...).
+      #     # IMAGE_ID=$(docker inspect --format='{{.Id}}' "$SERVICE")  # returns the unique "container ID", not the image ID.
+      #     ## the image name or ID that was used to start that container.
+      #     ## IMAGE_ID=$(docker inspect --format='{{index .Config.Image}}' "$SERVICE")  # returns the Image name/tag (string) used to start container
+      #     # IMAGE_ID=$(docker inspect --format='{{ .Config.Image }}' "$SERVICE")  # returns the Image name/tag (string) used to start container
+      #     ## Returns the image ID (sha256...) that the container was created from.
+      #     ## So for your tagging/pushing logic, the most correct would be:
+      #     ## Does not return the container ID — it traces back to the image used.
+      #     ##
+      #     ## So Save image that used to create the container that was pulled or created image
+      #     ## echo $(docker inspect --format='{{.Image}}' "scikit-plots_latest-jupyter")
+      #     IMAGE_ID=$(docker inspect --format='{{.Image}}' "$SERVICE")  # returns the "actual SHA" digest of the image (e.g. sha256:...) used to create the container that was pulled or created image
+
+      #     # echo "🧪 DEBUG: REF_TYPE=$REF_TYPE | BRANCH=$BRANCH | REF_TAG=$REF_TAG"
+      #     echo "🔎 Tagging context: $REF_TYPE (version=$VERSION, branch=$BRANCH)"
+
+      #     # Access tag details from matrix object
+      #     # TAG="${{ matrix.tag.tag }}"
+      #     # REF_TAG="${{ matrix.tag.ref_tag }}"
+      #     # ALIAS="${{ matrix.tag.alias }}"
+      #     # ALIAS2="${{ matrix.tag.alias2 || '' }}"
+
+      #     ## ✅ Best for: Simple, flat tag lists.
+      #     # for REF_TAG in "${{ join(matrix.tag, '" "') }}"; do
+
+      #     ## ✅ Best for: Complex nested arrays — if matrix.tag items are sublists of [TAG, REF_TAG, ALIAS].
+      #     ## ✅ Note the single quotes '...' around the full JSON block — that makes it a proper Bash string.
+      #     ## Get matrix.tag as full JSON
+      #     MATRIX_JSON='${{ toJSON(matrix.tag) }}'
+      #     # read -r -d '' MATRIX_JSON <<'EOF'
+      #     # {
+      #     #   "tag": "python-3.11",
+      #     #   "ref_tag": "ref_tags-python-3.11",
+      #     #   "alias": "latest-python-3.11"
+      #     # }
+      #     # EOF
+
+      #     # Loop through each tag entry as a compact JSON object
+      #     # for arr in "$(echo "$MATRIX_JSON" | jq -c '.')" ; do
+      #     #   IFS=',' read -r TAG REF_TAG ALIAS <<< "$(echo "$arr" | jq -r '. | join(",")')"
+
+      #     # Support both object or array with conditional logic
+      #     # If it's an object, wrap it in an array so '.[]' works
+      #     FORMATTED_JSON=$(echo "$MATRIX_JSON" | jq -c 'if type=="array" then . else [.] end')
+
+      #     # Optional push retry function (can be removed if not needed)
+      #     safe_push() {
+      #       local tag="$1"
+      #       for attempt in {1..3}; do
+      #         docker push "$IMAGE_NAME:$tag" && return 0
+      #         echo "🔴 Push failed for $tag (attempt $attempt), retrying..."
+      #         sleep 5
+      #       done
+      #       echo "⚠️ Push permanently failed for $tag"
+      #     }
+
+      #     echo "$FORMATTED_JSON" | jq -c '.[]' | while read -r arr; do
+      #       TAG=$(echo "$arr" | jq -r '.tag')
+      #       REF_TAG=$(echo "$arr" | jq -r '.ref_tag')
+      #       ALIAS=$(echo "$arr" | jq -r '.alias // empty')
+      #       ALIAS2=$(echo "$arr" | jq -r '.alias2 // empty')
+
+      #       echo "▶️ TAG=$TAG"
+      #       echo "📦 REF_TAG=$REF_TAG"
+      #       echo "🔖 ALIAS=$ALIAS"
+      #       echo "🪪 ALIAS2=$ALIAS2"
+
+      #       # Skip ref_tags-* on non-tag + non-main
+      #       # if [[ "$REF_TAG" == ref_tags-* && "$REF_TYPE" != "tag" ]]; then
+      #       # # ⏭️ Skip ref-only tags unless it's a Git tag or main branch
+      #       # This lets you build ref_tags-* on tag and main builds, but not on PRs or feature branches.
+      #       # if [[ "$REF_TAG" == ref_tags-* && "$REF_TYPE" != "tag" && "$BRANCH" != "main" ]]; then
+      #       #   echo "⏭️ Skipping tag: $TAG (used only for Git tags or main branch)"
+      #       #   continue
+      #       # fi
+
+      #       # Determine final tag based on context
+      #       if [[ "$REF_TAG" == ref_tags-* && "$REF_TYPE" == "tag" ]]; then
+      #         SUFFIX="${REF_TAG#ref_tags-}"         # e.g., 'jupyter'
+      #         FINAL_TAG="${VERSION}-${SUFFIX}"      # e.g., '1.2.3-jupyter', 'latest-jupyter'
+      #       elif [[ "$BRANCH" == "main" ]]; then
+      #         FINAL_TAG="$ALIAS"                    # e.g., 'latest-jupyter', 'latest-python-3.11'
+      #       elif [[ "$BRANCH" == maintenance-* ]]; then
+      #         BRANCH_VERSION="${BRANCH#maintenance-}"  # e.g., '0.3.x'
+      #         FINAL_TAG="${BRANCH_VERSION}-${TAG}"     # e.g., '0.3.x-jupyter'
+      #       else
+      #         echo "⏭️ Unknown branch pattern: $BRANCH — skipping tag $TAG"
+      #         continue
+      #       fi
+
+      #       echo "🏷️ Tagging image as $IMAGE_NAME:$FINAL_TAG"
+      #       docker tag "$IMAGE_ID" "$IMAGE_NAME:$FINAL_TAG"
+
+      #       echo "📤 Pushing $IMAGE_NAME:$FINAL_TAG"
+      #       # docker push "$IMAGE_NAME:$FINAL_TAG"
+      #       safe_push "$FINAL_TAG"
+
+      #       # ➕ Tag and push alias2 if it exists (e.g., 'latest')
+      #       if [[ -n "$ALIAS2" ]]; then
+      #         echo "🏷️ Tagging alias2 as $IMAGE_NAME:$ALIAS2"
+      #         docker tag "$IMAGE_ID" "$IMAGE_NAME:$ALIAS2"
+      #         echo "📤 Pushing $IMAGE_NAME:$ALIAS2"
+      #         docker push "$IMAGE_NAME:$ALIAS2"
+      #       fi
+      #     done
+
+      #     echo "✅ All applicable tags pushed."
+      #     echo "🔗 View at: https://hub.docker.com/r/$IMAGE_NAME/tags"
+
+      # - name: 🧹 Tear down Docker Compose
+      #   if: always()
+      #   continue-on-error: true
+      #   run: |
+      #     docker compose -f "$COMPOSE_FILE" down --remove-orphans --volumes
+
+      ################################################################
+      ## Docker tags alternative
+      ################################################################
+
+      # Determine tags for Docker image based on Git context
+      # - name: Determine Docker image tags
+      #   id: vars
+      #   run: |
+      #     set -euo pipefail
+
+      #     # Sanitize function to remove invalid characters for Docker tags
+      #     # SAFE_TAG='^[a-zA-Z0-9._-]+$'
+      #     # SAFE_REPO='^[a-zA-Z0-9._/-]+$'
+      #     # IMAGE_SAFE=$(sanitize "$IMAGE")
+      #     sanitize() {
+      #       echo "$1" | sed 's/[^a-zA-Z0-9._-]//g'
+      #     }
+
+      #     # Get the GitHub repository name (e.g., scikit-plots)
+      #     REPO_NAME=$(basename "$GITHUB_REPOSITORY")
+      #     # "${VAR//-/}" remove all "-" character
+      #     # "${VAR%?}" or "${VAR::-1}" remove the last character
+      #     ORG_NAME="${REPO_NAME//-/}"; ORG_NAME="${ORG_NAME%?}"
+
+      #     # Compose the full Docker image name using Docker Hub username
+      #     # IMAGE_NAME="${DOCKERHUB_USERNAME}/${REPO_NAME}"
+      #     IMAGE_NAME="${ORG_NAME}/${{ matrix.service }}"
+
+      #     # Generate a short SHA tag (e.g., sha-abc1234)
+      #     TAG_SAFE=$(echo "${{ matrix.tag }}" | sed 's/[^a-zA-Z0-9._-]//g')
+      #     SHA_TAG="sha-${GITHUB_SHA::7}"
+
+      #     # Initialize optional tags with default empty values
+      #     BRANCH_TAG=""
+      #     DEV_TAG=""
+      #     VERSION_TAG=""
+
+      #     # Handle Git tag events (e.g., refs/tags/v1.0.0)
+      #     if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+      #       VERSION_TAG="${GITHUB_REF#refs/tags/}"  # Strip 'refs/tags/'
+      #     # Handle branch events (e.g., refs/heads/main, refs/heads/feature/foo)
+      #     elif [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+      #       REF_BRANCH="${GITHUB_REF#refs/heads/}"  # Strip 'refs/heads/'
+
+      #       # Sanitize branch name for Docker tag: replace '/' with '-', remove invalid chars
+      #       # SAFE_PATTERN='^[a-zA-Z0-9._/-]+$'
+      #       SAFE_BRANCH=$(echo "$REF_BRANCH" | tr '/' '-' | sed 's/[^a-zA-Z0-9._-]//g')
+      #       BRANCH_TAG="$SAFE_BRANCH"
+
+      #       # Tag as 'dev' if the branch is 'main'
+      #       if [[ "$REF_BRANCH" == "main" ]]; then
+      #         BRANCH_TAG="latest-jupyter"
+      #         DEV_TAG="latest"
+      #       fi
+      #     fi
+
+      #     # Output variables for use in later steps
+      #     echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+      #     echo "sha_tag=$SHA_TAG" >> "$GITHUB_OUTPUT"
+      #     echo "branch_tag=$BRANCH_TAG" >> "$GITHUB_OUTPUT"
+      #     echo "dev_tag=$DEV_TAG" >> "$GITHUB_OUTPUT"
+      #     echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+
+      ################################################################

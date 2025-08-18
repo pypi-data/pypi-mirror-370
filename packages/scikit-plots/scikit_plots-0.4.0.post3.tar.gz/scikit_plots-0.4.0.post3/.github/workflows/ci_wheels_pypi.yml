@@ -1,0 +1,173 @@
+## Documentation: https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+## This workflow automates the process of publishing your Python package to TestPyPI or PyPI.
+## https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+---
+name: "CI 📦 Wheels (Test)PyPI"
+
+## Trigger the workflow manually via GitHub Actions' "workflow_dispatch".
+on:
+  workflow_dispatch:  # Allows manual triggering of the workflow
+    inputs:
+      conda_source:  # Specify whether to conda pkg source
+        description: 'conda pkg source'
+        required: true           # 👈 This makes the input mandatory
+        type: choice
+        default: 'scikit-plots-wheels-staging-nightly'  # 👈 Default
+        options:
+          - 'scikit-plots-wheels-staging'
+          - 'scikit-plots-wheels-staging-nightly'  # Default *.whl source
+      pypi_repo:  # Specify whether to publish to TestPyPI or PyPI
+        description: 'Repository to upload to (test.pypi or pypi)'
+        required: true            # 👈 This makes the input mandatory
+        type: choice
+        default: 'test.pypi'      # 👈 Default is still used if user doesn't change it
+        options:
+          - 'pypi'
+          - 'test.pypi'  # Default to TestPyPI for safety
+      version:  # Specify the version of the package to upload
+        description: 'Version to upload to PyPI (e.g., 1.0.0)'
+        required: true  # 👈 This makes the input mandatory
+        default: '0.4.0.post1'  # 👈 Default is still used if user doesn't change it
+        type: choice
+        options:
+          # 0.3.7
+          - '0.3.7.post0'
+          - '0.3.7.post1'
+          # 0.3.8
+          - '0.3.8.post0'
+          - '0.3.8.post1'
+          # 0.3.9
+          - '0.3.9.post0'
+          - '0.3.9.post1'
+          # 0.4.0
+          - '0.4.0.post1'  # 👈
+          - '0.4.0.post2'
+          # 0.4.1
+          - '0.4.1rc0'
+          - '0.4.1'
+          - '0.4.1.post0'
+          - '0.4.1.post1'
+          # 0.4.2
+          - '0.4.2rc0'
+          - '0.4.2'
+          - '0.4.2.post0'
+          - '0.4.2.post1'
+          # 0.5.0
+          - '0.5.0rc0'
+          - '0.5.0'
+          - '0.5.0.post0'
+          - '0.5.0.post1'
+          # 0.5.1
+          - '0.5.1rc0'
+          - '0.5.1'
+          - '0.5.1.post0'
+          - '0.5.1.post1'
+          # dev
+          - '0.5.dev0'
+
+## Top-level permissions (outside jobs)
+## Job-level permissions (inside a specific job)
+## Restrict the permissions granted to the use of secrets.GITHUB_TOKEN in this
+## github actions workflow:
+## https://docs.github.com/en/actions/security-guides/automatic-token-authentication
+permissions:
+  ## only required for workflows in private repositories
+  contents: read  # for actions/checkout to fetch code
+  ## IMPORTANT: This permission is mandatory for secure publishing
+  id-token: write  # Required for trusted publishing
+
+## Global environment variables (available to all jobs and steps)
+## Job-level environment variables (override global, scoped to this job)
+## Step-level environment variables (override job + global, scoped to this step)
+
+jobs:
+  publisher:
+    name: to publish "${{ github.event.inputs.pypi_repo }}"
+    runs-on: ubuntu-latest  # Use the latest Ubuntu virtual environment
+
+    # To enable this workflow on a fork, comment out:
+    if: github.repository == 'scikit-plots/scikit-plots'
+
+    ## Restrict this job to the 'publish_pypi' environment
+    ## If Activated, Accessing Environment Secret for 'publish_pypi'
+    # environment:
+    #   publish_pypi  # Specify the environment for environment secrets
+    #   url: https://pypi.org/p/<your-pypi-project-name>
+    env:  # Step level environment NAME: '', $NAME, ${{ env.NAME }}
+      SKPLT_VERSION: ${{ github.event.inputs.version }}
+      CONDA_SOURCE: ${{ github.event.inputs.conda_source }}
+
+    steps:
+      # Step 1: Check out the code from the repository
+      - name: "⬇️ Checkout (cloned) repository with full history"
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false  # Prevents accidental credential exposure
+          # submodules: true  # Fetch Hugo themes (true OR recursive)
+          fetch-depth: 0    # Fetch all history for .GitInfo and .Lastmod
+
+      # Step 2: Set up the Python environment
+      - name: Python Setup
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.8'  # Specify the Python version
+
+      # Step 3: Install dependencies for building and publishing
+      - name: Install dependencies
+        run: |
+          pip install -U wheelhouse_uploader pyyaml twine
+
+      # Step 4: Download wheels and sdist from Anaconda
+      - name: Downloading wheels and sdist from Anaconda staging
+        run: |
+          echo "Downloading $SKPLT_VERSION wheels and sdist from Anaconda repository"
+          python -m wheelhouse_uploader fetch \
+            --version $SKPLT_VERSION \
+            --local-folder dist/ \
+            scikit-plots \
+            https://pypi.anaconda.org/scikit-plots-wheels-staging-nightly/simple/scikit-plots/
+
+      # ✅ Step 5: Dry run — list Pyodide/WASM wheels to be removed
+      - name: "[Dry Run] Show Pyodide/WASM wheels that would be deleted"
+        run: |
+          echo "Dry Run: These files match *pyodide*.whl or *wasm*.whl:"
+          find dist/ -type f \( -name '*pyodide*.whl' -o -name '*wasm*.whl' \) -print || echo "No matching files found."
+
+      # ✅ Step 6: Remove unsupported Pyodide/WASM wheels
+      - name: Remove Pyodide/WASM wheels from dist/
+        run: |
+          echo "Removing unsupported pyodide/wasm wheels from dist/"
+          find dist/ -type f \( -name '*pyodide*.whl' -o -name '*wasm*.whl' \) -print -delete || echo "Nothing to delete."
+
+      # ✅ Step 7: List remaining valid files
+      - name: List downloaded files in dist/
+        run: |
+          echo "Contents of dist/ directory:"
+          # ls -lh dist/
+          ls -lhtr dist/
+
+      # - name: Check dist has the correct number of artifacts
+      #   run: |
+      #     python build_tools/github/check_wheels.py
+
+      # Step 8a: Publish the package to TestPyPI (if selected)
+      - name: Publish package distributions to TestPyPI
+        if: ${{ github.event.inputs.pypi_repo == 'test.pypi' }}
+        ## https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          # user: __token__
+          # password: ${{ secrets.TEST_PYPI_API_TOKEN }}  # Accessing Repository Secret TestPyPI API token
+          print-hash: true
+          repository-url: https://test.pypi.org/legacy/  # Change to TestPyPI if needed
+
+      # Step 8b: Publish the package to PyPI (if selected)
+      - name: Publish package distributions to  PyPI
+        if: ${{ github.event.inputs.pypi_repo == 'pypi' }}
+        ## https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        with:
+          # user: __token__
+          # password: ${{ secrets.PYPI_API_TOKEN }}  # Accessing Repository Secret PyPI API token
+          print-hash: true
+          repository-url: https://upload.pypi.org/legacy/  # Change to TestPyPI if needed

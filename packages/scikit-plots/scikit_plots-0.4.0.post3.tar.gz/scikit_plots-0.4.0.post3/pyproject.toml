@@ -1,0 +1,1373 @@
+# Authors: The scikit-plots developers
+# SPDX-License-Identifier: BSD-3-Clause
+
+## This file is the modern replacement for setup.py, used to configure how your Python package is built.
+##
+## ⚠️ https://packaging.python.org/en/latest/discussions/setup-py-deprecated/#setup-py-deprecated
+##
+## https://packaging.python.org/en/latest/specifications/pyproject-toml/
+## 🛎️ https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#a-full-example
+##
+## The [build-system] section specifies the build system requirements.
+## "setuptools.build_meta" is the default backend used by setuptools for building projects.
+## You can add other build like 'mesonpy' dependencies as needed.
+##
+## https://setuptools.pypa.io/en/stable/userguide/pyproject_config.html
+## https://setuptools.pypa.io/en/stable/userguide/declarative_config.html#metadata
+##
+## SciPy probably the most complex project using Meson and meson-python.
+## It combines CPython extensions and libraries written in C, C++, Fortran, Cython, and Pythran.
+##
+## https://mesonbuild.com/meson-python/tutorials/introduction.html
+## https://mesonbuild.com/meson-python/projects-using-meson-python.html
+##
+## https://setuptools.pypa.io/en/stable/build_meta.html#dynamic-build-dependencies-and-other-build-meta-tweaks
+##
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | Marker                | Common Values                                 | Suggestions / Best Practices                           |
+## +=======================+===============================================+========================================================+
+## | sys_platform          | "linux", "darwin", "win32", "cygwin",         | Use for OS-level differences (e.g., native deps)       |
+## |                       | "aix", "emscripten", "wasi"                   | Lowercase, stable; prefer over platform_system         |
+## |                       |                                               | ;sys_platform == "win32" ;sys_platform != "emscripten" |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | platform_system       | "Linux", "Darwin", "Windows", "Java",         | Avoid if case-insensitivity matters                    |
+## |                       | "AIX", "Emscripten", "WASI"                   | Case-sensitive; varies between systems                 |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | platform_machine      | "x86_64", "i386", "arm64", "aarch64",         | Use to detect WASM ("wasm32", "wasm64"), ARM, etc.     |
+## |                       | "armv7l", "wasm32", "wasm64", "ppc64le", etc. | Combine with sys_platform for accurate filtering       |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | python_version        | "3.11", "3.10", "3.9", "3.8", "3.7", "3.6"    | Good for minimum/maximum version support               |
+## |                       |                                               | No patch info included   ;python_version >= "3.8"      |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | python_full_version   | "3.11.3", "3.10.9", etc.                      | Use when patch version matters (rare)                  |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | implementation_name   | "cpython", "pypy", "ironpython", "jython"     | Use when packages rely on implementation internals     |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | implementation_version| "3.11.3", "3.10.9", etc.                      | Rarely used; available for tight implementation checks |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | platform_release      | "5.15.0-1068-azure", "10", "22.3.1", etc.     | OS version; very platform-specific                     |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | platform_version      | Varies; often similar to platform_release     | Even more specific; rarely used in packaging           |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | os_name               | "posix", "nt", "java"                         | Reflects `os.name`; useful for basic OS family checks  |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+## | extra                 | Custom extras like "dev", "docs", "test"      | Used with `extras_require` or `optional-dependencies`  |
+## |                       |                                               | 'package; extra == "docs"'                             |
+## +-----------------------+-----------------------------------------------+--------------------------------------------------------+
+##
+## 🔻 https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#declaring-the-build-backend
+[build-system]
+# backend-path = ["_custom_build"]          # If Needed
+
+# Purpose: Build backend that handles the package build process
+build-backend = "mesonpy"                   # Specifies the Python backend to use for building the package.
+
+## Purpose: Specifies the build dependencies needed to create the package or run the build process.
+requires = [
+  ## Building an env isolated one that build system information (how to package the project).
+  "meson>=1.5.0",                           # The Meson build system itself to coordinate the compilation of code.
+  "ninja>=1.11.0",                          # The Ninja build system used to compile code ';sys_platform != "emscripten"'
+  "meson-python>=0.16.0",                   # A PEP 517 backend for building Python packages with Meson.
+
+  ## C/C++ bindings
+  "cython>=3.0.8",                          # C/C++ Cython bindings
+  "pybind11>=2.13.2",                       # C/C++ Pybind bindings
+  "pythran>=0.14.0",
+
+  ## numpy requirement for wheel builds for distribution on PyPI - building
+  ## against 2.x yields wheels that are also compatible with numpy 1.x at
+  ## runtime.
+  ## Note that building against numpy 1.x works fine too - users and
+  ## redistributors can do this by installing the numpy version they like and
+  ## disabling build isolation.
+  ## py>=3.9 Numpy C-Api Headers by python module
+  'numpy>=1.20,!=1.24.0;python_version<"3.9"',
+  'numpy>=2.0.0;python_version>="3.9"',
+]
+
+######################################################################
+## 🔻 project: metadata about your project
+## https://setuptools.pypa.io/en/stable/userguide/pyproject_config.html
+## https://setuptools.pypa.io/en/stable/userguide/pyproject_config.html#dynamic-metadata
+######################################################################
+
+## The [project] section contains metadata about your project.
+[project]
+name = "scikit-plots"                       # The name of your project
+
+## (Optionally)
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#description
+description = "An intuitive library that seamlessly adds plotting capabilities and functionality to any model objects or outputs, compatible with tools like scikit-learn, XGBoost, TensorFlow, and more."
+
+## (Optionally)
+## Keywords to describe your project, useful for searchability
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#keywords
+## https://packaging.python.org/en/latest/specifications/core-metadata/#keywords
+keywords = [
+  "ai",
+  "data science",
+  "machine learning",
+  "visualization",
+  "matplotlib",
+  "scikit-learn",
+  "xgboost",
+  "catboost",
+  "tensorflow",
+  "keras",
+  "pytorch",
+  "transformers",
+]
+
+## (Optionally)
+## Classifiers help users understand the maturity, audience,
+## and compatible environments for your project.
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#classifiers
+## https://packaging.python.org/en/latest/specifications/core-metadata/#classifier-multiple-use
+## https://pypi.org/pypi?%3Aaction=list_classifiers
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  # "Development Status :: 4 - Beta",
+  # "Environment :: GPU",
+  # "Environment :: WebAssembly",
+  # "Environment :: WebAssembly :: Emscripten",
+  "Framework :: Matplotlib",
+  # "Framework :: Pyodide",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Science/Research",
+  ## If defined required to fully compatible with SPDX license expression for pep-639 license-files
+  ## or use test or file license = {file = "LICENSE"}  # "License :: OSI Approved :: MIT License",
+  # 'License :: OSI Approved :: BSD License',
+  "Natural Language :: English",
+  # "Operating System :: OS Independent",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX",
+  "Operating System :: Unix",
+  "Operating System :: MacOS",
+  'Programming Language :: C',
+  'Programming Language :: C++',
+  'Programming Language :: Fortran',
+  'Programming Language :: Cython',
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3",
+  # "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  ## CPython is what you get when you run python on most systems.
+  ## It's written in C, compiles to bytecode, and runs via the CPython interpreter.
+  ## If your package uses C extensions, CPython-specific internals, or is only tested on CPython
+  "Programming Language :: Python :: Implementation :: CPython",
+  ## PyPy is written in RPython, and is known for its Just-In-Time (JIT) compiler.
+  ## But it's not 100% compatible with all C-extension packages (like some heavy NumPy/Cython-based tools).
+  ## If your package is PyPy-compatible, or if you want to signal performance compatibility (especially if avoiding C-extensions)
+  # "Programming Language :: Python :: Implementation :: PyPy",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Visualization",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Multimedia :: Graphics",
+  "Typing :: Typed",
+]
+
+## (Recommended)
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#static-vs-dynamic-metadata
+## https://github.com/mesonbuild/meson-python/blob/main/mesonpy/__init__.py#L743
+## https://github.com/pypa/setuptools/blob/646c71f9af7e9ba6677203acde4ccd0a478dfbf8/setuptools/config/expand.py#L62-L86
+dynamic = [
+  "version",                                # Determined dynamically by build-backend, inside one of (meson.build, setup.cfg, setuptools.dynamic)
+  # "license",
+  # "license-files",
+]
+
+## (Recommended)
+## The readme file this is what users will see on your project's PyPI page.
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#readme
+## readme = "README.md"
+readme = {file = 'README.md', content-type = 'text/markdown'}
+
+## (Optionally)
+## [[project.readme]]  # Usage individually, If Needed
+## file = 'README.md'
+## content-type = 'text/x-rst'
+
+## (Recommended)
+## License information is critical. It's recommended to specify the license file.
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license-and-license-files
+## https://packaging.python.org/en/latest/specifications/core-metadata/#license-file-multiple-use
+## license is an SPDX license expression consisting of one or more license identifiers.
+## license-files is a list of license file glob patterns.
+##
+## TODO: add `license-files` once PEP 639 is accepted (see meson-python#88)
+## at that point, no longer include them in `py3.install_sources()`
+## [[project.license]]  # Usage individually, If Needed
+## If defined required to fully compatible with SPDX license expression by license-files
+## https://spdx.org/licenses/BSD-3-Clause.html  # 'MIT', 'Apache-2.0', 'GPL-3.0-or-later'
+license = { file = 'LICENSE.txt' }  # Primary license file # This is the SPDX identifier for the license
+## (Optionally)
+## [tool.meson-python]
+## PEP-639 license-files field to be used only if the license field contains a valid SPDX license expression.
+# license-files = ['LICENSE.txt', 'LICEN[CS]E*/*']
+
+## (Recommended)
+## List the authors of the project
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#authors-maintainers
+## [[project.authors]]  # Usage individually, If Needed
+authors = [
+  {name = "scikit-plots developers", email="scikit-plots-dev@googlegroups.com"},
+  # {name = "scikit-plots developers", email="scikit-plots@python.org"},
+  # {name = "Reiichiro Nakano et al.", email = "reiichiro.s.nakano@gmail.com"},
+  # {name = "Prateek Sharma", email = "s.prateek3080@gmail.com"},
+  # ...
+]
+## Project maintainers
+## [[project.maintainers]]  # Usage individually, If Needed
+maintainers = [
+  {name = "scikit-plots developers", email="scikit-plots-maintainers@googlegroups.com"},
+]
+
+## (Recommended)
+## Specify the minimum Python version required
+## https://packaging.python.org/en/latest/specifications/core-metadata/#requires-python
+## TODO: "3.10"  # due to array api compat
+requires-python = ">=3.8"
+
+## (Recommended)
+## Purpose: Specifies the Runtime dependencies needed for the project to run after it's installed.
+## https://setuptools.pypa.io/en/stable/userguide/dependency_management.html#declaring-required-dependency
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#dependencies-and-requirements
+## ✅ Runtime dependencies go here — as a list of strings for pyproject.toml with PEP 621
+## Runtime dependencies needed for proper operation on Python 3.7+,
+## installed automatically via pip (pip install)
+dependencies = [
+  # --- Core Numerical Libraries ---
+  'numpy>=1.20,!=1.24.0;python_version<"3.9"',
+  'numpy>=2.0.0;python_version>="3.9"',
+  "scipy>=1.7.0",
+  "pandas>=1.2.0",                          # Data Analysis
+  "matplotlib>=3.4,!=3.6.1",                # Data Plotting
+
+  # --- Performance / Parallelism ---
+  "threadpoolctl>=3.1.0",
+  "joblib>=1.2.0",
+
+  # --- Machine Learning ---
+  "scikit-learn>=1.3.0rc1",                 # Machine learning
+
+  # --- Visualkeras Dependency ---
+  "pillow>=6.2.0",                          # Image processing
+  ## aggdraw Only for platforms other than WebAssembly
+  ## high-quality drawing, with anti-aliasing and alpha compositing
+  # 'aggdraw>=1.3.11;not (platform_system == "Emscripten" and (platform_machine == "wasm32" or platform_machine == "wasm64"))',
+  'aggdraw>=1.3.11;sys_platform!="emscripten"',
+
+  # --- Optional Web Interface Dependencies (commented out) ---
+  # "docker>=4.0.0,<8",
+  # "streamlit",
+  # "requests>=2.17.3,<3",
+  # "Flask<4",
+  # "fastapi<1",
+  # "uvicorn<1",
+  # "waitress<4; platform_system == 'Windows'",
+  # "gunicorn<24; platform_system != 'Windows'",
+  # "importlib-metadata>=3.7.0,<9,!=4.7.0",  # Only if needed manually
+  # "pyyaml>=5.1,<7",
+  # "sqlalchemy>=1.4.0,<3",
+  # "sqlparse>=0.4.0,<1",
+  # "click>=7.0,<9",
+  # "cloudpickle<4",
+]
+
+######################################################################
+## 🔻 optional-dependencies
+## python -m pip install --no-build-isolation --no-cache-dir -e .[dev,build,test,docs,gpu] -v
+## https://peps.python.org/pep-0508/
+## https://peps.python.org/pep-0735/#deferred-ideas
+## https://setuptools.pypa.io/en/stable/userguide/dependency_management.html#optional-dependencies
+## https://setuptools.pypa.io/en/latest/userguide/dependency_management.html#direct-url-dependencies
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#dependencies-and-requirements
+######################################################################
+
+## (Optionally)
+## Development dependencies (for linting, type checking, and general dev tools)
+## Defines optional dependencies (extras) that can be installed separately
+## via `pip install yourpackage[extra_name]`
+[project.optional-dependencies]
+
+legacy = [
+  'numpy>=1.20,!=1.24.0;python_version<"3.9"',
+
+  'importlib-metadata;python_version<"3.10"',  # Backport needed for Python < '3.8'
+
+  # Read-only TOML parser for older Python
+  # Python TOML support became built-in (via tomllib) starting in Python >= 3.11.
+  # tomli — a newer, faster, read-only TOML parser focused on compliance.
+  # toml — a popular older TOML parsing library, supports both reading and writing.
+  'tomli;python_version<"3.11"',  # TOML parsing backports for Python < 3.11
+  'tomli-w;python_version<"3.11"',  # A lil' TOML writer backports for Python < 3.11
+  'toml;python_version<"3.11"',  # A lil' TOML reader/writer backports for Python < 3.11
+]
+## python -m pip install --no-build-isolation --no-cache-dir -e .[dev,build,test,docs] -v
+## Core dependencies that are used in multiple groups
+core = [
+  ## optionally
+  "seaborn>=0.11",                          # Statistical plotting
+  # "array-api-strict>=2.3.1",
+]
+## Build dependencies (for packaging and building extensions)
+build = [
+  "scikit-plots[legacy]",                   # Pulls in the 'legacy' optional dependencies during build
+  "scikit-plots[core]",                     # Reference the 'core' group as a dependency
+
+  ## packaging
+  # "setuptools",
+  # "wheel",
+  # "flit",
+  # 'ninja; sys_platform != 'emscripten'',
+  "build",                                  # Standard Python build tool
+  "twine",                                  # Upload to PyPI
+
+  ## DO NOT EDIT Copy "requires" section
+  ## Building an env isolated one that build system information (how to package the project).
+  "meson>=1.5.0",                           # The Meson build system itself to coordinate the compilation of code.
+  "ninja>=1.11.0",                          # The Ninja build system used to compile code ';sys_platform != "emscripten"'
+  "meson-python>=0.16.0",                   # A PEP 517 backend for building Python packages with Meson.
+
+  ## C/C++ bindings
+  "cython>=3.0.8",                          # C/C++ Cython bindings
+  "pybind11>=2.13.2",                       # C/C++ Pybind bindings
+  "pythran>=0.14.0",
+
+  ## numpy requirement for wheel builds for distribution on PyPI - building
+  ## against 2.x yields wheels that are also compatible with numpy 1.x at
+  ## runtime.
+  ## Note that building against numpy 1.x works fine too - users and
+  ## redistributors can do this by installing the numpy version they like and
+  ## disabling build isolation.
+  ## py>=3.9 Numpy C-Api Headers by python module
+  'numpy>=1.20,!=1.24.0;python_version<"3.9"',
+  'numpy>=2.0.0;python_version>="3.9"',
+]
+dev = [
+  "scikit-plots[core]",                     # Reference the 'core' group as a dependency
+  "packaging",
+  "pandas-stubs",
+  "pycodestyle",                            # PEP-8 compliance
+  "pydantic",
+  "pydevtool",                              # Development tools
+  "pyyaml",
+
+  "types-psutil",                           # Type stubs for psutil
+  "typing_extensions",                      # Backports for older Python versions
+  "requests",
+  "click",
+  "rich-click",                             # Enhanced CLI
+  "doit",                                   # Task automation
+
+  # lint-requirements
+  "pre-commit",                             # Git hook scripts are useful for identifying simple issues before submission to code review. ".pre-commit-config.yaml"
+  "cython-lint",                            # Linting for Cython
+  "flake8",
+  "black",                                  # Code formatting
+  "ruff",                                   # Linting
+  "mypy",                                   # Type checking
+
+  # "pipreqs",                              # Automatically scans the codebase and detects the used libraries.
+]
+## Testing dependencies
+test = [
+  "scikit-plots[core]",                     # Reference the 'core' group as a dependency
+
+  "hypothesis",                             # Property-based testing
+  "pytest>=7.1.2",                          # Core testing framework
+  "pytest-cov",                             # Coverage reports codecov.io
+  "pytest-fail-slow",
+  "pytest-mpl",                             # Matplotlib testing
+  "pytest-run-parallel",
+  "pytest-timeout",
+  "pytest-xdist",                           # Use Multiple CPUs to speed up
+
+  "asv",
+  "mpmath",
+  "tenacity",                               # general-purpose retrying library, written in Python
+  "pyinstrument",                           # import time helper
+
+  # "gmpy2",
+  # "pyamg",                                  # Algebraic multigrid solvers manual setup due to not support latest py314
+]
+emscripten_test = [
+  "hypothesis>=6.130.0",                    # Property-based testing
+  "pytest>=7.1.2",                          # Core testing framework
+  "pytest-xdist",                           # Use Multiple CPUs to speed up
+  "tzdata",
+]
+## Documentation dependencies
+doc = [
+  "scikit-plots[core]",                     # Reference the 'core' group as a dependency
+
+  ## sphinx
+  "sphinx>=5.0.0,<100.0.0",                 # Documentation generator
+  "sphinx-copybutton",                      # Copy button for code blocks
+  "sphinx-design",                          # Modern design elements
+  "sphinx-gallery",                         # Gallery examples
+  "sphinx-prompt",                          # Shell prompts can be created using a prompt directive:
+  "sphinx-remove-toctrees",                 # Customize toctrees
+  "sphinx-rtd-theme",                       # ReadTheDocs theme
+  "sphinx-tabs",                            # Tabbed content
+  "sphinx-tags",                            # Tagging support
+  "sphinxext-opengraph",                    # Social media metadata
+  "sphinxcontrib-inlinesyntaxhighlight",    # Inline syntax highlighting
+  "sphinxcontrib-sass",                     # SASS support
+  "sphinxcontrib-svg2pdfconverter",         # SVG to PDF conversion
+  "pydata-sphinx-theme",                    # PyData theme
+
+  "colorspacious",                          # Color management
+  "jinja2",                                 # Templating engine
+  "jupyter-sphinx",                         # Jupyter integration
+  "jupyterlite-pyodide-kernel",             # Pyodide support
+  "jupyterlite-sphinx",                     # JupyterLite integration
+  "jupytext",                               # Text-based Notebook formats
+  "intersphinx_registry",                   # Intersphinx management
+  "numpydoc",                               # Numpy-style docstrings
+  "myst-nb",                                # Jupyter Notebook integration
+  "myst-parser",                            # Markdown support
+  "packaging",                              # Package utilities
+  "pooch",                                  # Data by downloading files from a server
+  "towncrier",
+
+  # models
+  "catboost",                               # Gradient boosting
+  "xgboost",                                # Gradient boosting
+]
+## Maintenance tools
+maintenance = [
+  "conda-lock>=3.0.0",                      # Dependency lock files for Conda
+]
+## Specialized dependencies for specific hardware
+cpu = [
+  ## https://pytorch.org/get-started/locally/#start-locally
+  # "torch",  # PyTorch
+  # "torchvision",  # PyTorch
+  # "torchaudio",  # PyTorch
+  ##
+  # "jax",#"jaxlib",                          # import jax.numpy as jnp
+  ## On Python >= 3.13, it installs exactly tensorflow-cpu==2.15.0.
+  ## "tensorflow-cpu==2.15.0; python_version >= '3.13'",  # import tensorflow as tf
+  # "keras-hub",                              # import keras_hub
+  # "keras-nlp",                              # import keras_nlp
+  "tensorflow-cpu",                         # import tensorflow as tf
+  ##
+  "transformers",                           # import transformers  # ⚠️ newer transformers does not support some tf models use keras_nlp
+  "tf-keras",                               # keras compatibility
+]
+gpu = [
+  ## https://docs.cupy.dev/en/stable/install.html#installing-cupy-from-pypi
+  "cupy-cuda12x",                           # GPU-based numerical computing
+  ##
+  ## https://pytorch.org/get-started/locally/#start-locally  --index-url https://download.pytorch.org/whl/cu124
+  # "torch",  # PyTorch
+  # "torchvision",  # PyTorch
+  # "torchaudio",  # PyTorch
+  ##
+  ## JAX: https://jax.readthedocs.io/en/latest/installation.html#installation
+  ## "jax[cuda11_cudnn805] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html",  # import jax.numpy as jnp
+  ## "jax[cuda] -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html",             # import jax.numpy as jnp
+  # "jax[cuda12]",                          # import jax.numpy as jnp
+  ##
+  # "tensorflow[and-cuda]",                   # import tensorflow as tf
+  ##
+  # "transformers",                           # import transformers
+  # "tf-keras",                               # keras compatibility
+  ##
+  # "ivy",                                    # https://github.com/ivy-llc/ivy
+  "sentence-transformers",                    # https://www.sbert.net/ also down pytorch
+]
+tpu = [
+  ## JAXlib is a library by DeepMind that provides the low-level bindings for JAX and allows you to perform tensor computations on TPU, GPU, and CPU.
+  ## https://jax.readthedocs.io/en/latest/installation.html#installation  -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+  # "jax[tpu]"                                # TPU-accelerated machine learning
+  ##
+  # "dm-haiku",  # neural network library built on top of JAX by Google Research
+  # "flax",      # Flax is another JAX-based library but with a more comprehensive set of tools for defining neural networks.
+  #
+  "tensorflow",                             # TPU-accelerated machine learning
+  #
+  "transformers",                           # import transformers
+  "tf-keras",                               # keras compatibility
+]
+extend = [
+  # model
+  "statsmodels>=0.12",
+  "catboost",                               # Gradient boosting
+  "xgboost",                                # Gradient boosting
+  ## data
+  "scikit-image",                           # Image processing
+  "plotly",                                 # Interactive plotting
+  "polars",                                 # DataFrame library
+  "pyarrow",                                # DataFrame Arrow format
+]
+ci32_requirements = [
+  ## https://anaconda.org/conda-forge/blas
+  "scipy-openblas32==0.3.29.265.1",           # Keep this in sync with ci_requirements.txt
+  "spin",                                   # https://github.com/scientific-python/spin
+]
+ci_requirements = [
+  ## https://anaconda.org/conda-forge/blas
+  "scikit-plots[ci32_requirements]",        # Reference the 'core' group as a dependency
+  "scipy-openblas64==0.3.29.265.1",           # Keep this in sync with ci32_requirements.txt
+]
+
+######################################################################
+## pip, uv
+######################################################################
+
+[tool.pip]
+extra-index-url = "https://download.pytorch.org/whl/cu124"  # PyTorch custom index GPU 12.4
+
+## https://docs.astral.sh/uv/guides/integration/pytorch/#installing-pytorch
+# [tool.uv]
+# conflicts = [[{ extra = "cpu" }, { extra = "gpu" }, { extra = "tpu" }]]
+# [tool.uv.sources]
+# torch = [
+#   { index = "pytorch-cpu", marker = "platform_system != 'Darwin' and platform_machine != 'aarch64'" },
+#   { index = "pytorch-cu124", marker = "platform_system != 'Darwin' and platform_machine != 'aarch64'" },
+# ]
+# torchvision = [
+#   { index = "pytorch-cpu", marker = "platform_system != 'Darwin' and platform_machine != 'aarch64'" },
+#   { index = "pytorch-cu124", marker = "platform_system != 'Darwin' and platform_machine != 'aarch64'" },
+# ]
+# [[tool.uv.index]]
+# name = "pytorch-cpu"
+# url = "https://download.pytorch.org/whl/cpu"
+# explicit = true
+# [[tool.uv.index]]
+# name = "pytorch-cu124"
+# url = "https://download.pytorch.org/whl/cu124"
+# explicit = true
+
+######################################################################
+## 🔻 project.urls
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#urls
+## https://packaging.python.org/en/latest/specifications/well-known-project-urls/#well-known-labels
+## https://packaging.python.org/en/latest/specifications/core-metadata/#deprecated-fields
+######################################################################
+
+## (Optionally)
+# Links to important pages related to the project
+[project.urls]
+# homepage (Homepage)
+homepage        = "https://scikit-plots.github.io"
+# source (Source Code), repository, sourcecode, github
+repository      = "https://github.com/scikit-plots/scikit-plots"
+# download (Download), equivalent to Download-URL
+download        = "https://github.com/scikit-plots/scikit-plots/tags"
+# changelog (Changelog), changes, whatsnew, history
+# The changelog, really useful for ongoing users of your project
+changelog       = "https://scikit-plots.github.io/dev/whats_new/index.html"
+# releasenotes (Release Notes)
+# documentation (Documentation), docs
+documentation   = "https://scikit-plots.github.io"
+# issues (Issue Tracker), "Bug Tracker"
+# bugs, issue, tracker, issuetracker, bugtracker
+issues          = "https://github.com/scikit-plots/scikit-plots/issues"
+# funding (Funding), sponsor, donate, donation
+# Donate        = "https://github.com/scikit-plots/scikit-plots#donate"
+# Forum         = "https://github.com/orgs/scikit-plots/discussions"
+# Forked        = "https://github.com/reiinakano/scikit-plot"
+
+######################################################################
+## 🔻 Advanced plugins: CLI
+## The difference between [project.scripts] and [project.gui-scripts] is only relevant on Windows.
+## https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#creating-executable-scripts
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#advanced-plugins
+# https://setuptools.pypa.io/en/stable/userguide/entry_point.html#entry-points-syntax
+######################################################################
+
+## (Optionally)
+# Creating executable scripts
+# [project.gui-scripts]
+# my-script-gui = "my_package[.module_gui]:function_gui"
+# [project.entry-points."spam.magical"]
+# tomatoes = "spam:main_tomatoes"
+
+## (Optionally)
+[project.scripts]
+# my-script-cli = "my_package[.module_cli]:function_cli"
+scikitplot = "scikitplot.cli:cli"
+
+[project.entry-points."scikitplot.app"]
+basic-auth = "scikitplot.server.auth:create_app"
+
+[project.entry-points."scikitplot.app.client"]
+basic-auth = "scikitplot.server.auth.client:AuthServiceClient"
+
+[project.entry-points."scikitplot.deployments"]
+databricks = "scikitplot.deployments.databricks"
+http = "scikitplot.deployments.scikitplot"
+https = "scikitplot.deployments.scikitplot"
+openai = "scikitplot.deployments.openai"
+
+######################################################################
+## 🔻 pytest
+######################################################################
+
+# Configuration for the pytest testing framework
+[tool.pytest.ini_options]
+minversion = "6.0"  # Specify the minimum version of pytest
+log_cli_level = "info"
+xfail_strict = true
+filterwarnings = [
+  "error",
+]
+## Add command-line options
+addopts = [
+  "--color=yes",
+  "--doctest-rst",
+  "--strict-config",
+  "--strict-markers",
+  "-p no:legacypath",
+]
+testpaths = [
+  "scikitplot",
+]  # Directories where tests are located
+
+######################################################################
+## 🔻 Linters and Formatters
+## 1. Ruff
+## General-purpose linter (superset of Flake8, PyLint, etc.)
+## ruff format --diff
+######################################################################
+
+[tool.ruff]
+## https://docs.astral.sh/ruff/
+## .ruff.toml or ruff.toml (Ruff config file)
+## ruff configuration
+
+# .ruff.toml
+# Ruff automatically infers the target Python version from requires-python, so setting both is redundant and discouraged.
+# Always generate Python 3.8-compatible code.
+# target-version = "py38"  # "py39", "py310", "py311" etc.  # ← remove this
+
+# fix = true
+cache-dir = "~/.cache/ruff"
+
+exclude = [
+  ".git",
+  "__pycache__",
+  "build/**",
+  "dist/**",
+  "benchmarks/**",
+  "docs/source/**",
+  "galleries/**",
+  "third_party/**",
+  "tools/**",
+  "**tests",
+  "**conftest.py",
+  "dev.py",
+  ## module
+  "scikitplot/_api",
+  "scikitplot/_build_utils",
+  "scikitplot/_factory_api",
+  "scikitplot/_lib",
+  "scikitplot/_utils",
+  "scikitplot/api",
+  "scikitplot/cexperimental",
+  "scikitplot/cexternals",
+  "scikitplot/config",
+  "scikitplot/experimental",
+  "scikitplot/externals",
+  "scikitplot/kds",
+  "scikitplot/modelplotpy",
+  "scikitplot/visualkeras",
+  "scikitplot/_testing",
+  "scikitplot/_min_dependencies.py",
+  "scikitplot/_preprocess.py",
+]
+
+line-length = 88  # Ensure this matches Black
+indent-width = 4  # 2
+
+# Enable preview features, will use unstable rules, fixes, and formatting.
+# preview = true
+
+respect-gitignore = true
+
+# Enumerate all fixed violations.
+# show-fixes = true
+
+# unsafe-fixes = null
+
+[tool.ruff.format]
+# Enable reformatting of code snippets in docstrings.
+docstring-code-format = true
+
+# Format all docstring code snippets with a line length of 60.
+# docstring-code-line-length = 88
+
+exclude = [
+  "benchmarks/**",
+  "docs/source/**",
+  "galleries/**",
+  "third_party/**",
+  "tools/**",
+  "**tests",
+  "**conftest.py",
+  "dev.py",
+  ## module
+  "scikitplot/_api",
+  "scikitplot/_build_utils",
+  "scikitplot/_factory_api",
+  "scikitplot/_lib",
+  "scikitplot/_utils",
+  "scikitplot/api",
+  "scikitplot/cexperimental",
+  "scikitplot/cexternals",
+  "scikitplot/config",
+  "scikitplot/experimental",
+  "scikitplot/externals",
+  "scikitplot/kds",
+  "scikitplot/modelplotpy",
+  "scikitplot/visualkeras",
+  "scikitplot/_testing",
+  "scikitplot/_min_dependencies.py",
+  "scikitplot/_preprocess.py",
+]
+
+# Use tabs instead of 4 space indentation.
+# indent-style = "tab"
+indent-style = "space"  # Use spaces for indentation
+
+# Use `\n` line endings for all files
+line-ending = "lf"
+
+# Prefer single quotes over double quotes.
+quote-style = "double"  # Black uses double quotes by default
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint]
+# all rules can be found here: https://beta.ruff.rs/docs/rules/
+# This enables us to use CPY001: copyright header check
+
+preview = true
+# This enables us to use the explicit preview rules that we want only
+explicit-preview-rules = true  # Enable explicit preview rules
+
+# dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# Specify which linting rules to enable.
+extend-select = [
+  "ARG",      # flake8-unused-arguments
+  "B",        # flake8-bugbear
+  "B006",     # multiple-argument-default
+  "B015",     # useless-comparison
+  # "CPY001",
+  "C4",       # flake8-comprehensions
+  "D",        # pydocstyle (docstring enforcement)
+  "D209",     # new-line-after-last-paragraph
+  "D411",     # no-blank-line-before-section
+  "D417",     # undocumented-param
+  "E",        # pycodestyle (formatting errors)
+  "EM",       # flake8-errmsg
+  "EXE",      # flake8-executable
+  "F",        # Pyflakes (logical errors)
+  "FURB",     # refurb
+  "G",        # flake8-logging-format
+  "I",        # isort
+  "ICN",      # flake8-import-conventions
+  "ISC001",   # single-line-implicit-string-concatenation
+  "NPY",      # NumPy specific rules
+  "N804",     # invalid-first-argument-name-for-class-method
+  "PD",       # pandas-vet
+  "PGH",      # pygrep-hooks
+  "PIE",      # flake8-pie
+  "PIE790",   # unnecessary-placeholder
+  "PL",       # pylint
+  "PLR0402",  # manual-from-import
+  "PLE1205",  # logging-too-many-args
+  "PLW0602",  # global-variable-not-assigned
+  "PT",       # flake8-pytest-style
+  "PT001",    # pytest-fixture-incorrect-parentheses-style
+  "PT002",    # pytest-fixture-positional-args
+  "PT003",    # pytest-extraneous-scope-function
+  "PT006",    # pytest-parameterize-names-wrong-type
+  "PT007",    # pytest-parameterize-values-wrong-type
+  "PT009",    # pytest-unittest-assertion
+  "PT010",    # pytest-raises-without-exception
+  "PT011",    # pytest-raises-too-broad
+  "PT012",    # pytest-raises-with-multiple-statements
+  "PT013",    # pytest-incorrect-pytest-import
+  "PT014",    # pytest-duplicate-parametrize-test-cases
+  "PT018",    # pytest-composite-assertion
+  "PT022",    # pytest-useless-yield-fixture
+  "PT023",    # pytest-incorrect-mark-parentheses-style
+  "PT026",    # pytest-use-fixtures-without-parameters
+  "PT027",    # pytest-unittest-raises-assertion
+  # "PTH",      # flake8-use-pathlib
+  "PYI",      # flake8-pyi
+  "RET",      # flake8-return
+  "RET504",   # unnecessary-assign
+  "RUF",      # Ruff-specific
+  "RUF003",   # ambiguous-unicode-character-comment
+  "RUF010",   # explicit-f-string-type-conversion
+  "RUF013",   # implicit-optional
+  "RUF100",   # unused-noqa
+  "S",        # flake8-bandit (security checks)
+  "S307",     # suspicious-eval-usage
+  "S324",     # hashlib-insecure-hash-function
+  "SIM",      # flake8-simplify
+  "SIM101",   # duplicate-isinstance-call
+  "SIM108",   # if-else-block-instead-of-if-exp
+  "SIM114",   # if-with-same-arms
+  "SIM115",   # open-file-with-context-handler
+  "SIM210",   # if-expr-with-true-false
+  "SIM910",   # dict-get-with-none-default
+  "T20",      # flake8-print
+  "TID251",   # banned-api
+  # "TID252",   # relative-improt
+  "TRY203",   # useless-try-except
+  "UP",       # pyupgrade
+  "UP004",    # useless-object-inheritance
+  "UP006",    # non-pep585-annotation
+  "UP008",    # super-call-with-parameters
+  "UP011",    # lru-cache-without-parameters
+  "UP012",    # unecessary-encode-utf8
+  "UP015",    # redundant-open-modes
+  "UP030",    # format-literals
+  "UP031",    # printf-string-format
+  "UP034",    # extraneous-parenthesis
+  "YTT",      # flake8-2020
+  "N",        # pep8-naming (naming conventions)
+  "W",        # warning
+]
+ignore = [
+  "ARG001", "ARG002", "ARG005",             # Unused method argument
+  "D200",                                   # One-line docstring should fit on one line
+  "D202",                                   # No blank lines allowed after function docstring
+  "EM101",                                  # Exception must not use a string literal, assign to variable first
+  "EM102",                                  # Exception must not use an f-string literal, assign to variable first
+  "EXE002",                                 # Ignore shebang missing warning
+  "E203",                                   # space before : (needed for how black formats slicing)
+  "E402",                                   # module-import-not-at-top-of-file
+  "E501",
+  "E721",  # E721 is in preview (july 2024) and gives many false positives. Use `is` and `is not` for type comparisons, or `isinstance()`
+  "E722",                                   # Do not use bare `except`
+  "E731",                                   # do not assign a lambda expression, use a def
+  "E741",                                   # ambiguous-variable-name, do not use variables named 'l', 'O', or 'I's
+  "F811",                                   # redefined-while-unused
+  "F841",  # F841 is in preview (july 2024), and we don't care much about it. Local variable ... is assigned to but never used
+  "G004",                                   # Logging statement uses f-string
+  "PLR0913",                                # Too many arguments in function definition (6 > 5)
+  "PLR0915",                                # Too many statements (52 > 50)
+  "RUF100",                                 # Prevent Ruff from removing `# noqa`
+  "S110",                                   # `try`-`except`-`pass` detected, consider logging the exception
+  "UP015",                                  # Unnecessary open mode parameters
+]
+
+# [tool.ruff.lint.per-file-ignores]
+[tool.ruff.lint.extend-per-file-ignores]
+# It's fine not to put the import at the top of the file in the examples
+# folder.
+"!.github/**"=["CPY001"]
+"!.spin/**"=["CPY001"]
+"benchmarks/**"=["CPY001"]
+"!docs/**"=["CPY001"]
+"!docs/conf.py"=["E402"]
+"docs/*.py" = [
+  "INP001",                                 # implicit-namespace-package. The examples are not a package.
+]
+# "!galleries/**"=["E402"]
+# "galleries/examples/classification/plot_precision_recall.py"=["CPY001"]
+# "!tools/**"=[
+#   "CPY001",  # missing-copyright-notice (CPY001) | Ruff
+# ]
+# Ignore `CPY001` rules everywhere except for the `...` directory.
+# "!scikitplot/_build_utils/**" = [
+#   "CPY001",  # missing-copyright-notice (CPY001) | Ruff
+# ]
+# Ignore `D` rules everywhere except for the `src/` directory.
+# "!src/**.py" = [
+#   "D",
+# ]
+"test_*.py" = [
+  "ANN201",                                 # Public function without return type annotation
+  "B018",                                   # UselessExpression
+  "D",                                      # pydocstyle
+  "S101",                                   # Use of assert detected
+]
+"conftest.py" = [                           # Part of configuration, not a package.
+  "INP001",
+]
+
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = "\\#\\ Authors:\\ The\\ scikit\\-plots\\ developers\\\r?\\\n\\#\\ SPDX\\-License\\-Identifier:\\ BSD\\-3\\-Clause"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"pkg_resources".msg = "Do not use pkg_resources. Use importlib.resources or importlib.metadata instead."
+"entrypoints".msg = "Do not use entrypoints. Use importlib.metadata.entry_points instead."
+"pip".msg = "Importing pip can cause undesired side effects such as https://github.com/scikit-learn/scikit-learn/issues/26992. Consider using `subprocess.run([sys.executable, '-m', 'pip', ...])` instead."
+
+[tool.ruff.lint.isort]
+known-first-party = ["scikitplot"]
+forced-separate = ["tests"]
+
+[tool.ruff.lint.pydocstyle]
+# convention = "google"
+# Enforce NumPy docstring conventions
+convention = "numpy"
+
+######################################################################
+## Linters and Formatters
+## 2. Flake8
+## Legacy linter config (Ruff may replace this)
+######################################################################
+
+# .flake8
+
+######################################################################
+## Linters and Formatters
+## 3. Black
+## Code formatter
+## black --verbose --check --diff .
+######################################################################
+
+# Black is a code formatter; this section configures its behavior.
+[tool.black]
+line-length = 88                            # Maximum line length 88
+
+# Always generate Python 3.8-compatible code.
+# Black technically accepts a list
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+
+preview = true                              # Enable Black's preview features
+
+extend-exclude = '''
+# A regex preceded with ^/ will apply only to files and directories
+# in the root of the project.
+/(
+    \.eggs         # exclude a few common directories in the
+  | \.git          # root of the project
+  | \.mypy_cache
+  | \.vscode
+  | benchmarks
+  | build
+  | dist
+  | docs/build
+  | docs/source
+  | galleries
+  | third_party
+  | tools
+  | tests
+  | scikitplot/cexperimental
+  | scikitplot/cexternals
+  | scikitplot/experimental
+  | scikitplot/externals
+  | scikitplot/modelplotpy
+  | scikitplot/visualkeras
+)/
+'''
+
+######################################################################
+## Linters and Formatters
+## 4. isort
+## Import sorter
+######################################################################
+
+[tool.isort]
+profile = "black"  # Make isort compatible with Black's formatting style
+known_third_party = ["cython"]  # Ensure Cython is considered a third-party library
+line_length = 88  # Matches Black and Flake8 line length
+
+######################################################################
+## Linters and Formatters
+## 5. MyPy
+## Static type checker
+######################################################################
+
+# .mypy.ini
+# Always generate Python 3.8-compatible code.
+# python_version = 3.11  # Use Python 3.10 type hints and features
+# strict = true  # Enable all strict type checking features
+
+######################################################################
+## Linters and Formatters
+## 6. cython-lint
+## Lint for Cython files
+######################################################################
+
+[tool.cython-lint]
+# Ignore the same error codes as ruff
+# + E501 (line too long) because keeping it < 88 in cython
+# often makes code less readable.
+ignore = [
+  # multiple spaces/tab after comma
+  'E24',
+  # space before : (needed for how black formats slicing)
+  'E203',
+  # line too long
+  'E501',
+  # do not assign a lambda expression, use a def
+  'E731',
+  # do not use variables named 'l', 'O', or 'I'
+  'E741',
+  # line break before binary operator
+  'W503',
+  # line break after binary operator
+  'W504',
+  # expected 2 blank lines
+  'E302',
+  # imported but unused
+  # 'F401',
+]
+# Exclude files are generated from tempita templates
+exclude= '''
+(
+    benchmarks/
+  | scikitplot/metrics/_dist_metrics.pyx
+)
+'''
+
+######################################################################
+## codespell
+## https://github.com/codespell-project/codespell
+## If several config files are present, they are read in the following order:
+##   1. pyproject.toml (only if the tomli library is available for Python < 3.11)
+##   2. setup.cfg
+##   3. .codespellrc
+##   4. any additional file supplied via --config
+######################################################################
+
+[tool.codespell]
+# specific files or directories (specified via their names or glob patterns):
+skip = """
+  *.cff,
+  docs/credits.rst,
+  galleries/*,
+  scikitplot/cexternals/*,
+  scikitplot/externals/*,
+  third_party/*,
+  tools/*,
+"""
+count = true
+# quiet-level = 3
+
+# The following list of words for codespell to ignore may contain some
+# misspellings that should be revisited and fixed in the future.
+ignore-words = ".codespellrc-ignore-words"
+ignore-words-list = ".codespellrc-ignore-words"
+
+######################################################################
+## 🔻 repo-review
+######################################################################
+
+[tool.repo-review]
+ignore = [
+  "MY",    # ignore MyPy setting checks
+  "PC111", # ignore using `blacken-docs` in pre-commit
+  "PC140", # ignore using `mypy` in pre-commit
+  "PC180", # ignore using `prettier` in pre-commit
+  "PC901", # ignore using custom update message (we have many of the default ones in our history already)
+  "PP308", # ignore requiring `-ra` flag for pytest, astropy's test suite is too large for this to be useful
+  "PY005", # ignore requiring a root level "test*" directory
+]
+
+######################################################################
+## 🔻 cibuildwheel
+## https://cibuildwheel.pypa.io/en/stable/options/
+######################################################################
+
+[tool.cibuildwheel]
+# Note: the below skip command doesn't do much currently, the platforms to
+# build wheels for in CI are controlled in `.github/workflows/wheels.yml` and
+# `tools/ci/cirrus_wheels.yml`.
+skip = ["*_i686", "*_ppc64le", "*_s390x", "*_universal2"]
+build-frontend = "build"
+# We're only testing with essential test dependencies, not optional ones.
+# Some of those require binary wheels (often missing for some platforms),
+# or they slow down the test suite runs too much or simply aren't necessary.
+
+# /project will be the $PWD equivalent inside the docker used to build the wheel
+# {project} might be used for higher-level tasks, like referencing the project root.
+# {package} is used to refer to the specific package directory for cibuildwheel
+before-test = "pip install -r {project}/requirements/test.txt"
+# test-requires = [
+#   "pytest",
+#   "pytest-xdist",
+#   "threadpoolctl",
+#   "pooch",
+#   "hypothesis",
+# ]
+test-command = "bash {project}/tools/wheels/cibw_test_command.sh {project}"
+
+before-build = "bash {project}/tools/wheels/cibw_before_build.sh {project}"
+
+# CIBW_ENABLE="cpython-prerelease cpython-freethreading"
+enable = ["cpython-freethreading", "cpython-prerelease", "pypy"]  # for >=v3.0.0
+
+# The build will use openblas64 everywhere, except on arm64 macOS >=14.0 (uses Accelerate)
+[tool.cibuildwheel.config-settings]
+setup-args = ["-Duse-ilp64=true", "-Dallow-noblas=false"]
+build-dir = "build"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"  # "manylinux2014"
+manylinux-aarch64-image = "manylinux_2_28"  # "manylinux2014"
+musllinux-x86_64-image = "musllinux_1_2"
+musllinux-aarch64-image = "musllinux_1_2"
+
+# environment = {}
+
+# Linux-specific environment variables
+[tool.cibuildwheel.linux.environment]
+# /project will be the $PWD equivalent inside the docker used to build the wheel
+PKG_CONFIG_PATH = "/project/.openblas"
+CIBW_ENVIRONMENT = "PKG_CONFIG_PATH=/project/.openblas"
+LD_LIBRARY_PATH = "/project/.openblas/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# RUNNER_OS is a GitHub Actions specific env var; define it here so it works on Cirrus CI too
+RUNNER_OS="Linux"
+
+[tool.cibuildwheel.macos]
+# universal2 wheels are not supported (see gh-21233), use `delocate-fuse` if you need them
+# note that universal2 wheels are not built, they're listed in the tool.cibuildwheel.skip
+# section
+# Not clear why the DYLD_LIBRARY_PATH is not passed through from the environment
+repair-wheel-command = [
+  "export DYLD_LIBRARY_PATH=$PWD/.openblas/lib",
+  "echo DYLD_LIBRARY_PATH $DYLD_LIBRARY_PATH",
+  "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}",
+]
+
+# macOS-specific environment variables
+[tool.cibuildwheel.macos.environment]
+# /project will be the $PWD equivalent inside the docker used to build the wheel
+PKG_CONFIG_PATH = "/project/.openblas"
+DYLD_LIBRARY_PATH = "/project/.openblas/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+CIBW_ENVIRONMENT_MACOS = "PKG_CONFIG_PATH=/project/.openblas"
+
+[tool.cibuildwheel.windows]
+config-settings = {setup-args = ["--vsenv", "-Dallow-noblas=false"], build-dir="build"}
+repair-wheel-command = "bash -el ./tools/wheels/repair_windows.sh {wheel} {dest_dir}"
+
+# This does not work, use CIBW_ENVIRONMENT_WINDOWS
+# environment = {PKG_CONFIG_PATH="./.openblas"}
+
+# [[tool.cibuildwheel.overrides]]
+# select = [
+#   "*-win32",  # not "*-win_amd64"
+# ]
+# config-settings = {setup-args = ["--vsenv", "-Dallow-noblas=true"], build-dir="build"}
+# repair-wheel-command = ""  # Leave empty if no repair script is needed
+
+# Windows-specific environment variables
+[tool.cibuildwheel.windows.environment]
+# /project will be the $PWD equivalent inside the docker used to build the wheel
+# This does not work because pkg-config does not like backslashes,
+PKG_CONFIG_PATH = "{project}/.openblas"
+PATH = "{project}/.openblas/lib;$PATH"
+# do this instead (which will override this setting)
+# set CIBW_ENVIRONMENT_WINDOWS=PKG_CONFIG_PATH=PWD.replace('\\', '/')
+# CIBW_ENVIRONMENT_WINDOWS = "PKG_CONFIG_PATH={project}/.openblas"
+
+[tool.cibuildwheel.pyodide]
+before-test = "pip install -r {project}/requirements/emscripten_test.txt"
+# Pyodide ensures that the wheels are already repaired by auditwheel-emscripten
+repair-wheel-command = ""
+test-command = "python -c 'import scikitplot; print(scikitplot.__version__)'"
+
+[tool.cibuildwheel.pyodide.config-settings]
+build-dir = "build"
+setup-args = ["--cross-file=$PWD/tools/ci/emscripten/emscripten.meson.cross", "-Dblas=none", "-Dlapack=none"]
+
+######################################################################
+## doit
+######################################################################
+
+# [tool.doit]
+# dodoFile = "dev.py"
+
+######################################################################
+## 🔻 gilesbot
+## https://github.com/scientific-python/action-towncrier-changelog
+######################################################################
+
+[tool.gilesbot]
+  ## https://github.com/Cadair/giles
+  [tool.gilesbot.circleci_artifacts]
+    enabled = true
+
+  [tool.gilesbot.pull_requests]
+    enabled = true
+
+  ## To enable checking of milestones
+  # [tool.gilesbot.milestones]
+  #   enabled = true
+
+  ## Towncrier Changelog Checking
+  [tool.gilesbot.towncrier_changelog]
+    enabled = true  # default is false
+    whatsnew_label = "whats_new-needed"  # default
+    changelog_noop_label = "skip-changelog-checks"  # default
+    changelog_skip_label = "no-changelog-entry-needed"  # default is none
+    verify_pr_number = true  # default is false
+    number_incorrect_long = """The number in the changelog file you added
+      does not match the number of this pull request. Please rename the file."""
+    help_url = "https://github.com/scikit-plots/scikit-plots/blob/main/docs/source/whats_new/upcoming_changes/README.md"
+    changelog_missing_long = """There isn't a changelog file in this pull request.
+      Please add a changelog file to the `docs/source/whats_new/upcoming_changes/`
+      directory following the instructions in the changelog
+      [README](https://github.com/scikit-plots/scikit-plots/blob/main/docs/source/whats_new/upcoming_changes/README.md)."""
+    type_incorrect_long = """The changelog file you added is not one of the allowed types.
+      Please use one of the types described in the changelog
+      [README](https://github.com/scikit-plots/scikit-plots/blob/main/docs/source/whats_new/upcoming_changes/README.md)"""
+    whatsnew_pattern = '''docs/source/whats_new/[^/]+/[^/]+/v?\d+\.[^.]+\.rst'''
+
+######################################################################
+## 🔻 towncrier
+## https://github.com/scientific-python/action-towncrier-changelog
+######################################################################
+
+[tool.towncrier]
+  all_bullets  = false
+  single_file  = true
+  issue_format = ":pr:`{issue}`"
+  underlines = "=-^"
+  package      = "scikitplot"
+  filename     = "docs/source/whats_new/v0.5.rst"
+  directory    = "docs/source/whats_new/upcoming_changes"
+  template     = "docs/source/whats_new/upcoming_changes/towncrier_template.rst.jinja2"
+
+  # === towncrier.type ===
+
+  [[tool.towncrier.type]]
+    directory = "major-feature"
+    name = "|MajorFeature|"
+    showcontent = true
+
+  [[tool.towncrier.type]]
+    directory = "feature"
+    name = "|Feature|"
+    showcontent = true
+
+  [[tool.towncrier.type]]
+    directory = "efficiency"
+    name = "|Efficiency|"
+    showcontent = true
+
+  [[tool.towncrier.type]]
+    directory = "enhancement"
+    name = "|Enhancement|"
+    showcontent = true
+
+  [[tool.towncrier.type]]
+    directory = "fix"
+    name = "|Fix|"
+    showcontent = true
+
+  [[tool.towncrier.type]]
+    directory = "api"
+    name = "|API|"
+    showcontent = true
+
+  [[tool.towncrier.type]]
+    directory = "other"
+    name = ""
+    showcontent = true
+
+  # === towncrier.section ===
+
+  [[tool.towncrier.section]]
+    name = "Support for Array API"
+    path = "array-api"
+
+  [[tool.towncrier.section]]
+    name = "Changed models"
+    path = "changed-models"
+
+  [[tool.towncrier.section]]
+    name = "Security"
+    path = "security"
+
+  [[tool.towncrier.section]]
+    name = "Changes impacting many modules"
+    path = "many-modules"
+
+  [[tool.towncrier.section]]
+    name = "Metadata routing"
+    path = "metadata-routing"
+
+  [[tool.towncrier.section]]
+    name = "custom-top-level"
+    path = "custom-top-level"
+
+  [[tool.towncrier.section]]
+    name = ":mod:`scikitplot.cexternals._astropy`"
+    path = "scikitplot.cexternals._astropy"
+
+  [[tool.towncrier.section]]
+    name = ":mod:`scikitplot.externals._seaborn`"
+    path = "scikitplot.externals._seaborn"
+
+  [[tool.towncrier.section]]
+    name = ":mod:`scikitplot.api`"
+    path = "scikitplot.api"
+
+  [[tool.towncrier.section]]
+    name = ":mod:`scikitplot.utils`"
+    path = "scikitplot.utils"
+
+######################################################################
+## meson-python
+######################################################################
+
+# [tool.meson-python]
+# meson = 'vendored-meson/meson/meson.py'
+
+# [tool.meson-python.args]
+# install = ['--tags=runtime,python-runtime,tests,devel']
+
+######################################################################
+## spin
+######################################################################
+
+## https://github.com/scientific-python/spin
+# [tool.spin]
+# package = 'numpy'
+
+# [tool.spin.meson]
+# cli = 'vendored-meson/meson/meson.py'
+
+# [tool.spin.commands]
+# "Build" = [
+#   ".spin/cmds.py:build",
+#   ".spin/cmds.py:test",
+#   ".spin/cmds.py:mypy",
+#   ".spin/cmds.py:config_openblas",
+#   ".spin/cmds.py:lint",
+# ]
+# "Environments" = [
+#   "spin.cmds.meson.run",
+#   ".spin/cmds.py:ipython",
+#   ".spin/cmds.py:python",
+#   "spin.cmds.meson.gdb",
+#   "spin.cmds.meson.lldb"
+# ]
+# "Documentation" = [
+#   ".spin/cmds.py:docs",
+#   ".spin/cmds.py:changelog",
+#   ".spin/cmds.py:notes",
+#   ".spin/cmds.py:check_docs",
+#   ".spin/cmds.py:check_tutorials",
+# ]
+# "Metrics" = [".spin/cmds.py:bench"]
+
+######################################################################
+##
+######################################################################
