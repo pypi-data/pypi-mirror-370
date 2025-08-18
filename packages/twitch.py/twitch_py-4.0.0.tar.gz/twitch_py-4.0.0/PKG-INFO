@@ -1,0 +1,112 @@
+Metadata-Version: 2.1
+Name: twitch.py
+Version: 4.0.0
+Summary: Async Python wrapper for Twitch EventSub and Helix API
+Author-email: Snifo <Snifo@mail.com>
+License: MIT
+Project-URL: Homepage, https://github.com/mrsnifo/twitch.py
+Project-URL: Documentation, https://twitchpy.readthedocs.io/latest/
+Project-URL: Repository, https://github.com/mrsnifo/twitch.py
+Project-URL: Issue tracker, https://github.com/mrsnifo/twitch.py/issues
+Project-URL: Discord, https://discord.gg/UFTkgnse7d
+Keywords: twitch,api,eventsub,websocket,helix,conduit
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Framework :: AsyncIO
+Requires-Python: <4.0,>=3.11.0
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: aiohttp<4.0,>=3.10.6
+Provides-Extra: docs
+Requires-Dist: mkdocs-material==9.6.16; extra == "docs"
+Requires-Dist: mkdocstrings-python==1.17.0; extra == "docs"
+
+# twitch.py
+[![PyPI - Version](https://img.shields.io/pypi/v/twitch.py?color=%236A5ACD)](https://pypi.org/project/twitch.py)
+[![Python Versions](https://img.shields.io/pypi/pyversions/twitch.py?color=%236A5ACD)](https://pypi.org/project/twitch.py)
+
+An async Python wrapper for Twitch that handles real-time events via WebSocket EventSub and integrates with the Helix API.
+
+## Key Features
+* Async/await support throughout
+* Complete Twitch Helix API integration
+* WebSocket EventSub for real-time events
+* Built-in authentication and token management
+
+## Installing
+To install the library, you can just run the following command:
+```bash
+# Linux/macOS
+python3 -m pip install -U twitch.py
+# Windows
+py -3 -m pip install -U twitch.py
+```
+
+For the development version:
+```bash
+git clone https://github.com/mrsnifo/twitch.py
+cd twitch.py
+python3 -m pip install -U .
+```
+
+## Quick Example
+```python
+from twitch import App
+
+async def main():
+    async with App('CLIENT_ID', 'CLIENT_SECRET') as app:
+        emotes = await app.application.get_global_emotes()
+        print(f'Found {len(emotes)} global emotes')
+
+import asyncio
+asyncio.run(main())
+```
+
+## Client App Example
+```python
+from twitch.eventsub import ClientApp, Event, ChannelChatMessageEvent
+
+client = ClientApp('CLIENT_ID', 'CLIENT_SECRET')
+
+@client.event
+async def on_chat_message_v1(message: Event[ChannelChatMessageEvent]):
+    print(message.event.message)
+
+@client.event
+async def on_ready():
+    user = await client.add_user('ACCESS_TOKEN')
+    await client.eventsub.channel_chat_message(broadcaster_user_id=user.id, user_id=user.id)
+
+# Switches between shards if one fails. For multi-sharding use MultiShardClientApp.
+client.run('CONDUIT_ID', shard_ids=(0,))
+```
+
+## Client User Example
+```python
+from twitch.eventsub import ClientUser, Event, ChannelFollowEvent
+
+client = ClientUser('CLIENT_ID', 'CLIENT_SECRET')
+
+@client.event
+async def on_ready():
+    print('Client is ready!')
+    await client.eventsub.channel_follow()
+
+@client.event
+async def on_channel_follow_v2(message: Event[ChannelFollowEvent]):
+    print(f'{message.event.user.name} just followed!')
+
+client.run('ACCESS_TOKEN')
+```
+
+More usage examples available in the examples folder.
+
+## Links
+- [Documentation](https://twitchpy.readthedocs.io/latest/)
+- [Twitch API](https://discord.gg/UFTkgnse7d)
