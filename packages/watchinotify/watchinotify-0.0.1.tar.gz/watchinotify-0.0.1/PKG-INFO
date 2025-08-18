@@ -1,0 +1,145 @@
+Metadata-Version: 2.4
+Name: watchinotify
+Version: 0.0.1
+Summary: Simple and powerfull file watcher using libc's inotify
+Author-email: Corentin <corentin@ayo.tokyo>
+License-Expression: GPL-3.0-or-later
+Project-URL: Homepage, https://git.ayo.tokyo/corentin/watchinotify
+Project-URL: Issues, https://git.ayo.tokyo/corentin/watchinotify/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: POSIX :: Linux
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
+Dynamic: license-file
+
+# FileWatch
+
+FileWatch is a python library to easily use the libc's inotify functions to watch for any file interaction.
+
+The library aims at being simple yet powerfull with easily auditable code.
+
+
+## Limitations
+
+**If you watch a file or a folder for a move it will be unwatched after being moved** (renaming is considered a move). This is a limitation of the inotify system which desn't give any way to know the new name/path. **Any move/rename within watched folders are kept being tracked**, this also works with the recursive option.
+
+**When using the recursive option the folder SUB_CREATED and SUB_MOVED events are enforced.** Otherwise the watcher would not be able to keep track of the file tree after adding or moving folders.
+
+
+## Install
+
+Use pip or equivalent to install package name `watchinotify`:
+``` shell
+pip install watchinotify
+```
+
+## Usage
+
+Create a `Watcher` and assign its `callback` to your custom function, then with the `Watcher`'s `watch` function to add a list (or any iterable) or path to file/folder to watch. The watcher is going to run on a separated thread waiting for any event then calling the `callback`. You can run your code after calling `watch` or wait for an event using the `threading.Event` for instance.
+
+The following example explicits the parameters types of the callback function:
+
+``` python
+from pathlib import Path
+import threading
+
+from watchinotify import Watcher
+
+event_received = threading.Event()
+
+def callback(path: Path | None, event, name: bytes):
+    print(f'New event {event} from path {path} with additionnal name {name.decode()}')
+    event_received.set()
+
+watcher = Watcher() as watcher:
+watcher.watch([Path('/path/to/watch')])
+watcher.callback = callback
+# Any of your code from here
+event_received.wait()
+
+# Do not forget to close the watcher once done (or use a 'with' statement)
+watcher.close()
+```
+
+Using a `with` statement is easier and safer so the `close` will be automatically called.
+
+``` python
+with Watcher(event_type, exclude_patterns, recursive) as watcher:  # will automatically close
+    watcher.watch([Path('/path/to/watch')])
+```
+
+The Watcher has 3 arguments:
+* **event_type** : what type of event to watch see the ***Event Type** section below. If set to None it is using default value of `FileEvent.MODIFIED | FileEvent.DELETED | FileEvent.MOVED` for files and `FolderEvent.DELETED | FolderEvent.MOVED | FolderEvent.SUB_CREATED | FolderEvent.SUB_DELETED | FolderEvent.SUB_MOVED` for folders. You can use the parent `Event` type to set all required events, if you want specific events separated it is better to create multiple watchers. **Default: None**
+* **exclude_patterns** : iterable (list, tuple, etc) of pattern to ignore,following glob conventions, example : `['*/sub_folder', __pycache__]`. **Default: None**
+* **recursive** : boolean to watch recursively all sub folders/files when adding a folder to watch. This will force the events `FolderEvent.SUB_CREATED` and `FolderEvent.SUB_MOVED` to be watched in order to properly work, you'll have to filter out those event in you callback if unwanted. **Default: True**
+
+### Event Types
+
+All possible events are un the `Event` flag. You can cumulate events by using the `or` or `|` operator. 2 additionnal types `FileEvent` and `FolderEvent` inherits from the `Event` values but only contains the event that can be trigger respectively from files and folders. The 2 sub types also have an `ALL` value as a handy shortcut.
+
+The events are defined as:
+``` python
+from enum import IntFlag, auto
+
+class Event(IntFlag):
+    OPENED = auto()
+    MODIFIED = auto()
+    DELETED = auto()
+    MOVED = auto()
+    CLOSED = auto()
+    SUB_CREATED = auto()
+    SUB_DELETED = auto()
+    SUB_MOVED = auto()
+
+
+class FileEvent(IntFlag):
+    OPENED = Event.OPENED.value
+    MODIFIED = Event.MODIFIED.value
+    DELETED = Event.DELETED.value
+    MOVED = Event.MOVED.value
+    CLOSED = Event.CLOSED.value
+
+    ALL = OPENED | MODIFIED | DELETED | MOVED | CLOSED
+
+
+class FolderEvent(IntFlag):
+    DELETED = Event.DELETED.value
+    MOVED = Event.MOVED.value
+    SUB_CREATED = Event.SUB_CREATED.value
+    SUB_DELETED = Event.SUB_DELETED.value
+    SUB_MOVED = Event.SUB_MOVED.value
+
+    ALL = DELETED | MOVED | SUB_CREATED | SUB_DELETED | SUB_MOVED
+```
+
+## Development
+
+### Run test
+
+``` shell
+pytest
+```
+
+### Run coverage
+
+``` shell
+python tests/run_coverage.py
+```
+
+## LICENSE
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
