@@ -1,0 +1,1 @@
+from .spectral_conv import SpectralConv1D, SpectralConv2D, SpectralConv3D
