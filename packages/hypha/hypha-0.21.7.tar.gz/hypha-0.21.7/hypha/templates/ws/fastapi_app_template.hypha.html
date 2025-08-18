@@ -1,0 +1,93 @@
+<config lang="json">
+{
+    "name": "FastAPI Web App",
+    "type": "web-python",
+    "version": "0.1.0",
+    "description": "A modern FastAPI web application with elegant styling and interactive features.",
+    "tags": ["web", "api", "fastapi", "modern"],
+    "ui": "",
+    "cover": "",
+    "icon": "🚀",
+    "api_version": "0.1.8",
+    "requirements": ["fastapi==0.112.1"],
+    "dependencies": [],
+    "startup_config": {
+        "timeout": 60,
+        "wait_for_service": "hello-fastapi",
+        "stop_after_inactive": 600
+    }
+}
+</config>
+
+<script lang="python">
+from hypha_rpc import api
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+import time
+import json
+from datetime import datetime
+
+def create_fastapi_app():
+    app = FastAPI(
+        title="Modern FastAPI App",
+        description="A stylish FastAPI application with interactive features",
+        version="1.0.0"
+    )
+
+    @app.get("/", response_class=HTMLResponse)
+    async def home():
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return f"""
+        <html>
+        <head>
+            <title>Modern FastAPI App</title>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🚀 Modern FastAPI App</h1>
+                    <div class="subtitle">A stylish web application with interactive features</div>
+                </div>
+                
+                <div class="status">
+                    <strong>Status:</strong> ✅ Service Running<br>
+                    <strong>Time:</strong> {current_time}<br>
+                    <strong>Service:</strong> hello-fastapi
+                </div>
+            </div>
+
+        </body>
+        </html>
+        """
+
+    @app.get("/api/add/{a}/{b}")
+    async def add_numbers(a: int, b: int):
+        result = a + b
+        return {
+            "operation": "addition",
+            "inputs": {"a": a, "b": b},
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+    return app
+
+async def setup():
+    # Registering FastAPI app
+    fastapi_app = create_fastapi_app()
+
+    async def serve_fastapi(args):
+        await fastapi_app(args["scope"], args["receive"], args["send"])
+
+    await api.register_service({
+        "id": "hello-fastapi",
+        "type": "asgi",
+        "serve": serve_fastapi,
+        "config": {
+            "visibility": "public"
+        }
+    }, {"overwrite": True})
+
+api.export({"setup": setup})
+</script> 
