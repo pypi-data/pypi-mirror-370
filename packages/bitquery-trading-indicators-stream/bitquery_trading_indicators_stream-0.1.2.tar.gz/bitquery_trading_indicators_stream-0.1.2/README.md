@@ -1,0 +1,49 @@
+# Streaming Crypto Trading Indicators in Real-time
+
+Real-time Token Volume,SMA,RSI and VWAP streaming from Bitquery.
+
+## Installation
+
+```bash
+pip install bitquery-trading-indicators-stream
+```
+
+## Configuration
+
+You need to generate an authorization token on your Bitquery account. Generate one [here](https://account.bitquery.io/user/api_v2/access_tokens)
+
+Provide your Bitquery token via one of:
+
+- Environment variable: `BITQUERY_TOKEN` (or `BITQUERY_OAUTH_TOKEN`)
+- Config file JSON with key `oauth_token` or `token` at one of:
+  - `./config.json`
+  - `~/.config/trading-indicators/config.json`
+  - `~/.trading-indicators.json`
+- CLI flag: `--token` (highest precedence)
+
+Example `config.json`:
+
+```json
+{ "oauth_token": "YOUR_TOKEN_HERE" }
+```
+
+## Usage
+
+Run via CLI:
+
+```bash
+bitquery-trading-indicators-stream --duration 120 --rsi-period 14 --vwap-period 20
+```
+
+Or import as a library:
+
+```python
+from trading_indicators import load_token, run_stream
+
+token = load_token()
+run_stream(token, rsi_period=14, vwap_period=20, duration_seconds=120)
+```
+
+Source Price Feed is [here](https://docs.bitquery.io/docs/trading/crypto-price-api/introduction/)
+
+Tutorial is [here](https://docs.bitquery.io/docs/usecases/trading-indicators/)
