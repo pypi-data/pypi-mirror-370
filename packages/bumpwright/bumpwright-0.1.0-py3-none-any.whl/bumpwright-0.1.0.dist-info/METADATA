@@ -1,0 +1,213 @@
+Metadata-Version: 2.4
+Name: bumpwright
+Version: 0.1.0
+Summary: Static public-API diff + heuristics to suggest semantic version bumps.
+Author-email: Lewis Morris <lewis@arched.dev>
+License: MIT License
+        
+        Copyright (c) 2024 Lewis Morris
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: homepage, https://github.com/arched-dev/bumpwright
+Project-URL: repository, https://github.com/arched-dev/bumpwright
+Project-URL: documentation, https://bumpwright.readthedocs.io
+Project-URL: bug_tracker, https://github.com/arched-dev/bumpwright/issues
+Keywords: semantic-versioning,semver,api,diff,release
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Version Control
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: libcst>=1.4.0
+Requires-Dist: tomlkit>=0.13.2
+Requires-Dist: jinja2>=3.1
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: graphql-core>=3.2
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: flask; extra == "test"
+Requires-Dist: fastapi; extra == "test"
+Requires-Dist: alembic; extra == "test"
+Requires-Dist: sqlalchemy; extra == "test"
+Requires-Dist: tomlkit; extra == "test"
+Requires-Dist: click; extra == "test"
+Provides-Extra: docs
+Requires-Dist: sphinx>=7.3; extra == "docs"
+Requires-Dist: sphinx-wagtail-theme; extra == "docs"
+Requires-Dist: sphinx-autodoc-typehints>=2.2; extra == "docs"
+Requires-Dist: sphinx-copybutton>=0.5.2; extra == "docs"
+Requires-Dist: myst-parser; extra == "docs"
+Requires-Dist: sphinx-click; extra == "docs"
+Requires-Dist: sphinxcontrib-mermaid; extra == "docs"
+Requires-Dist: sphinx-inline-tabs; extra == "docs"
+Requires-Dist: sphinx_design; extra == "docs"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.2; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: ruff>=0.5; extra == "dev"
+Requires-Dist: black>=24.0; extra == "dev"
+Requires-Dist: isort>=5.12; extra == "dev"
+Requires-Dist: anybadge>=1.14; extra == "dev"
+Dynamic: license-file
+
+# bumpwright
+
+![Coverage](https://lewis-morris.github.io/bumpwright/_static/badges/coverage.svg)
+![Version](https://lewis-morris.github.io/bumpwright/_static/badges/version.svg)
+![Python Versions](https://lewis-morris.github.io/bumpwright/_static/badges/python.svg)
+![License](https://lewis-morris.github.io/bumpwright/_static/badges/license.svg)
+
+Bumpwright compares two Git refs, inspects your **public API**, and recommends (or applies) the correct semantic version bump. It can also update version strings in your project and render changelog entries from your commits.
+
+**Docs:** https://lewis-morris.github.io/bumpwright
+**Usage recipes:** https://lewis-morris.github.io/bumpwright/usage-patterns.html
+
+---
+
+## Why Bumpwright?
+
+- **Code-first accuracy** – infers breaking/minor/patch from exported symbols, not commit messages.  
+- **Optional analysers** – enable checks for CLI, web routes, migrations, OpenAPI/GraphQL, and more.
+- **CI-friendly** – print a decision (`text|md|json`) or apply + tag releases automatically.
+
+Get started in the [Introduction](https://lewis-morris.github.io/bumpwright/#introduction) or dive into the [Quickstart](https://lewis-morris.github.io/bumpwright/get-started.html#quickstart).
+
+---
+
+## Install
+
+```bash
+pip install bumpwright  # Python 3.11+
+```
+
+Bumpwright now uses Python's built-in `tomllib`, removing the need for the
+external `tomli` dependency.
+
+Full details: [Installation](https://lewis-morris.github.io/bumpwright/get-started.html#installation)
+
+---
+
+## TL;DR (90 seconds)
+
+```bash
+# 1) Create a baseline release commit once
+bumpwright init
+
+# 2) Ask Bumpwright what the next version should be
+bumpwright decide
+
+# 3) Apply it, update files, commit and tag
+bumpwright bump --commit --tag
+```
+
+What the decision means and examples: [Quickstart](https://lewis-morris.github.io/bumpwright/get-started.html#quickstart) • Command flags: [Usage → bump](https://lewis-morris.github.io/bumpwright/usage/bump.html)
+
+| Command | Purpose |
+|---------|---------|
+| [`bumpwright init`](https://lewis-morris.github.io/bumpwright/usage/init.html) | Create a baseline release commit. |
+| [`bumpwright bump`](https://lewis-morris.github.io/bumpwright/usage/bump.html) | Determine and apply the next version. |
+| [`bumpwright history`](https://lewis-morris.github.io/bumpwright/usage/history.html) | View past releases in text, Markdown, or JSON and roll back a tag. |
+
+---
+
+## Configuration (minimal)
+
+Bumpwright reads `bumpwright.toml` (you can change with `--config`). Defaults are sensible; start small and opt-in extras as needed.
+
+```toml
+# bumpwright.toml
+[project]
+public_roots = ["."]
+private_prefixes = ["_"]  # names starting with "_" are ignored as private
+
+[analysers]
+cli = true         # set true to enable
+grpc = false
+web_routes = false
+migrations = false
+openapi = false
+graphql = false
+
+[changelog]
+# path = "CHANGELOG.md"   # optional default target for --changelog
+repo_url = "https://github.com/me/project"  # link commits and compares
+
+[version]
+scheme = "semver"   # "semver" | "calver"
+# paths / ignore have robust defaults
+```
+
+All options and defaults: [Configuration](https://lewis-morris.github.io/bumpwright/configuration.html) • Versioning schemes: [Versioning](https://lewis-morris.github.io/bumpwright/versioning.html)
+
+---
+
+## Output & Changelog
+
+- Choose output with `--format text|md|json` for human/CI consumption.
+- Generate release notes with a Jinja2 template via `--changelog` (and `--repo-url` or `[changelog].repo_url` for compare/commit links).
+
+Template context includes: `version`, `date`, `release_datetime_iso`, `commits[sha,subject,link]`, `previous_tag`, `compare_url`, `contributors[name,link]`, `breaking_changes`, `repo_url`.
+
+Learn more & ready-to-copy templates:  
+- [Changelog → Template variables](https://lewis-morris.github.io/bumpwright/changelog/template.html)  
+- [Changelog → Examples](https://lewis-morris.github.io/bumpwright/changelog/examples.html)
+
+---
+
+## Analysers (opt-in)
+
+Enable what you need in `[analysers]` or per-run with `--enable-analyser/--disable-analyser`.
+
+- **Python API (default)** – respects `__all__`; otherwise public = names not starting with `_`.  
+- **CLI** – detects changes to argparse/Click commands.  
+- **Web routes** – Flask/FastAPI route changes.  
+- **Migrations** – Alembic schema impacts.  
+- **OpenAPI** – spec diffs.  
+- **GraphQL** – schema diffs.
+
+Overview & per-analyser docs: [Analysers](https://lewis-morris.github.io/bumpwright/analysers/)
+
+---
+
+## GitHub Actions (CI)
+
+Common workflows are prebuilt:
+
+- **Auto-bump on push** (commit + tag + append changelog)  
+- **PR check** (report decision only)  
+- **Manual release** (on dispatch)
+
+Copy/paste from: [CI/CD (GitHub Actions)](https://lewis-morris.github.io/bumpwright/recipes/github-actions.html)
+
+---
+
+## Contributing & Roadmap
+
+Issues and PRs welcome. See [Contributing](https://lewis-morris.github.io/bumpwright/contributing.html) and planned work in the [Roadmap](https://lewis-morris.github.io/bumpwright/roadmap.html).
+
+**License:** [MIT](./LICENSE)
