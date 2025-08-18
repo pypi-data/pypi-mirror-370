@@ -1,0 +1,137 @@
+# Jupyter Remote Kernel
+
+A CLI tool for launching and managing remote Jupyter kernels over SSH port forwarding.
+
+## Big Upgrade
+
+- **Remote workspace mounting** via native `sshfs`, keeping local and remote directories in sync during kernel sessions.  
+- **Automatic mount lifecycle**: the workspace is mounted when the kernel starts and unmounted cleanly when it stops, preventing stale mounts.  
+- **Transparent file access**: notebooks, scripts, and data files appear locally but are backed by the remote environment.  
+- **Seamless development flow**: edit code with your local editor/IDE while execution happens remotely with full GPU/CPU resources.  
+- **Error recovery**: detects failed or interrupted mounts and retries or cleans up gracefully.  
+
+## Features
+
+- **SSH tunneling** for all five Jupyter ZMQ channels (`shell`, `iopub`, `stdin`, `control`, `hb`)
+- **Support Bastion** you can use -J user@basion:port to forward into your private network
+- **Kernel spec management**: add, list, and delete remote kernels for seamless integration with Jupyter and VS Code
+- **Graceful tunnel management**: start and stop SSH tunnels as needed
+
+---
+
+## Simple Architecture
+
+```plaintext
+[ JupyterLab / VS Code ]
+            |
+    ~/.local/share/jupyter/kernels/remote_cuda/kernel.json
+            |
+     [ remote_kernel CLI ]
+            |
+  SSH tunnel  <====>  [ Remote Host: ipykernel + Python ]
+            |
+    /tmp/<connection file> is copied to remote host before starting
+```
+---
+
+## Installation
+
+```bash
+pip install jupyter_remote_kernel
+```
+
+---
+
+## Usage
+
+## Kernel Spec Management
+
+### Add a remote kernel
+
+Registers a new kernel spec so it appears in Jupyter and VS Code:
+
+```bash
+remote_kernel add <HostAlias> --name "Remote CUDA"
+```
+
+This creates a kernel spec at `~/.local/share/jupyter/kernels/remote_cuda/kernel.json`:
+
+```json
+{
+  "argv": [
+    "/path/to/remote_kernel",
+    "--endpoint", hostalias,
+    "-f", "{connection_file}"
+  ],
+  "display_name": "Remote CUDA",
+  "language": "python"
+}
+```
+
+### List all registered kernels
+
+```bash
+remote_kernel list
+```
+
+### Delete a kernel
+
+Delete by slug (preferred):
+
+```bash
+remote_kernel delete remote_cuda
+```
+
+Or by display name:
+
+```bash
+remote_kernel delete "Remote CUDA"
+```
+
+Both remove the kernel spec from `~/.local/share/jupyter/kernels/<slug>`.
+
+---
+
+## Notes
+
+- Slug names are lowercased from the display name, with spaces and dashes converted to underscores.
+- **SSH jump host (bastion) support:**
+  If your remote server is only accessible via a jump host (bastion), simply configure with -J.
+
+---
+
+## Integration with JupyterLab and VS Code
+
+Once a remote kernel is registered, it will appear in the JupyterLab and VS Code kernel selector.  
+Select it as you would any local kernel to launch a remote session.
+
+---
+
+## License
+
+Apache License Version 2.0, January 2004# Changelog
+
+## Changelog
+
+### [2.7.0] - 2025-08-17
+
+### New Features
+
+1. **`sshfs` Mount Support**  
+   Added native `sshfs` support for mounting remote working directories during kernel startup.  
+
+2. **Enhanced Logging**  
+   Probe results and command outputs are logged with concise console previews (first 50 characters) while persisting full logs to file.  
+
+### Changes
+
+- Replaced Paramiko and `bash -lc` probing with **plain native ssh** (`ssh endpoint 'cmd'`), ensuring faster and more reliable execution.  
+- Simplified subprocess handling with consistent quoting using single quotes.  
+
+### Bug Fixes
+
+- Fixed timeout issues during remote probing caused by subshell invocation.  
+- Improved error handling when Python or `sshfs` is missing on the remote host.  
+- Ensured reliable detection and re-probing of `ipykernel` after installation.  
+
+---
