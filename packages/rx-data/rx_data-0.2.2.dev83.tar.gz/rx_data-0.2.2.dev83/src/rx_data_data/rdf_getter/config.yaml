@@ -1,0 +1,70 @@
+# This config file is used to configure the behaviour of RDFGetter
+
+#If a column ins not found in a dataframe, it will be added according to the following definitions
+redefinitions:
+  block             : 'block < 0 ? 0 : block' # This is needed to process pre-UT data as Block 0 data, temporary
+  q2                : Jpsi_Mass * Jpsi_Mass # Ntuples from post_ap already have q2 calculated without correction
+definitions:
+  common: &common
+    L1_TRACK_ETA      : ROOT::Math::XYZVector lep(L1_TRACK_PX, L1_TRACK_PY, L1_TRACK_PZ); return lep.eta();
+    L1_TRACK_PHI      : ROOT::Math::XYZVector lep(L1_TRACK_PX, L1_TRACK_PY, L1_TRACK_PZ); return lep.phi();
+
+    L2_TRACK_ETA      : ROOT::Math::XYZVector lep(L2_TRACK_PX, L2_TRACK_PY, L2_TRACK_PZ); return lep.eta();
+    L2_TRACK_PHI      : ROOT::Math::XYZVector lep(L2_TRACK_PX, L2_TRACK_PY, L2_TRACK_PZ); return lep.phi();
+    Jpsi_const_mass_M : TMath::Sqrt(TMath::Power(Jpsi_DTF_HEAD_PE, 2) - TMath::Power(Jpsi_DTF_HEAD_PX, 2) - TMath::Power(Jpsi_DTF_HEAD_PY, 2) - TMath::Power(Jpsi_DTF_HEAD_PZ, 2))
+    q2_dtf            : Jpsi_const_mass_M * Jpsi_const_mass_M
+    q2_smr_dtf        : q2_dtf # TODO: For now, the smeared version of the DTF q2 is the same as the unsmeared
+    q2_track          : ROOT::Math::PtEtaPhiMVector l1(L1_TRACK_PT, L1_TRACK_ETA, L1_TRACK_PHI, 0.511);
+                        ROOT::Math::PtEtaPhiMVector l2(L2_TRACK_PT, L2_TRACK_ETA, L2_TRACK_PHI, 0.511);
+                        auto ll = l1 + l2;
+                        return ll.M2();
+  DATA:
+    L1_TRACK_PT       : ROOT::Math::XYZVector lep(L1_TRACK_PX, L1_TRACK_PY, L1_TRACK_PZ); return lep.rho();
+    L2_TRACK_PT       : ROOT::Math::XYZVector lep(L2_TRACK_PX, L2_TRACK_PY, L2_TRACK_PZ); return lep.rho();
+    L1_TRACK_P        : ROOT::Math::XYZVector lep(L1_TRACK_PX, L1_TRACK_PY, L1_TRACK_PZ); return lep.r();
+    L2_TRACK_P        : ROOT::Math::XYZVector lep(L2_TRACK_PX, L2_TRACK_PY, L2_TRACK_PZ); return lep.r();
+  MC:
+    q2_true           : ROOT::Math::PxPyPzEVector l1(L1_TRUEPX, L1_TRUEPY, L1_TRUEPZ, L1_TRUEENERGY);
+                        ROOT::Math::PxPyPzEVector l2(L2_TRUEPX, L2_TRUEPY, L2_TRUEPZ, L2_TRUEENERGY);
+                        auto ll = l1 + l2;
+                        return ll.M2();
+  EE:
+    Jpsi_Mass         : Jpsi_M_brem_track_2 # Use brem corrected masses only for electron channel
+    B_Mass            : B_M_brem_track_2
+    Jpsi_Mass_smr     : Jpsi_M_smr_brem_track_2 # These are brem corrected and smeared masses. Smeared for data/mc differences
+    B_Mass_smr        : B_M_smr_brem_track_2
+    q2_smr            : Jpsi_Mass_smr * Jpsi_Mass_smr
+    nbrem             : int(L1_HASBREMADDED_brem_track_2) + int(L2_HASBREMADDED_brem_track_2) # Will use the new definition of brem
+    <<: *common
+  MM:
+    Jpsi_Mass                                 : Jpsi_M # For electrons brem correction makes no sense, so name brem corrected = original
+    brem_track_2_B_M_brem_track_2             : B_M
+    brem_track_2_B_PT_brem_track_2            : B_PT
+    B_M_brem_track_2                          : B_M
+    B_Mass                                    : B_M
+    nbrem                                     : '0'
+    brem_track_2_L1_PT_brem_track_2           : L1_PT           # These are needed by classifier prediction
+    brem_track_2_L2_PT_brem_track_2           : L2_PT           # classifier will be trained on brem corrected electron
+    brem_track_2_B_DIRA_OWNPV_brem_track_2    : B_DIRA_OWNPV    # and expects brem corrected features in muon trees
+    B_DIRA_OWNPV_brem_track_2                 : B_DIRA_OWNPV
+    brem_track_2_B_PT_brem_track_2            : B_PT
+    B_PT_brem_track_2                         : B_PT
+    brem_track_2_Jpsi_DIRA_OWNPV_brem_track_2 : Jpsi_DIRA_OWNPV
+    brem_track_2_Jpsi_PT_brem_track_2         : Jpsi_PT
+    <<: *common
+  MCDT:
+    EE:
+      q2              : ROOT::Math::PxPyPzEVector l1(E1_PX, E1_PY, E1_PZ, E1_ENERGY);
+                        ROOT::Math::PxPyPzEVector l2(E2_PX, E2_PY, E2_PZ, E2_ENERGY);
+                        auto ll = l1 + l2;
+                        return ll.M2();
+    MM:
+      q2              : ROOT::Math::PxPyPzEVector l1(M1_PX, M1_PY, M1_PZ, M1_ENERGY);
+                        ROOT::Math::PxPyPzEVector l2(M2_PX, M2_PY, M2_PZ, M2_ENERGY);
+                        auto ll = l1 + l2;
+                        return ll.M2();
+trees:
+  main : main # This is the name of the file holding the main (not friend) trees, e.g. main.yaml
+  electron_only: # These are the yaml files with friend trees meant for only the electrons
+    - brem_track_2
+    - mass          # Kpipi and KKK masses are only available for electron channel, needed for misID
