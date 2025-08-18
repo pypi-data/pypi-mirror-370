@@ -1,0 +1,196 @@
+"""
+    Copyright 2025 Guillaume Everarts de Velp
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: edvgui@gmail.com
+"""
+import std
+import exec
+import podman
+import files
+import files::systemd_unit
+
+
+implementation resource for SystemdContainer:
+    """
+    Setup the container like relation as the pod attached to this service.
+    """
+    self._resource = self.container
+end
+
+
+implementation service_name for SystemdContainer:
+    """
+    Setup the service name for the container, using the container name.
+    """
+    self.service_name = self.name is defined ? self.name : f"container-{self.container.name}.service"
+end
+
+
+implementation unit_file for SystemdContainer:
+    """
+    Deploy and cleanup all the configuration files required by our service.
+    """
+    user = self.container.owner
+    host = self.container.host
+
+    pod = self.container.pod is defined
+        ? self.container.pod
+        : null
+
+    pod_service = pod is defined and pod._systemd_service is defined
+        ? pod._systemd_service
+        : null
+
+    # Set the variable that is required by the container.service.j2 template
+    container = self.container
+
+    # Create the service unit for the pod
+    self.unit = files::SystemdUnitFile(
+        path=files::path_join(self._systemd_config_dir.path, self.service_name),
+        permissions=644,
+        owner=user,
+        group=user,
+        host=host,
+        via=self.container.via is defined ? self.container.via : null,
+        unit=Unit(
+            description=self.description is defined ? self.description : f"Podman {self.service_name}",
+            documentation=["https://github.com/edvgui/inmanta-module-podman"],
+            wants=[
+                user == "root" ? "network-online.target" : "podman-user-wait-network-online.service",
+                self.on_calendar is defined ? [self.timer_name] : [],
+                self.listen_stream is defined ? [self.socket_name] : [],
+            ],
+            requires_mounts_for=["%t/containers"],
+            binds_to=pod_service is defined
+                ? [pod_service.service_name]
+                : [],
+            after=[
+                pod_service is defined ? [pod_service.service_name] : [],
+                user == "root" ? "network-online.target" : "podman-user-wait-network-online.service",
+            ],
+            part_of=[
+                self.on_calendar is defined ? [self.timer_name] : [],
+                self.listen_stream is defined ? [self.socket_name] : [],
+            ],
+            on_failure=self.on_failure,
+        ),
+        service=Service(
+            environment={"PODMAN_SYSTEMD_UNIT": "%n"},
+            restart="on-failure",
+            timeout_stop_sec=70,
+            exec_start=podman::container_run(
+                self.container,
+                cidfile="%t/%n.ctr-id",
+                cgroups="no-conmon",
+                pod_id_file=pod_service is defined
+                    ? "%t/pod-{{ container.pod.name }}.pod-id"
+                    : null,
+                sdnotify="conmon",
+                detach=true,
+                replace=true,
+            ),
+            exec_stop=podman::container_stop(
+                self.container,
+                ignore=true,
+                cidfile="%t/%n.ctr-id",
+                time=10,
+            ),
+            exec_stop_post=[
+                podman::container_rm(
+                    self.container,
+                    force=true,
+                    ignore=true,
+                    time=10,
+                    cidfile="%t/%n.ctr-id",
+                ),
+            ],
+            type=self.on_calendar is defined ? "exec" : "notify",
+            notify_access="all",
+        ),
+        install=Install(
+            wanted_by=["default.target"],
+        ),
+        send_event=true,
+        purged=self.state == "removed",
+        requires=self.requires,
+        provides=self.provides,
+    )
+    self.unit.requires += self._systemd_config_dir
+    self.file_resources += self.unit
+end
+
+
+implementation quadlet_file for SystemdContainer:
+    """
+    Deploy and cleanup all the configuration files required by our service.
+    """
+    user = self.container.owner
+    host = self.container.host
+
+    pod = self.container.pod is defined
+        ? self.container.pod
+        : null
+
+    pod_service = pod is defined and pod._systemd_service is defined
+        ? pod._systemd_service
+        : null
+
+    std::assert(self.systemd_container_dir != null, "The attribute systemd_container_dir must be set when quadlet is true.")
+    std::assert(self._container_config_dir is defined, "Compiler error, self._container_config_dir must be set.")
+    self.unit = QuadletUnitFile(
+        path=files::path_join(
+            self._container_config_dir.path,
+            removesuffix(self.service_name, ".service") + ".container",
+        ),
+        permissions=644,
+        owner=user,
+        group=user,
+        host=host,
+        via=self.container.via is defined ? self.container.via : null,
+        unit=Unit(
+            description=self.description is defined ? self.description : f"Podman {self.service_name}",
+            documentation=["https://github.com/edvgui/inmanta-module-podman"],
+            wants=[
+                self.on_calendar is defined ? [self.timer_name] : [],
+                self.listen_stream is defined ? [self.socket_name] : [],
+            ],
+            binds_to=pod_service is defined
+                ? [pod_service.service_name]
+                : [],
+            after=[
+                pod_service is defined ? [pod_service.service_name] : [],
+            ],
+            part_of=[
+                self.on_calendar is defined ? [self.timer_name] : [],
+                self.listen_stream is defined ? [self.socket_name] : [],
+            ],
+        ),
+        install=Install(
+            wanted_by=["default.target"],
+        ),
+        container=self.container,
+        send_event=true,
+        purged=self.state == "removed",
+        requires=self.requires,
+        provides=self.provides,
+    )
+    self.unit.requires += self._container_config_dir
+    self.file_resources += self.unit
+end
+
+
+implement SystemdContainer using resource, service_name, parents
+implement SystemdContainer using unit_file when not self.quadlet
+implement SystemdContainer using quadlet_file when self.quadlet
