@@ -1,0 +1,237 @@
+# See https://setuptools.readthedocs.io/en/latest/build_meta.html
+# Many files are automatically added making MANIFEST.in almost obsolete.
+# https://setuptools.pypa.io/en/latest/userguide/miscellaneous.html#using-manifest-in
+
+[build-system]
+# Use setuptools >= 42 for the license_files option
+# Use setuptools >= 43 because it automatically includes pyproject.toml in source distribution
+# Use setuptools >= 46.5 to use attr: package.__version__
+# Use setuptools >= 61 for pyproject.toml support
+# Use setuptools >= 70.1 for built-in bdist_wheel which obsoletes the wheel standalone package
+# Use setuptools >= 77 for project.license-files support
+# https://setuptools.readthedocs.io/en/latest/history.html#id284
+# Use setuptools <= 82 because the license specification changes backward-incompatible in 2026-02.
+# https://github.com/pypa/setuptools/issues/4903#issuecomment-2923109576
+requires = ["setuptools >= 61, <= 82", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ratarmountcore"
+description = "Random Access To Archived Resources Library"
+authors = [{name = "Maximilian Knespel", email = "mxmlnknp@gmail.com"}]
+license = {text = "MIT"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Natural Language :: English",
+    "Operating System :: MacOS",
+    "Operating System :: Unix",
+    "Programming Language :: Python :: 3",
+    # I am unsure about the semantic of these. For actualy compatibility, there is 'requires-python'.
+    # These are only informational, and therefore I think it should be fine to list older Python versions,
+    # which do not work with the current version of this project, but for which there exists older versions
+    # of this project that are still installable and usable.
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Archiving",
+    "Topic :: System :: Archiving :: Compression",
+    "Topic :: System :: Filesystems",
+    "Topic :: Utilities",
+]
+# Require Python 3.9. argparse.BooleanOptionalAction was the straw that broke the camel's back.
+# But these are also features that I wanted to use for a long time or sound useful:
+# Python 3.7:
+#  - dataclasses
+#  - time.time_ns
+#  - python -X dev
+#  - contextlib.nullcontext
+#  - pathlib.Path.is_mount()
+#  - sqlite3.Connection.backup
+#  - subprocess.run(capture_output=...)
+#  - ZipFile(compressLevel=...)
+# Python 3.8:
+#  - walrus operator :=
+#  - position-only parameters! def f(a, b, /, c, d, *, e, f):
+#  - f'{user=}' to format f'user={user}', well only useful for debug output, which should not be committed
+#  - dict().reversed()
+#  - importlib.metadata
+#  - @functools.cached_property
+#  - mmap.mmap.madvise
+#  - typing.Final, typing.Protocol
+# Python 3.9:
+#  - dict |=
+#  - typing generics! Dict -> dict, List -> list, Set -> set
+#    - Seems difficult to use, i.e., may require from __future__ import annotations and may not work with mypy:
+#      https://peps.python.org/pep-0585/
+#      https://docs.python.org/3/library/stdtypes.html#types-genericalias
+#  - str.removeprefix(prefix) and str.removesuffix(suffix)
+#  - pathlib.Path.readlink()
+#  - argparse.BooleanOptionalAction
+#  - Parenthesized context managers
+requires-python = ">= 3.9"
+# Python 3.10:
+#  - match statement
+#  - typing.Union -> X | Y
+#  - https://typing.python.org/en/latest/spec/aliases.html#type-aliases
+#  - https://typing.python.org/en/latest/spec/narrowing.html#typeguard
+#  - bisect.bisect(key=...)
+#  - @dataclass(kw_only=True)
+# Python 3.11:
+#  - Self type
+#  - Starred unpacking expressions can now be used in for statements
+#  - sqlite3.Connection.serialize/deserialize
+#  - sqlite3.Connection.blobopen
+# Python 3.12:
+#  - distutils removed
+#  - sys.monitoring
+#  - @typing.override, typing.TypedDict
+#  - itertools.batched
+#  - tempfile.NamedTemporaryFile(delete_on_close=...)
+# Python 3.13:
+#  - optional Free-threaded CPython and JIT compiler
+#  - argparse add_argument(deprecated=...)
+#  - os.process_cpu_count()
+dynamic = ["version"]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/mxmlnkn/ratarmount/ratarmountcore"
+
+[project.optional-dependencies]
+# https://peps.python.org/pep-0508/ Dependency specification for Python Software Packages
+full = [
+    "rich",
+    "indexed_gzip ~= 1.7",
+    'indexed_zstd >= 1.3.1, < 2.0; sys_platform=="darwin"',
+    'indexed_zstd >= 1.2.2, < 2.0; platform_system!="Windows"',
+    "libarchive-c ~= 5.1, < 6.0",
+    "python-xz ~= 0.4.0",
+    # Require rapidgzip >= 0.14 for gztool index support.
+    "rapidgzip ~= 0.15.0",
+    "rarfile ~= 4.1",
+    "py7zr ~= 1.0",
+    "PySquashfsImage == 0.9.0",
+    "lz4 ~= 4.0.0",
+    "python-lzo ~= 1.0",
+    # Need at least 0.23.0 for Python 3.13 support.
+    # https://github.com/indygreg/python-zstandard/issues/223
+    # With Python 3.14, I get ImportError: cannot import name 'ByteString' from 'typing' via
+    # zstandard/__init__.py:21.
+    # https://github.com/indygreg/python-zstandard/issues/238
+    "zstandard ~= 0.23.0; python_version >= '3.8' and python_version < '3.14'",
+    # With Python 3.14, when building the wheel, I get:
+    # /usr/bin/ld: cannot find /tmp/tmpcuw21d78/bin/isa-l.a: No such file or directory
+    'isal ~= 1.0; python_version < "3.14.0"',
+    'fast_zip_decryption',
+    "pygit2",
+    # fsspec:
+    "requests",
+    "aiohttp",
+    "sshfs",  # For performance, asyncssh > 2.17 would be recommended: https://github.com/ronf/asyncssh/issues/691
+    # Need newer pyopenssl than comes with Ubuntu 22.04.
+    # https://github.com/ronf/asyncssh/issues/690
+    "pyopenssl>=23",
+    "smbprotocol",
+    "dropboxdrivefs",
+    "fsspec",
+    "ipfsspec",
+    "s3fs",
+    "webdav4",
+    #"gcsfs",  # untested
+    #"adlfs",  # untested. build error in Python 3.13
+]
+# There are too many major versions and I don't wanna lock into one. I only need the most basic things anyway.
+# It should work with almost every version.
+colors = ["rich"]
+bzip2 = ["rapidgzip ~= 0.15.0"]
+git = ["pygit2"]
+# Require rapidgzip >= 0.14 for gztool index support.
+gzip = ["rapidgzip ~= 0.15.0", "indexed_gzip ~= 1.7"]
+fsspec = ["fsspec"]
+fsspec-backends = [
+    # Copy-pasted from fsspec[full] list. Some were excluded because they are too unproportionally large.
+    "requests",
+    "aiohttp",
+    "sshfs",  # For performance, asyncssh > 2.17 would be recommended: https://github.com/ronf/asyncssh/issues/691
+    # Need newer pyopenssl than comes with Ubuntu 22.04.
+    # https://github.com/ronf/asyncssh/issues/690
+    "pyopenssl>=23",
+    "smbprotocol",
+    "dropboxdrivefs",
+    "fsspec",
+    "ipfsspec",
+    "s3fs",
+    "webdav4",
+    #"gcsfs",  # untested
+    #"adlfs",  # untested. build error in Python 3.13
+    # "dask", "distributed" : ~34 MB, ~10 MB gzip-compressed
+    # "pyarrow >= 1" : ~196 MB, ~60 MB gzip-compressed, build error in Python 3.13
+    # "ocifs" : ~350 MB
+    # "panel" : only for fsspec GUI
+]
+# Need >= 4.1 because of https://github.com/markokr/rarfile/issues/73
+rar = ["rarfile ~= 4.1"]
+# For now, only optional (and installed in the AppImage) because it is unstable and depends on many other packages
+# that do not even have up-to-date wheels, i.e., will fail to install if, e.g., gcc and liblzo2-dev are not installed.
+sqlar = [
+    "cryptography",
+    "sqlcipher3-wheels",
+]
+squashfs = [
+    "PySquashfsImage == 0.9.0",
+    "lz4 ~= 4.0.0",
+    "python-lzo ~= 1.0",
+    # Need at least 0.23.0 for Python 3.13 support.
+    # https://github.com/indygreg/python-zstandard/issues/223
+    # With Python 3.14, I get ImportError: cannot import name 'ByteString' from 'typing' via
+    # zstandard/__init__.py:21.
+    # https://github.com/indygreg/python-zstandard/issues/238
+    "zstandard ~= 0.23.0; python_version >= '3.8' and python_version < '3.14'",
+    # With Python 3.14, when building the wheel, I get:
+    # /usr/bin/ld: cannot find /tmp/tmpcuw21d78/bin/isa-l.a: No such file or directory
+    'isal ~= 1.0; python_version < "3.14.0"',
+]
+xz = ["python-xz ~= 0.4.0"]
+zip = ["fast_zip_decryption"]
+zstd = [
+    'indexed_zstd >= 1.3.1, < 2.0; sys_platform=="darwin"',
+    'indexed_zstd >= 1.2.2, < 2.0; platform_system!="Windows"',
+]
+7z = [
+    "libarchive-c ~= 5.1, < 6.0",
+    "py7zr ~= 1.0",
+]
+# Bundled with fix because of https://github.com/nathanhi/pyfatfs/issues/41
+fat = []
+# Not part of 'full' because it does exact pinning for its dependencies, which does lead to dependency conflicts.
+ext4 = ['ext4 ~= 1.1']
+# All optional dependencies of asyncssh via sshfs. I have not yet needed any of these.
+# Half of these are installed anyway via other dependencies.
+full-ssh = [
+    "sshfs[bcrypt]",
+    "sshfs[fido2]",
+    "sshfs[gssapi]",
+    "sshfs[libnacl]",
+    "sshfs[python-pkcs11]",
+    "sshfs[pyOpenSSL]",
+    #"sshfs[pywin32]",  # Only Windows? asyncssh has no platform specifier though...
+]
+
+[project.entry-points."fsspec.specs"]
+ratar = "ratarmountcore.SQLiteIndexedTarFsspec.SQLiteIndexedTarFileSystem"
+
+[tool.setuptools]
+license-files = ["LICENSE", "ratarmountcore/_external/pyfatfs/LICENSE"]
+
+[tool.setuptools.dynamic]
+version = {attr = "ratarmountcore.version.__version__"}
