@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+{% if db_config.image %}
+    depends_on:
+      - db
+{% endif %}
+{% if spec.config.background_tasks %}
+      - redis
+{% endif %}
+
+{% if db_config.image %}
+  db:
+    image: {{ db_config.image }}
+    environment:
+{% for key, value in db_config.env.items() %}
+      - {{ key }}={{ value }}
+{% endfor %}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+{% endif %}
+
+{% if spec.config.background_tasks %}
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+
+  worker:
+    build: .
+    command: celery -A app.worker.celery_app worker --loglevel=info
+    volumes:
+      - ./app:/app/app
+    env_file:
+      - ./.env
+    depends_on:
+      - redis
+      - api
+{% endif %}
+
+{% if db_volumes %}
+volumes:
+  postgres_data:
+{% endif %}

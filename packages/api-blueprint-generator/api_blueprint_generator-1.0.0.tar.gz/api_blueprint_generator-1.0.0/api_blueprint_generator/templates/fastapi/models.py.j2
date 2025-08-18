@@ -1,0 +1,44 @@
+from sqlalchemy import (
+    Column, Integer, String, Boolean, DateTime, Text, Float, Date, Time, JSON, ForeignKey
+)
+from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
+from datetime import datetime
+
+from .database import Base
+
+{% for model in models %}
+class {{ model.name }}(Base):
+    __tablename__ = '{{ model.name_plural_snake }}'
+
+    {% for field in model.fields %}
+    {% if spec.config.auth_type != 'none' and model.name == 'User' and field.name == 'password' %}
+    hashed_password = Column(String(255), nullable=False)
+    {% else %}
+    {{ field.name }} = Column(
+        {{- field.sqlalchemy_type }},
+        {%- if field.is_foreign_key %}
+        ForeignKey('{{ model_map[field.foreign_key_to.split('.')[0]].name_plural_snake }}.{{ field.foreign_key_to.split('.')[1] }}'),
+        {%- endif %}
+        {% if field.options.get('primary_key') %}primary_key=True, {% endif %}
+        {% if field.options.get('unique') %}unique=True, {% endif %}
+        nullable={{ not field.options.get('required', False) }}{% if field.options.get('default') is not none or (field.type == 'datetime' and field.options.get('auto')) %},{% endif %}
+        {% if field.options.get('default') is not none %}
+        {%- if field.type == 'datetime' and field.options.default == 'now' %}server_default=func.now(){% elif field.type == 'boolean' %}default={{ field.options.default|title }}{% else %}default={{ field.options.default }}{% endif %}
+        {%- elif field.type == 'datetime' and field.options.get('auto') %}server_default=func.now(){% endif %}
+    )
+    {% endif %}
+    {% endfor %}
+    {% if model.relationships %}
+
+    # --- Relationships ---
+    {% for rel in model.relationships %}
+    {{ rel.name }} = relationship("{{ rel.target_model }}", back_populates="{{ rel.back_populates }}")
+    {% endfor %}
+    {% endif %}
+
+    def __repr__(self):
+        return f"<{{ model.name }} ({{ model.primary_key_name }}={self.{{ model.primary_key_name }}})>"
+
+{% endfor %}
