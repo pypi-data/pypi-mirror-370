@@ -1,0 +1,36 @@
+from setuptools import setup, find_packages
+
+setup(
+    name='adpkg',
+    version='0.1.3',
+    author='Amit Dutta',
+    author_email='amitdutta4255@gmail.com',
+    maintainer='Amit Dutta',
+    maintainer_email='amitdutta4255@gmail.com',
+    description='A beginner-friendly package for advanced mathematical calculations including finance, number theory, strings, matrices, statistics, and geometry.',
+    long_description=open('README.md', encoding='utf-8').read(),
+    long_description_content_type='text/markdown',
+    packages=find_packages(),
+    classifiers=[
+        'Programming Language :: Python :: 3',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: OS Independent',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Education',
+        'Intended Audience :: Science/Research',
+        'Topic :: Education',
+        'Topic :: Scientific/Engineering :: Mathematics',
+    ],
+    python_requires='>=3.6',
+    project_urls={
+        "GitHub": "https://github.com/notamitgamer/adpkg",
+        "PyPI": "https://pypi.org/project/adpkg/",
+        "Documentation": "https://github.com/notamitgamer/adpkg#readme",
+        "Bug Tracker": "https://github.com/notamitgamer/adpkg/issues",
+        "LinkedIn": "https://linkedin.com/in/notamitgamer",
+        "Twitter": "https://twitter.com/notamitgamer",
+        "Instagram": "https://instagram.com/notamitgamer",
+        "YouTube": "https://youtube.com/@notamitgamer",
+        "Facebook": "https://facebook.com/notamitgamer",
+    },
+)
