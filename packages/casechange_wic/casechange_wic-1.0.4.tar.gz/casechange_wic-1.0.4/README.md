@@ -1,0 +1,24 @@
+# CaseChange
+
+A package for changing the case of strings.
+
+## Installation
+
+You can install the package using pip:
+
+```
+pip install casechange_wic
+```
+
+## Usage
+
+Here's a quick example of how to use the package:
+
+```python
+from casechange import case_change
+
+text = "Hello World"
+print(case_change(text, "snake"))  # hello_world
+print(case_change(text, "kebab"))  # hello-world
+print(case_change(text, "camel"))  # helloWorld
+```
