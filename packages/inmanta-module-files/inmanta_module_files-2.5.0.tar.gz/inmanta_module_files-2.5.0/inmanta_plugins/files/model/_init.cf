@@ -1,0 +1,254 @@
+"""
+    Copyright 2023 Guillaume Everarts de Velp
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: edvgui@gmail.com
+"""
+import std
+import mitogen
+import files::host
+import files::json
+import files::systemd_unit
+
+typedef operation_t as string matching self in ["replace", "merge", "remove"]
+"""
+Define the type of operation to apply for a batch of data in a desired state.
+These operations are inspired from the netconf yang specifications and have the
+same semantic.
+cf. https://datatracker.ietf.org/doc/html/rfc4741#section-7.2
+"""
+
+typedef json_format_t as string matching self in ["json", "yaml"]
+
+
+entity BaseFile extends std::PurgeableResource, std::ManagedResource:
+    """
+    Base entity representing a file on a host.
+
+    :attr path: The path where the file should be managed.
+    :attr permissions: The permissions to set on the file
+        (null if you don't want to manage this).
+    :attr owner: The name of the user owning of the file
+        (null if you don't want to manage this).
+    :attr group: The name of the group owning the file
+        (null if you don't want to manage this).
+    """
+    string path
+    int? permissions = 744
+    string? owner = null
+    string? group = null
+    bool send_event = true
+end
+BaseFile.host [1] -- std::Host
+"""
+The host that this file is managed on.
+"""
+
+BaseFile.via [0:1] -- mitogen::Context
+"""
+Dedicated mitogen context for this file.
+"""
+
+
+entity TextFile extends BaseFile:
+    """
+    A simple text file.
+
+    :attr content: The content of the text file
+    """
+    string content
+end
+
+index TextFile(host, path)
+
+implement TextFile using std::none
+
+
+entity HostFileABC extends BaseFile:
+    """
+    A host file containing a mapping from ips to domain names.  The host file
+    is comanaged, we will only merge/replace/remove entries which are specified in
+    the entries relation.
+    """
+end
+HostFileABC.entries [0:] -- files::host::Entry.host_file [1]
+"""
+All the entries present in the host file.
+"""
+
+
+entity HostFile extends HostFileABC:
+    """
+    A host file containing a mapping from ips to domain names.  The host file
+    is comanaged, we will only merge/replace/remove entries which are specified in
+    the entries relation.
+    """
+end
+
+index HostFile(host, path)
+
+implement HostFile using std::none
+
+
+entity SharedHostFile extends HostFileABC:
+    """
+    A host file containing a mapping from ips to domain names.  The host file
+    is comanaged, we will only merge/replace/remove entries which are specified in
+    the entries relation.
+    The difference with the HostFile resource is that this resource can be
+    split into multiple ones, which share the management of the file.  This is
+    ideal for managing files that needs to be part of a multiple resource sets.
+
+    :attr resource_discriminator: An additional field which allows
+        to create multiple resources for a single file.
+    """
+    string resource_discriminator = ""
+end
+
+index SharedHostFile(host, path, resource_discriminator)
+
+implement SharedHostFile using std::none
+
+
+entity JsonFileABC extends BaseFile:
+    """
+    :attr indent: The indentation to use when writing in the file.
+    :attr format: The format the json content is supposed to be written in.
+    :attr named_list: When set, the file is expected to contain a list instead
+        of an object at its root.  Every paths modifying the file's content must
+        start with the list's name.
+    :attr sort_keys: Whether every dict's keys should be sorted when the desired
+        state is saved to file.
+    """
+    int indent = 2
+    json_format_t format = "json"
+    string? named_list = null
+    bool? sort_keys = null
+end
+JsonFileABC.values [0:] -- files::json::Value.json_file [1]
+"""
+The set of values that will be enforced in the file.
+"""
+
+JsonFileABC.discovered_values [0:] -- files::json::DiscoveredValue.json_file [1]
+"""
+The set of values that should be discovered within the file.
+"""
+
+
+entity JsonFile extends JsonFileABC:
+    """
+    A JsonFile on the given host.  The resource contains a set of values
+    that needs to be enforced on the given file.  See files::json::Value for
+    more information about the usage of said values.
+    """
+end
+
+index JsonFile(host, path)
+
+implement JsonFile using std::none
+
+
+entity SharedJsonFile extends JsonFileABC:
+    """
+    A JsonFile on the given host.  The resource contains a set of values
+    that needs to be enforced on the given file.  See files::json::Value for
+    more information about the usage of said values.
+    The difference with the JsonFile resource is that this resource can be
+    split into multiple ones, which share the management of the file.  This is
+    ideal for managing files that needs to be part of a multiple resource sets.
+
+    :attr resource_discriminator: An additional field which allows
+        to create multiple resources for a single file.
+    """
+    string resource_discriminator = ""
+end
+
+index SharedJsonFile(host, path, resource_discriminator)
+
+implement SharedJsonFile using std::none
+
+
+entity SystemdUnitFile extends BaseFile:
+    """
+    A systemd unit file.
+    """
+    string content
+end
+SystemdUnitFile.unit [0:1] -- files::systemd_unit::Unit
+"""
+Compose the [unit] section of the file
+"""
+
+SystemdUnitFile.service [0:1] -- files::systemd_unit::Service
+"""
+Compose the [service] section of the file
+"""
+
+SystemdUnitFile.install [0:1] -- files::systemd_unit::Install
+"""
+Compose the [install] section of the file
+"""
+
+SystemdUnitFile.timer [0:1] -- files::systemd_unit::Timer
+"""
+Compose the [timer] section of the file
+"""
+
+SystemdUnitFile.socket [0:1] -- files::systemd_unit::Socket
+"""
+Compose the [socket] section of the file
+"""
+
+index SystemdUnitFile(host, path)
+
+implement SystemdUnitFile using std::none
+
+
+entity Directory extends BaseFile:
+    """
+    Create a directory on the host.
+
+    :attr create_parents: Create all the parents directory, recursively.
+    """
+    bool create_parents = false
+end
+
+index Directory(host, path)
+
+implement Directory using std::none
+
+
+entity Symlink extends BaseFile:
+    """
+    Create a directory on the host.
+
+    :attr target: The path on the file system that the symlink should point to.
+    """
+    string target
+    int? permissions = null
+end
+
+index Symlink(host, path)
+
+implement Symlink using symlink_permissions
+
+
+implementation symlink_permissions for Symlink:
+    """
+    Make sure that we do not attempt to manage the permissions of
+    the symlink, as it is not supported by the handler.
+    """
+    self.permissions = null
+end
