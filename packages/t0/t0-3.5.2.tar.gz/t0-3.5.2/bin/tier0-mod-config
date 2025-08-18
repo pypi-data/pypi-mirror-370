@@ -1,0 +1,178 @@
+#!/usr/bin/env python
+# encoding: utf-8
+"""
+tier0-mod-config.py
+Created by Dirk Hufnagel on 2012-04-12.
+Copyright (c) 2011 Fermilab. All rights reserved.
+"""
+
+import sys
+import getopt
+import importlib.util
+import socket
+import traceback
+import os
+
+from WMCore.Configuration import saveConfigurationFile
+from WMCore.Configuration import Configuration
+from WMCore.Lexicon import sanitizeURL
+
+help_message = '''
+The help message goes here.
+'''
+
+
+class Usage(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+def load_module_from_file(module_name, filename):
+    spec = importlib.util.spec_from_file_location(module_name, filename)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+def importConfigTemplate(filename):
+    """
+    _importConfigTemplate_
+
+    Given filename, load it and grab the configuration object from it
+
+    """
+    mod = load_module_from_file("wmcore_config_input", filename)
+    config = getattr(mod, 'config', None)
+    #
+    if config == None:
+        msg = "No config attribute found in %s" % filename
+        raise RuntimeError(msg)
+    return config
+
+def saveConfiguration(configObject, outputPath):
+    """
+    _saveConfiguration_
+
+    Save the configuration to the output path provided
+
+    """
+    saveConfigurationFile(configObject, outputPath)
+    os.chmod(outputPath, 0o600)
+
+
+def modifyConfiguration(config, **args):
+    """
+    _modifyConfiguration_
+
+    Given the dictionary of key: value, look up the entry matching the key in the configuration
+    and set it to that value in the config
+
+    """
+    config.BossAir.pluginNames = ["SimpleCondorPlugin"]
+
+    # remove components we don't use
+    if hasattr(config, "JobUpdater"):
+        delattr(config, "JobUpdater")
+    if hasattr(config, "WorkQueueManager"):
+        delattr(config, "WorkQueueManager")
+    if hasattr(config, "ArchiveDataReporter"):
+        delattr(config, "ArchiveDataReporter")
+    if hasattr(config, "WorkflowUpdater"):
+        delattr(config, "WorkflowUpdater")
+
+    config.TaskArchiver.useWorkQueue = False
+
+    # tier0 specific accounting group
+    config.BossAir.acctGroup = 'tier0'
+    config.BossAir.acctGroupUser = 'cmsdataops'
+
+    # t0 wmstats specific configuration
+    config.AnalyticsDataCollector.localT0RequestDBURL = "%s/%s" % (config.JobStateMachine.couchurl,
+                                                                   config.Tier0Feeder.requestDBName)
+    config.AnalyticsDataCollector.RequestCouchApp = "T0Request"
+
+    # t0 disk monitoring specific configuration
+    config.AgentStatusWatcher.ignoreDisks = [ "/cvmfs/cvmfs-config.cern.ch", "/cvmfs/cms.cern.ch", "/eos/cms" ]
+    config.AgentStatusWatcher.diskUseThreshold = 90
+
+    # don't set bad exit codes for the tier0 jobs
+    config.ErrorHandler.failureExitCodes = []
+
+    if 'confdb_url' in args:
+        config.section_("HLTConfDatabase")
+        config.HLTConfDatabase.connectUrl = args['confdb_url']
+
+    if 'smdb_url' in args:
+        config.section_("StorageManagerDatabase")
+        config.StorageManagerDatabase.connectUrl = args['smdb_url']
+
+    if 'popconlogdb_url' in args:
+        config.section_("PopConLogDatabase")
+        config.PopConLogDatabase.connectUrl = args['popconlogdb_url']
+
+    if 't0datasvcdb_url' in args:
+        config.section_("T0DataSvcDatabase")
+        config.T0DataSvcDatabase.connectUrl = args['t0datasvcdb_url']
+
+    if 'smnotifydb_url' in args:
+        config.section_("SMNotifyDatabase")
+        config.SMNotifyDatabase.connectUrl = args['smnotifydb_url']
+
+    return config
+
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+
+    inputFile = None
+    outputFile = None
+    parameters = {}
+
+    try:
+        try:
+            opts, args = getopt.getopt(argv[1:], "h",
+            ["help", "input=", "output=", "confdb_url=", "smdb_url=", "popconlogdb_url=", "t0datasvcdb_url=", "smnotifydb_url="])
+
+        except getopt.error as msg:
+            raise Usage(msg)
+
+        # option processing
+        for option, value in opts:
+            if option in ("-h", "--help"):
+                raise Usage(help_message)
+            if option == "--output":
+                outputFile = value
+            if option == "--input":
+                inputFile = value
+            if option in ('--confdb_url', '--smdb_url', '--popconlogdb_url', '--t0datasvcdb_url', '--smnotifydb_url'):
+                parameters[option[2:]] = value
+
+    except Usage as err:
+        print(sys.argv[0].split("/")[-1] + ": " + str(err.msg), file=sys.stderr)
+        print("\t for help use --help", file=sys.stderr)
+        return 2
+
+    try:
+        cfg = importConfigTemplate(inputFile)
+    except Exception as ex:
+        msg = "Failed to import template config: %s\n" % inputFile
+        msg += str(ex)
+        print(msg, file=sys.stderr)
+        return 3
+    try:
+        cfg = modifyConfiguration(cfg, **parameters)
+    except Exception as ex:
+        msg = "Error modifying configuration:\n %s" % str(ex)
+        print(msg, file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
+        return 4
+    try:
+        saveConfiguration(cfg, outputFile)
+    except Exception as ex:
+        msg = "Error saving output configuration file:\n %s\n" % outputFile
+        msg += str(ex)
+        print(msg, file=sys.stderr)
+        return 5
+
+if __name__ == "__main__":
+    sys.exit(main())
