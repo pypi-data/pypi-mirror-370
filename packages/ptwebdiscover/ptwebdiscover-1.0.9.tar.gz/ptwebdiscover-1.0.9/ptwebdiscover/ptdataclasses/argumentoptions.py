@@ -1,0 +1,57 @@
+from dataclasses import dataclass
+
+
+@dataclass
+class ArgumentOptions:
+    url: str
+    source: str
+    non_exist: list[str]
+    charsets: list[str]
+    length_min: int
+    length_max: int
+    wordlist: list[str]
+    prefix: str
+    suffix: str
+    begin_with: str
+    backups: bool
+    backup_all: bool
+    extensions: list[str]
+    extensions_file: str
+    recurse: bool
+    max_depth: int
+    parse: bool
+    parse_only: bool
+    directory: bool
+    not_directories: list[str]
+    case_insensitive: bool
+    string_in_response: str
+    string_not_in_response: str
+    status_codes: list[int]
+    method: str
+    scheme: str
+    delay: int
+    proxy: str
+    timeout: int
+    content_length: int
+    without_dns_cache: bool
+    headers: list[tuple[str,str]]
+    user_agent: str
+    cookie: str
+    refuse_cookies: bool
+    not_redirect: bool
+    target: str
+    threads: int
+    without_domain: bool
+    with_headers: bool
+    include_parameters: bool
+    tree: bool
+    output: str
+    save: str
+    auth: str
+    json: bool
+    errors: bool
+    silent: bool
+    cache: bool
+    socket_address: str
+    socket_port: str
+    process_ident: str
