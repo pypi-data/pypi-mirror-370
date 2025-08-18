@@ -1,0 +1,794 @@
+<!-- Modal JavaScript -->
+<script>
+  // Modal functionality
+  const modal = document.getElementById("sendRequestModal");
+  const sendRequestBtn = document.getElementById("sendRequestBtn");
+  const closeBtn = document.querySelector(".close");
+  const requestForm = document.getElementById("requestForm");
+  const sendBtn = document.getElementById("sendBtn");
+  const loadingSpinner = document.getElementById("loadingSpinner");
+  const sendBtnText = document.getElementById("sendBtnText");
+
+  // Open modal (this will be overridden below with resetModalToSendMode)
+
+  // Close modal
+  if (closeBtn) {
+    closeBtn.onclick = function () {
+      closeModal();
+    };
+  }
+
+  // Close modal when clicking outside
+  window.onclick = function (event) {
+    if (event.target == modal) {
+      closeModal();
+    }
+  };
+
+  // Function to close modal and refresh page
+  function closeModal() {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+    document.body.style.overflow = "auto";
+
+    // Refresh page if we're on the requests page
+    if (
+      window.location.pathname === "/admin/requests" ||
+      window.location.pathname === "/admin/llm_calls"
+    ) {
+      window.location.reload();
+    }
+  }
+
+  // Example loading functions
+  function loadExample(type) {
+    const promptInput = document.getElementById("promptInput");
+
+    if (type === "json") {
+      promptInput.value =
+        "Generate a user profile with name, email, age, and address";
+
+      const jsonSchema = {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          email: { type: "string", format: "email" },
+          age: { type: "integer", minimum: 0 },
+          address: {
+            type: "object",
+            properties: {
+              street: { type: "string" },
+              city: { type: "string" },
+              zipcode: { type: "string" },
+            },
+            required: ["street", "city", "zipcode"],
+          },
+        },
+        required: ["name", "email", "age", "address"],
+      };
+
+      document.getElementById("jsonSchemaInput").value = JSON.stringify(
+        jsonSchema,
+        null,
+        2
+      );
+      switchSchemaTab("json");
+    } else if (type === "string") {
+      promptInput.value = "generate name and address";
+      document.getElementById("stringSchemaInput").value = "{name, address}";
+      switchSchemaTab("string");
+    }
+  }
+
+  // Schema tab switching functionality
+  let currentSchemaTab = "string"; // Track current active tab
+
+  // Initialize schema tab required attributes on page load
+  function initializeSchemaTab() {
+    const stringInput = document.getElementById("stringSchemaInput");
+    const jsonInput = document.getElementById("jsonSchemaInput");
+
+    // Set string schema as required by default (since it's the default active tab)
+    if (stringInput) stringInput.setAttribute("required", "");
+    if (jsonInput) jsonInput.removeAttribute("required");
+  }
+
+  // Call initialization when DOM is ready
+  document.addEventListener("DOMContentLoaded", initializeSchemaTab);
+
+  function switchSchemaTab(tabType) {
+    const stringTab = document.getElementById("stringSchemaTab");
+    const jsonTab = document.getElementById("jsonSchemaTab");
+    const stringContent = document.getElementById("stringSchemaContent");
+    const jsonContent = document.getElementById("jsonSchemaContent");
+    const stringInput = document.getElementById("stringSchemaInput");
+    const jsonInput = document.getElementById("jsonSchemaInput");
+
+    if (tabType === "string") {
+      // Activate string schema tab
+      stringTab.className =
+        "py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600 whitespace-nowrap";
+      jsonTab.className =
+        "py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap";
+      stringContent.classList.remove("hidden");
+      jsonContent.classList.add("hidden");
+
+      // Handle required attributes - only the visible input should be required
+      stringInput.setAttribute("required", "");
+      jsonInput.removeAttribute("required");
+
+      currentSchemaTab = "string";
+    } else if (tabType === "json") {
+      // Activate JSON schema tab
+      jsonTab.className =
+        "py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600 whitespace-nowrap";
+      stringTab.className =
+        "py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap";
+      jsonContent.classList.remove("hidden");
+      stringContent.classList.add("hidden");
+
+      // Handle required attributes - only the visible input should be required
+      jsonInput.setAttribute("required", "");
+      stringInput.removeAttribute("required");
+
+      currentSchemaTab = "json";
+    }
+  }
+
+  // Add event listeners for schema tabs
+  document.getElementById("stringSchemaTab").onclick = function () {
+    convertAndSwitchSchema("string");
+  };
+
+  document.getElementById("jsonSchemaTab").onclick = function () {
+    convertAndSwitchSchema("json");
+  };
+
+  // Convert schema when switching tabs
+  async function convertAndSwitchSchema(targetTab) {
+    const currentInput =
+      currentSchemaTab === "string"
+        ? document.getElementById("stringSchemaInput").value.trim()
+        : document.getElementById("jsonSchemaInput").value.trim();
+
+    if (currentInput && currentSchemaTab !== targetTab) {
+      try {
+        const response = await fetch("/schema/convert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schema: currentInput,
+            target_format: targetTab,
+          }),
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          if (targetTab === "string") {
+            document.getElementById("stringSchemaInput").value =
+              result.converted_schema;
+          } else {
+            document.getElementById("jsonSchemaInput").value = JSON.stringify(
+              result.converted_schema,
+              null,
+              2
+            );
+          }
+        } else {
+          console.warn("Schema conversion failed:", result.error);
+        }
+      } catch (error) {
+        console.warn("Schema conversion error:", error);
+      }
+    }
+
+    switchSchemaTab(targetTab);
+  }
+
+  // Get current schema value from active tab
+  function getCurrentSchema() {
+    if (currentSchemaTab === "string") {
+      return document.getElementById("stringSchemaInput").value;
+    } else {
+      return document.getElementById("jsonSchemaInput").value;
+    }
+  }
+
+  // Check Schema button functionality
+  document.getElementById("checkSchemaBtn").onclick = async function () {
+    const schema = getCurrentSchema();
+    const outputTextarea = document.getElementById("outputTextarea");
+
+    if (!schema.trim()) {
+      outputTextarea.value = "❌ Error: Please enter a schema to validate";
+      switchToTab("output");
+      return;
+    }
+
+    outputTextarea.value = "🔍 Validating schema...";
+    switchToTab("output");
+
+    try {
+      let validationResult;
+
+      if (currentSchemaTab === "string") {
+        // Validate string schema
+        const response = await fetch("/schema/validate-string", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schema_definition: schema,
+            is_list: false,
+          }),
+        });
+        validationResult = await response.json();
+      } else {
+        // Validate JSON schema
+        let jsonSchema;
+        try {
+          jsonSchema = JSON.parse(schema);
+        } catch (e) {
+          outputTextarea.value = "❌ Error: Invalid JSON format in schema";
+          return;
+        }
+
+        const response = await fetch("/schema/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            json_schema: jsonSchema,
+          }),
+        });
+        validationResult = await response.json();
+      }
+
+      // Display validation results
+      let output = "";
+      if (validationResult.valid) {
+        output += "✅ Schema is valid!\n\n";
+
+        if (validationResult.example) {
+          output += "📋 Example output:\n";
+          output += JSON.stringify(validationResult.example, null, 2) + "\n\n";
+        }
+
+        if (validationResult.parsed_fields) {
+          output += "🔍 Parsed fields:\n";
+          for (const [fieldName, fieldInfo] of Object.entries(
+            validationResult.parsed_fields
+          )) {
+            output += `• ${fieldName}: ${fieldInfo.type}${
+              fieldInfo.required ? " (required)" : " (optional)"
+            }\n`;
+          }
+          output += "\n";
+        }
+
+        if (validationResult.generated_schema) {
+          output += "🔧 Generated JSON Schema:\n";
+          output += JSON.stringify(validationResult.generated_schema, null, 2);
+        }
+      } else {
+        output += "❌ Schema validation failed!\n\n";
+
+        if (validationResult.errors) {
+          if (Array.isArray(validationResult.errors)) {
+            output += "Errors:\n";
+            validationResult.errors.forEach((error) => {
+              output += `• ${error}\n`;
+            });
+          } else {
+            output += "Errors:\n";
+            for (const [key, error] of Object.entries(
+              validationResult.errors
+            )) {
+              output += `• ${key}: ${error}\n`;
+            }
+          }
+        }
+      }
+
+      outputTextarea.value = output;
+    } catch (error) {
+      outputTextarea.value = `❌ Error validating schema: ${error.message}`;
+    }
+  };
+
+  // Clear form function
+  document.getElementById("clearFormBtn").onclick = function () {
+    clearAllFormFields();
+  };
+
+  // Form submission
+  if (requestForm) {
+    requestForm.onsubmit = async function (e) {
+      e.preventDefault();
+
+      const prompt = document.getElementById("promptInput").value;
+      const schema = getCurrentSchema();
+      const model = document.getElementById("modelSelect").value;
+      const fallbackModels = Array.from(
+        document.getElementById("fallbackModels").selectedOptions
+      ).map((option) => option.value);
+      const enableWebSearch =
+        document.getElementById("enableWebSearch").checked;
+      const outputTextarea = document.getElementById("outputTextarea");
+
+      if (!prompt || !schema || !model) {
+        alert("Please fill in all required fields");
+        return;
+      }
+
+      // Show loading state
+      sendBtn.disabled = true;
+      loadingSpinner.classList.remove("hidden");
+      sendBtnText.textContent = "Sending...";
+      outputTextarea.value = "Processing request...";
+
+      // Switch to output tab when sending request
+      switchToTab("output");
+
+      try {
+        // Send schema as-is from the active tab - backend will auto-detect the type
+        // No need to parse JSON here since backend handles both string and object schemas
+        const requestData = {
+          prompt: prompt,
+          schema: schema, // Send raw schema value - backend auto-detects string vs JSON
+          model: model,
+          fallback_models:
+            fallbackModels.length > 0 ? fallbackModels : undefined,
+          enable_web_search: enableWebSearch,
+        };
+
+        const response = await fetch("/generate/united", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestData),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          outputTextarea.value = JSON.stringify(result, null, 2);
+        } else {
+          // Better error handling for API errors
+          let errorMessage = "Unknown error occurred";
+          if (result.detail) {
+            if (typeof result.detail === "string") {
+              errorMessage = result.detail;
+            } else if (Array.isArray(result.detail)) {
+              // Handle validation errors
+              errorMessage = result.detail
+                .map(
+                  (err) =>
+                    `${err.loc ? err.loc.join(".") + ": " : ""}${err.msg}`
+                )
+                .join("\n");
+            } else {
+              errorMessage = JSON.stringify(result.detail);
+            }
+          }
+          outputTextarea.value = `Error: ${errorMessage}`;
+        }
+      } catch (error) {
+        // Better error handling for network/parsing errors
+        let errorMessage = "Network or parsing error";
+        if (error.message) {
+          errorMessage = error.message;
+        } else if (error.toString && typeof error.toString === "function") {
+          errorMessage = error.toString();
+        } else {
+          errorMessage = "Unknown error occurred";
+        }
+        outputTextarea.value = `Error: ${errorMessage}`;
+      } finally {
+        // Hide loading state
+        sendBtn.disabled = false;
+        loadingSpinner.classList.add("hidden");
+        sendBtnText.textContent = "Send Request";
+      }
+    };
+  }
+
+  // Filter functionality for request history page
+  if (document.getElementById("applyFilters")) {
+    document.getElementById("applyFilters").onclick = function () {
+      const provider = document.getElementById("providerFilter").value;
+      const model = document.getElementById("modelFilter").value;
+      const searchType = document.getElementById("searchTypeFilter").value;
+      const status = document.getElementById("statusFilter").value;
+
+      const params = new URLSearchParams();
+      if (provider) params.append("provider", provider);
+      if (model) params.append("model", model);
+      if (searchType) params.append("search_type", searchType);
+      if (status) params.append("status", status);
+
+      window.location.href = "/admin/requests?" + params.toString();
+    };
+  }
+
+  if (document.getElementById("clearFilters")) {
+    document.getElementById("clearFilters").onclick = function () {
+      window.location.href = "/admin/requests";
+    };
+  }
+
+  if (document.getElementById("clearAllFilters")) {
+    document.getElementById("clearAllFilters").onclick = function () {
+      window.location.href = "/admin/requests";
+    };
+  }
+
+  // View details functionality
+  document.querySelectorAll(".view-details-btn").forEach((btn) => {
+    btn.onclick = async function () {
+      const requestId = this.getAttribute("data-request-id");
+      await openViewModal(requestId);
+    };
+  });
+
+  // Function to open modal in view mode with existing request data
+  async function openViewModal(requestId) {
+    try {
+      // Fetch request details
+      const response = await fetch(`/admin/requests/${requestId}`);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch request details: ${response.statusText}`
+        );
+      }
+
+      const requestData = await response.json();
+
+      // Clear all fields first to ensure clean state
+      clearAllFormFields();
+
+      // Open modal
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      document.body.style.overflow = "hidden";
+
+      // Update modal title to indicate view mode
+      const modalTitle = document.querySelector("#sendRequestModal h2");
+      if (modalTitle) {
+        modalTitle.innerHTML =
+          '<i class="fas fa-eye"></i> View Request Details';
+      }
+
+      // Populate form fields with existing data
+      document.getElementById("promptInput").value = requestData.prompt || "";
+
+      // Handle schema - use request_schema first, then fallback to response parsing
+      let schemaValue = "";
+      let isJsonSchema = false;
+
+      if (requestData.request_schema) {
+        try {
+          // Try to parse as JSON first
+          const schemaObj = JSON.parse(requestData.request_schema);
+          schemaValue = JSON.stringify(schemaObj, null, 2);
+          isJsonSchema = true;
+        } catch (e) {
+          // If parsing fails, use as-is (might be a string schema)
+          schemaValue = requestData.request_schema;
+          isJsonSchema = false;
+        }
+      } else if (requestData.response) {
+        // Fallback to parsing response for older records
+        try {
+          const responseObj = JSON.parse(requestData.response);
+          if (responseObj.schema_used) {
+            schemaValue = JSON.stringify(responseObj.schema_used, null, 2);
+            isJsonSchema = true;
+          } else if (responseObj.string_schema) {
+            schemaValue = responseObj.string_schema;
+            isJsonSchema = false;
+          }
+        } catch (e) {
+          // If response parsing fails, leave schema empty
+        }
+      }
+
+      // Set schema in appropriate tab
+      if (schemaValue) {
+        if (isJsonSchema) {
+          document.getElementById("jsonSchemaInput").value = schemaValue;
+          switchSchemaTab("json");
+        } else {
+          document.getElementById("stringSchemaInput").value = schemaValue;
+          switchSchemaTab("string");
+        }
+      }
+
+      // Set model if available
+      const modelSelect = document.getElementById("modelSelect");
+      if (requestData.model && modelSelect) {
+        // Find and select the matching model option
+        for (let option of modelSelect.options) {
+          if (option.value === requestData.model) {
+            option.selected = true;
+            break;
+          }
+        }
+      }
+
+      // Set web search checkbox if search was enabled
+      const enableWebSearchCheckbox =
+        document.getElementById("enableWebSearch");
+      if (
+        requestData.search_type &&
+        requestData.search_type !== "none" &&
+        enableWebSearchCheckbox
+      ) {
+        enableWebSearchCheckbox.checked = true;
+      }
+
+      // Populate output with the response
+      const outputTextarea = document.getElementById("outputTextarea");
+      if (requestData.response) {
+        try {
+          // Try to format JSON response nicely
+          const responseObj = JSON.parse(requestData.response);
+          outputTextarea.value = JSON.stringify(responseObj, null, 2);
+        } catch (e) {
+          // If not JSON, show as-is
+          outputTextarea.value = requestData.response;
+        }
+      } else if (requestData.error) {
+        outputTextarea.value = `Error: ${requestData.error}`;
+      } else {
+        outputTextarea.value = "No response data available";
+      }
+
+      // Change send button to "Resend Request"
+      const sendBtn = document.getElementById("sendBtn");
+      const sendBtnText = document.getElementById("sendBtnText");
+      if (sendBtnText) {
+        sendBtnText.textContent = "Resend Request";
+      }
+
+      // Add a note about viewing mode
+      const outputLabel = document.querySelector('label[for="outputTextarea"]');
+      if (outputLabel && !outputLabel.querySelector(".view-mode-note")) {
+        const note = document.createElement("span");
+        note.className = "view-mode-note text-xs text-blue-600 ml-2";
+        note.textContent =
+          "(Viewing previous response - modify and resend if needed)";
+        outputLabel.appendChild(note);
+      }
+
+      // Switch to output tab when viewing existing request
+      switchToTab("output");
+    } catch (error) {
+      console.error("Failed to load request details:", error);
+      alert(`Failed to load request details: ${error.message}`);
+    }
+  }
+
+  // Function to clear all form fields
+  function clearAllFormFields() {
+    document.getElementById("promptInput").value = "";
+    document.getElementById("stringSchemaInput").value = "";
+    document.getElementById("jsonSchemaInput").value = "";
+    document.getElementById("outputTextarea").value = "";
+    document.getElementById("codeTextarea").value = "";
+    document.getElementById("modelSelect").value = "";
+    document.getElementById("fallbackModels").selectedIndex = -1;
+    document.getElementById("enableWebSearch").checked = false;
+
+    // Reset to string schema tab
+    switchSchemaTab("string");
+  }
+
+  // Function to set default model
+  function setDefaultModel() {
+    const modelSelect = document.getElementById("modelSelect");
+    if (modelSelect && modelSelect.options.length > 0) {
+      // Try to find a default model (claude-sonnet-4, gpt-4o, or first available)
+      const preferredModels = [
+        "claude-sonnet-4-20250514",
+        "gpt-4o",
+        "gpt-4o-mini",
+      ];
+      let defaultSet = false;
+
+      for (const preferred of preferredModels) {
+        for (let option of modelSelect.options) {
+          if (option.value === preferred) {
+            option.selected = true;
+            defaultSet = true;
+            break;
+          }
+        }
+        if (defaultSet) break;
+      }
+
+      // If no preferred model found, select the first one
+      if (!defaultSet && modelSelect.options.length > 0) {
+        modelSelect.options[0].selected = true;
+      }
+    }
+  }
+
+  // Tab switching functionality
+  function switchToTab(tabName) {
+    const outputTab = document.getElementById("outputTab");
+    const codeTab = document.getElementById("codeTab");
+    const outputContent = document.getElementById("outputTabContent");
+    const codeContent = document.getElementById("codeTabContent");
+
+    if (tabName === "output") {
+      // Activate output tab
+      outputTab.className =
+        "px-4 py-2 text-sm font-semibold text-blue-600 border-b-2 border-blue-600 bg-blue-50 rounded-t-lg transition-colors";
+      codeTab.className =
+        "px-4 py-2 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors ml-2";
+      outputContent.classList.remove("hidden");
+      codeContent.classList.add("hidden");
+    } else if (tabName === "code") {
+      // Activate code tab
+      codeTab.className =
+        "px-4 py-2 text-sm font-semibold text-blue-600 border-b-2 border-blue-600 bg-blue-50 rounded-t-lg transition-colors ml-2";
+      outputTab.className =
+        "px-4 py-2 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors";
+      codeContent.classList.remove("hidden");
+      outputContent.classList.add("hidden");
+    }
+  }
+
+  // Generate Python code based on current form values
+  function generatePythonCode() {
+    const prompt =
+      document.getElementById("promptInput").value || "your prompt here";
+    const schema = getCurrentSchema() || "{}";
+    const model = document.getElementById("modelSelect").value || "gpt-4o";
+    const enableWebSearch = document.getElementById("enableWebSearch").checked;
+
+    // Determine if schema is JSON or string format based on current tab
+    let isJsonSchema = currentSchemaTab === "json";
+    let schemaCode = "";
+
+    if (isJsonSchema) {
+      schemaCode = schema;
+    } else {
+      schemaCode = `"${schema}"`;
+    }
+
+    // Generate the Python code
+    let code = `# Import the LLM client
+from united_llm import LLMClient
+from pydantic import BaseModel
+import json
+
+# Initialize the client
+client = LLMClient()
+
+`;
+
+    if (isJsonSchema) {
+      code += `# Define your Pydantic model based on the schema
+class ResponseModel(BaseModel):
+    # Define your fields based on the schema
+    # Example: name: str, age: int, etc.
+    pass
+
+# Make the request with structured output
+try:
+    result = client.generate_structured(
+        prompt="${prompt.replace(/"/g, '\\"')}",
+        output_model=ResponseModel,
+        model="${model}"`;
+    } else {
+      code += `# Make the request with string schema
+try:
+    result = client.generate_dict(
+        prompt="${prompt.replace(/"/g, '\\"')}",
+        schema_definition=${schemaCode},
+        model="${model}"`;
+    }
+
+    if (enableWebSearch) {
+      if (model.startsWith("claude") || model.startsWith("anthropic")) {
+        code += `,
+        anthropic_web_search=True`;
+      } else {
+        code += `,
+        duckduckgo_search=True`;
+      }
+    }
+
+    code += `
+    )
+
+    print("Response:", result)
+
+except Exception as e:
+    print(f"Error: {e}")`;
+
+    return code;
+  }
+
+  // Function to reset modal to send mode
+  function resetModalToSendMode() {
+    // Reset modal title
+    const modalTitle = document.querySelector("#sendRequestModal h2");
+    if (modalTitle) {
+      modalTitle.innerHTML =
+        '<i class="fas fa-paper-plane"></i> Send LLM Request';
+    }
+
+    // Reset send button text
+    const sendBtnText = document.getElementById("sendBtnText");
+    if (sendBtnText) {
+      sendBtnText.textContent = "Send Request";
+    }
+
+    // Remove view mode note
+    const viewModeNote = document.querySelector(".view-mode-note");
+    if (viewModeNote) {
+      viewModeNote.remove();
+    }
+
+    // Clear all form fields for a fresh start
+    clearAllFormFields();
+
+    // Set default model
+    setDefaultModel();
+
+    // Ensure output tab is active by default
+    switchToTab("output");
+  }
+
+  // Reset modal when opening normally (not in view mode)
+  if (sendRequestBtn) {
+    sendRequestBtn.onclick = function () {
+      resetModalToSendMode();
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      document.body.style.overflow = "hidden";
+    };
+  }
+
+  // Tab click handlers
+  const outputTab = document.getElementById("outputTab");
+  const codeTab = document.getElementById("codeTab");
+
+  if (outputTab) {
+    outputTab.onclick = function () {
+      switchToTab("output");
+    };
+  }
+
+  if (codeTab) {
+    codeTab.onclick = function () {
+      switchToTab("code");
+    };
+  }
+
+  // Generate Code button handler
+  const generateCodeBtn = document.getElementById("generateCodeBtn");
+  if (generateCodeBtn) {
+    generateCodeBtn.onclick = function () {
+      const code = generatePythonCode();
+      document.getElementById("codeTextarea").value = code;
+      switchToTab("code"); // Switch to code tab when generating code
+    };
+  }
+
+  // Auto-refresh functionality (optional)
+  function enableAutoRefresh(intervalSeconds = 30) {
+    setInterval(() => {
+      if (document.visibilityState === "visible") {
+        window.location.reload();
+      }
+    }, intervalSeconds * 1000);
+  }
+
+  // Enable auto-refresh on dashboard only (not on requests page to avoid modal issues)
+  if (window.location.pathname === "/") {
+    enableAutoRefresh(30);
+  }
+</script>

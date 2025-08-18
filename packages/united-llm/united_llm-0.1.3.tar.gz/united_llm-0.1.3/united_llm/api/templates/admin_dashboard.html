@@ -1,0 +1,95 @@
+{% extends "base.html" %} {% block title %}Unified LLM - Admin Dashboard{%
+endblock %} {% block content %}
+<div class="max-w-7xl mx-auto p-6">
+  <!-- Header -->
+  {% set header_data = { 'title': 'Unified LLM Admin', 'subtitle':
+  'Comprehensive dashboard for LLM request monitoring and analytics', 'icon':
+  'fas fa-robot', 'show_nav_menu': true, 'stats_bar': [ {'number':
+  stats.total_calls|number_format, 'label': 'Total Requests'}, {'number':
+  stats.recent_calls_24h, 'label': 'Last 24h'}, {'number':
+  (stats.error_rate_percent|string) ~ '%', 'label': 'Error Rate'}, {'number':
+  ((stats.avg_duration_ms|default(0))|round|int|string) ~ 'ms', 'label': 'Avg
+  Response'} ] } %} {% include "components/header.html" %}
+
+  <!-- Stats Grid -->
+  <div
+    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8"
+  >
+    <!-- Total Requests -->
+    {% set stat_data = { 'icon': 'fas fa-comments', 'icon_color': 'blue',
+    'value': stats.total_calls|number_format, 'label': 'Total Requests',
+    'detail': stats.recent_calls_24h ~ ' in last 24h • ' ~
+    stats.week_calls|default(0) ~ ' this week' } %} {% include
+    "components/stat_card.html" %}
+
+    <!-- Last Hour Activity -->
+    {% set stat_data = { 'icon': 'fas fa-pulse', 'icon_color': 'green', 'value':
+    stats.hour_calls|default(0), 'label': 'Last Hour', 'detail': 'Current
+    activity level' } %} {% include "components/stat_card.html" %}
+
+    <!-- Error Rate -->
+    {% set stat_data = { 'icon': 'fas fa-exclamation-triangle', 'icon_color':
+    'red', 'value': stats.error_rate_percent ~ '%', 'label': 'Error Rate',
+    'detail': 'System reliability metric' } %} {% include
+    "components/stat_card.html" %}
+
+    <!-- Average Response Time -->
+    {% set stat_data = { 'icon': 'fas fa-tachometer-alt', 'icon_color':
+    'yellow', 'value':
+    (stats.avg_duration_ms|default(0))|round|int|number_format ~ 'ms', 'label':
+    'Avg Response', 'detail': 'Average response time' } %} {% include
+    "components/stat_card.html" %}
+
+    <!-- Total Tokens -->
+    {% set stat_data = { 'icon': 'fas fa-coins', 'icon_color': 'orange',
+    'value': stats.total_tokens_used|default(0)|number_format, 'label': 'Total
+    Tokens', 'detail': 'Avg ' ~ stats.avg_tokens_per_call|default(0)|round|int ~
+    ' per request' } %} {% include "components/stat_card.html" %}
+
+    <!-- Search Requests -->
+    {% set stat_data = { 'icon': 'fas fa-search', 'icon_color': 'indigo',
+    'value': search_requests_count, 'label': 'Search Requests', 'detail':
+    'Enhanced with web search' } %} {% include "components/stat_card.html" %}
+  </div>
+
+  <!-- Charts Section -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    <!-- Provider Usage Chart -->
+    {% set provider_chart_data = [] %} {% for provider, count in
+    provider_stats.items() %} {% set _ = provider_chart_data.append({ 'label':
+    provider.title(), 'count': count, 'percentage': (count / max_provider_count
+    * 100)|round|int }) %} {% endfor %} {% set chart_data = { 'icon': 'fas
+    fa-server', 'icon_color': 'blue', 'title': 'Provider Usage', 'chart_data':
+    provider_chart_data, 'bar_color': 'blue' } %} {% include
+    "components/chart_card.html" %}
+
+    <!-- Top Models Chart -->
+    {% set model_chart_data = [] %} {% for model, count in top_models %} {% set
+    _ = model_chart_data.append({ 'label': model_display_names.get(model,
+    model), 'count': count, 'percentage': (count / max_model_count *
+    100)|round|int }) %} {% endfor %} {% set chart_data = { 'icon': 'fas
+    fa-brain', 'icon_color': 'purple', 'title': 'Top Models', 'chart_data':
+    model_chart_data, 'bar_color': 'purple' } %} {% include
+    "components/chart_card.html" %}
+  </div>
+
+  <!-- Quick Actions -->
+  {% set actions = [ {'url': '/admin/requests', 'color': 'blue', 'icon': 'fas
+  fa-list', 'label': 'View All Requests'}, {'url':
+  '/admin/requests?provider=anthropic', 'color': 'indigo', 'icon': 'fas
+  fa-filter', 'label': 'Filter by Anthropic'}, {'url':
+  '/admin/requests?search_type=duckduckgo_search', 'color': 'green', 'icon':
+  'fas fa-search', 'label': 'Search Requests Only'}, {'url':
+  '/admin/export/csv', 'color': 'emerald', 'icon': 'fas fa-file-csv', 'label':
+  'Export to CSV'}, {'url': '/admin/export/json', 'color': 'teal', 'icon': 'fas
+  fa-download', 'label': 'Export to JSON'} ] %} {% include
+  "components/quick_actions.html" %}
+</div>
+
+<script>
+  // Auto-refresh every 30 seconds
+  setTimeout(() => {
+    window.location.reload();
+  }, 30000);
+</script>
+{% endblock %}
