@@ -1,0 +1,173 @@
+Metadata-Version: 2.4
+Name: mcap-ros2idl-support
+Version: 0.1.0
+Summary: A Python library to read and parse ROS 2 MCAP bag files without a ROS 2 runtime.
+Author: dskkato
+License: MIT License
+        
+        Copyright (c) 2025 dskkato
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: mcap>=1.3.0
+Requires-Dist: lark
+Requires-Dist: typing-extensions
+Provides-Extra: dev
+Requires-Dist: pre-commit; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: maturin<2,>=1.5; extra == "dev"
+Requires-Dist: build; extra == "dev"
+Dynamic: license-file
+
+# mcap-ros2idl-support
+
+
+A Python library to read and parse ROS 2 MCAP bag files without a ROS 2 runtime.
+It extracts schemas from rosbag2 messages and decodes their CDR payloads.
+
+## Features
+
+- Read-only parsing of MCAP/rosbag2 files without needing a ROS 2 runtime
+- Treats each struct as a Python `dict` instead of generating dynamic classes
+
+## Project structure
+
+The repository is organized as follows:
+
+- `mcap_ros2idl_support/` – core Python package
+  - `cdr/` – helpers for reading and writing CDR streams
+  - `ros2idl_parser/` – parser for `ros2idl` schema definitions
+  - `rosmsg/` – parser for classic `.msg` message definitions
+  - `rosmsg2_serialization/` – utilities for decoding CDR payloads into dictionaries
+  - `decode_factory.py` – integrates parsers and CDR readers with the MCAP decoder
+- `examples/` – example CLI demonstrating how to iterate decoded messages
+- `tests/` – unit tests for the library
+
+## Installation
+
+Requires Python ≥3.10.
+
+Install the Python package:
+
+```bash
+pip install .
+```
+
+## Development
+
+1. Create and activate a virtual environment:
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+
+2. Install project and development dependencies:
+
+   ```bash
+   pip install -e '.[dev]'
+   ```
+
+3. Build the Rust Python bindings using `maturin`:
+
+   ```bash
+   maturin develop --manifest-path rust/mcap-rs/Cargo.toml
+   ```
+
+4. Install and run `pre-commit`:
+
+   ```bash
+   pre-commit install
+   pre-commit run --files <file> [<file> ...]
+   ```
+
+   To check the entire repository, use:
+
+   ```bash
+   pre-commit run --all-files
+   ```
+
+5. Run tests with `pytest`:
+
+   ```bash
+   pytest
+   ```
+
+## Usage
+
+```bash
+python examples/cli.py --mcap-file sample.mcap
+```
+
+Use the ``--enum-as-string`` flag to return enumeration values as strings:
+
+```bash
+python examples/cli.py --mcap-file sample.mcap --enum-as-string
+```
+
+## Building the wheel
+
+1. Clean old artifacts:
+
+   ```bash
+   rm -rf dist
+   ```
+
+2. Install the build backend:
+
+   ```bash
+   python -m pip install --upgrade build
+   ```
+
+3. Build the wheel:
+
+   ```bash
+   python -m build
+   ```
+
+5. (Optional) Verify the wheel locally:
+
+   ```bash
+   python -m pip install dist/mcap_ros2idl_support-<version>-py3-none-any.whl
+   ```
+
+6. (Optional) Upload to PyPI:
+
+   ```bash
+   python -m pip install --upgrade twine
+   python -m twine upload dist/*
+   ```
+
+## Design notes
+
+- Uses Foxglove’s `@foxglove/ros2idl-parser` to handle `.idl` files in addition to classic `.msg` definitions.
+- Only reading is supported; writing MCAP files is out of scope.
+- Enumerations defined in IDL can be returned as their string values by
+  enabling ``enum_as_string``.
+- The goal is to enable parsing MCAP bags without any ROS 2 dependencies to make offline analysis easier.
