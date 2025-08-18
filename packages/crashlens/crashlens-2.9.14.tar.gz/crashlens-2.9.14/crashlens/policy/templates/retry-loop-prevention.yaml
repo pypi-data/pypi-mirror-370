@@ -1,0 +1,104 @@
+# CrashLens Policy Template: Retry Loop Prevention
+# Detects and prevents expensive retry patterns that waste tokens
+
+metadata:
+  name: "Retry Loop Prevention"
+  description: "Comprehensive retry loop detection and prevention policies"
+  category: "cost_optimization"
+  severity_level: "critical"
+  estimated_savings: "15-40%"
+  
+rules:
+  - id: expensive_single_call
+    description: "Very expensive single call (potential retry waste)"
+    match:
+      cost: ">0.02"
+    action: warn
+    severity: medium
+    suggestion: |
+      Expensive API call detected. If this is part of a retry pattern:
+      - Implement exponential backoff with jitter
+      - Add circuit breaker patterns
+      - Use cheaper models for retries
+      - Log retry reasons for debugging
+    cost_impact: "high"
+    
+  - id: expensive_model_usage
+    description: "Expensive model usage that could indicate retry patterns"
+    match:
+      model: ["gpt-4", "gpt-4-turbo", "gpt-4o"]
+      cost: ">0.01"
+    action: warn
+    severity: medium
+    suggestion: |
+      Expensive model call detected. 
+      Solutions if part of retry pattern:
+      - Use gpt-4o-mini or gpt-3.5-turbo for retries
+      - Implement model degradation strategy
+      - Cache successful responses to avoid retries
+    cost_impact: "very_high"
+    
+  - id: wasteful_large_prompts
+    description: "Large prompts with expensive models"
+    match:
+      model: ["gpt-4", "gpt-4-turbo", "gpt-4o"]
+      prompt_tokens: ">1000"
+    action: warn
+    severity: medium
+    suggestion: |
+      Large prompt (1000+ tokens) with expensive model.
+      Optimization strategies:
+      - Break down into smaller chunks
+      - Use cheaper models for preprocessing
+      - Implement prompt compression techniques
+      - Consider context window optimization
+    cost_impact: "high"
+    
+  - id: inefficient_completion_ratio
+    description: "Very small completion for large prompt (inefficient)"
+    match:
+      prompt_tokens: ">200"
+      completion_tokens: "<20"
+    action: warn
+    severity: low
+    suggestion: |
+      Large prompt generated small completion. This may indicate:
+      - Overly verbose prompts
+      - Poor prompt engineering
+      - Task could be simplified
+      - Consider prompt optimization
+    cost_impact: "medium"
+    suggestion: |
+      Rapid retries detected without proper backoff.
+      Implement exponential backoff: 2s, 4s, 8s, 16s delays
+    cost_impact: "medium"
+    
+  - id: high_cost_retry_cascade
+    description: "Block retry cascades burning budget"
+    match:
+      cost: ">0.10"
+      retry_count: ">0"
+    action: fail
+    severity: high
+    suggestion: |
+      High-cost retry cascade detected (>${cost} per trace).
+      Emergency actions:
+      - Implement immediate circuit breaker
+      - Switch to cheaper fallback models
+      - Add request queuing and deduplication
+    cost_impact: "very_high"
+    
+  - id: persistent_failure_retry
+    description: "Detect persistent failures being retried"
+    match:
+      retry_count: ">2"
+      status: ["error", "timeout", "rate_limited"]
+    action: warn
+    severity: medium
+    suggestion: |
+      Persistent failures being retried repeatedly.
+      Solutions:
+      - Implement failure classification
+      - Stop retrying permanent failures (4xx errors)
+      - Use different strategies for different error types
+    cost_impact: "high"
