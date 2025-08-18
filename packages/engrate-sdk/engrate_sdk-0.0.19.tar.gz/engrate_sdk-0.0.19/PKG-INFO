@@ -1,0 +1,137 @@
+Metadata-Version: 2.4
+Name: engrate-sdk
+Version: 0.0.19
+Summary: Engrate SDK for plugin developers
+Project-URL: Homepage, https://engrate.io
+Project-URL: Repository, https://github.com/engrate/engrate-sdk
+Author-email: Engrate Dev <dev@engrate.io>
+Maintainer-email: Carlos <carlos@engrate.io>, Joel <joel@engrate.io>, Rille <rille@engrate.io>
+License: MIT
+Keywords: api-client,energy,engrate,http-client,logging,mcp,plugins,sdk
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Logging
+Classifier: Typing :: Typed
+Requires-Python: >=3.8
+Requires-Dist: fastapi~=0.115.12
+Requires-Dist: httpx<1.0.0,>=0.25.0
+Requires-Dist: pydantic-settings<3.0.0,>=2.0.0
+Requires-Dist: pydantic<3.0.0,>=2.0.0
+Requires-Dist: python-dotenv<2.0.0,>=1.0.0
+Requires-Dist: pyyaml~=6.0.2
+Requires-Dist: structlog<25.0.0,>=24.0.0
+Requires-Dist: tenacity<9.0.0,>=8.2.0
+Requires-Dist: typing-extensions>=4.8.0; python_version < '3.11'
+Requires-Dist: uvicorn[standard]~=0.24.0.post1
+Description-Content-Type: text/markdown
+
+# Engrate SDK
+
+A utility SDK providing common services for logging, configuration, and HTTP clients to connect the Engrate Platform.
+
+## Features
+
+- Simple and consistent logging interface
+- Flexible configuration management
+- HTTP client utilities for seamless API integration
+- TypeScript support
+
+## Installation
+
+Add the dependency to your project configuration (i.e. UV):
+
+```code
+"engrate-sdk ~= 0.0.16"
+```
+Then update your local environment
+```bash
+uv pip install .
+```
+
+## Usage
+
+```python
+from engrate_sdk import Logger, Config, HttpClient
+
+# Logging
+logger = Logger()
+logger.info('Engrate SDK initialized')
+
+# Configuration
+config = Config()
+config.load_from_env()
+
+# HTTP Client
+client = HttpClient(base_url=config.get('API_URL'))
+response = client.get('/status')
+```
+
+## Registry
+
+The library contains a ```regystry.py``` module which provides access to our internal plugin registry. Every plugin has to call to the ```register_plugin()``` method
+at some point in the plugin bootstrap process (if using ```FastAPI``this is usually recommended to use a lifespan function). 
+
+```python
+@asynccontextmanager
+async def lifespan(fast_app: FastAPI):
+    """Startup and shutdown logic using lifespan events."""
+    try:
+        print("Validating environment variables...")
+        env.validate()
+        if env.should_register():
+            logger.info("Registering plugin...")
+            plugin = PluginRegistry(registrar_url=env.get_registrar_url())
+            await plugin.register_plugin()
+        yield
+    finally:
+        logger.info("Shutting down application...")
+```
+This method will look for a ```plugin_manifest.yaml```file at root level of the project (it's also possible to provide an url when initializing the ```PluginRegistry```object) This file must exist and contain the following format ***(WIP: this might change in the near future)***:
+
+ ```yaml
+name: "power-tariffs"
+author: "Energy development solutions"
+description: "Test plugin to use Engrate SDK"
+product_category: "market_intelligence"
+extensions:
+  markets:
+    - "*"
+    - "nl"
+    - "de"
+    - "se"
+plugin_metadata:
+  display_name: "Demo Plugin"
+  service_name: "demo-plugin"
+  url_prefix: "demo-plugin"
+  fav_icon: ""
+  image: ""
+  port: "3111"
+  api_version: "v1"
+  flavors:
+    - "external-api"
+  traits:
+    - "storage"
+
+ ```
+
+### Mock registrar
+For testing purposes, the library includes a ```mock registrar```that mimics the behaviour for the actual registrar in the core services. This is a simple ```FastApi``` server that will
+implement the required endpoints for puglins lifecycle.
+
+## Documentation
+
+[TODO]
+
+## License
+
+[TBD]
