@@ -1,0 +1,194 @@
+# NTA MCP Server
+
+A Model Context Protocol server that interfaces with Ireland's National Transport Authority (NTA) API.
+
+## Available Tools
+
+This package provides the following tools for interacting with the NTA API:
+
+-   `get_trip_updates`
+
+    -   Retrieves real-time trip update information from the NTA API. This includes data about transit vehicle schedules, delays, and timing.
+    -   No input parameters required.
+
+-   `get_vehicles`
+
+    -   Retrieves real-time vehicle position information from the NTA API. This includes current location data for transit vehicles.
+    -   No input parameters required.
+
+-   `get_gtfs_realtime`
+    -   Retrieves the GTFS real-time feed from the NTA API. This includes comprehensive real-time transit data.
+    -   No input parameters required.
+
+### Prompts
+
+-   "Get the current trip updates from Dublin Bus and show me buses that are running late."
+-   "List all Dublin Bus route 46A buses and their current schedule status."
+-   "Create a summary of transit delays on major routes based on NTA data."
+-   "Check if my bus (route 7) is on time and when it will arrive at O'Connell Street."
+-   "Where are all the DART trains currently located?"
+-   "Show me all buses near Dublin city centre right now."
+-   "Find the closest buses to Heuston Station at this moment."
+-   "Track the current positions of Irish Rail trains."
+-   "Are there any service disruptions on the Luas Green Line today?"
+-   "Check if there are any alerts affecting bus routes in County Cork."
+-   "Give me a list of all current Irish public transport service alerts as bullet points."
+-   "Are there any planned maintenance or closures on the DART system this weekend?"
+
+## Installation
+
+### Using uv (recommended)
+
+When using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will
+use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run _mcp-server-nta_.
+
+### Using PIP
+
+Alternatively you can install `mcp-server-nta` via pip:
+
+```
+pip install mcp-server-nta
+```
+
+After installation, you can run it as a script using:
+
+```
+python -m mcp_server_nta
+```
+
+## Configuration
+
+### Configure for Claude.app
+
+Add to your Claude settings:
+
+<details>
+<summary>Using uvx</summary>
+
+```json
+{
+	"mcpServers": {
+		"nta": {
+			"command": "uvx",
+			"args": ["mcp-server-nta"],
+			"env": {
+				"NTA_API_KEY": "PROVIDE_API_KEY"
+			}
+		}
+	}
+}
+```
+
+</details>
+
+<details>
+<summary>Using pip installation</summary>
+
+```json
+{
+	"mcpServers": {
+		"nta": {
+			"command": "python",
+			"args": ["-m", "mcp_server_nta"],
+			"env": {
+				"NTA_API_KEY": "PROVIDE_API_KEY"
+			}
+		}
+	}
+}
+```
+
+</details>
+
+### Configure for VS Code
+
+For manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.
+
+Optionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.
+
+> Note that the `mcp` key is needed when using the `mcp.json` file.
+
+<details>
+<summary>Using uvx</summary>
+
+```json
+{
+	"mcp": {
+		"servers": {
+			"nta": {
+				"command": "uvx",
+				"args": ["mcp-server-nta"],
+				"env": {
+					"NTA_API_KEY": "PROVIDE_API_KEY"
+				}
+			}
+		}
+	}
+}
+```
+
+</details>
+
+### Customization - API Key
+
+An API Key will be required to interface with the NTA API. This API key can be requested by creating an account with the service and requesting one.
+
+## Debugging
+
+You can use the MCP inspector to debug the server. For uvx installations:
+
+```
+npx @modelcontextprotocol/inspector uvx mcp-server-nta
+```
+
+Or if you've installed the package in a specific directory or are developing on it:
+
+```
+cd path/to/servers/src/nta
+npx @modelcontextprotocol/inspector uv run mcp-server-nta
+```
+
+## Testing
+
+The project includes a comprehensive test suite using pytest. You can run the tests with:
+
+### Using uv (Recommended)
+
+```bash
+# Install development dependencies
+uv pip install -e ".[dev]"
+
+# Run all tests
+uv run pytest
+
+# Run tests with verbose output
+uv run pytest -v
+```
+
+### Using pip
+
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest
+
+# Run tests with verbose output
+pytest -v
+```
+
+For more details on the test suite, see the [test README](mcp_server_nta/test/README.md).
+
+## Contributing
+
+We encourage contributions to help expand and improve mcp-server-nta. Whether you want to add new tools, enhance existing functionality, or improve documentation, your input is valuable.
+
+For examples of other MCP servers and implementation patterns, see:
+https://github.com/modelcontextprotocol/servers
+
+Pull requests are welcome! Feel free to contribute new ideas, bug fixes, or enhancements to make mcp-server-nta even more powerful and useful.
+
+## License
+
+mcp-server-nta is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
