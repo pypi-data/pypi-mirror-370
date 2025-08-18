@@ -1,0 +1,119 @@
+"""
+ s-parameters post-processing parser
+"""
+
+# Copyright (c) 2021 Nubis Communications, Inc.
+# Copyright (c) 2018-2020 Teledyne LeCroy, Inc.
+# All rights reserved worldwide.
+#
+# This file is part of SignalIntegrity.
+#
+# SignalIntegrity is free software: You can redistribute it and/or modify it under the terms
+# of the GNU General Public License as published by the Free Software Foundation, either
+# version 3 of the License, or any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with this program.
+# If not, see <https://www.gnu.org/licenses/>
+
+from SignalIntegrity.Lib.SParameters.SParameters import SParameters
+from SignalIntegrity.Lib.Exception import SignalIntegrityExceptionPostProcessing
+from SignalIntegrity.Lib.FrequencyDomain.FrequencyList import FrequencyList
+
+class SParametersParser(SParameters):
+    """parses a list of commands to process s-parameters"""
+    def __init__(self,sp,lines,efl=None):
+        """Constructor
+        Takes a set of s-parameters along with a list of command lines to process the s-parameters
+        @param sp instance of SParameters to process
+        @param lines list of lines with commands indicating the processing, in order
+        @param efl (optional, defaults to None) instance of class FrequencyList containing the
+        evenly spaced frequency list to use when time-domain transformations are required.
+        @remark For causality checks, the threshold for causality is 10e-6 (-100 dB).  
+        The maximum number of iterations is 30.  
+        the Largest singular value is 1.  
+        @see EnforceCausality
+        @see EnforcePassivity
+        @see EnforceReciprocity
+        @see EnforceBothPassivityAndReciprocity
+        @see EnforceAll
+        @see LimitImpulseResponseLength
+        @see SetReferenceImpedance
+        @see RemoveImpulseResponseOffset
+        """
+        SParameters.__init__(self,sp.m_f,sp.m_d,sp.m_Z0)
+        self.preserveDC = False
+        # evenlySpaced=FrequencyList(self.m_f).EvenlySpaced()
+        # todo - probably should use whether evenly spaced frequency list is supplied (i.e. not None for this
+        # determination
+        self.efl=efl
+        self.uefl = None if efl is None else sp.m_f
+        for line in lines:
+            tokens=line.split()
+            if len(tokens)>=0:
+                if tokens[0]!='post': continue
+            else: # pragma: no cover
+                continue
+            try:
+                if tokens[1]=='enforce':
+                    if tokens[2]=='causality':
+                        self.EnforceCausality(preserveDC=self.preserveDC)
+                    elif tokens[2]=='passivity':
+                        self.EnforcePassivity()
+                    elif tokens[2]=='reciprocity':
+                        self.EnforceReciprocity()
+                    elif tokens[2]=='both':
+                        self.EnforceBothPassivityAndCausality(causalityThreshold=10e-6,
+                                                              maxIterations=30,
+                                                              maxSingularValue=1.,
+                                                              preserveDC=self.preserveDC)
+                    elif tokens[2]=='all':
+                        self.EnforceAll(causalityThreshold=10e-6,
+                                        maxIterations=30,
+                                        maxSingularValue=1.,
+                                        preserveDC=self.preserveDC)
+                    else:
+                        raise IndexError
+                elif tokens[1] == 'preserve':
+                    if tokens[2] in ['dc','DC']:
+                        self.preserveDC = True
+                    else:
+                        raise IndexError
+                elif tokens[1]=='limit':
+                    self.LimitImpulseResponseLength((float(tokens[2]) if tokens[2]!='none' else -1e15,
+                                                     float(tokens[3]) if tokens[3]!='none' else +1e15))
+                elif tokens[1]=='offset':
+                    if len(tokens)<= 2:
+                        self.RemoveImpulseResponseOffset()
+                    elif len(tokens)<=3:
+                        self.RemoveImpulseResponseOffset((float(tokens[2]) if tokens[2]!='none' else -1e15,+1e15))
+                    else:
+                        self.RemoveImpulseResponseOffset((float(tokens[2]) if tokens[2]!='none' else -1e15,
+                                                         float(tokens[3]) if tokens[3]!='none' else +1e15))
+                elif tokens[1]=='reference':
+                    if tokens[2]=='impedance':
+                        try:
+                            self.SetReferenceImpedance(float(tokens[3]))
+                        except:
+                            raise IndexError
+                    else:
+                        raise IndexError
+                elif tokens[1]=='port':
+                    if tokens[2] == 'reorder':
+                        try:
+                            order=tokens[3]
+                            sp=self.PortReorder([int(p) for p in order.split(',')])
+                            SParameters.__init__(self,sp.m_f,sp.m_d,sp.m_Z0)
+                        except:
+                            raise IndexError
+                    else:
+                        raise IndexError
+                elif tokens[1][0]=='!':
+                    self.header.append(line[len('post !'):])
+                else:
+                    raise IndexError
+            except:
+                raise SignalIntegrityExceptionPostProcessing('not understood: '+line)

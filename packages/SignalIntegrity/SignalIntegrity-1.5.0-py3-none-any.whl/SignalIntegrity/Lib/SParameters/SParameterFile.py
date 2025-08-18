@@ -1,0 +1,197 @@
+"""
+ s-parameter file
+"""
+
+# Copyright (c) 2021 Nubis Communications, Inc.
+# Copyright (c) 2018-2020 Teledyne LeCroy, Inc.
+# All rights reserved worldwide.
+#
+# This file is part of SignalIntegrity.
+#
+# SignalIntegrity is free software: You can redistribute it and/or modify it under the terms
+# of the GNU General Public License as published by the Free Software Foundation, either
+# version 3 of the License, or any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with this program.
+# If not, see <https://www.gnu.org/licenses/>
+
+from numpy import empty
+from numpy import array
+import cmath
+import math
+import os
+import sys
+
+from SignalIntegrity.Lib.SParameters.SParameters import SParameters
+from SignalIntegrity.Lib.Conversions import ReferenceImpedance
+from SignalIntegrity.Lib.FrequencyDomain.FrequencyList import GenericFrequencyList
+from SignalIntegrity.Lib.Exception import SignalIntegrityExceptionSParameterFile
+
+class SParameterFile(SParameters):
+    """class for s-parameters read from a file"""
+    sort_frequencies=True
+    def __init__(self,name,Z0=None,callback=None,**kwargs):
+        """Constructor
+        @param name string file name of s-parameter file to read.
+        @param Z0 (optional) real or complex reference impedance desired (defaults to 50 ohms).
+        @param callback function ptr (optional, defaults to None) callback function.
+        @param **kwargs dict (optional, defaults to {}) dictionary of arguments for the file
+
+        Reads the s-parameter file and produces an instance of its base class SParameters.  
+
+        If the reference impedance of the Touchstone 1.0 file read is not the reference
+        impedance specified, then the reference impedance of the s-parameters are converted
+        to the reference impedance specified.
+
+        The callback function is used to pass down into s-parameter files that are actually
+        SignalIntegrity projects so that progress can be tracked and the UI thread can be kept
+        updated.  The callback function should have a signature like Callback(self,number,name=None),
+        where the number is the progress in percent and the name is the name of the file being processed.
+
+        If the name is the name of an s-parameter file and one of the kwarg keywords is 'text', then
+        the item associated with the keyword is assumed be a text stream containing s-parameter data to
+        directly fill in.  In this case, the file name is used only to determine the number of ports.
+
+        if a kwarg keyword is 'reorder', then it is followed by a string of comma separted integer
+        one-based values representing the ports to take the data from in the list.  For example, a
+        two-port with the argument 'reorder 1,2' will return the s-parameters unchanged, but
+        'reorder 2,1' will swap the ports. You can also use 'reorder 1' to extract the port 1 return
+        loss and convert it into a one-port s-parameter.
+        """
+        self.m_sToken='S'
+        self.m_Z0=Z0
+        # pragma: silent exclude
+        order=kwargs.pop('reorder',None)
+        if order not in [None,'None','']:
+            order=[int(p) for p in order.split(',')]
+        else:
+            order=None
+        ext=str.lower(name).split('.')[-1]
+        if ext == 'si':
+            from SignalIntegrity.App.SignalIntegrityAppHeadless import ProjectSParameters
+            sp=ProjectSParameters(name,callback,**kwargs)
+            if not sp is None:
+                if order != None:
+                    sp=sp.PortReorder(order)
+                SParameters.__init__(self,sp.m_f,sp.m_d,sp.m_Z0)
+                self.SetReferenceImpedance(Z0)
+                return
+            else:
+                raise SignalIntegrityExceptionSParameterFile('s-parameters could not be produced by '+name)
+        else:
+            try:
+            # pragma: include outdent outdent
+                self.m_P=int(str.lower(name).split('.')[-1].split('s')[1].split('p')[0])
+            # pragma: silent exclude indent indent
+            except:
+                raise SignalIntegrityExceptionSParameterFile('incorrect extension in s-parameter file name in '+name)
+        # pragma: include
+        freqMul = 1e6
+        complexType = 'MA'
+        Z0=50.
+        sp=True
+        f=[]
+        self.m_f=[]
+        numbersList=[]
+        # pragma: silent exclude
+        self.header=[]
+        if 'text' in kwargs:
+            spfile=kwargs['text']
+        else:
+            try:
+                from SignalIntegrity.Lib.Encryption import Encryption
+                spfile=Encryption().ReadEncryptedLines(name)
+            except IOError:
+                raise SignalIntegrityExceptionSParameterFile(name+' not found')
+        readHeader=True
+        # pragma: include indent indent
+        for line in spfile:
+            # pragma: silent exclude
+            if readHeader:
+                if line[0] in ['!',' ','#','\n']:
+                    if line[0] == '!':
+                        self.header.append(line[1:-1]+'\n')
+                else:
+                    readHeader = False
+            # pragma: include
+            lineList = str.lower(line).split('!')[0].split()
+            if len(lineList)>0:
+                if lineList[0] == '#':
+                    if 'hz' in lineList: freqMul = 1.0
+                    if 'khz' in lineList: freqMul = 1e3
+                    if 'mhz' in lineList: freqMul = 1e6
+                    if 'ghz' in lineList: freqMul = 1e9
+                    if 'ma' in lineList: complexType = 'MA'
+                    if 'ri' in lineList: complexType = 'RI'
+                    if 'db' in lineList: complexType = 'DB'
+                    if 'r' in lineList:
+                        Z0=float(lineList[lineList.index('r')+1])
+                    if not self.m_sToken.lower() in lineList:
+                        sp=False
+                else: numbersList.extend(lineList)
+        if not sp: return
+        if self.m_Z0==None: self.m_Z0=Z0
+        # pragma: silent exclude
+        try:
+            import numpy as np
+            invalid = np.any(np.isnan([float(v) for v in numbersList]))
+        except:
+            invalid = True
+        if invalid:
+            raise SignalIntegrityExceptionSParameterFile(name+' has invalid values')
+        # pragma: include
+        frequencies = len(numbersList)//(1+self.m_P*self.m_P*2)
+        P=self.m_P
+        self.m_d=[empty([P,P]).tolist() for fi in range(frequencies)]
+        for fi in range(frequencies):
+            f.append(float(numbersList[(1+P*P*2)*fi])*freqMul)
+            for r in range(P):
+                for c in range(P):
+                    n1=float(numbersList[(1+P*P*2)*fi+1+(r*P+c)*2])
+                    n2=float(numbersList[(1+P*P*2)*fi+1+(r*P+c)*2+1])
+                    if complexType == 'RI':
+                        self.m_d[fi][r][c]=n1+1j*n2
+                    else:
+                        expangle=cmath.exp(1j*math.pi/180.*n2)
+                        if complexType == 'MA':
+                            self.m_d[fi][r][c]=n1*expangle
+                        elif complexType == 'DB':
+                            self.m_d[fi][r][c]=math.pow(10.,n1/20)*expangle
+            if P == 2:
+                self.m_d[fi]=array(self.m_d[fi]).transpose().tolist()
+            if Z0 != self.m_Z0:
+                self.m_d[fi]=ReferenceImpedance(self.m_d[fi],self.m_Z0,Z0)
+        self.m_f=GenericFrequencyList(f)
+        # pragma: silent exclude
+        if order != None:
+            sp=self.PortReorder(order)
+            SParameters.__init__(self,sp.m_f,sp.m_d,sp.m_Z0)
+        if self.sort_frequencies:
+            import numpy as np
+            if not all (np.diff(f) > 0): # frequency list is not in order!
+                _,unq_row_indices = np.unique(np.array(f),return_index=True,axis=0)
+                reindex_array=np.stack((np.array(f)[unq_row_indices],unq_row_indices),axis=1)
+                reindex_array=reindex_array[reindex_array[:, 0].argsort()]
+                newf,index = reindex_array[:,0],reindex_array[:,1].astype(int)
+                newd=[self.m_d[i] for i in index]
+                self.m_f=newf.tolist()
+                self.m_d=newd
+                pass
+        # pragma: include
+# pragma: silent exclude
+if __name__ == "__main__": # pragma: no cover
+    runProfiler=True
+
+    if runProfiler:
+        import cProfile
+        cProfile.run('SParameterFile(\'/home/peterp/Work/PySI/PowerIntegrity/ReversePulseMode/CurrentDelayLine1p65us.s4p\')','stats')
+
+        import pstats
+        p = pstats.Stats('stats')
+        p.strip_dirs().sort_stats('cumulative').print_stats(30)
+    else:
+        SParameterFile('/home/peterp/Work/PySI/PowerIntegrity/ReversePulseMode/CurrentDelayLine1p65us.s4p')
