@@ -1,0 +1,145 @@
+{% extends "admin/dj_redis_panel/base.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block content %}
+<div class="module">
+    <h2>{% trans 'Redis Instances' %}</h2>
+    <br>
+    {% if redis_instances %}
+    <div class="results">
+        <table id="result_list">
+            <thead>
+                <tr>
+                    <th scope="col">{% trans 'Instance' %}</th>
+                    <th scope="col">{% trans 'Status' %}</th>
+                    <th scope="col">{% trans 'Version' %}</th>
+                    <th scope="col">{% trans 'Memory Used' %}</th>
+                    <th scope="col">{% trans 'Clients' %}</th>
+                    <th scope="col">{% trans 'Total Keys' %}</th>
+                    <th scope="col">{% trans 'Actions' %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for instance in redis_instances %}
+                <tr class="{% cycle 'row1' 'row2' %}">
+                    <td>
+                        <strong>{{ instance.alias }}</strong>
+                        {% if instance.config.description %}
+                            <br><small class="quiet">{{ instance.config.description }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if instance.status == 'connected' %}
+                            <span class="icon-yes" title="Connected">
+                                <img src="{% static 'admin/img/icon-yes.svg' %}" alt="Connected">
+                                {% trans 'Connected' %}
+                            </span>
+                        {% else %}
+                            <span class="icon-no" title="Disconnected">
+                                <img src="{% static 'admin/img/icon-no.svg' %}" alt="Disconnected">
+                                {% trans 'Disconnected' %}
+                            </span>
+                            {% if instance.error %}
+                                <br><small class="quiet" style="color: #ba2121;">{{ instance.error }}</small>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if instance.info %}
+                            {{ instance.info.redis_version }}
+                        {% else %}
+                            <span class="quiet">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if instance.info %}
+                            {{ instance.info.used_memory_human }}
+                        {% else %}
+                            <span class="quiet">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if instance.info %}
+                            {{ instance.info.connected_clients }}
+                        {% else %}
+                            <span class="quiet">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if instance.info %}
+                            {{ instance.total_keys }}
+                        {% else %}
+                            <span class="quiet">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if instance.status == 'connected' %}
+                            <a href="{% url 'dj_redis_panel:instance_overview' instance.alias %}" class="default">
+                                {% trans 'Browse Instance' %}
+                            </a>
+                        {% else %}
+                            <span class="quiet">{% trans 'N/A' %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="aligned">
+        <fieldset class="module">
+            <h2>{% trans 'Redis Configuration Required' %}</h2>
+            
+            <div class="form-row">
+                <div class="help-text">
+                    <p>{% trans 'To use the Redis panel, you must configure Redis instances in your Django settings.' %}</p>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <h3>{% trans 'Step 1: Configure Redis Panel Settings' %}</h3>
+                <div class="help-text">
+                    <p>{% trans 'Add the following to your Django settings.py:' %}</p>
+                </div>
+                <fieldset class="collapse">
+                    <div class="form-row">
+                        <textarea readonly rows="15" class="vLargeTextField" style="font-family: monospace; width: 100%;">DJ_REDIS_PANEL_SETTINGS = {
+    "INSTANCES": {
+        "default": {
+            "description": "Default Redis Cache",
+            "host": "127.0.0.1",
+            "port": 6379,
+            "db": 0,
+        },
+        "sessions": {
+            "description": "Session Storage",
+            "host": "127.0.0.1",
+            "port": 6379,
+            "db": 1,
+        },
+        "cache_db": {
+            "description": "Application Cache",  
+            "host": "127.0.0.1",
+            "port": 6379,
+            "db": 2,
+        },
+        # Add more instances as needed...
+    }
+}</textarea>
+                    </div>
+                </fieldset>
+            </div>
+
+            
+
+            <div class="form-row">
+                <div class="help-text">
+                    <p><strong>{% trans 'After adding the configuration, restart your Django server to see your Redis instances.' %}</strong></p>
+                </div>
+            </div>
+        </fieldset>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
