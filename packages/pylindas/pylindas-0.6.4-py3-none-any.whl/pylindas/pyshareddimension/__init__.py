@@ -1,0 +1,1 @@
+from pylindas.pyshareddimension.shared_dimension import SharedDimension
