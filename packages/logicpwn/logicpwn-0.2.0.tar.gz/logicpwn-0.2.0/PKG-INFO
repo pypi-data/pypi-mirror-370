@@ -1,0 +1,250 @@
+Metadata-Version: 2.3
+Name: logicpwn
+Version: 0.2.0
+Summary: A modular web application security testing framework
+Author: Jash Naik
+Author-email: jashnaik2004@gmail.com
+Requires-Python: >=3.9,<4.0
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Provides-Extra: email
+Provides-Extra: providers
+Provides-Extra: sms
+Requires-Dist: aiohttp (>=3.9.0,<4.0.0)
+Requires-Dist: boto3 (>=1.34.0,<2.0.0) ; extra == "sms" or extra == "providers"
+Requires-Dist: cryptography (>=42.0.0,<43.0.0)
+Requires-Dist: jsonpath-ng (>=1.7.0,<2.0.0)
+Requires-Dist: loguru (>=0.7.2,<0.8.0)
+Requires-Dist: psutil (>=5.9.0,<6.0.0)
+Requires-Dist: pydantic (>=2.5.0,<3.0.0)
+Requires-Dist: pytest-asyncio (<1.0)
+Requires-Dist: qrcode[pil] (>=7.4.2,<8.0.0)
+Requires-Dist: requests (>=2.31.0,<3.0.0)
+Requires-Dist: sendgrid (>=6.11.0,<7.0.0) ; extra == "email" or extra == "providers"
+Requires-Dist: sphinx (>=7.2.0,<8.0.0)
+Requires-Dist: sphinx-autodoc-typehints (>=1.22.0,<2.0.0)
+Requires-Dist: sphinx-rtd-theme (>=3.0.2,<4.0.0)
+Requires-Dist: tenacity (>=9.1.2,<10.0.0)
+Requires-Dist: twilio (>=9.0.0,<10.0.0) ; extra == "sms" or extra == "providers"
+Description-Content-Type: text/markdown
+
+# LogicPwn
+
+LogicPwn is a modern, extensible framework for automated business logic vulnerability assessment, exploit chaining, and professional reporting.
+
+## Why LogicPwn?
+
+**Business logic vulnerabilities** are often missed by traditional scanners because they require understanding application workflows, not just code patterns. LogicPwn fills this gap by:
+
+- **Automating complex attack chains** - Chain multiple requests with session handling, CSRF tokens, and dynamic data extraction
+- **Detecting access control flaws** - Find IDOR vulnerabilities and privilege escalation issues through systematic testing
+- **Professional reporting** - Generate client-ready reports with CVSS scoring, proof-of-concepts, and remediation guidance
+- **Flexible authentication** - Handle complex login flows, multi-step auth, and session persistence automatically
+- **Extensible architecture** - Build custom modules for specific application types or testing scenarios
+
+Perfect for **penetration testers**, **bug bounty hunters**, and **security teams** who need to go beyond basic vulnerability scanning.
+
+
+## Features
+- 🔐 **Authentication**: Flexible session management
+- 🚀 **Request Runner**: Advanced HTTP operations
+- ✅ **Response Validator**: Powerful response analysis
+- 🔍 **Access Detector**: Automated IDOR & access control detection
+- ⚡ **Exploit Engine**: Automated exploit chaining
+- 📄 **Report Generator**: Professional, multi-format reporting (Markdown, HTML, JSON)
+- 🧩 **Extensible**: Plugin-ready, template-driven, and highly modular
+- 🛡️ **Security**: Automatic sensitive data redaction, CVSS scoring, and privacy compliance
+
+## Quickstart
+
+### Synchronous Request (No Authentication)
+```python
+import requests
+from logicpwn.core.runner import send_request
+
+session = requests.Session()
+request_config = {
+    "url": "https://httpbin.org/get",
+    "method": "GET"
+}
+response = send_request(session, request_config)
+print("Status:", response.status_code)
+print("Content:", response.text[:200])
+```
+
+### Synchronous Authenticated Request
+```python
+from logicpwn.core.auth import authenticate_session
+from logicpwn.core.runner import send_request
+
+auth_config = {
+    "url": "https://httpbin.org/basic-auth/user/passwd",
+    "method": "GET",
+    "credentials": {"username": "user", "password": "passwd"},
+    "success_indicators": ["authenticated"]
+}
+session = authenticate_session(auth_config)
+request_config = {
+    "url": "https://httpbin.org/basic-auth/user/passwd",
+    "method": "GET"
+}
+response = send_request(session, request_config)
+print("Status:", response.status_code)
+print("Content:", response.text[:200])
+```
+
+### Async Example (No Authentication)
+```python
+import asyncio
+from logicpwn.core.runner import AsyncSessionManager
+
+async def main():
+    async with AsyncSessionManager() as manager:
+        results = await manager.execute_exploit_chain([
+            {"url": "https://httpbin.org/get", "method": "GET"},
+            {"url": "https://httpbin.org/uuid", "method": "GET"}
+        ])
+        for i, result in enumerate(results):
+            print(f"Request {i+1}: {result.status_code} - {result.text[:100]}")
+
+asyncio.run(main())
+```
+
+### IDOR Detection Example
+```python
+import requests
+from logicpwn.core.access import detect_idor_flaws, AccessDetectorConfig
+
+session = requests.Session()
+endpoint_template = "https://httpbin.org/anything/{id}"
+test_ids = ["1", "2", "3"]
+success_indicators = ["url"]
+failure_indicators = ["error"]
+
+config = AccessDetectorConfig(
+    current_user_id="1",
+    authorized_ids=["1"],
+    unauthorized_ids=["2", "3"],
+    compare_unauthenticated=True
+)
+
+results = detect_idor_flaws(
+    session,
+    endpoint_template,
+    test_ids,
+    success_indicators,
+    failure_indicators,
+    config
+)
+for result in results:
+    print(f"Tested ID: {result.id_tested}")
+    print(f"  Access granted: {result.access_granted}")
+    print(f"  Vulnerability detected: {result.vulnerability_detected}")
+    print(f"  Status code: {result.status_code}")
+    print(f"  Error: {result.error_message}")
+    print()
+```
+
+### Reporting Example
+```python
+from logicpwn.core.reporter.orchestrator import (
+    ReportGenerator, ReportConfig, VulnerabilityFinding, ReportMetadata
+)
+from datetime import datetime
+
+# Configure the report
+config = ReportConfig(
+    target_url="https://httpbin.org/get",
+    report_title="Security Assessment Report"
+)
+reporter = ReportGenerator(config)
+
+# Add a finding
+finding = VulnerabilityFinding(
+    id="IDOR-001",
+    title="IDOR in User Profile",
+    severity="High",
+    description="User profile accessible without auth...",
+    affected_endpoints=["/anything/{id}"],
+    proof_of_concept="GET /anything/123",
+    impact="Sensitive data exposure",
+    remediation="Add access control",
+    discovered_at=datetime.now()
+)
+reporter.add_finding(finding)
+
+# Set metadata
+reporter.metadata = ReportMetadata(
+    report_id="RPT-001",
+    title="Security Assessment Report",
+    target_url="https://httpbin.org/get",
+    scan_start_time=datetime.now(),
+    scan_end_time=datetime.now(),
+    logicpwn_version="1.0.0",
+    total_requests=100,
+    findings_count={"High": 1}
+)
+
+# Generate and export
+reporter.export_to_file("report.md", "markdown")
+reporter.export_to_file("report.html", "html")
+```
+
+### Exploit Engine Example
+```python
+import requests
+from logicpwn.core.exploit_engine.models import ExploitChain, ExploitStep
+from logicpwn.core.exploit_engine.exploit_engine import run_exploit_chain
+from logicpwn.models.request_config import RequestConfig
+
+# Define a simple exploit step
+step = ExploitStep(
+    name="Get UUID",
+    description="Fetch a UUID from httpbin",
+    request_config=RequestConfig(
+        url="https://httpbin.org/uuid",
+        method="GET"
+    ),
+    success_indicators=["uuid"]
+)
+
+# Create an exploit chain
+chain = ExploitChain(
+    name="Simple Chain",
+    description="A single-step chain for demonstration",
+    steps=[step]
+)
+
+# Use a plain session for public endpoints
+session = requests.Session()
+
+# Run the exploit chain
+results = run_exploit_chain(session, chain)
+
+for result in results:
+    print(f"Step: {result.step_name}, Status: {result.status}, Error: {result.error_message}")
+    if result.response is not None:
+        print("Response:", result.response.text[:200])
+```
+
+## Documentation
+- **API Reference**: See `docs/build/index.html` (after running `poetry run sphinx-build docs/source docs/build`)
+- **Getting Started**: See `docs/source/getting_started.rst`
+- **Examples**: See `examples/reports/`
+
+## Testing
+Run all tests with:
+```sh
+poetry run pytest tests/core/reporter/
+```
+
+## Contributing
+- PRs welcome! Please add tests and docstrings for new features.
+- For questions or feature requests, open an issue.
+
+---
+LogicPwn © 2024 | MIT License
