@@ -1,0 +1,613 @@
+# Rule Language Documentation
+
+## Overview
+
+The Rule Language is a domain-specific language (DSL) designed for defining soft logic constraints in mammography classification. It allows you to replace hard-coded constraint logic with flexible, interpretable rule scripts that can be modified without changing Python code.
+
+## Syntax Reference
+
+### Comments
+Comments start with `#` and continue to the end of the line:
+```
+# This is a comment
+define findings_L = mass_L | mc_L  # Inline comment
+```
+
+### Variable Definitions
+Define new variables using logical combinations of existing features:
+```
+define variable_name = expression
+```
+
+### Constant Definitions
+Define constants for reusable literal values:
+```
+const constant_name = value
+```
+
+### Variable Expectations
+Declare which variables (features) the script expects to be provided:
+```
+expect variable_name
+expect variable1, variable2, variable3
+```
+
+Examples:
+```
+# Declare expected variables at the beginning of the script
+expect left_birads, right_birads, mass_L, mc_L
+
+# Or declare them individually
+expect comp
+expect risk_score
+
+# Define constants for thresholds
+const high_threshold = 0.8
+const low_threshold = 0.2
+const birads_cutoff = 4
+
+# Basic logical operations with literals
+define findings_L = mass_L | mc_L
+define high_risk = risk_score > 0.7  # Using literal number
+define moderate_risk = risk_score > low_threshold  # Using constant
+
+# Function calls with mixed literals and variables
+define high_birads = sum(birads_L, [4, 5, 6])
+define threshold_check = risk_score >= high_threshold
+```
+
+### Constraints
+Define constraints that will be enforced during training:
+```
+constraint expression [weight=value] [transform="type"] [param=value ...]
+```
+
+Examples:
+```
+# Basic constraint
+constraint exactly_one(birads_L)
+
+# Constraint with weight and transform
+constraint findings_L >> high_birads weight=0.7 transform="logbarrier"
+
+# Constraint with multiple parameters
+constraint exactly_one(comp) weight=1.5 transform="hinge" alpha=2.0
+```
+
+## Operators
+
+### Logical Operators (in order of precedence, lowest to highest)
+
+1. **Implication (`>>`)**: A >> B (if A then B)
+   ```
+   constraint findings_L >> high_birads_L
+   ```
+
+2. **OR (`|`)**: A | B (A or B)
+   ```
+   define findings = mass_L | mc_L
+   ```
+
+3. **XOR (`^`)**: A ^ B (A exclusive or B)
+   ```
+   define exclusive = mass_L ^ mc_L
+   ```
+
+4. **Comparison Operators**: `>`, `<`, `==`, `>=`, `<=`
+   ```
+   define high_risk = risk_score > threshold_value
+   define similar_scores = score_a == score_b
+   define within_range = score >= min_val & score <= max_val
+   ```
+
+5. **AND (`&`)**: A & B (A and B)
+   ```
+   define strict_findings = mass_L & high_confidence
+   ```
+
+6. **AND_n (`& variable`)**: AND across all elements in a tensor
+   ```
+   # All radiologists must agree (consensus)
+   define consensus = & radiologist_assessments
+   
+   # All imaging modalities must show findings
+   define all_modalities_positive = & imaging_results
+   ```
+
+7. **OR_n (`| variable`)**: OR across all elements in a tensor  
+   ```
+   # Any radiologist found something
+   define any_concern = | radiologist_assessments
+   
+   # Any imaging modality shows findings
+   define any_positive = | imaging_results
+   ```
+
+8. **NOT (`~`)**: ~A (not A)
+   ```
+   define no_findings = ~findings_L
+   ```
+
+9. **Indexing (`variable[...]`)**: Access tensor elements using numpy/pytorch syntax
+   ```
+   # Integer indexing
+   define first_patient = patient_data[0]
+   define specific_element = matrix[1, 2]
+   define last_radiologist = assessments[2]
+   
+   # Slice indexing
+   define first_two_patients = patient_data[:2]
+   define middle_columns = matrix[:, 1:3]
+   define every_other = data[::2]
+   define specific_range = tensor[1:4]
+   
+   # Multi-dimensional indexing
+   define patient_features = batch_data[0, :, 2]
+   define view_subset = assessments[:, 1, :]
+   ```
+
+### Parentheses
+Use parentheses to override operator precedence:
+```
+define complex = (mass_L | mc_L) & ~(birads_L >> findings_L)
+```
+
+## Statement Separation
+
+### Semicolons
+You can use semicolons (`;`) to separate multiple statements on a single line, similar to Python:
+
+```
+# Multiple statements on one line
+expect a, b; define c = a | b; constraint c
+
+# Mix of semicolons and newlines
+const threshold = 0.5; expect risk_score
+define high_risk = risk_score > threshold
+constraint high_risk weight=0.8
+
+# Multiple constants and definitions
+const low = 0.2; const high = 0.8; define range_check = value >= low & value <= high
+```
+
+### Line-based Separation
+Statements can also be separated by newlines (traditional approach):
+```
+expect findings_L, findings_R
+define bilateral = findings_L & findings_R
+constraint bilateral weight=0.6
+```
+
+### Trailing Semicolons
+Trailing semicolons are optional and ignored:
+```
+expect variables;
+define result = expression;
+constraint result;
+```
+
+## Built-in Functions
+
+### `sum(probabilities, indices)`
+Sum probabilities for specified class indices:
+```
+define high_birads_L = sum(birads_L, [4, 5, 6])
+define very_high_birads = sum(birads_L, [5, 6])
+```
+
+### `exactly_one(probabilities)`
+Create exactly-one constraint for categorical probabilities:
+```
+constraint exactly_one(birads_L) weight=1.0
+```
+
+### `mutual_exclusion(...probabilities)`
+Create mutual exclusion constraint between multiple probabilities:
+```
+constraint mutual_exclusion(mass_L, mc_L) weight=0.5
+```
+
+### `at_least_k(probabilities, k)`
+Create constraint that at least k elements must be true:
+```
+define min_two_findings = at_least_k(findings_combined, 2)
+constraint min_two_findings weight=0.6
+```
+
+### `at_most_k(probabilities, k)`
+Create constraint that at most k elements can be true:
+```
+define max_one_high_birads = at_most_k(high_birads_indicators, 1)
+constraint max_one_high_birads weight=0.7
+```
+
+### `exactly_k(probabilities, k)`
+Create constraint that exactly k elements must be true:
+```
+define exactly_two_radiologists = exactly_k(radiologist_agreement, 2)
+constraint exactly_two_radiologists weight=0.8
+```
+
+### `threshold_implication(antecedent, consequent, threshold)`
+Create threshold-based implication constraint:
+```
+define strong_implication = threshold_implication(high_risk_L, findings_L, 0.7)
+constraint strong_implication weight=0.9
+```
+
+### `conditional_probability(condition, event, target_prob)`
+Create conditional probability constraint:
+```
+define conditional_findings = conditional_probability(high_birads_L, findings_L, 0.85)
+constraint conditional_findings weight=0.8
+```
+
+### `clamp(tensor, min_val, max_val)`
+Clamp tensor values to specified range:
+```
+define clamped_mass = clamp(mass_L, 0.1, 0.9)
+```
+
+### `threshold(tensor, threshold)`
+Apply threshold to tensor:
+```
+define binary_mass = threshold(mass_L, 0.5)
+```
+
+### `greater_than(left, right)`
+Create soft greater than comparison between two tensors:
+```
+define high_confidence = greater_than(confidence, baseline)
+```
+
+### `less_than(left, right)`
+Create soft less than comparison between two tensors:
+```
+define low_risk = less_than(risk_score, threshold_low)
+```
+
+### `equals(left, right)`
+Create soft equality comparison between two tensors:
+```
+define similar_scores = equals(score_a, score_b)
+```
+
+### `threshold_constraint(tensor, threshold, operator)`
+Create threshold constraint with specified comparison operator:
+```
+define high_birads = threshold_constraint(birads_score, 0.7, ">")
+define exact_match = threshold_constraint(prediction, 0.5, "==")
+define within_bounds = threshold_constraint(value, 0.3, ">=")
+```
+
+## Data Types
+
+### Numbers
+Integer or floating-point numbers can be used directly in expressions:
+```
+define high_risk = risk_score > 0.8
+define moderate = value >= 0.3 & value <= 0.7
+constraint threshold_check weight=1.5  # Literal number as parameter
+```
+
+### Strings
+Text values enclosed in quotes:
+```
+transform="logbarrier"
+transform='hinge'
+const model_type = "transformer"
+```
+
+### Lists
+Arrays of values:
+```
+[1, 2, 3]
+[4, 5, 6]
+const important_classes = [4, 5, 6]  # Can store list constants
+```
+
+### Mixed Type Expressions
+The rule language automatically handles mixed types in expressions:
+```
+# Tensor compared with literal number
+define high_values = predictions > 0.5
+
+# Tensor compared with constant
+const threshold = 0.7
+define above_threshold = scores >= threshold
+
+# Combining constants and variables
+const low_cut = 0.2
+const high_cut = 0.8
+define in_range = (values >= low_cut) & (values <= high_cut)
+```
+
+## Constraint Parameters
+
+### `weight` (float)
+Relative importance of the constraint:
+```
+constraint exactly_one(birads_L) weight=2.0  # Higher weight = more important
+```
+
+### `transform` (string)
+Loss transformation method:
+- `"logbarrier"`: Logarithmic barrier (default, smooth penalties)
+- `"hinge"`: Hinge loss (softer penalties)
+- `"linear"`: Linear loss (proportional penalties)
+
+```
+constraint findings >> high_birads transform="hinge"
+```
+
+### Custom Parameters
+Additional parameters specific to constraint types:
+```
+constraint exactly_one(birads_L) weight=1.0 alpha=2.0 beta=0.5
+```
+
+## Complete Example
+
+```
+# Mammography Constraint Rules
+# ============================
+
+# Declare expected variables from model output
+expect mass_L, mass_R, mc_L, mc_R
+expect birads_L, birads_R, birads_score_L, birads_score_R
+expect comp
+
+# Define constants for reusable thresholds
+const high_risk_threshold = 0.7
+const low_risk_threshold = 0.3
+const birads_high_cutoff = 4
+const birads_very_high_cutoff = 5
+
+# Feature definitions - combine findings per breast
+define findings_L = mass_L | mc_L
+define findings_R = mass_R | mc_R
+
+# BI-RADS probability groups using constants
+define high_birads_L = sum(birads_L, [4, 5, 6])
+define high_birads_R = sum(birads_R, [4, 5, 6])
+define very_high_birads_L = sum(birads_L, [5, 6])
+define very_high_birads_R = sum(birads_R, [5, 6])
+define low_birads_L = sum(birads_L, [1, 2])
+define low_birads_R = sum(birads_R, [1, 2])
+
+# Threshold-based risk assessments using literals and constants
+define high_risk_L = birads_score_L > high_risk_threshold
+define high_risk_R = birads_score_R > high_risk_threshold  
+define very_low_risk_L = birads_score_L < low_risk_threshold
+define very_low_risk_R = birads_score_R < low_risk_threshold
+define balanced_assessment = equals(risk_L, risk_R)
+
+# Range constraints using multiple comparisons with literals
+define valid_risk_range_L = (birads_score_L >= 0.0) & (birads_score_L <= 1.0)
+define valid_risk_range_R = (birads_score_R >= 0.0) & (birads_score_R <= 1.0)
+
+# No findings (negation of findings)
+define no_findings_L = ~findings_L
+define no_findings_R = ~findings_R
+
+# Categorical exclusivity constraints
+constraint exactly_one(birads_L) weight=1.0 transform="logbarrier"
+constraint exactly_one(birads_R) weight=1.0 transform="logbarrier"
+constraint exactly_one(comp) weight=0.7 transform="logbarrier"
+
+# Logical implication constraints using threshold variables
+constraint high_risk_L >> findings_L weight=0.8 transform="logbarrier"
+constraint high_risk_R >> findings_R weight=0.8 transform="logbarrier"
+
+# Very High BI-RADS (5-6) -> Findings  
+constraint very_high_birads_L >> findings_L weight=0.7 transform="logbarrier"
+constraint very_high_birads_R >> findings_R weight=0.7 transform="logbarrier"
+
+# Low BI-RADS with literal thresholds -> No findings (gentle constraint)
+constraint very_low_risk_L >> no_findings_L weight=0.3 transform="logbarrier"
+constraint very_low_risk_R >> no_findings_R weight=0.3 transform="logbarrier"
+
+# Range validation constraints
+constraint valid_risk_range_L weight=2.0 transform="logbarrier"
+constraint valid_risk_range_R weight=2.0 transform="logbarrier"
+
+# Comparison-based constraints using constants
+constraint balanced_assessment weight=0.4 transform="hinge"
+```
+
+## Usage Patterns
+
+### 1. Variable Expectations
+Declare required variables at the beginning of scripts for better error handling:
+```
+# Declare all expected model outputs in one line
+expect left_mass_prob, right_mass_prob, left_birads, right_birads, composition
+
+# Now use these variables with confidence
+define findings_L = left_mass_prob > 0.5
+constraint exactly_one(left_birads)
+```
+
+### 2. Categorical Constraints
+Ensure exactly one category is selected:
+```
+constraint exactly_one(birads_L) weight=1.0
+constraint exactly_one(composition) weight=0.8
+```
+
+### 2. Implication Rules
+Model domain knowledge as if-then relationships:
+```
+# If findings present, then high BI-RADS likely
+constraint findings_L >> high_birads_L weight=0.7
+
+# If very high BI-RADS, then findings must be present
+constraint very_high_birads_L >> findings_L weight=0.8
+```
+
+### 3. Mutual Exclusion
+Prevent conflicting classifications:
+```
+constraint mutual_exclusion(mass_L, calc_L) weight=0.5
+```
+
+### 4. Threshold Rules
+Apply domain-specific thresholds:
+```
+define suspicious = threshold(combined_score, 0.7)
+constraint suspicious >> high_birads weight=0.6
+```
+
+### 5. Comparison Constraints
+Use soft comparison operators for ordinal and threshold relationships:
+```
+# Risk stratification with thresholds
+define high_risk = risk_score > 0.8
+define low_risk = risk_score < 0.2
+constraint high_risk >> findings weight=0.7
+```
+
+### 6. Consensus and Agreement (AND_n)
+Model situations where all elements must be true:
+```
+# All radiologists must agree for high confidence
+define consensus = & radiologist_assessments
+constraint consensus > 0.7 >> definitive_diagnosis weight=0.9
+
+# All imaging modalities must show findings
+define multi_modal_positive = & imaging_results
+constraint multi_modal_positive >> high_confidence weight=0.8
+```
+
+### 7. Any Evidence Detection (OR_n)
+Model situations where any element being true is significant:
+```
+# Any radiologist expressing concern triggers review
+define any_concern = | radiologist_assessments  
+constraint any_concern > 0.5 >> requires_review weight=0.6
+
+# Any modality showing findings suggests pathology
+define any_positive = | imaging_modalities
+constraint any_positive >> potential_pathology weight=0.7
+```
+
+### 8. Tensor Indexing and Slicing
+Access specific elements, patients, or subsets of multi-dimensional data:
+```
+# Patient-specific analysis
+define patient_0_risk = patient_risks[0]
+define patient_1_findings = findings[1, :]
+constraint patient_0_risk > 0.8 >> patient_0_findings weight=1.0
+
+# View-specific mammography analysis
+define cc_assessments = assessments[:, 0, :]  # CC view for all patients
+define mlo_assessments = assessments[:, 1, :]  # MLO view for all patients
+define cc_consensus = & cc_assessments
+define mlo_consensus = & mlo_assessments
+constraint cc_consensus & mlo_consensus >> high_confidence weight=0.9
+
+# Radiologist-specific consistency
+define senior_opinions = assessments[:, :, 0]  # Senior across all views
+define resident_opinions = assessments[:, :, 1]  # Resident across all views
+define senior_consistency = & senior_opinions
+constraint senior_consistency weight=0.8
+
+# Subset analysis
+define high_risk_patients = patient_data[:3]  # First 3 patients
+define feature_subset = features[:, 2:5]  # Specific feature range
+define consensus_subset = & high_risk_patients
+constraint consensus_subset >> intensive_monitoring weight=1.0
+
+
+# Equality constraints for consistency
+define balanced_breasts = equals(risk_L, risk_R)
+constraint balanced_breasts weight=0.3 transform="hinge"
+
+# Range constraints using multiple comparisons
+define valid_range = (score >= 0.1) & (score <= 0.9)
+constraint valid_range weight=1.0
+```
+
+### 9. Ordinal Relationships
+Model ordered classifications with comparison operators:
+```
+# BI-RADS ordering constraints
+define birads_3_higher = birads_3 >= birads_2
+define birads_4_higher = birads_4 >= birads_3
+constraint birads_3_higher & birads_4_higher weight=0.8
+```
+
+## Error Handling
+
+The rule language provides helpful error messages for common issues:
+
+### Syntax Errors
+```
+define x = mass_L |  # Error: Missing right operand
+```
+
+### Undefined Variables
+```
+define x = undefined_var  # Error: Variable 'undefined_var' is not defined
+```
+
+### Type Mismatches
+```
+constraint exactly_one(5)  # Error: Expected Truth object, got number
+```
+
+### Invalid Functions
+```
+define x = unknown_func()  # Error: Unknown function 'unknown_func'
+```
+
+## Advanced Features
+
+### Custom Functions
+Add domain-specific functions to the interpreter:
+```python
+def custom_risk_score(mass_prob, calc_prob, birads_prob):
+    # Custom risk calculation
+    return combined_risk
+
+interpreter.add_builtin_function('risk_score', custom_risk_score)
+```
+
+### Dynamic Rule Updates
+Modify rules at runtime:
+```python
+loss_fn.update_rules(new_rules_string)
+```
+
+### Multiple Semantics
+Choose different logical semantics:
+- **Gödel**: min/max operations (sharp decisions)
+- **Łukasiewicz**: bounded sum operations (smoother)
+- **Product**: multiplication operations (independent probabilities)
+
+```python
+loss_fn = RuleBasedMammoConstraintsLoss(
+    feature_indices=indices,
+    rules=rules,
+    semantics="lukasiewicz"  # or "godel", "product"
+)
+```
+
+## Best Practices
+
+1. **Start Simple**: Begin with basic constraints and add complexity gradually
+2. **Use Comments**: Document the medical reasoning behind each constraint
+3. **Test Incrementally**: Add constraints one at a time and validate behavior
+4. **Meaningful Names**: Use descriptive variable names that reflect medical concepts
+5. **Balanced Weights**: Start with equal weights and adjust based on domain importance
+6. **Appropriate Transforms**: Use "logbarrier" for strict constraints, "hinge" for softer ones
+
+## Migration from Hard-coded Constraints
+
+To convert existing hard-coded constraints to rule language:
+
+1. **Identify logical patterns** in your constraint code
+2. **Extract variable definitions** for reused expressions
+3. **Convert constraints** to rule language syntax
+4. **Test equivalence** with the original implementation
+5. **Refine and optimize** weights and transforms
