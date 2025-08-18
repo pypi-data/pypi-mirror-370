@@ -1,0 +1,13 @@
+#1. Basic Data Preprocessing for Generative AI 
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
+
+# Generate synthetic data
+data = np.random.randint(0, 255, (10, 5))
+print("Original Data:\n", data)
+
+# Scale data between 0 and 1
+scaler = MinMaxScaler()
+scaled_data = scaler.fit_transform(data)
+print("Scaled Data:\n", scaled_data)
