@@ -1,0 +1,194 @@
+# keymanager_hjy
+
+[![PyPI version](https://img.shields.io/pypi/v/keymanager_hjy.svg?style=flat-square&color=1E3A8A)](https://pypi.org/project/keymanager_hjy/)
+[![Python versions](https://img.shields.io/pypi/pyversions/keymanager_hjy.svg?style=flat-square&color=1E3A8A)](https://pypi.org/project/keymanager_hjy/)
+[![License](https://img.shields.io/pypi/l/keymanager_hjy.svg?style=flat-square&color=059669)](https://github.com/hjy/keymanager_hjy/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/keymanager_hjy.svg?style=flat-square&color=059669)](https://pypi.org/project/keymanager_hjy/)
+
+> **一句话宣言**: 零配置、专业级API安全管理器，为现代Python API提供优雅的认证、限流和审计日志。
+
+## 🚀 快速开始
+
+### 安装
+
+```bash
+# 基础安装
+pip install keymanager_hjy
+
+# 安装FastAPI集成
+pip install keymanager_hjy[fastapi]
+
+# 安装Flask集成
+pip install keymanager_hjy[flask]
+
+# 安装CLI工具
+pip install keymanager_hjy[cli]
+
+# 安装所有功能
+pip install keymanager_hjy[all]
+```
+
+### 基本使用
+
+```python
+from keymanager_hjy import KeyManager
+
+# 创建密钥管理器
+key_manager = KeyManager()
+
+# 生成API密钥
+api_key = key_manager.generate_api_key("user123")
+
+# 验证API密钥
+is_valid = key_manager.validate_api_key(api_key)
+
+print(f"API密钥: {api_key}")
+print(f"验证结果: {is_valid}")
+```
+
+## ✨ 核心功能
+
+### 🔐 认证管理
+- **API密钥生成**: 安全的API密钥生成和管理
+- **用户认证**: 完整的用户认证流程
+- **权限验证**: 细粒度的权限控制
+- **会话管理**: 安全的会话管理
+
+### 🛡️ 安全防护
+- **速率限制**: 智能的API速率限制
+- **IP白名单**: IP地址白名单管理
+- **请求签名**: 请求签名验证
+- **加密存储**: 敏感数据加密存储
+
+### 📊 审计日志
+- **操作记录**: 完整的操作审计日志
+- **访问追踪**: 用户访问行为追踪
+- **异常监控**: 安全异常监控和告警
+- **报告生成**: 安全报告自动生成
+
+## 🔧 集成示例
+
+### FastAPI集成
+
+```python
+from fastapi import FastAPI, Depends
+from keymanager_hjy.integrations import fastapi_guard
+
+app = FastAPI()
+
+# 使用装饰器保护路由
+@app.get("/protected")
+@fastapi_guard.require_auth
+async def protected_endpoint():
+    return {"message": "This is a protected endpoint"}
+
+# 使用依赖注入
+@app.get("/secure")
+async def secure_endpoint(auth=Depends(fastapi_guard.auth_dependency)):
+    return {"message": "Secure endpoint", "user": auth.user_id}
+```
+
+### Flask集成
+
+```python
+from flask import Flask
+from keymanager_hjy.integrations import flask_guard
+
+app = Flask(__name__)
+
+# 使用装饰器保护路由
+@app.route("/protected")
+@flask_guard.require_auth
+def protected_endpoint():
+    return {"message": "This is a protected endpoint"}
+
+# 使用中间件
+app.before_request(flask_guard.auth_middleware)
+```
+
+## 🎯 高级功能
+
+### 自定义认证策略
+
+```python
+from keymanager_hjy import KeyManager, AuthStrategy
+
+class CustomAuthStrategy(AuthStrategy):
+    def authenticate(self, request):
+        # 自定义认证逻辑
+        custom_token = request.headers.get("X-Custom-Token")
+        if custom_token == "valid_token":
+            return {"user_id": "custom_user", "permissions": ["read", "write"]}
+        return None
+
+key_manager = KeyManager(auth_strategy=CustomAuthStrategy())
+```
+
+### 速率限制配置
+
+```python
+from keymanager_hjy import RateLimiter
+
+# 配置速率限制
+rate_limiter = RateLimiter(
+    requests_per_minute=60,
+    requests_per_hour=1000,
+    burst_size=10
+)
+
+# 检查速率限制
+if rate_limiter.is_allowed("user123"):
+    # 处理请求
+    pass
+else:
+    # 返回429错误
+    pass
+```
+
+## 📚 文档
+
+- **[API文档](https://keymanager-hjy.readthedocs.io/)**: 完整的API参考
+- **[集成指南](docs/integrations.md)**: 详细的集成说明
+- **[安全最佳实践](docs/security.md)**: 安全配置建议
+- **[部署指南](docs/deployment.md)**: 生产环境部署
+
+## 🧪 测试
+
+```bash
+# 运行所有测试
+pytest
+
+# 运行集成测试
+pytest -m integration
+
+# 运行性能测试
+pytest -m performance
+
+# 生成覆盖率报告
+pytest --cov=keymanager_hjy --cov-report=html
+```
+
+## 🤝 贡献
+
+我们欢迎所有形式的贡献！
+
+1. Fork 项目
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 创建 Pull Request
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+
+## 🔗 相关项目
+
+- [ai_runner_hjy](https://pypi.org/project/ai-runner-hjy/): AI服务运行器
+- [taskmanager_hjy](https://pypi.org/project/taskmanager-hjy/): 任务管理器
+- [datamanager_hjy](https://pypi.org/project/datamanager-hjy/): 数据管理器
+- [configmanager_hjy](https://pypi.org/project/configmanager-hjy/): 配置管理器
+
+---
+
+**keymanager_hjy** - 让API安全变得简单而强大 🛡️
