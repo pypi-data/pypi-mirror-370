@@ -1,0 +1,49 @@
+from typing import Any, Dict, List, Optional
+
+from fastapi import Request
+
+from .action import Action
+
+
+class Modal(Action):
+    """
+    表示一个模态框组件，支持配置宽度和关闭时的行为。
+    """
+
+    action_type: str = "modal"
+
+    # 弹出层宽度，默认值为 520
+    width: int = 520
+
+    # 关闭时销毁弹出层里的子元素，默认为 False
+    destroy_on_close: bool = False
+
+    async def content(self, request: Request) -> Optional[Any]:
+        """
+        获取模态框内容，可以是任意类型的数据
+        """
+        return None
+
+    async def data(self, request: Request) -> Dict[str, Any]:
+        """
+        异步获取数据
+        """
+        return {}
+
+    def get_width(self) -> int:
+        """获取弹出层宽度"""
+        return self.width
+
+    def get_destroy_on_close(self) -> bool:
+        """关闭时销毁 Modal 里的子元素"""
+        return self.destroy_on_close
+
+    async def get_body(self, request: Request) -> Optional[Any]:
+        """获取弹窗主体内容"""
+        return await self.content(request)
+
+    async def get_actions(self, request: Request) -> List[Any]:
+        """
+        获取弹窗行为按钮列表
+        """
+        return []
