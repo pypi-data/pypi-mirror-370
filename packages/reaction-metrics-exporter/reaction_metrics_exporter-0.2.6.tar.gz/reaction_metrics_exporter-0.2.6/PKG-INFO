@@ -1,0 +1,511 @@
+Metadata-Version: 2.3
+Name: reaction-metrics-exporter
+Version: 0.2.6
+Summary: A daemon that scans reaction outputs, and serves an HTTP OpenMetrics endpoint
+License: AGPL-3.0-or-later
+Keywords: reaction,prometheus,openmetrics
+Author: Lilou
+Author-email: lilou@chosto.me
+Requires-Python: >=3.10
+Classifier: Development Status :: 4 - Beta
+Classifier: Topic :: System :: Monitoring
+Requires-Dist: aiofiles (>=24.1.0,<25.0.0)
+Requires-Dist: aionotify (>=0.3.1,<0.4.0)
+Requires-Dist: asyncio-simple-http-server (>=0.0.8,<0.0.9)
+Requires-Dist: jinja2 (>=3.1.6,<4.0.0)
+Requires-Dist: prometheus-client (>=0.22.1,<0.23.0)
+Requires-Dist: pytest (>=8.4.1,<9.0.0)
+Requires-Dist: python-dateutil (>=2.9.0.post0,<3.0.0)
+Requires-Dist: python-systemd (>=0.0.9,<0.0.10)
+Requires-Dist: ruamel-yaml (>=0.18.14,<0.19.0)
+Requires-Dist: schema (>=0.7.7,<0.8.0)
+Requires-Dist: structlog (>=25.4.0,<26.0.0)
+Requires-Dist: systemd-python (>=235,<236)
+Description-Content-Type: text/markdown
+
+
+<!-- TOC ignore:true -->
+# reaction-metrics-exporter
+
+> [!note] 💚 A lot of inspiration has been drawn from [`dmarc-metrics-exporter`](https://github.com/jgosmann/dmarc-metrics-exporter).
+
+Export [OpenMetrics](https://prometheus.io/docs/specs/om/open_metrics_spec/) for [reaction](https://reaction.ppom.me/). The exporter continuously monitors and parses reaction's logs and state. 
+
+## Main metrics
+
+- `reaction_match_count`: number of matches since last collection;
+- `reaction_action_count`: current number of actions since last collection;
+- `reaction_pending_count`: current number of pending actions.
+
+All metrics are labelled with `stream`, `filter` and matched patterns.
+Action-related metrics have an additional `action` label.
+
+For example, matches exported from [the SSH filter](https://reaction.ppom.me/filters/ssh.html) look like:
+
+```
+reaction_match_count{stream="ssh",filter="failedlogin",ip="X.X.X.X"}: N
+```
+
+`N` being the number of matches for this unique combination of labels.
+
+## Secondary metrics
+
+- `reaction_exporter_build_info`: gives the version of the exporter;
+- `reaction_status_info`: gives the version of reaction and its status;
+- `reaction_commands_count`: count of start/stop commands run by reaction, labelled with command name, status and exit code;
+- `reaction_stream_event_count`: count of stream events, labelled with stream name and event type.
+
+## Side notes
+
+> ℹ️ In the long-term, `reaction` will have builtin metrics. Whether the proposed ones will be adopted depends on long-term relevance and performance.
+
+> ⚠️ For very large numbers of matches and actions, your TSDB may grow too much. Read ["the patterns dilemma"](#the-patterns-dilemma) if in doubt.
+
+<!-- TOC ignore:true -->
+## Table of contents
+
+<!-- TOC -->
+
+- [Quick start](#quick-start)
+- [Real-world setups](#real-world-setups)
+- [Usage details](#usage-details)
+- [The patterns dilemma](#the-patterns-dilemma)
+- [Visualising data](#visualising-data)
+- [Implementation details](#implementation-details)
+- [Development setup](#development-setup)
+
+<!-- /TOC -->
+
+# Quick start
+
+> [!caution] ⚠️ Do not use in production as-is; see [real-world setup](#real-world-setup).
+
+## Prerequisites
+
+### For running the exporter
+
+- `python>=3.10` and `pip`;
+- `reaction==2` (tested up to `v2.1.2`);
+- [`libsystemd`](https://www.freedesktop.org/software/systemd/man/latest/libsystemd.html);
+- [`pkg-config`](https://www.freedesktop.org/wiki/Software/pkg-config/).
+
+### For exploiting the metrics
+
+- A [Prometheus](https://prometheus.io/)-compatible TSBD ([VictoriaMetrics](https://victoriametrics.com/) is recommended, see [below](#implementation-details));
+- [Grafana](https://grafana.com/oss/grafana/).
+
+## Install
+
+```bash
+python3 -m pip install reaction-metrics-exporter
+```
+
+## Configure
+
+Create a configuration file, *e.g.* `config.yml`:
+
+```yaml
+reaction:
+  # as you would pass to `reaction test-config`
+  config: /etc/reaction
+  logs:
+    # monitor logs for `reaction.service`
+    systemd:
+```
+
+>>> [!tip] Using a log file ?
+```yaml
+reaction:
+  # ...
+  logs:
+    # replace with your log path
+    file: /var/log/reaction.log
+```
+>>>
+
+## Run
+
+```bash
+python3 -m reaction_metrics_exporter -c /etc/reaction-metrics-exporter/config.yml start
+```
+
+Metrics are exposed at http://localhost:8080/metrics.
+
+# Real-world setups
+
+## Create an unprivileged user
+
+For security reasons, the exporter should run as an unprivileged, system user. This is a prerequisite for what's next.
+
+This user should be able to read [journald](https://www.freedesktop.org/software/systemd/man/latest/systemd-journald.service.html) logs and to communicate with `reaction`'s socket.
+
+To do so, first create a user and a group, then add the user to the `systemd-journal` group.
+
+```bash
+# creates group automatically
+/sbin/adduser reaction --no-create-home --system
+usermod -aG systemd-journal reaction
+```
+
+Then, open an editor to override some settings of `reaction` :
+
+```bash
+systemctl edit reaction.service
+```
+
+Paste the following and save:
+
+```systemd
+[Service]
+# Reaction will run as this group
+Group=reaction
+# Files will be created with rwxrwxr_x
+UMask=0002
+```
+
+Restart reaction:
+
+```bash
+systemctl daemon-reload
+systemctl restart reaction
+```
+
+>>> [!tip] Check that it worked
+```bash
+sudo su reaction
+reaction show
+journalctl -feu reaction
+```
+>>>
+
+## Running with systemd
+
+It is recommended to install the exporter in a [virtualenv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/), *e.g.* in `/usr/share/reaction-metrics-exporter/venv`.
+
+Save the [service file](./reaction-metrics.service) in `/etc/systemd/systemd`.
+
+> 💡 Add your config file and adjust the `venv` path in the `ExecStart=` directive. 
+
+Enable and start the exporter:
+
+```bash
+systemctl daemon-reload
+systemctl enable --now reaction-metrics.service
+```
+
+Follow the logs with:
+
+```bash
+journalctl -feu reaction-metrics.service
+```
+
+## Running with Docker
+
+> ⚠️ Running with Docker adds complexity for the exporter; prefer `systemd`.
+
+Start inside the [docker](./docker) directory. 
+
+>>> [!tip] Homemade is better
+It is recommended to build you own image so that the version of `reaction` inside the container matches yours. In [`compose.yml`](./docker/compose.yml), adjust `REACTION_VERSION` variable, and then:
+```bash
+docker compose build
+```
+>>>
+
+Create a `.env` file:
+
+```ini
+UID=
+GID=
+JOURNAL_GID=
+```
+
+Values can be found out of command `id reaction`.
+
+You may need to adjust the default mounts in [`compose.yml`](./docker/compose.yml). Expectations are:
+- `reaction`'s configuration is mounted on `/etc/reaction`;
+- `reaction`'s socket is mounted on `/run/reaction/reaction.sock`;
+- `journald` file is mounted on `/var/log/journal`.
+
+Use the [sample configuration file](./docker/config.yml) and tweak it to your needs and run the exporter:
+
+```bash
+docker compose up -d && docker compose logs -f
+```
+
+The exporter is mapped to the host's `8080` port by default.
+
+# Usage details
+
+## Configuration
+
+You can either provide a YAML file or a JSON file. Albeit not recommended, you can run the exporter without a configuration file.
+
+The default configuration is as follows:
+
+```yaml
+# only stdout is supported atm
+loglevel: INFO
+# read logs starting from the last stop time of the exporter
+# disable if stopped for a long time: meant to avoid 
+# missing logs on restart/rebuild etc
+# only available for journald
+restore: true
+listen:
+  address: 127.0.0.1
+  port: 8080
+reaction:
+  config: /etc/reaction
+  logs:
+    systemd: reaction.service
+  # same default as reaction
+  socket: /run/reaction/reaction.sock
+  # ignore actions for 60 seconds (in logtime, not realtime) after reaction start
+  hold: 60
+metrics:
+  all: {}
+  for: {}
+  # all metrics with labels are exported by default
+  export:
+    matches:
+      extra: true
+    actions:
+      extra: true
+    pending:
+      extra: true
+    commands:
+    streams:
+```
+
+## Commands
+
+```
+usage: python -m reaction_metrics_exporter [-h] [-c CONFIG] [-f {yaml,json}] {start,defaults,test-config,version}
+
+positional arguments:
+  {start,defaults,test-config,version}
+                        mode of operation; see below
+
+options:
+  -h, --help            show this help message and exit
+  -c, --config CONFIG   path to the configuration file (JSON or YAML)
+  -f, --format {yaml,json}
+                        format for dumping default configuration (defautl yaml)
+
+command:
+    start: continuously read logs, compute metrics and serve HTTP endpoint
+    defaults: print the default configuration in json and exit
+    test-config: validate and output configuration in json and exit
+    version: print the exporter's version and exit
+```
+
+## Pre-treating matches
+
+In some cases, you may want to transform matches prior to exporting, instead of relabelling. You can do so with [Jinja2](https://jinja.palletsprojects.com/en/stable/) expressions.
+
+For example, for an `email` pattern, you could to keep only the domain part in metrics. This can be achieved with:
+
+```yaml
+metrics:
+  all:
+    email: "{{ email.split('@') | last }}
+```
+
+You can also differentiate by stream and filter:
+
+```yaml
+metrics:
+  for:
+    ssh:
+      failedlogin:
+        ip: TEMPLATE_A
+    traefik:
+      aiBots:
+        ip: TEMPLATE_B
+```
+
+## Enabling internals metrics
+
+The Prometheus client library has some defauts metrics about Python, Garbage Collector and so on, that I found useless. You can nevertheless enable them:
+
+```yaml
+metrics:
+  export:
+    internals:
+```
+
+# The patterns dilemma
+
+`reaction` matches often contains valuable information, such as IP addresses.
+
+## How matches could become a problem
+
+Quoting the [Prometheus docs](https://prometheus.io/docs/practices/naming/):
+
+> CAUTION: Remember that every unique combination of key-value label pairs represents a new time series, which can dramatically increase the amount of data stored. Do not use labels to store dimensions with high cardinality (many different label values), such as user IDs, email addresses, or other unbounded sets of values.
+
+In other words, each new IP address will therefore **create a new time serie** in the TSDB. For large instances, this may result in storage and performance issues.
+
+However, TSBDs can handle our metrics for most cases. Prometheus used to claim being able of handling [millions of time series](https://prometheus.io/docs/prometheus/1.8/storage/), and VictoriaMetrics claims being able of handling [100 million active time series](https://docs.victoriametrics.com/victoriametrics/faq/#what-are-scalability-limits-of-victoriametrics). Besides, our time series usually have very few data points. We use OpenMetrics in a kind of hackish way, so that recommandations tailored for active and dense time series do not apply.
+
+You should just test and check after a few months. In most cases, the retention period will kick before you run into troubles. 
+
+You can still disable the export of some metrics or patterns, but this will break the Grafana dashboard.
+
+## Disable metrics
+
+```yaml
+metrics:
+  export:
+    actions: false
+    matches: false
+    pending: false
+```
+
+## Disable patterns
+
+For example, to remove `ip` from export for the `failedlogin` filter from the `openssh` stream:
+
+```yaml
+metrics:
+  for:
+    ssh:
+      failedlogin:
+        ip: false
+```
+
+If you use the pattern `ip` in multiple streams, you can avoid repetition by removing it globally:
+
+```yaml
+metrics:
+  all:
+    ip: false
+```
+
+# Visualising data
+
+🚧 WIP !
+
+# Implementation details
+
+> 🚧 Work in progress; below is a draft, not proofed at all, probably unclear, maybe not needed.
+
+The exporter does not quite follow Prometheus' philosophy. For example, it uses [gauges](https://prometheus.io/docs/concepts/metric_types/#gauge) for counting matches, actions and so on.
+
+Let's take the example of matches. Normally, gauge « represents a single numerical value that can arbitrarily go up and down ». In our case, this single numerical value will give **the number of matches since the last export**. Without extra labels, such as IPs, it would fit the model.
+
+But when exporting pattern's values, such as IPs, the result is a multitude of short-lived time series. As an example:
+
+```
+reaction_match_count{filter="aiBots",ip="121.229.156.18",stream="traefik"} 1.0
+reaction_match_count{filter="aiBots",ip="23.21.179.120",stream="traefik"} 1.0
+reaction_match_count{filter="failedlogin",ip="77.201.74.44",stream="ssh"} 3.0
+```
+
+These metrics will be registered in three distinct timeseries, and discarded for the next export. They will record a new value only on the next hypothetical identical match.
+
+Semantically, **we are exporting events**, which is [highly discouraged](https://prometheus.io/docs/introduction/faq/#how-to-feed-logs-into-prometheus). Events are usually processed with a log aggregator, *e.g.* [Grafana Loki](https://grafana.com/oss/loki/), or could be aggregated by a Prometheus middleware, *e.g.* [prom-aggregation-gateway](https://github.com/zapier/prom-aggregation-gateway). We made the choice to stick to OpenMetrics because the TSBD/Grafana setup is **simple and widespread**.
+
+In the early development, aggregation was made locally, *i.e.* the total count for each timeserie was exported continuously, with restarts handled by a persistence file. This behaviour was abandonned notably because of the HTTP body growing rapidly.
+
+Above all considerations, the exported metrics had to be exploitable through a comprehensive Grafana dashboard, and they are, minus we don't have yet high-volume performance measures.
+
+A natural expectation would be to visualize the evolution of matches, actions and so on. With our event-based export, the only way would be to do a cumulative sum of timeseries for the current time window.
+
+In theory, **this is not possible with Prometheus**. That's why VictoriaMetrics is recommended, beside better performance. It has exactly the function we need:
+
+```
+running_sum(reaction_match_count)
+```
+
+That request will calculate, for each time serie (*i.e.* each unique combination of stream, filter and matches), the cumulative sum for the given window, usually chosen within Grafana's UI. As the number of timeseries is huge when exporting extra labels, is it useful to aggregate results *e.g.* per instance:
+
+```
+sum(running_sum(reaction_match_count)) by (instance)
+```
+
+However, this request will give wrong results for large time windows. Indeed, the larger the window, the lower the resolution, *i.e.* not all data points are considered. This is known as **step**, *e.g.* 5 minutes (`5m`). This step is automatically calculated by Grafana (aka [`$__interval` variable](https://grafana.com/docs/grafana/latest/dashboards/variables/add-template-variables/#__interval)). 
+
+The above query is in fact converted by VictoriaMetrics to:
+
+```
+sum(running_sum(default_rollup(reaction_match_count[step]))) by (instance)
+```
+
+This is because `running_sum` applies on rollups, that is results calculated on a sliding time window (usually the step).
+
+`default_rollup` simply takes the last value of the [range vector](https://prometheus.io/docs/prometheus/latest/querying/basics/#range-vector-selectors), *i.e.* the result is equivalent to `reaction_match_count` quantized every 5 minutes. In other words, every event occuring during that time is discarded.
+
+To fix the query, we need to compute the cumulative sum **inside the 5m step**. The final query will look like this:
+
+```
+sum(running_sum(sum_over_time(reaction_match_count))) by (instance)
+```
+
+`sum_over_time` will [automatically](https://docs.victoriametrics.com/victoriametrics/metricsql/#rollup-functions) use the step as a lookbehind window. 
+
+> ⚠️ We cannot nest `running_sum`, because it needs rollup results; the inner `running_sum` would therefore apply on `default_rollup`, calculate rollups, and the outer `running_sum` would give crazy results, calculating the cumulative sum of the initial wrong cumulative sum.
+
+Wrapping up, this is performant and allows us to emulate Prometheus [counters](https://prometheus.io/docs/concepts/metric_types/#counter), in a given time window.
+
+Doing the same in Prometheus is a whole different ballgame. A question that may arise is: why don't we simply `sum_over_time` over the whole window (`$__range` in Grafana)?
+
+```
+sum_over_time(reaction_match_count[$__range])
+```
+
+Let's say our time window is 2 days (`2d`). The problem is that `sum_over_time` being a rollup function, or a moving function, the first value shown on the graph will be the cumulative sum of `[-4d, -2d]`. Values for the last 2 days will be kind of smoothed by old values.
+
+Ideally, we would like to ask Prometheus to have a fixed starting point (`-2d`), and a moving end point. This is really against the way Prometheus works, because the query range is made to be static, not dynamic.
+
+After a lot of infructuous research, it is likely that we found a solution (not tested yet on Prometheus, but working in VictoriaMetrics and limited to PromQL functions). It takes advantage of:
+
+- Grafana exposing the `$__from` variable, which is the timestamp of the time window's start;
+- The `time()` function which returns the timestamp being evaluated.
+
+The trick is as follows: first, compute the cumulative sum per step interval, similar to what we've done before, except Prometheus needs an explicit lookbehind for rollup functions.
+
+```
+sum_over_time(reaction_match_count[$__interval])
+```
+
+Second, build a timeserie made of timestamps **inside** the window:
+
+```
+vector(time()) > $__from/1000
+```
+
+Then, build a "*rollup-resistant*" timeserie consisting of step-sums of matches within the window:
+
+```
+sum_over_time(reaction_match_count) and on() vector(time()) > $__from/1000
+```
+
+The [`and` operator](https://prometheus.io/docs/prometheus/latest/querying/operators/#logicalset-binary-operators) will drop every data point in the left part which is not in the right part. The `on()` clause has to do with [vector matching](https://prometheus.io/docs/prometheus/latest/querying/operators/#vector-matching); here it means that no label is required to match, *i.e.* every point with the same timestamp will match. 
+
+The result is simply dropping any point outside of the window. And there is; if you remember the first naive attempt, values were fetch from `[-2*$__from,$__from]` for the first point.
+
+Now that we have this magical timeserie, we can compute the cumulative sum over `$__range`:
+
+```
+sum_over_time((sum_over_time(reaction_match_count[$__interval]) and on() vector(time()) > $__from/1000)[$__range])
+```
+
+The first point will be 0, exactly what we want. This is because to compute the first point, Prometheus will start from `-2d`. Therefore, the outer sum will be, in theory, calculated with data from `[-4d, -2d]`. But our fixed timeserie has data within `[-2d, now]`. In other words, Prometheus find no values, giving a 0. Then, the window will slide by `step`, and the cumulative sum from `[-2d, -2d+step]` will give the second value, and so on.
+
+The drawback is that logical operations, vector matching and nested `sum_over_time` probably performs poorly. 
+
+> 💡 Increasing `step`, like Grafana does for large time windows, doesn't mitigate performance issues! This is because we explicitly ask Prometheus to perform a [subquery](https://prometheus.io/docs/prometheus/latest/querying/basics/#subquery) **inside the step**, no matter its value.
+
+# Development setup
+
+In addition of the prerequisites, you need [Poetry](https://python-poetry.org/).
+
+```bash
+# inside the cloned repository
+poetry install
+# run app
+poetry run python -m reaction_metrics_exporter [...]
+# run tests
+poetry run pytest
+```
