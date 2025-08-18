@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Browse</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Courier New", monospace;
+        background: white;
+        color: black;
+        line-height: 1.4;
+      }
+
+      .container {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 20px 10px;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid black;
+        padding-bottom: 15px;
+        margin-bottom: 20px;
+      }
+
+      .header-left {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header h1 {
+        font-size: 24px;
+        font-weight: bold;
+      }
+
+      .breadcrumb {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #666;
+      }
+
+      .breadcrumb a {
+        color: black;
+        text-decoration: none;
+      }
+
+      .breadcrumb a:hover {
+        text-decoration: underline;
+      }
+
+      .upload-zone {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+        background: #f9f9f9;
+      }
+
+      .upload-zone.dragover {
+        border-color: black;
+        background: #f0f0f0;
+      }
+
+      .file-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid black;
+        background: white;
+        table-layout: fixed;
+      }
+
+      .file-table th {
+        background: black;
+        color: white;
+        padding: 10px 12px;
+        text-align: left;
+        font-weight: bold;
+        border-bottom: 2px solid black;
+        position: relative;
+      }
+
+      .resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 5px;
+        cursor: col-resize;
+        user-select: none;
+        height: 100%;
+      }
+
+      .file-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #ddd;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .file-table tbody tr:hover {
+        background: #f5f5f5;
+      }
+
+      .file-table th,
+      .file-table td {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .name-col {
+        width: 50%;
+      }
+      .size-col {
+        width: 15%;
+      }
+      .modified-col {
+        width: 20%;
+      }
+      .actions-col {
+        width: 15%;
+        text-align: right;
+      }
+
+      .size-cell {
+        text-align: left;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      .actions-cell {
+        text-align: right;
+      }
+
+      .modified-cell {
+        font-family: monospace;
+        font-size: 12px;
+        color: #666;
+      }
+
+      .file-link {
+        color: black;
+        text-decoration: none;
+        display: block;
+      }
+
+      .file-link:hover {
+        text-decoration: underline;
+      }
+
+      .file-icon {
+        margin-right: 8px;
+      }
+
+      .action-link {
+        color: black;
+        text-decoration: none;
+        margin-right: 1px;
+        font-size: 11px;
+        padding: 2px 6px;
+        border: 1px solid #ccc;
+        background: #f9f9f9;
+      }
+
+      .action-link:hover {
+        background: #e9e9e9;
+        text-decoration: none;
+      }
+
+      .sort-header {
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .sort-header:hover {
+        background: #333;
+      }
+
+      /* Responsive design */
+      @media (max-width: 768px) {
+        .file-table thead {
+          display: none;
+        }
+
+        .file-table,
+        .file-table tbody,
+        .file-table tr,
+        .file-table td {
+          display: block;
+          width: 100%;
+        }
+
+        .file-table tr {
+          margin-bottom: 15px;
+          border: 1px solid #ddd;
+          border-radius: 5px;
+          overflow: hidden;
+        }
+
+        .file-table td {
+          text-align: right;
+          padding-left: 50%;
+          position: relative;
+          border-bottom: 1px solid #eee;
+        }
+
+        .file-table td:last-child {
+          border-bottom: 0;
+        }
+
+        .file-table td::before {
+          content: attr(data-label);
+          position: absolute;
+          left: 10px;
+          width: 45%;
+          padding-right: 10px;
+          white-space: nowrap;
+          text-align: left;
+          font-weight: bold;
+        }
+
+        .name-cell {
+          padding-left: 10px !important;
+          text-align: left !important;
+          font-size: 1.1em;
+          font-weight: bold;
+          background: #f8f8f8;
+        }
+
+        .name-cell::before {
+          display: none;
+        }
+
+        .actions-cell {
+          padding-left: 10px !important;
+          text-align: left !important;
+        }
+
+        .actions-cell::before {
+          display: none;
+        }
+
+        .action-link {
+          display: inline-block;
+          margin: 5px 5px 5px 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="header-left">
+          <h1>Aird</h1>
+          <div class="breadcrumb">
+            <a href="/files/">🏠 Home</a>
+            {% if current_user and current_path != "/" %} {% set path_parts = current_path.strip('/').split('/') %}
+            {% for i, part in enumerate(path_parts) %} 
+            {% set partial_path = '/files/' + '/'.join(path_parts[:i+1]) %} /
+            <a href="{{ partial_path }}">{{ part }}</a>
+            {% end %} {% end %}
+          </div>
+        </div>
+        {% if features.get('file_share') %}
+        <a href="/share" style="display:inline-block;padding:6px 10px;border:1px solid #000;background:#fff;color:#000;text-decoration:none;font-size:12px;">🔗 Share Files</a>
+        {% end %}
+      </div>
+
+      <!-- Upload Zone -->
+      {% if features['file_upload'] %}
+      <div class="upload-zone" id="uploadZone">
+        <p><strong>📁 Drop files here to upload</strong></p>
+        <p>Or click to select files</p>
+        <input type="file" id="fileInput" multiple style="display: none" />
+      </div>
+      <div id="uploads-container" style="margin-bottom: 20px;"></div>
+      {% end %}
+
+      <!-- File Listing Table -->
+      <table class="file-table" id="fileTable">
+        <thead>
+          <tr>
+            <th class="name-col sort-header" onclick="sortTable(0)">📁 Name<div class="resizer"></div></th>
+            <th class="size-col sort-header" onclick="sortTable(1)">📏 Size<div class="resizer"></div></th>
+            <th class="modified-col sort-header" onclick="sortTable(2)">
+              🕒 Modified<div class="resizer"></div>
+            </th>
+            <th class="actions-col">⚡ Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Parent Directory Link -->
+          {% if current_path and current_path != "/" %}
+          <tr>
+            <td class="name-cell" data-label="Name">
+              <a href="/files/{{ parent_path or '' }}" class="file-link">
+                <span class="file-icon">📁</span>..
+              </a>
+            </td>
+            <td class="size-cell" data-label="Size">-</td>
+            <td class="modified-cell" data-label="Modified">-</td>
+            <td class="actions-cell" data-label="Actions">-</td>
+          </tr>
+          {% end %}
+
+          <!-- File and Directory Listings -->
+          {% for file in files %}
+          <tr class="file-row">
+            <td class="name-cell" data-label="Name">
+              {% if file['is_dir'] %}
+              <a
+                href="/files/{{ escape(join_path(current_path, file['name'])) }}"
+                class="file-link"
+              >
+                <span class="file-icon">📁</span>{{ escape(file['name']) }}
+                {% if file.get('is_shared') %}
+                <span class="shared-icon" title="This file is shared">🔗</span>
+                {% end %}
+              </a>
+              {% else %}
+              <a
+                href="/files/{{ escape(join_path(current_path, file['name'])) }}?start_line=1&end_line=100"
+                class="file-link"
+              >
+                <span class="file-icon">{{ get_file_icon(file["name"]) }}</span>{{
+                escape(file['name']) }}
+                {% if file.get('is_shared') %}
+                <span class="shared-icon" title="This file is shared">🔗</span>
+                {% end %}
+              </a>
+              {% end %}
+            </td>
+            <td class="size-cell" data-label="Size" data-bytes="{{ file.get('size_bytes', 0) }}">
+              {{ file.get('size_str', '-') }}
+            </td>
+            <td
+              class="modified-cell"
+              data-label="Modified"
+              data-timestamp="{{ file.get('modified_timestamp', 0) }}"
+            >
+              {{ file.get('modified', '-') }}
+            </td>
+            <td class="actions-cell" data-label="Actions">
+              {% if not file["is_dir"] %}
+                {% if features['file_download'] %}
+                <a
+                  href="/files/{{ escape(join_path(current_path, file['name'])) }}?download=1"
+                  class="action-link"
+                  >Download</a
+                >
+                {% end %}
+              {% end %}
+              {% if features['file_rename'] %}
+              <a
+                href="#"
+                onclick="renameItem('{{ escape(join_path(current_path, file['name'])) }}')"
+                class="action-link"
+                >Rename</a>
+              {% end %}
+              {% if features['file_delete'] %}
+              <a
+                href="#"
+                onclick="deleteItem('{{ escape(join_path(current_path, file['name'])) }}')"
+                class="action-link"
+                >Delete</a>
+              {% end %}
+            </td>
+          </tr>
+          {% end %}
+
+          <!-- Empty Directory Message -->
+          {% if not files %}
+          <tr>
+            <td
+              colspan="4"
+              style="text-align: center; padding: 40px; color: #666"
+            >
+              📭 This directory is empty
+            </td>
+          </tr>
+          {% end %}
+        </tbody>
+      </table>
+
+    </div>
+
+    <script>
+      // File upload functionality
+      const uploadZone = document.getElementById("uploadZone");
+      const fileInput = document.getElementById("fileInput");
+      const uploadsContainer = document.getElementById("uploads-container");
+      let activeUploads = 0;
+      let anyUploadFailed = false;
+      function maybeFinishGlobalUploads() {
+        if (activeUploads === 0) {
+          if (anyUploadFailed) {
+            alert("Some files failed to upload. Please check the console and try again.");
+            anyUploadFailed = false;
+          } else {
+            setTimeout(() => location.reload(), 1000);
+          }
+        }
+      }
+
+      if (uploadZone) {
+        uploadZone.addEventListener("click", () => fileInput.click());
+        uploadZone.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          uploadZone.classList.add("dragover");
+        });
+        uploadZone.addEventListener("dragleave", () => {
+          uploadZone.classList.remove("dragover");
+        });
+        uploadZone.addEventListener("drop", (e) => {
+          e.preventDefault();
+          uploadZone.classList.remove("dragover");
+          handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener("change", (e) => {
+          handleFiles(e.target.files);
+        });
+      }
+
+      function handleFiles(files) {
+        if (files.length === 0) return;
+
+        uploadsContainer.style.display = "block";
+
+        const uploadPromises = [];
+
+        for (const file of files) {
+          const uploadId = `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          
+          const progressElement = document.createElement('div');
+          progressElement.id = uploadId;
+          progressElement.style.marginBottom = '10px';
+          progressElement.innerHTML = `
+              <div style="display: flex; align-items: center; font-family: monospace; font-size: 12px;">
+                  <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.name}">${file.name}</span>
+                  <span id="${uploadId}-speed" style="margin-left: 10px; width: 100px; text-align: right;"></span>
+                  <button id="${uploadId}-cancel" style="margin-left: 10px; border: 1px solid #ccc; background: #f0f0f0; cursor: pointer;">Cancel</button>
+              </div>
+              <progress id="${uploadId}-progress" min="0" max="100" value="0" style="width: 100%; height: 8px;"></progress>
+          `;
+          uploadsContainer.appendChild(progressElement);
+
+          const uploadPromise = uploadFile(file, uploadId).catch(err => {
+            anyUploadFailed = true;
+            console.error(err.message);
+          });
+          uploadPromises.push(uploadPromise);
+        }
+
+        // We no longer reload here; global completion is handled when all active uploads across batches finish
+      }
+
+      function uploadFile(file, uploadId) {
+        return new Promise((resolve, reject) => {
+          const progressEl = document.getElementById(`${uploadId}-progress`);
+          const speedEl = document.getElementById(`${uploadId}-speed`);
+          const cancelBtn = document.getElementById(`${uploadId}-cancel`);
+          const fileLabel = document.querySelector(`#${uploadId} span[title="${file.name}"]`);
+
+          const xhr = new XMLHttpRequest();
+
+          const cancelHandler = () => xhr.abort();
+          cancelBtn.addEventListener('click', cancelHandler);
+
+          const directory = '{{ current_path or "" }}';
+          let lastLoaded = 0;
+          let lastTime = Date.now();
+
+          xhr.open("POST", "/upload", true);
+          xhr.setRequestHeader("X-Upload-Dir", encodeURIComponent(directory));
+          xhr.setRequestHeader("X-Upload-Filename", encodeURIComponent(file.name));
+          xhr.setRequestHeader("Content-Type", "application/octet-stream");
+
+          activeUploads += 1;
+          let completed = false;
+          const complete = (success) => {
+            if (completed) return;
+            completed = true;
+            cancelBtn.removeEventListener('click', cancelHandler);
+            activeUploads -= 1;
+            if (!success) anyUploadFailed = true;
+            maybeFinishGlobalUploads();
+          };
+
+          xhr.upload.onprogress = (event) => {
+              if (event.lengthComputable) {
+                  const percentage = (event.loaded / event.total) * 100;
+                  progressEl.value = percentage;
+
+                  const now = Date.now();
+                  const timeDiff = (now - lastTime) / 1000;
+                  const bytesDiff = event.loaded - lastLoaded;
+                  if (timeDiff > 0.5 || event.loaded === event.total) {
+                      const speed = bytesDiff / timeDiff / 1024 / 1024; // MB/s
+                      speedEl.textContent = `${speed.toFixed(2)} MB/s`;
+                      lastLoaded = event.loaded;
+                      lastTime = now;
+                  }
+              }
+          };
+
+          xhr.onload = () => {
+              if (xhr.status === 200) {
+                  progressEl.value = 100;
+                  speedEl.textContent = "Done!";
+                  cancelBtn.style.display = 'none';
+                  fileLabel.style.color = 'green';
+                  complete(true);
+                  resolve({success: true});
+              } else {
+                  speedEl.textContent = `Error: ${xhr.status}`;
+                  speedEl.style.color = 'red';
+                  fileLabel.style.color = 'red';
+                  cancelBtn.textContent = 'Failed';
+                  cancelBtn.disabled = true;
+                  complete(false);
+                  reject(new Error(`Upload of ${file.name} failed: ${xhr.responseText || xhr.statusText}`));
+              }
+          };
+
+          xhr.onerror = () => {
+              speedEl.textContent = "Network Error";
+              speedEl.style.color = 'red';
+              fileLabel.style.color = 'red';
+              cancelBtn.textContent = 'Failed';
+              cancelBtn.disabled = true;
+              complete(false);
+              reject(new Error(`Upload of ${file.name} failed: Network error.`));
+          };
+
+          xhr.onabort = () => {
+              speedEl.textContent = "Cancelled";
+              speedEl.style.color = 'orange';
+              fileLabel.style.color = 'orange';
+              cancelBtn.textContent = 'Cancelled';
+              cancelBtn.disabled = true;
+              complete(false);
+              reject(new Error("Upload cancelled."));
+          };
+
+          xhr.send(file);
+        });
+      }
+
+      // Rename functionality
+      function renameItem(filepath) {
+        const newName = prompt("Enter new name:");
+        if (!newName) return;
+        const formData = new URLSearchParams();
+        formData.append("path", filepath);
+        formData.append("new_name", newName);
+        fetch("/rename", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: formData.toString(),
+        })
+          .then((res) => {
+            if (res.ok) {
+              location.reload();
+            } else {
+              res.text().then((t) => alert("Rename failed: " + t));
+            }
+          })
+          .catch((err) => alert("Rename failed: " + err.message));
+      }
+
+      // Delete functionality
+      function deleteItem(filepath) {
+        if (!confirm("Are you sure you want to delete this item?")) return;
+        const formData = new URLSearchParams();
+        formData.append("path", filepath);
+        fetch("/delete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: formData.toString(),
+        })
+          .then((res) => {
+            if (res.ok) {
+              location.reload();
+            } else {
+              res.text().then((t) => alert("Delete failed: " + t));
+            }
+          })
+          .catch((err) => alert("Delete failed: " + err.message));
+      }
+
+      // Table sorting functionality
+      function sortTable(columnIndex) {
+        const table = document.getElementById("fileTable");
+        const tbody = table.querySelector("tbody");
+        const skipRows = tbody.querySelector("a[href*='..']") ? 1 : 0;
+        const rows = Array.from(tbody.querySelectorAll("tr")).slice(skipRows);
+
+        rows.sort((a, b) => {
+          let aVal = a.children[columnIndex].textContent.trim();
+          let bVal = b.children[columnIndex].textContent.trim();
+
+          if (columnIndex === 1) {
+            // Size column
+            aVal = parseInt(a.children[columnIndex].dataset.bytes) || -1;
+            bVal = parseInt(b.children[columnIndex].dataset.bytes) || -1;
+            return bVal - aVal;
+          } else if (columnIndex === 2) {
+            // Modified column
+            aVal = parseInt(a.children[columnIndex].dataset.timestamp) || 0;
+            bVal = parseInt(b.children[columnIndex].dataset.timestamp) || 0;
+            return bVal - aVal;
+          }
+
+          const aIsDir =
+            a.children[0].querySelector(".file-icon").textContent === "📁";
+          const bIsDir =
+            b.children[0].querySelector(".file-icon").textContent === "📁";
+
+          if (aIsDir !== bIsDir) {
+            return bIsDir ? 1 : -1;
+          }
+
+          return aVal.localeCompare(bVal);
+        });
+
+        rows.forEach((row) => tbody.appendChild(row));
+      }
+
+      document.addEventListener('DOMContentLoaded', function () {
+        const table = document.getElementById('fileTable');
+        const resizers = table.querySelectorAll('.resizer');
+        let th = null;
+        let startX, startWidth;
+
+        resizers.forEach(resizer => {
+          resizer.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            th = e.target.parentElement;
+            startX = e.pageX;
+            startWidth = th.offsetWidth;
+            
+            const headerCells = table.querySelectorAll('th');
+            headerCells.forEach(cell => {
+                cell.style.width = `${cell.offsetWidth}px`;
+            });
+
+            document.addEventListener('mousemove', mouseMove);
+            document.addEventListener('mouseup', mouseUp);
+          });
+        });
+
+        function mouseMove(e) {
+          const width = startWidth + (e.pageX - startX);
+          if (width > 50) { // Minimum width
+            th.style.width = width + 'px';
+          }
+        }
+
+        function mouseUp() {
+          document.removeEventListener('mousemove', mouseMove);
+          document.removeEventListener('mouseup', mouseUp);
+        }
+      });
+    </script>
+  </body>
+</html>
