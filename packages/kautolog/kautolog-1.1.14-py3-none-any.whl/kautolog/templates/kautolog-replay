@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log_error() {
+  echo "$1" >&2
+  exit 1
+}
+
+show_usage() {
+  echo "Usage:"
+  echo "  kautolog replay <log_base>        # Replays with timing"
+  echo "  kautolog replay -i <log_base>     # Instantly dumps log without timing"
+  echo "Options:"
+  echo "  -d <speed>        Speed divisor (multiplier)"
+  echo "  -m <maxdelay>     Max delay between lines"
+  echo "  --target <secs>   Target duration in seconds"
+  exit 1
+}
+
+# --- args ---
+instant=0
+speed_args=()
+maxdelay=""
+target=""
+replay_arg=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -i)
+      instant=1
+      shift
+      ;;
+    -d)
+      speed_args+=("-d" "$2")
+      shift 2
+      ;;
+    -m|--maxdelay)
+      maxdelay="$2"
+      shift 2
+      ;;
+    --target)
+      target="$2"
+      shift 2
+      ;;
+    -*)
+      log_error "❌ Unknown option: $1"
+      ;;
+    *)
+      replay_arg="$1"
+      shift
+      ;;
+  esac
+done
+
+[[ -z "$replay_arg" ]] && show_usage
+
+# --- Normalize replay target ---
+base="${replay_arg%.log}"
+log="$(realpath -m "${base}.log")"
+timing="$(realpath -m "${base}.timing")"
+
+# --- Resolve current live session log, if defined ---
+live_log="${logbase:-}"
+if [[ -n "$live_log" ]]; then
+  live_log="$(realpath -m "${live_log}.log" 2>/dev/null || true)"
+else
+  live_log=""
+fi
+
+# --- Debug output ---
+# echo "🔍 [DEBUG] Requested replay log: $log"
+# echo "🔍 [DEBUG] Current live session log: $live_log"
+
+# --- Prevent recursion ---
+if [[ -n "$live_log" && "$log" == "$live_log" ]]; then
+  echo "❌ Refusing to replay the current live session log due to recursion."
+  exit 1
+fi
+
+saved=$(stty -g 2>/dev/null || true)
+_restore() {
+  stty "$saved" 2>/dev/null || true
+  printf '\e[?7h\e[?25h'
+  echo
+  echo "✅ Back to your shell."
+  trap - INT EXIT
+}
+trap _restore INT EXIT
+
+if [[ "$instant" -eq 1 ]]; then
+  [[ -f "$log" ]] || log_error "❌ Missing: $log"
+  echo "Instant dump of: $log"
+  cat -- "$log"
+else
+  [[ -f "$log" && -f "$timing" ]] || log_error "❌ Missing: $log or $timing"
+  total=$(awk '{s+=$1} END{print int(s+0.5)}' "$timing" || echo 1)
+  (( total<=0 )) && total=1
+  if [[ -n "$target" && "$target" -gt 0 ]]; then
+    d=$(( total / target ))
+    (( d<1 )) && d=1
+    speed_args=( "-d" "$d" )
+    [[ -z "$maxdelay" ]] && maxdelay="0.12"
+  fi
+
+  echo "Replaying: $log"
+  echo "Tips: Ctrl+C to stop early; you’ll stay on this screen."
+
+  cmd=( /usr/bin/scriptreplay )
+  [[ ${#speed_args[@]} -gt 0 ]] && cmd+=( "${speed_args[@]}" )
+  [[ -n "$maxdelay" ]] && cmd+=( --maxdelay "$maxdelay" )
+  cmd+=( -t "$timing" "$log" )
+
+  "${cmd[@]}"
+fi
+
+_restore
