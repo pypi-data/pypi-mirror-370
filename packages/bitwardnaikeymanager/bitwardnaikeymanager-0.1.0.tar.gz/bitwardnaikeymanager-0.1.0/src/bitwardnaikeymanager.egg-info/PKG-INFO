@@ -1,0 +1,134 @@
+Metadata-Version: 2.4
+Name: bitwardnaikeymanager
+Version: 0.1.0
+Summary: Use AI to manage your Bitwarden API keys.
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.11.7
+Requires-Dist: python-dotenv>=1.1.1
+Requires-Dist: pyyaml>=6.0.2
+Requires-Dist: typer>=0.16.0
+
+# Bitwarden AI Key Manager (BAKM)
+
+BAKM is a command-line interface (CLI) tool designed to streamline the management of AI model configurations by syncing them between a local LiteLLM-formatted YAML file and a Bitwarden vault.
+
+It leverages Bitwarden's Secure Notes and Custom Fields to store model parameters, ensuring that sensitive information like API keys is kept secure. The tool also supports pulling configurations from Bitwarden and converting them into various formats, such as LiteLLM YAML, Claude Code Router JSON, or a generic JSON structure.
+
+## Features
+
+- **Sync to Bitwarden**: Upload models from a `litellm_config.yaml` to a specified folder in your Bitwarden vault.
+- **Pull from Bitwarden**: Fetch model configurations from Bitwarden.
+- **Multiple Output Formats**: Convert pulled configurations into `litellm`, `claude-router`, or `json` formats.
+- **Secure Storage**: Automatically stores `api_key` values in hidden custom fields within Bitwarden.
+- **Easy Configuration**: Uses a `.env` file to configure the target Bitwarden folder.
+
+## Prerequisites
+
+1.  **Python**: Version 3.8 or higher.
+2.  **Bitwarden CLI**: The `bw` command-line tool must be installed and accessible in your system's PATH. You can find installation instructions [here](https://bitwarden.com/help/cli/). For macOS users, you can install it using Homebrew:
+    ```sh
+    brew install bitwarden-cli
+    ```
+
+## Installation
+
+1.  **Clone the repository:**
+    ```sh
+    git clone <repository_url>
+    cd BitwardnAiKeyManager
+    ```
+
+2.  **Install dependencies using `uv`:**
+    This project uses `uv` for dependency management. If you don't have it, install it first. Then, install the project in editable mode:
+    ```sh
+    uv pip install -e .
+    ```
+    This will install all required packages and register the `bakm` command in your shell.
+
+## Configuration
+
+1.  **Log in to Bitwarden CLI:**
+    Before using the tool, you must be logged in to your Bitwarden account and your vault must be unlocked.
+    ```sh
+    # Log in (only needs to be done once)
+    bw login
+
+    # Unlock your vault (session-based)
+    bw unlock
+    ```
+
+2.  **Create a Bitwarden Folder:**
+    In your Bitwarden vault (either via the app or web vault), create a new folder to store your AI model configurations. For example, you can name it `AI_KEYS`.
+
+3.  **Set up the Environment File:**
+    Create a `.env` file in the project root by copying the example file:
+    ```sh
+    cp .env.example .env
+    ```
+    Edit the `.env` file and set `BITWARDEN_FOLDER_NAME` to the exact name of the folder you created in the previous step.
+    ```dotenv
+    # .env
+    BITWARDEN_FOLDER_NAME="AI_KEYS"
+    ```
+
+## Usage
+
+The CLI is available via the `bakm` command.
+
+### Sync to Bitwarden
+
+The `sync` command reads a local `litellm_config.yaml` file and creates or updates corresponding Secure Notes in your Bitwarden vault.
+
+```sh
+# Sync using the default litellm_config.yaml in the current directory
+bakm sync
+
+# Sync using a specific config file
+bakm sync --config /path/to/your/config.yaml
+```
+The tool will match models by the `model_name` field and either update existing entries or create new ones.
+
+### Pull from Bitwarden
+
+The `pull` command fetches all model configurations from the specified Bitwarden folder and outputs them in the desired format.
+
+**1. Output as LiteLLM YAML (default):**
+```sh
+bakm pull
+```
+*Output:*
+```yaml
+model_list:
+- model_name: openai/gpt-4o
+  litellm_params:
+    api_base: https://api.openai.com/v1/
+    api_key: sk-xxxx
+    model: gpt-4o
+- model_name: azure/gpt-4o
+  litellm_params:
+    api_base: https://your-azure-deployment.openai.azure.com/
+    api_key: xxxxx
+    api_version: '2024-02-01'
+    model: azure/gpt-4o-2024-05-13
+```
+
+**2. Output as Claude Code Router JSON:**
+```sh
+bakm pull --format claude-router
+```
+
+**3. Output as Generic JSON and Save to a File:**
+```sh
+bakm pull --format json --out my_models.json
+```
+This will create a file named `my_models.json` with the configuration data.
+
+### Get Help
+
+For a full list of commands and options, use the `--help` flag.
+```sh
+bakm --help
+bakm sync --help
+bakm pull --help
+```
