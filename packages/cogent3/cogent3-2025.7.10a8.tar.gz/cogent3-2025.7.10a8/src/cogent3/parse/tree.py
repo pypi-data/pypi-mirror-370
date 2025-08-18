@@ -1,0 +1,181 @@
+from collections.abc import Iterable
+
+from cogent3.core.tree import PhyloNode
+from cogent3.parse.record import RecordError
+
+strip = str.strip
+maketrans = str.maketrans
+
+_dnd_token_str = "(:),[];"
+_dnd_tokens = dict.fromkeys(_dnd_token_str)
+_dnd_tokens_and_spaces = _dnd_token_str + " \t\v\n"
+
+remove_dnd_tokens = maketrans(_dnd_tokens_and_spaces, "-" * len(_dnd_tokens_and_spaces))
+
+
+def safe_for_tree(s):
+    """Makes string s safe for DndParser by removing significant chars."""
+    return s.translate(remove_dnd_tokens)
+
+
+def bad_dnd_tokens(s, is_valid_name):
+    """Returns list of bad dnd tokens from s, using is_valid_name for names.
+
+    Useful for finding trees with misformatted names that break parsing.
+    """
+    for t in DndTokenizer(s):
+        if t in _dnd_tokens:
+            continue
+        # also OK if it's a number
+        try:
+            float(t)
+            continue
+        except:  # wasn't a number -- further tests
+            pass
+        if is_valid_name(t):
+            continue
+        # if we got here, nothing worked, so yield the current token
+        yield t
+
+
+def DndTokenizer(data):
+    """Tokenizes data into a stream of punctuation, labels and lengths.
+
+    Note: data should all be a single sequence, e.g. a single string.
+    """
+    in_quotes = False
+    saved = []
+    sa = saved.append
+    for d in data:
+        if d == "'":
+            in_quotes = not (in_quotes)
+        if d in _dnd_tokens and not in_quotes:
+            curr = "".join(saved).strip()
+            if curr:
+                yield curr
+            yield d
+            saved = []
+            sa = saved.append
+        else:
+            sa(d)
+
+
+def DndParser(
+    lines: Iterable[str],
+    constructor: type[PhyloNode] = PhyloNode,
+    unescape_name: bool = False,
+) -> PhyloNode:
+    """Returns tree from the Clustal .dnd file format, and anything equivalent.
+
+    Tree is made up of cogent3.base.tree.PhyloNode objects, with branch lengths
+    (by default, although you can pass in an alternative constructor
+    explicitly).
+    """
+    data = lines if isinstance(lines, str) else "".join(lines)
+    data = data.strip()
+    if not data.endswith(";"):
+        data = f"{data};"
+
+    # skip arb comment stuff if present: start at first paren
+    paren_index = data.find("(")
+    data = data[paren_index:]
+    left_count = data.count("(")
+    right_count = data.count(")")
+    if left_count != right_count:
+        msg = f"Found {left_count} left parens but {right_count} right parens."
+        raise RecordError(
+            msg,
+        )
+
+    tokens = DndTokenizer(data)
+    curr_node = None
+    state = "PreColon"
+    state1 = "PreClosed"
+    last_token = None
+    start_comment = False
+    comment = []
+    for t in tokens:
+        if t == "[":
+            start_comment = True
+            comment = []
+            continue
+        if start_comment and t == ",":
+            continue
+        if start_comment and t != "]":
+            comment.append(t)
+            continue
+        if t == "]":
+            start_comment = False
+            curr_node.params["other"] = comment
+            comment = []
+            continue
+        if t == ":":  # expecting branch length
+            state = "PostColon"
+            # prevent state reset
+            last_token = t
+            continue
+        if t == ")" and (last_token in (",", "(")):  # node without name
+            new_node = _new_child(curr_node, constructor)
+            new_node.name = None
+            curr_node = new_node.parent
+            state1 = "PostClosed"
+            last_token = t
+            continue
+        if t == ")":  # closing the current node
+            curr_node = curr_node.parent
+            state1 = "PostClosed"
+            last_token = t
+            continue
+        if t == "(":  # opening a new node
+            curr_node = _new_child(curr_node, constructor)
+        elif t == ";":  # end of data
+            last_token = t
+            break
+        # node without name
+        elif t == "," and (last_token in (",", "(")):
+            new_node = _new_child(curr_node, constructor)
+            new_node.name = None
+            curr_node = new_node.parent
+        elif t == ",":  # separator: next node adds to this node's parent
+            curr_node = curr_node.parent
+        elif state == "PreColon" and state1 == "PreClosed":  # data for the current node
+            new_node = _new_child(curr_node, constructor)
+            if unescape_name:
+                if t.startswith("'") and t.endswith("'"):
+                    while t.startswith("'") and t.endswith("'"):
+                        t = t[1:-1]
+                elif "_" in t:
+                    t = t.replace("_", " ")
+            new_node.name = t
+            curr_node = new_node
+        elif state == "PreColon" and state1 == "PostClosed":
+            if unescape_name:
+                while t.startswith("'") and t.endswith("'"):
+                    t = t[1:-1]
+            curr_node.name = t
+        elif state == "PostColon":  # length data for the current node
+            curr_node.length = float(t)
+        else:  # can't think of a reason to get here
+            msg = f"Incorrect PhyloNode state? {t}"
+            raise RecordError(msg)
+        state = "PreColon"  # get here for any non-colon token
+        state1 = "PreClosed"
+        last_token = t
+
+    if curr_node is not None and curr_node.parent is not None:
+        msg = "Didn't get back to root of tree."
+        raise RecordError(msg)
+
+    if curr_node is None:  # no data -- return empty node
+        return constructor("")
+    return curr_node  # this should be the root of the tree
+
+
+def _new_child(old_node, constructor):
+    """Returns new_node which has old_node as its parent."""
+    new_node = constructor("")
+    new_node.parent = old_node
+    if old_node is not None:
+        if id(new_node) not in list(map(id, old_node.children)):
+            old_node.children.append(new_node)
+    return new_node
