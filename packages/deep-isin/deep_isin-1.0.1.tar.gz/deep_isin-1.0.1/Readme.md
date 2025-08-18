@@ -1,0 +1,40 @@
+# deep_isin
+
+deep_isin is a Python package that allows you to safely check whether a specific value exists in nested data structures such as dictionaries, lists, tuples, and sets. It also safely handles circular references to prevent infinite recursion.
+
+---
+
+Installation:
+
+pip install deep_isin
+
+---
+
+Usage:
+
+1. Import the entire module:
+```python
+import deep_isin
+
+data = {123: [1, 2, {456: [7, 8]}], "abc": (9, 10)}
+
+print(deep_isin.isin(data, 7))    # True
+print(deep_isin.isin(data, 99))   # False
+```
+2. Import the function directly:
+```python
+from deep_isin import isin
+
+data = {123: [1, 2, {456: [7, 8]}], "abc": (9, 10)}
+
+print(isin(data, 456))   # True
+print(isin(data, 0))     # False
+```
+---
+
+Features:
+
+- Works with nested dictionaries, lists, tuples, and sets.
+- Checks both keys and values in dictionaries.
+- Handles circular references safely to avoid infinite recursion.
+- Can handle any mix of nested Python data structures.
