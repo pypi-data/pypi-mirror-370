@@ -1,0 +1,283 @@
+Metadata-Version: 2.1
+Name: chapter-by-chapter
+Version: 0.2.0
+Summary: Serializes classic literature to Mastodon
+Home-page: https://codeberg.org/bfordham/chapter-by-chapter
+License: AGPL 3.0
+Keywords: mastodon,bot,social-media,markov,automation
+Author: Bryan L. Fordham
+Author-email: bfordham@naughtybaptist.com
+Requires-Python: >=3.12,<4.0
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU Affero General Public License v3
+Classifier: License :: Other/Proprietary License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Communications :: Chat
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Typing :: Typed
+Requires-Dist: beautifulsoup4 (>=4.13.4,<5.0.0)
+Requires-Dist: robotooter (>=0.3.0,<0.4.0)
+Project-URL: Documentation, https://codeberg.org/bfordham/chapter-by-chapter#readme
+Project-URL: Repository, https://codeberg.org/bfordham/chapter-by-chapter
+Description-Content-Type: text/markdown
+
+# Chapter by Chapter
+
+A Python bot that serializes classic literature to Mastodon, posting one chapter at a time in a daily schedule.
+
+## Overview
+
+Chapter by Chapter is a Mastodon bot built as a plug for the [robotooter](https://codeberg.org/bfordham/robotooter) framework. It takes classic literature from Project Gutenberg and posts it chapter by chapter to social media. The bot processes text files, extracts chapters, and creates engaging daily posts with customizable templates.
+
+## Features
+
+- **Automated Chapter Processing**: Converts full books into individual chapters with metadata
+- **Customizable Templates**: Flexible templating system for post formatting
+- **Daily Scheduling**: Posts chapters on a configurable schedule
+- **Project Gutenberg Integration**: Direct support for Project Gutenberg text files
+- **Rich Content Creation**: Generates engaging introductions and endings.
+- **Mastodon Integration**: Built on robotooter for reliable social media posting
+
+## Examples
+
+- **[Chapter By Chapter](https://social.naughtybaptist.com/@chapterbychapter)]** The reason I created this. Posts a chapter a day from Public Domain litereature. Victorian-era Netflix.
+
+## Installation
+
+### Prerequisites
+
+- Python 3.12+
+- RoboTooter 0.2.2
+- Poetry for dependency management
+
+### Installation
+
+#### Via pip
+
+```bash
+# Create a virtual environment
+mkdir my_bot
+cd my_bot
+python3 -m venv .venv
+# Activate the environment
+. .venv/bin/activate
+# And install...
+pip install chapter_by_chapter
+```
+
+#### From source
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd chapter-by-chapter
+```
+
+2. Install dependencies:
+```bash
+just init
+# or manually: poetry install
+```
+
+## Usage
+
+### Setup
+
+You will need to register the plugin, and then create a new bot.
+
+```bash
+❯ robotooter plugins register --plugin chapter_by_chapter
+chapter_by_chapter plugin registered
+
+# You will now see the new bot installed
+❯ robotooter info
+RobotoTooter info
+Version: 0.2.0
+Root directory: /Users/bryan.fordham/.robotooter
+Filters:
+  BlankLineFilter
+  GutenbergFilter
+  ParagraphCombiningFilter
+Tooters:
+  MarkovBot
+  ChapterByChapterBot
+```
+
+And now create the bot, selecting `ChapterByChapter` as the bot you want to use.
+
+```bash
+❯ robotooter create
+Let's get your bot's information.
+Enter the bot name: test
+Enter the username, such as 'mybot@mastodon.social': test@not.real
+1. ChapterByChapterBot
+2. MarkovBot
+Select an option: 1
+...
+```
+
+### Setting up a Book
+
+To configure a new book for serialization:
+
+```bash
+robotooter -b <botname> setup --book KEY --file PATH
+# or
+robotooter -b <botname> setup --book KEY --url URL
+```
+- `KEY` will be how you refer to the book, and will also be the directory name for its files.
+  - So, for example, for *A Study in Scarlet* I used `a_study_in_scarlet` but you can use anything.
+- `PATH` A local file path to a Project Gutenberg text file
+- `URL` A URL to download a text file
+
+Example:
+```bash
+robotooter -b my_literature_bot setup -f /path/to/book.txt -bk "scarlet"
+robotooter -b my_literature_bot setup -u "https://gutenberg.org/files/244/244.txt" -bk "study"
+```
+
+### Setting the Book
+
+This bot is mean to do most things automatically. So you have to tell it which book to post.
+
+Examples:
+```bash
+# Defaults to chapter 1
+robotooter --book a_study_in_scarlet
+
+# You can set a specific chapter to start from, if you want
+robotooter --book a_study_in_scarlet --chapter 2
+```
+
+### Posting Content
+
+After you've told it which book to use, it will post the next chapter automatically.
+
+```bash
+robotooter -b <botname> toot 
+```
+
+If you run the command again, it will post the next chapter.
+
+### Book Queue
+
+You have the ability to set a queue of books. If set, the bot will automatically move to the next book in the queue when the current one finishes.
+
+```bash
+$ robotooter -b beta queue --add frankenstein
+Added frankenstein to the book queue.
+
+$ robotooter -b beta queue
+1 books are currently present in the book queue.
+1. Frankenstein; Or, The Modern Prometheus
+
+# And obviously you can also remove books
+$ robotooter -b beta queue --remove frankenstein
+Removed frankenstein from the book queue.
+```
+
+### Periodic Messages
+
+This plugin has the ability to send messages outside the regular book posts.
+
+To send periodic messages (if necessary) run
+
+```bash
+robotooter -b beta periodic
+```
+
+#### Next book reminders
+
+If turned on, you will receive private messages from the bot when you are a few days from the end of the book.
+
+```bash
+# To enable
+$ robotooter -b beta periodic --enable
+
+# to disable
+$ robotooter -b beta periodic --disable
+
+# to send messages, if needed
+$ robotooter -b beta periodic
+```
+
+## Development
+
+### Code Quality
+
+Run linting and type checking:
+
+```bash
+just lint    # Run ruff linter with auto-fix
+just type    # Run mypy type checker
+just build   # Run both lint and type checks, then build
+```
+
+### Testing
+
+Run the test suite:
+
+```bash
+poetry run pytest
+```
+
+### Project Structure
+
+```
+src/chapter_by_chapter/
+    bot.py              # Main bot implementation
+    content_creator.py  # Content generation and templating
+    greeter.py         # User interaction handling
+    models.py          # Data models and configuration
+    processor.py       # Text processing and chapter extraction
+    util.py           # Utility functions
+        resources/
+        templates/     # Post templates
+        word_choices.json
+```
+
+## Configuration
+
+The bot uses a configuration system based on robotooter's `BotConfig`. Key configuration options include:
+
+- **Book Processing**: Chapter extraction settings
+- **Content Templates**: Customizable post formatting
+- **Scheduling**: Daily posting configuration
+- **Social Media**: Mastodon API credentials
+
+## Templates
+
+The bot includes several customizable templates. When you create a new both they are copied to the bot's resources directory. So, if you create "chapter_bot" you will find the templates in `<robotooter_root>/chapter_bot/resources/templates/`:
+
+- `chapter_text.txt` - Main chapter content format
+- `book_intro/` - Book introduction variations
+- `daily_intro/` - Daily post introductions
+- `book_ending/` - Book conclusion formats
+- `chapter_spoiler.txt` - Spoiler warning template
+
+The templates use jinja2 as the template engine.
+
+When a specific template is called for, it will first to see if there is a template directory that matches. If so, it will randomly pick one of the files in the directoy as the template to use. This allows for some variety.
+
+If there is not a directory that matches, it will look for `"{template_name}.txt"`.
+
+So, as an example, if you try to render the template `book_intro`, out of the box it will look in the `templates/book_intro` directory and pick a template. If you want to always use the same template, remove the directory and create `templates/book_intro.txt`.
+
+## Contributing
+
+If you would like to add features, please feel free. If you use this yourself, [please let me know](https://infosec.exchange/@bfordham)!
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](LICENSE) file for details.
+
+The AGPL-3.0 is a copyleft license that requires anyone who distributes the code or runs it on a server to make the source code available under the same license terms.
+
+## Author
+
+Bryan L. Fordham <bfordham@naughtybaptist.com>
+
