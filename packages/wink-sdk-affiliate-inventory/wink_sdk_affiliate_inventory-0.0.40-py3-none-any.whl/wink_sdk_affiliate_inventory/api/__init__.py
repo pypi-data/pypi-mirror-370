@@ -1,0 +1,12 @@
+# flake8: noqa
+
+# import apis into api package
+from wink_sdk_affiliate_inventory.api.customization_api import CustomizationApi
+from wink_sdk_affiliate_inventory.api.embeddable_inventories_api import EmbeddableInventoriesApi
+from wink_sdk_affiliate_inventory.api.grids_api import GridsApi
+from wink_sdk_affiliate_inventory.api.inventory_links_api import InventoryLinksApi
+from wink_sdk_affiliate_inventory.api.items_api import ItemsApi
+from wink_sdk_affiliate_inventory.api.maps_api import MapsApi
+from wink_sdk_affiliate_inventory.api.ranked_grids_api import RankedGridsApi
+from wink_sdk_affiliate_inventory.api.supplier_links_api import SupplierLinksApi
+
