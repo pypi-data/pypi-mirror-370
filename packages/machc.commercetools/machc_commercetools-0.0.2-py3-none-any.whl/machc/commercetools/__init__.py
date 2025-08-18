@@ -1,0 +1,1 @@
+from .user_adapter import CommercetoolsUserAdapter as CommercetoolsUserAdapter
