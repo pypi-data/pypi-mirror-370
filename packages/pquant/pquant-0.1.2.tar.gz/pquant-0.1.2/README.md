@@ -1,0 +1,34 @@
+# pquant
+
+PocketQuant 策略编写辅助库。  
+该项目仅提供对象和方法的定义，用于在本地开发环境中获得类型提示和自动补全，
+需要使用numpy、pandas、ta-lib库提示需自行安装，终端中已经集成了这些库。
+文件夹strategy_demo中提供一些示例策略文件，和indicator_my源码，供参考。
+具体的交易逻辑由[口袋量化平台](https://quant.gkoudai.com/)在终端实现。
+
+## 安装
+
+```bash
+pip install pquant
+```
+
+## 快速开始
+
+在当前目录生成一个模板策略文件：
+
+```bash
+pquant new my_strategy
+```
+
+在生成的文件中可以直接导入库内对象和方法：
+
+```python
+from pquant import *
+```
+
+编写完成后，将策略代码复制到口袋量化平台即可运行。
+
+## 免责声明
+
+本仓库中的代码只用于本地开发时的提示和静态检查，不包含实际交易实现。
+
