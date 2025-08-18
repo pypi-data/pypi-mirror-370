@@ -1,0 +1,16 @@
+import os
+import uuid
+
+BID_STATUS = {
+  'NEW': uuid.UUID('225d67d1-a733-45f6-8425-a6973bc1c0ac'),
+  'ACCEPTED': uuid.UUID('9a0dc3e6-b451-4cf0-92e5-29d6e3695102'),
+  'COUNTERED': uuid.UUID('d2261f74-2f48-4c01-a426-748ecb950912'),
+  'DECLINED': uuid.UUID('269e4734-6ade-44a3-952b-6e619d0ac14b'),
+  'INVITED': uuid.UUID('47102931-c5cd-4732-bb75-00e73c702e9e'),
+  'SELECTED': uuid.UUID('5903a778-52bc-42cc-8e66-5dab8a8821c4'),
+  'CANCELLED': uuid.UUID('88a8ba81-838a-43d3-86c5-d6d77240da71'),
+  'EXPIRED': uuid.UUID('a030ad02-2903-48f5-83ec-d74208d44c35')
+}
+
+BOOKING_AGENT_URL = os.environ.get('BOOKING_AGENT_URL')
+BOOKING_AGENT_TOKEN = os.environ.get("BOOKING_AGENT_TOKEN")

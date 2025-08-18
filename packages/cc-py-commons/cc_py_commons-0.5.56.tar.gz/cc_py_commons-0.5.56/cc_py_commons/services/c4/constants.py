@@ -1,0 +1,5 @@
+import os
+
+C4_API_URL = os.environ.get('C4_API_URL')
+C4_API_AUTH_TOKEN = os.environ.get("C4_API_AUTH_TOKEN")
+AMAZON_INTEGRATION = 'AMAZON_FREIGHT'
