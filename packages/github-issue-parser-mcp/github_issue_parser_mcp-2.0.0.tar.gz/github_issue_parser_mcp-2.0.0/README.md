@@ -1,0 +1,205 @@
+# GitHub Issue Parser MCP Server
+
+A Model Context Protocol (MCP) server that parses GitHub issues and returns formatted plain text content including comments and reactions.
+
+## Features
+
+- Parse GitHub issue URLs to extract structured content
+- Fetch issue details, comments, and reactions from GitHub API
+- Format output in clean, readable plain text
+- Support for multiple analysis types (summary, technical, priority)
+- Available as both tool and resource
+
+## Installation
+
+### Prerequisites
+
+- Python 3.8 or higher
+- uv package manager (recommended) or pip
+
+### Installation
+
+#### From PyPI (recommended)
+
+```bash
+pip install github-issue-parser-mcp
+```
+
+#### Local Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/Anionex/github-issue-parser-MCP-server.git
+cd github-issue-parser-MCP-server
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the server:
+
+For locally installed version:
+```bash
+python github_issue_parser.py
+```
+
+For PyPI installed version:
+```bash
+python -m github_issue_parser_mcp
+```
+
+Or use the provided batch file (Windows):
+```bash
+start.bat
+```
+
+**Note**: The server uses streamable-http transport mode for MCP communication.
+
+## Usage
+
+### As MCP Tool
+
+The server provides a `parse_github_issue` tool that takes a GitHub issue URL and returns formatted content.
+
+Example usage:
+```
+Tool: parse_github_issue
+Input: {"issue_url": "https://github.com/owner/repo/issues/123"}
+```
+
+### As MCP Resource
+
+Access GitHub issues as resources using the `github-issue://` URI scheme.
+
+Example:
+```
+Resource: github-issue://https://github.com/owner/repo/issues/123
+```
+
+### As MCP Prompt
+
+Generate analysis prompts for GitHub issues with different analysis types.
+
+Example:
+```
+Prompt: analyze_github_issue
+Arguments: {
+  "issue_url": "https://github.com/owner/repo/issues/123",
+  "analysis_type": "technical"
+}
+```
+
+## Configuration for ModelScope
+
+### MCP Service Configuration
+
+When submitting to ModelScope MCP广场, use the following configuration:
+
+```json
+{
+  "name": "GitHub Issue Parser",
+  "description": "Parse GitHub issues and return formatted plain text content including comments and reactions",
+  "author": "Your Name",
+  "version": "1.0.0",
+  "license": "MIT",
+  "mcp": {
+    "server": {
+      "command": "uvx",
+      "args": [
+        "python",
+        "github_issue_parser.py"
+      ],
+      "env": {
+        "PYTHONPATH": "."
+      },
+      "transport": "streamable-http"
+    }
+  }
+}
+```
+
+### Environment Variables
+
+The service doesn't require any special environment variables for basic usage. However, for GitHub API rate limiting, you may want to add:
+
+```json
+{
+  "env": {
+    "GITHUB_TOKEN": "your_github_token_here"
+  }
+}
+```
+
+## Dependencies
+
+- fastmcp>=0.1.0
+- requests>=2.28.0
+- beautifulsoup4>=4.11.0
+
+## build
+```bash
+python -m build
+```
+
+## API Endpoints
+
+### parse_github_issue
+
+Parse a GitHub issue URL and return formatted content.
+
+**Parameters:**
+- `issue_url` (string): GitHub issue URL
+
+**Returns:**
+Formatted plain text containing:
+- Issue title and metadata
+- Description
+- Comments with reactions
+- Issue reactions
+
+## Example Output
+
+```
+Title: Feature Request: Add dark mode support
+==================================================
+Repository: ['owner', 'repo']
+Issue #42
+State: OPEN
+Author: user123
+Labels: enhancement, ui
+Created: 2024-01-15T10:30:00Z
+Updated: 2024-01-16T14:20:00Z
+
+Description:
+--------------------
+It would be great to have dark mode support for the application...
+
+Comments (2):
+--------------------
+Comment #1 by dev456 on 2024-01-15T11:00:00Z:
+---------------
+I agree this would be a useful feature...
+Reactions: 2 people react 👍
+
+Comment #2 by designer789 on 2024-01-15T12:30:00Z:
+---------------
+I can help with the UI design...
+Reactions: 1 people react ❤️
+```
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## Support
+
+For issues and questions, please open an issue in the GitHub repository.
