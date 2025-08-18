@@ -1,0 +1,1 @@
+# Smoke tests for Telegram Group Message Crawler
