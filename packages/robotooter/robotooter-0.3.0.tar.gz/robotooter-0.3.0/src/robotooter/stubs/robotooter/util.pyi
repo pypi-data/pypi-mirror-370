@@ -1,0 +1,9 @@
+from abc import ABCMeta
+from pathlib import Path
+from typing import TypeVar
+
+T = TypeVar('T')
+
+def load_included(package_path: str, expected_klass: type, ending: str) -> dict[str, type]: ...
+def load_list(names: list[str], expected_type: type[T] | ABCMeta) -> dict[str, type[T]]: ...
+def download_sources(source_file_path: Path, output_directory: Path) -> None: ...

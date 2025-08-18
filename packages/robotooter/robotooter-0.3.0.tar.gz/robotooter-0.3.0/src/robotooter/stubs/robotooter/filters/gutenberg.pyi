@@ -1,0 +1,9 @@
+from robotooter.filters.base_filter import BaseFilter as BaseFilter
+
+PG_START: str
+PG_END: str
+
+class GutenbergFilter(BaseFilter):
+    def __init__(self) -> None: ...
+    def process(self, line: str) -> str | None: ...
+    def reset(self) -> None: ...
