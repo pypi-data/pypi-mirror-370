@@ -1,0 +1,112 @@
+Metadata-Version: 2.4
+Name: awl
+Version: 0.3.2
+Summary: Python implementation of the Abstract Workflow Language (AWL / AWL-LD)
+Home-page: https://github.com/OO-LD/awl-python
+Author: Simon Stier
+Author-email: simon.stier@gmx.de
+License: Apache-2.0
+Project-URL: Documentation, https://oo-ld.github.io/awl-python/
+Project-URL: Source, https://github.com/OO-LD/awl-python
+Project-URL: Download, https://pypi.org/project/awl/#files
+Platform: any
+Classifier: Development Status :: 3 - Alpha
+Classifier: Programming Language :: Python
+Description-Content-Type: text/markdown; charset=UTF-8; variant=GFM
+License-File: LICENSE
+Requires-Dist: ast2json
+Requires-Dist: json2ast
+Requires-Dist: pyyaml
+Requires-Dist: pyld
+Requires-Dist: rdflib
+Requires-Dist: oold>=0.8.0
+Provides-Extra: hitl
+Requires-Dist: oold[UI-panel]; extra == "hitl"
+Provides-Extra: dev
+Requires-Dist: tox; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+Provides-Extra: testing
+Requires-Dist: setuptools; extra == "testing"
+Requires-Dist: pytest; extra == "testing"
+Requires-Dist: pytest-cov; extra == "testing"
+Requires-Dist: oold[UI-panel]; extra == "testing"
+Dynamic: license-file
+
+[![DOI](https://zenodo.org/badge/957336610.svg)](https://doi.org/10.5281/zenodo.15108186)
+[![PyPI-Server](https://img.shields.io/pypi/v/awl.svg)](https://pypi.org/project/awl/)
+[![Coveralls](https://img.shields.io/coveralls/github/OO-LD/awl-python/main.svg)](https://coveralls.io/r/<USER>/awl)
+[![Project generated with PyScaffold](https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold)](https://pyscaffold.org/)
+
+# awl-python
+Python implementation of the [Abstract Workflow Language (AWL / AWL-LD)](https://github.com/OO-LD/awl-schema)
+
+## Install
+
+`pip install awl`
+
+## Usage
+
+```py
+from awl import AstSerialization
+
+ast_serialization = AstSerialization()
+
+# python source code example
+source = """if a == 1:
+b = 1
+else:
+b = 'test'"""
+
+# generate ast document
+ast_dict = ast_serialization.parse(source)
+print(ast_serialization.dumps())
+
+# regenerate source code
+src_code = ast_serialization.unparse(ast_dict)
+assert src_code == source
+
+# manipulate ast_dict: set b = 2
+ast_dict["body"][0]["body"][0]["value"]["value"] = 2
+src_code = ast_serialization.unparse(ast_dict)
+
+assert src_code == """if a == 1:
+b = 2
+else:
+b = 'test'"""
+
+# export as json-ld
+jsonld_doc = ast_serialization.to_jsonld()
+
+# import into a graph
+from rdflib import Graph
+g = Graph()
+g.parse(data=jsonld_doc, format="json-ld")
+
+# dump graph as turtle
+print(g.serialize(format="turtle"))
+
+# query for all possible values of b
+qres = g.query(
+    """
+    PREFIX awl: <https://w3id.org/awl/schema/>
+    PREFIX ex: <https://example.org/>
+    SELECT ?v
+    WHERE {
+        ?a a awl:Assign .
+        ?a awl:HasTarget ex:b .
+        ?a awl:HasValue ?v .
+    }
+    """
+)
+
+possible_values = [row[0].toPython() for row in qres]
+assert possible_values == [1, "test"]
+```
+
+## Development
+
+```bash
+git clone https://github.com/OO-LD/awl-python
+cd awl-python
+pip install -e .[dev,testing]
+```
