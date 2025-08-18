@@ -1,0 +1,21 @@
+// Copyright 2025 Pixar
+//
+// Licensed under the terms set forth in the LICENSE.txt file available at
+// https://openusd.org/license.
+//
+// Modified by Jeremy Retailleau.
+
+#ifndef PXR_WORK_IMPL_H
+#define PXR_WORK_IMPL_H
+
+#include "pxr/work/workTBB/impl.h"
+
+#ifdef WORK_IMPL_NS
+#define PXR_WORK_IMPL_NS WORK_IMPL_NS
+#define PXR_WORK_IMPL_NAMESPACE_USING_DIRECTIVE using namespace PXR_WORK_IMPL_NS;
+#else
+#define PXR_WORK_IMPL_NS
+#define PXR_WORK_IMPL_NAMESPACE_USING_DIRECTIVE
+#endif
+
+#endif
