@@ -1,0 +1,132 @@
+# This workflow will install Python dependencies and run tests on
+# windows and linux systems with a variety of Python versions
+
+# For more information see:
+# https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: CI/CD
+
+on:
+    push:
+    pull_request:
+    workflow_dispatch:
+    schedule: # only upstream, won't trigger on forks!
+        - cron: '0 0 * * *' # daily
+
+jobs:
+  build:
+    name: Build py${{ matrix.python-version }} @ ${{ matrix.os }} 🐍
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ['3.12']  #  Make sure to use the QA4SM python version
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: install libtiff dependency (Ubuntu only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev
+          sudo ln -s /usr/lib/x86_64-linux-gnu/libtiff.so.6 /usr/lib/x86_64-linux-gnu/libtiff.so.5
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: qa4sm_reader
+          auto-activate-base: false
+      - name: Print environment infos
+        shell: bash -l {0}
+        run: |
+          conda info -a
+          conda list
+          pip list
+          which pip
+          which python
+      - name: Install package
+        shell: bash -l {0}
+        run: |
+          pip install -e .[building,testing]
+      - name: Export Environment
+        shell: bash -l {0}
+        run: |
+          mkdir -p artifacts
+          filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
+          conda env export --no-builds | grep -v "prefix" > artifacts/$filename
+      - name: Run tests
+        shell: bash -l {0}
+        run: |
+          pytest
+      - name: Create wheel and dist package
+        shell: bash -l {0}
+        run: |
+          mkdir -p artifacts/dist
+          if [ ${{ matrix.os }} == "ubuntu-latest" ]
+          then
+            # build dist on linux
+            python -m build --outdir artifacts/dist
+          fi
+          python setup.py bdist_wheel --dist-dir artifacts/dist
+          ls artifacts/dist
+          twine check artifacts/dist/*
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
+          path: artifacts/*
+      - name: Upload Coverage
+        shell: bash -l {0}
+        run: |
+          pip install coveralls && coveralls --service=github-actions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
+          COVERALLS_PARALLEL: true
+
+  coveralls:
+    name: Submit Coveralls 👚
+    needs: build
+    runs-on: ubuntu-latest
+    container: python:3-slim
+    steps:
+      - name: Finalize Coveralls Parallel Build
+        run: |
+          pip3 install --upgrade coveralls
+          coveralls --finish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERALLS_SERVICE_NAME: github-actions
+
+  publish-pypi-package:
+    name: Publish PyPI 🚀
+    # Will only trigger when Tests have passed on release/tag from the TUW-GEO repository
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      startsWith(github.repository, 'awst-austria')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print environment variables
+        run: |
+          echo "GITHUB_REF = $GITHUB_REF"
+          echo "GITHUB_REPOSITORY = $GITHUB_REPOSITORY"
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: Artifacts
+          pattern: Artifacts-*
+          merge-multiple: true
+      - name: Display downloaded files
+        run: ls -aR
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          verbose: true
+          verify-metadata: true
+          packages-dir: Artifacts/dist/
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }} # this needs to be uploaded to github actions secrets
