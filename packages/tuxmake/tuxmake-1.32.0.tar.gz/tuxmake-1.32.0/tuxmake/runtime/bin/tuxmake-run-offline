@@ -1,0 +1,79 @@
+#!/bin/sh
+
+set -eu
+
+if [ -z "${TUXMAKE_OFFLINE_BUILD:-}" ]; then
+    # initial call: here we still have network access
+
+    if ! command -v socat >/dev/null; then
+        echo "socat not found" >&2
+        exit 1
+    fi
+
+    if [ -n "${TUXMAKE_OFFLINE_BUILD_ALLOW_LOCAL_PORT:-}" ]; then
+        port="${TUXMAKE_OFFLINE_BUILD_ALLOW_LOCAL_PORT}"
+
+        # wait for server to be online
+        waited=0
+        while ! socat GOPEN:/dev/null tcp-connect:localhost:${port} 2>/dev/null; do
+            waited=$((waited + 1))
+            if [ "$waited" -ge 50 ]; then
+                echo "$(basename $0): can't reach service at localhost:${port}" >&2
+                exit 1
+            fi
+            sleep 0.1
+        done
+
+        # determine socket location
+        uid="$(id -u)"
+        socket_dir="$(mktemp --tmpdir --directory tuxmake.XXXXXXXXX)"
+        export TUXMAKE_OFFLINE_BUILD_SOCKET="${socket_dir}/${port}.sock"
+        # start TCP -> UNIX socket tunnel
+        socat -lp'socat-external' \
+            "unix-listen:${TUXMAKE_OFFLINE_BUILD_SOCKET},reuseaddr,fork" \
+            "tcp-connect:localhost:${port}" \
+            &
+        export TUXMAKE_OFFLINE_BUILD_FORWARDER1_PID="$!"
+
+        # wait until socket is ready
+        while ! socat -u OPEN:/dev/null "unix-connect:${TUXMAKE_OFFLINE_BUILD_SOCKET}" 2>/dev/null; do
+            sleep 0.1
+        done
+    fi
+
+    # run itself under a new and empty network namespace
+    export TUXMAKE_OFFLINE_BUILD=1
+    exec unshare --net --map-root-user "${0}" "$@"
+else
+    # inner call: here we have no network access
+
+    # set up loopback interface
+    ip link set lo up
+
+    if [ -n "${TUXMAKE_OFFLINE_BUILD_ALLOW_LOCAL_PORT:-}" ]; then
+        # start TCP -> UNIX socket
+        socat -lp'socat-internal' \
+            "tcp-listen:${TUXMAKE_OFFLINE_BUILD_ALLOW_LOCAL_PORT},reuseaddr,fork" \
+            "unix-connect:${TUXMAKE_OFFLINE_BUILD_SOCKET}" \
+            &
+        export TUXMAKE_OFFLINE_BUILD_FORWARDER2_PID="$!"
+    fi
+
+    # run the original command
+    rc=0
+    "$@" || rc="$?"
+
+    # cleanup
+    if [ -n "${TUXMAKE_OFFLINE_BUILD_FORWARDER1_PID:-}" ]; then
+        kill -9 "${TUXMAKE_OFFLINE_BUILD_FORWARDER1_PID}"
+    fi
+    if [ -n "${TUXMAKE_OFFLINE_BUILD_FORWARDER2_PID:-}" ]; then
+        kill -9 "${TUXMAKE_OFFLINE_BUILD_FORWARDER2_PID}"
+    fi
+    if [ -n "${TUXMAKE_OFFLINE_BUILD_SOCKET:-}" ]; then
+        rm -f "${TUXMAKE_OFFLINE_BUILD_SOCKET}"
+        rm -rf "$(dirname "${TUXMAKE_OFFLINE_BUILD_SOCKET}")"
+    fi
+
+    exit "$rc"
+fi

@@ -1,0 +1,31 @@
+#!/bin/sh
+
+set -eu
+
+repo=${1:-dist/repo}
+rm -rf ${repo}
+mkdir -p ${repo}
+cp dist/*.rpm ${repo}/
+cp dist/*.deb ${repo}/
+cd ${repo}
+
+export GPG_TTY=
+gpg="gpg --local-user ${TUXMAKE_RELEASE_KEYID} --batch --yes"
+
+
+# export signing key
+$gpg --armor --export --export-options export-minimal --output signing-key.asc ${TUXMAKE_RELEASE_KEYID}
+$gpg         --export --export-options export-minimal --output signing-key.gpg ${TUXMAKE_RELEASE_KEYID}
+
+# rpm
+rpmsign --define "__gpg /usr/bin/gpg" --define "_gpg_name ${TUXMAKE_RELEASE_KEYID}" --addsign *.rpm
+createrepo_c .
+$gpg --armor --detach-sign --output repodata/repomd.xml.asc repodata/repomd.xml
+ln signing-key.asc  repodata/repomd.xml.key
+
+# deb
+dpkg-scanpackages . > Packages
+apt-ftparchive -o APT::FTPArchive::Release::Origin=tuxmake release . > Release
+$gpg --detach-sign --output Release.gpg Release
+$gpg --clearsign --output InRelease Release
+

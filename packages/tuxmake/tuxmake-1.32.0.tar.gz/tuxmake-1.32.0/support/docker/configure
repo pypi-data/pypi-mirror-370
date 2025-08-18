@@ -1,0 +1,358 @@
+#!/usr/bin/env python3
+
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+tuxmake = (pathlib.Path(__file__).parent / "../..").resolve()
+sys.path.insert(0, str(tuxmake))
+
+
+from tuxmake.exceptions import UnsupportedArchitecture
+from tuxmake.runtime import NullRuntime, DockerRuntime
+from tuxmake.arch import Architecture, native_arch
+
+TAG = os.getenv("TAG")
+
+
+class ImageList:
+    __all__ = []
+
+    @classmethod
+    def register(cls, name):
+        if name not in cls.__all__:
+            cls.__all__.append(name)
+
+    @classmethod
+    def dump(cls, stream):
+        for name in cls.__all__:
+            stream.write(f"{name}: $({name}_images)\n")
+        lists = " ".join(cls.__all__)
+        stream.write(f"releases = {lists}\n")
+
+        stream.write("list: checkconfig\n")
+        for name in cls.__all__:
+            stream.write(f"\t@echo {name}_images = $({name}_images)\n")
+
+
+class Image:
+    kind = "base"
+    extra_lists = []
+
+    @property
+    def lists(self):
+        return self.extra_lists + ["all", self.group, self.when]
+
+    def __init__(self, image_data):
+        self.name = image_data.name
+        self.base = image_data.base
+        self.when = image_data.rebuild
+        self.packages = image_data.packages
+        self.install_options = image_data.install_options
+        self.group = re.sub(r"-", "_", image_data.group)
+        self.extra_apt_repo = image_data.extra_apt_repo
+        self.extra_apt_repo_key = image_data.extra_apt_repo_key
+        self.tc_full_version = image_data.tc_full_version  # specify korg llvm full version like 18.1.0-rc3
+        self.args = []
+        self.test_args = [self.name]
+
+        if version := re.match(r"^.*-([0-9]+)$", self.name):
+            self.arg("TOOLCHAIN_VERSION", version[1])
+        # process boot_test flag
+        self.boot_test = image_data.boot_test
+        if isinstance(self.boot_test, str):
+            self.boot_test = True if self.boot_test.lower() == "true" else False
+
+
+    @property
+    def dependency(self):
+        return self.base
+
+    @property
+    def base_image(self):
+        return f"$(REGISTRY)$(PROJECT)/{self.base}:latest$(TAG)"
+
+    def arg(self, k, v):
+        self.args.append((k, v))
+
+    def emit(self):
+        base = self.base_image
+        if "tuxmake/" in base:
+            base += ":latest$(TAG)"
+        self.arg("BASE", base)
+
+    def register(self):
+        for l in self.lists:
+            ImageList.register(l)
+
+    def get_packages(self):
+        return self.packages
+
+    @property
+    def build_args(self):
+        return ""
+
+    def generate(self, stream):
+        self.emit()
+        for l in sorted(set(self.lists)):
+            stream.write(f"{l}_images += {self.name}\n")
+        if self.dependency and not self.dependency.startswith("base"):
+            stream.write(f"# dot: \"{self.name}\" -> \"{self.dependency}\";\n")
+            stream.write(f"{self.name}: {self.dependency} log\n")
+        else:
+            stream.write(f"{self.name}: log\n")
+        stream.write(f"\t$(ANN_BUILD) {self.name}\n")
+        stream.write("\t$(Q)$(docker) build \\\n")
+        stream.write(f"\t\t--network host \\\n")
+        for k, v in self.args:
+            stream.write(f"\t\t--build-arg={k}={v} \\\n")
+        stream.write(f"\t\t{self.build_args} $(docker_build_args) \\\n")
+        stream.write(f"\t\t--file=Dockerfile.{self.kind} \\\n")
+        stream.write(f"\t\t--tag=$(REGISTRY)$(PROJECT)/{self.name}:latest$(TAG) \\\n")
+        stream.write("\t\t. $(LOG)\n\n")
+
+        test_args = " ".join(self.test_args)
+        # FIXME We skip testing loongarch container for now
+        # since we don't have gnu ld in the container
+        if self.name in ["loongarch_clang-nightly", "loongarch_clang-17", "loongarch_clang-18"] or "korg" in self.name:
+            stream.write(f"test-{self.name}: {self.name}\n")
+            stream.write(f"\t$(ANN_TEST) Skip {self.name}\n")
+            return
+        stream.write(f"test-{self.name}: {self.name}\n")
+        stream.write(f"\t$(ANN_TEST) {self.name}\n")
+        stream.write(f"\t$(Q)$(docker) run --rm $(REGISTRY)$(PROJECT)/{self.name}:latest$(TAG) tuxmake-check-environment {test_args} $(NOSTDOUT) \n")
+        if self.boot_test:
+            stream.write(f"\t$(Q)sh ./test_container.sh $(REGISTRY)$(PROJECT)/{self.name}:latest$(TAG) $(NOSTDOUT) \n\n")
+
+
+
+class BaseImage(Image):
+    extra_lists = ["base"]
+
+    @property
+    def dependency(self):
+        return "tuxmake-check-environment"
+
+    @property
+    def base_image(self):
+        return f"{self.base}"
+
+    @property
+    def build_args(self):
+        return "--pull"
+
+
+class CiImage(BaseImage):
+    kind = "ci"
+    extra_lists = ["ci"]
+
+
+class BuildImage(Image):
+    kind = "build"
+    extra_lists = ["build"]
+
+    def __init__(self, image_data):
+        super().__init__(image_data)
+        self.pkgname = self.name
+
+    @property
+    def arch(self):
+        try:
+            return getattr(self, "__arch__")
+        except AttributeError:
+            a = re.sub(r"_((korg-)?(rust|gcc|clang)).*$", "", self.name)
+            if a == self.name:
+                return None
+            self.__arch__ = Architecture(a)
+            return self.__arch__
+
+    def emit(self):
+        super().emit()
+        packages = " ".join(self.get_packages())
+        if self.install_options:
+            self.arg("INSTALL_OPTIONS", f'"{self.install_options}"')
+        if self.extra_apt_repo:
+            self.arg("EXTRA_APT_REPO", f'"{self.extra_apt_repo}"')
+        if self.extra_apt_repo:
+            self.arg("EXTRA_APT_REPO_KEY", self.extra_apt_repo_key)
+        self.arg("PACKAGES", f'"{packages}"')
+
+
+class ClangBuildImage(BuildImage):
+    def get_packages(self):
+        extra_packages = []
+        if self.arch == "arm64":
+            extra_packages = ["binutils-arm-linux-gnueabihf"]
+        return super().get_packages() + extra_packages
+
+
+class GccBuildImage(BuildImage):
+    def get_packages(self):
+        extra_packages = []
+        if self.arch == "arm64":
+            extra_packages = [f"{pkg}-arm-linux-gnueabihf" for pkg in self.packages]
+        return super().get_packages() + extra_packages
+
+
+class CrossBuildMixin:
+    @property
+    def lists(self):
+        arch = self.arch.name
+        return super().lists + [f"{arch}"]
+
+    @property
+    def full_arch(self):
+        return re.sub(r"-$", "", self.arch.makevars["CROSS_COMPILE"])
+
+    @property
+    def cross_package_suffix(self):
+        return self.full_arch.replace("_", "-")
+
+    @property
+    def gnu_arch(self):
+        return self.full_arch.replace("-linux-gnu", "")
+
+    def emit(self):
+        super().emit()
+        self.arg("HOSTARCH", self.gnu_arch)
+        self.test_args.append(self.arch.makevars["CROSS_COMPILE"])
+        # FIXME: this list should not be hardcoded here
+        if self.arch in ['x86_64', 'arm64', 'arm', 'i386', 'powerpc', 's390']:
+            self.test_args.append("--libc-compile-fatal")
+
+
+class CrossGccBuildImage(CrossBuildMixin, GccBuildImage):
+    extra_lists = ["crossbuild"]
+
+    def __init__(self, image_data):
+        super().__init__(image_data)
+        self.pkgname = re.sub(r".*_(gcc.*)$", r"\g<1>", self.name)
+
+    def get_packages(self):
+        extra_packages = []
+        if self.arch != native_arch.name:
+            extra_packages = [
+                pkg + "-" + self.cross_package_suffix
+                for pkg in self.packages
+            ]
+        return super().get_packages() + extra_packages
+
+
+class CrossClangBuildImage(CrossBuildMixin, ClangBuildImage):
+    extra_lists = ["crossbuild"]
+
+    def get_packages(self):
+        return super().get_packages() + ["binutils-" + self.cross_package_suffix]
+
+
+class ClangAndroidBuildImage(ClangBuildImage):
+    kind = "clang-android"
+    pass
+
+
+class CrossClangAndroidBuildImage(CrossClangBuildImage):
+    pass
+
+
+class KorgBuildMixin:
+    def emit(self):
+        super().emit()
+        self.arg("TC_FULL_VERSION", self.tc_full_version)
+        self.arg("BUILD_HOST_ARCH", native_arch.name)
+        if native_arch.name == "arm64":
+            self.arg("BUILD_HOST_ARCH", "aarch64")
+
+
+class KorgClangBuildImage(KorgBuildMixin, ClangBuildImage):
+    kind = "korg-clang-build"
+    pass
+
+
+class CrossKorgClangBuildImage(KorgBuildMixin, CrossClangBuildImage):
+    kind = "korg-clang-build"
+    pass
+
+
+class KorgGccBuildImage(Image):
+    kind = "korg-gcc-build"
+
+
+class CrossKorgGccBuildImage(Image):
+    kind = "korg-gcc-build"
+    extra_lists = ["crossbuild"]
+
+
+class ArcImage(Image):
+    kind = "arc"
+    extra_lists = ["crossbuild", "arc"]
+    releases = {
+        'arc_gcc-8': (
+            ('RELEASE', 'arc-2019.03-release'),
+            ('TARBALL', 'arc_gnu_2019.03_prebuilt_elf32_le_linux_install.tar.gz'),
+            ('GCC_VERSION', '8'),
+            ('GCC_VERSION_FULL', '8.3.1'),
+        ),
+        'arc_gcc-9': (
+            ('RELEASE', 'arc-2020.03-release'),
+            ('TARBALL', 'arc_gnu_2020.03_prebuilt_elf32_le_linux_install.tar.gz'),
+            ('GCC_VERSION', '9'),
+            ('GCC_VERSION_FULL', '9.3.1'),
+        ),
+    }
+    releases['arc_gcc'] = releases['arc_gcc-9']
+
+    def emit(self):
+        super().emit()
+        for k, v in self.releases[self.name]:
+            self.arg(k, v)
+
+
+class RustImage(GccBuildImage):
+    kind = "build"
+
+    def get_packages(self):
+        return super().get_packages() + ["clang", "lld", "llvm"]
+
+    def emit(self):
+        super().emit()
+        self.arg("INSTALL_RUST", "yes")
+
+
+class CrossRustImage(CrossGccBuildImage):
+    kind = "build"
+    base = "rust"
+    extra_lists = ["crossbuild"]
+
+
+def generate(image_data):
+    # transforms foo-bar into FooBarImage
+    clsname = "".join([w.title() for w in re.split(r"[-_]", image_data.kind)]) + "Image"
+    cls = globals()[clsname]
+    image = cls(image_data)
+    image.register()
+
+    if TAG:
+        host_arch = re.sub("^-", "", TAG)
+        if host_arch not in image_data.hosts:
+            return
+
+    image.generate(output)
+
+
+if os.getenv("DEBUG"):
+    output = sys.stdout
+else:
+    output = open("configure.mk", "w")
+
+runtime = DockerRuntime()
+for image in runtime.images:
+    if image.skip_build:
+        continue
+    generate(image)
+
+ImageList.dump(output)
+
+
+output.close()

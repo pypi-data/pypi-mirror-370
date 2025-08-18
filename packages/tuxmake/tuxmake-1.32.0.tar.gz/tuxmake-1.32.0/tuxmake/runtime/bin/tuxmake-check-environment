@@ -1,0 +1,227 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use File::Temp qw(tempdir);
+use Getopt::Long;
+my $optional_compile_fatal = 0;
+GetOptions(
+  "libc-compile-fatal" => \$optional_compile_fatal,
+  "optional-compile-fatal" => \$optional_compile_fatal,
+) or exit(1);
+
+my $LATEST_CLANG_NIGHTLY = "22";
+
+my $image = shift;
+my $cross_compile = shift;
+my $cross_compile_compat = shift;
+
+my $failures = 0;
+my $PASS = "\033[32mPASS\033[m";
+my $FAIL = "\033[31mFAIL\033[m";
+my $WARN = "\033[33mWARN\033[m";
+
+
+sub check($$$) {
+  my ($name, $test, $ok_to_fail) = @_;
+  if ($test) {
+    print STDOUT "${PASS} - ${name}\n";
+  } elsif ($ok_to_fail) {
+    print STDERR "${WARN} - non fatal failure: ${name}\n";
+  } else {
+    print STDERR "${FAIL} - ${name}\n";
+    $failures++;
+  }
+}
+
+sub skip($) {
+  my $description = shift;
+  print STDOUT "SKIP - ${description}\n";
+}
+
+sub check_run($$$) {
+  my ($name, $command, $ok_to_fail) = @_;
+  my $output = `$command 2>&1`;
+  my $rc = $?;
+  if ($rc != 0) {
+    print(STDERR $command, "\n");
+    print(STDERR $output);
+  }
+  check("${name}", $rc == 0, $ok_to_fail);
+}
+
+sub check_program($) {
+  my $program = shift;
+  check_run("${program} in PATH", "which ${program}", 0);
+}
+
+sub check_base_image() {
+  check_program("bash");
+  check_program("bc");
+  check_program("bison");
+  check_program("bzip2");
+  check_program("ccache");
+  check_program("cpio");
+  check_program("flex");
+  check_program("git");
+  check_program("gzip");
+  check_program("lzop");
+  check_program("lz4");
+  check_program("make");
+  check_program("rsync");
+  check_program("socat");
+  check_program("tar");
+  check_program("wget");
+  check_program("xz");
+  check_program("zstd");
+  check_run("Perl JSON::PP module", "perl -MJSON::PP -e 'exit(0)'", 0);
+}
+
+my $PROGRAM = <<PROGRAM;
+int main(int argc, char** argv) {
+  return 0;
+}
+PROGRAM
+
+sub check_compile_program($$$$$) {
+  my ($name, $compiler, $flags, $program, $ok_to_fail) = @_;
+  $flags ||= '';
+  my $tmpdir = tempdir(CLEANUP => 1);
+  open PROGRAM, ">", "${tmpdir}/program.c" or die($!);
+  print PROGRAM $program;
+  close PROGRAM;
+  check_run($name, "${compiler} -o ${tmpdir}/program ${tmpdir}/program.c ${flags}", $ok_to_fail);
+}
+
+sub check_compiler($$) {
+  my $compiler = shift;
+  my $prefix = shift;
+  check_compiler_no_libc($compiler);
+  check_compiler_libc($compiler);
+  check_compiler_fuse($compiler, $prefix);
+}
+
+sub check_compiler_no_libc($) {
+  my $compiler = shift;
+  check_compile_program("${compiler} can produce binaries", "${compiler} -nostdlib", undef, $PROGRAM, 0);
+}
+
+sub check_compiler_libc($) {
+  my $compiler = shift;
+  check_compile_program("${compiler} can produce binaries using the libc", $compiler, undef, "#include <stdio.h>\n" . $PROGRAM, !$optional_compile_fatal);
+}
+
+my $fuse_program = <<PROGRAM;
+#include <fuse.h>
+int main(int argc, char *argv[])
+{
+	return fuse_main(argc, argv, NULL);
+}
+PROGRAM
+
+sub check_compiler_fuse($$) {
+  my $compiler = shift;
+  my $prefix = shift || '';
+  my $debianversion = `dpkg-query --show base-files | cut -f2`;
+  chomp $debianversion;
+  if ($debianversion && $debianversion lt '11') {
+    skip("not checking for development packages on Debian < 11");
+    return;
+  }
+  my $fuse_flags = `${prefix}pkg-config fuse --libs --cflags`;
+  chomp $fuse_flags;
+  check_compile_program("${compiler} can build against libfuse", ${compiler}, $fuse_flags, $fuse_program, !$optional_compile_fatal);
+}
+
+sub check_rust() {
+  check_program("rustc");
+  check_program("rustdoc");
+  check_program("rustfmt");
+  check_program("clippy-driver");
+  check_program("bindgen");
+  my $tmpdir = tempdir(CLEANUP => 1);
+}
+
+sub check_toolchain_image() {
+  my ($arch, $compiler, $version, $is_korg);
+  if ($image =~ /^(.*)_(.*)$/) {
+    $arch = $1;
+    $compiler = $2;
+  } else {
+    $compiler = $image;
+  }
+  if ($compiler =~ /^(.*)-(nightly|android|\d+)$/) {
+    $compiler = $1;
+    $version = $2;
+    if ($compiler eq "clang" && $version eq "nightly") {
+      $version = $LATEST_CLANG_NIGHTLY;
+    }
+  }
+  if ($compiler eq "llvm") {
+    $compiler = "clang"
+  }
+  if ( $compiler eq "korg-clang" || $compiler eq "korg-llvm" ) {
+    $compiler = "clang";
+    $is_korg = 1;
+  }
+  my @compilers = ($compiler);
+
+  if ($compiler eq "rust") {
+    check_rust();
+    @compilers = ("gcc", "clang");
+  }
+
+  $arch ||= `arch`; chomp $arch;
+  my @prefixes = ("");
+  push @prefixes, $cross_compile if $cross_compile;
+  if (defined($cross_compile_compat)) {
+    if ($cross_compile_compat) {
+      push @prefixes, $cross_compile_compat;
+    } else {
+      print STDERR "${WARN} - non fatal failure: compiler for CROSS_COMPILE_COMPAT not found\n";
+    }
+  }
+
+  for $compiler (@compilers) {
+    for my $prefix (@prefixes) {
+      check_program($prefix . $compiler) unless ($prefix ne "" && $compiler =~ /clang/);
+      check_program($prefix . "ld");
+      check_program($prefix . "as");
+    }
+
+    check_compiler($compiler, undef);
+    my $compiler_bin = $compiler;
+    if ($cross_compile) {
+      if ($compiler =~ /gcc/) {
+        $compiler_bin = ($cross_compile . $compiler);
+      } else { # llvm or clang*
+        my $target = $cross_compile;
+        $target =~ s/-$//;
+        $compiler_bin = "${compiler} --target=${target}";
+      }
+      check_compiler($compiler_bin, $cross_compile);
+    }
+    if ($version && $version =~ /^\d+$/) {
+      my $actual_version = `${compiler_bin} -dumpversion`;
+      chomp $actual_version;
+      check("${compiler_bin} version is ${version}", $actual_version =~ qr/^${version}(\.\d+)*/, 0);
+    }
+    check_compiler("${compiler_bin} -use-ld=lld", undef) if ($compiler =~ /clang/);
+
+    if ($compiler =~ /clang/) {
+      check_program("ld.lld");
+      if ($is_korg) {
+        skip("llvm-as");
+      } else {
+        check_program("llvm-as");
+      }
+    }
+  }
+}
+
+check_base_image();
+check_toolchain_image unless ($image =~ /^base-/);
+
+if ($failures > 0) {
+  exit(1)
+}

@@ -1,0 +1,282 @@
+#!/bin/sh
+
+. $(dirname $0)/test_helper.sh
+
+gcc_v=$(readlink /usr/bin/gcc) # gcc-8, gcc-9, gcc-10 etc
+
+test_basic() {
+  run tuxmake
+  assertEquals 0 "$rc"
+  assertTrue 'config: PASS' "grep 'config: PASS' stderr"
+  assertTrue 'kernel: PASS' "grep 'kernel: PASS' stderr"
+  assertFalse 'no ARCH=' 'grep ARCH= stdout'
+  assertFalse 'no CROSS_COMPILE=' 'grep CROSS_COMPILE= stdout'
+  assertFalse 'no CC=' 'grep CC= stdout'
+}
+
+test_x86_64() {
+  run tuxmake --target-arch=x86_64
+  assertEquals 0 "$rc"
+  assertTrue 'ARCH=' "grep 'ARCH=x86_64' stdout"
+  assertTrue 'CROSS_COMPILE=' "grep 'CROSS_COMPILE=x86_64-linux-gnu-' stdout"
+  assertFalse 'no CC=' 'grep CC= stdout'
+  assertTrue 'bzImage' 'test -f $XDG_CACHE_HOME/tuxmake/builds/1/bzImage'
+  bunzip2 < "${XDG_CACHE_HOME}/tuxmake/builds/1/bzImage" > "${tmpdir}/Image"
+  assertTrue 'Image is compiled for x86-64' \
+    'file ${tmpdir}/Image | grep -qi x86-64'
+}
+
+test_arm64() {
+  run tuxmake --target-arch=arm64
+  assertEquals 0 "$rc"
+  assertTrue 'ARCH=' "grep 'ARCH=arm64' stdout"
+  assertTrue 'CROSS_COMPILE=' "grep 'CROSS_COMPILE=aarch64-linux-gnu-' stdout"
+  assertFalse 'no CC=' 'grep CC= stdout'
+  assertTrue 'Image.gz' 'test -f $XDG_CACHE_HOME/tuxmake/builds/1/Image.gz'
+  gunzip < "${XDG_CACHE_HOME}/tuxmake/builds/1/Image.gz" > "${tmpdir}/Image"
+  assertTrue 'Image is compiled for arm64' \
+    'file ${tmpdir}/Image | grep -qi aarch64'
+}
+
+test_clang_x86_64() {
+  run tuxmake --target-arch=x86_64 --toolchain=clang
+  assertEquals 0 "$rc"
+  bunzip2 < "${XDG_CACHE_HOME}/tuxmake/builds/1/bzImage" > "${tmpdir}/Image"
+  assertTrue 'Image is compiled for x86_64' \
+    'file ${tmpdir}/Image | grep -qi x86-64'
+}
+
+test_clang_arm64() {
+  run tuxmake --target-arch=arm64 --toolchain=clang
+  assertEquals 0 "$rc"
+  gunzip < "${XDG_CACHE_HOME}/tuxmake/builds/1/Image.gz" > "${tmpdir}/Image"
+  assertTrue 'Image is compiled for arm64' \
+    'file ${tmpdir}/Image | grep -qi aarch64'
+}
+
+test_llvm_x86_64() {
+  skip_if not program_installed ld.lld
+
+  run tuxmake --target-arch=x86_64 --toolchain=llvm
+  assertTrue 'LLVM=1 in output' 'grep LLVM=1 stdout'
+  assertEquals 'exits with 0' 0 "$rc"
+  bunzip2 < "${XDG_CACHE_HOME}/tuxmake/builds/1/bzImage" > "${tmpdir}/Image"
+  assertTrue 'Image is compiled for x86_64' \
+    'file ${tmpdir}/Image | grep -qi x86-64'
+}
+
+test_llvm_arm64() {
+  skip_if not program_installed ld.lld
+
+  run tuxmake --target-arch=arm64 --toolchain=llvm
+  assertTrue 'LLVM=1 in output' 'grep LLVM=1 stdout'
+  assertEquals 'exits with 0' 0 "$rc"
+  gunzip < "${XDG_CACHE_HOME}/tuxmake/builds/1/Image.gz" > "${tmpdir}/Image"
+  assertTrue 'Image is compiled for arm64' \
+    'file ${tmpdir}/Image | grep -qi aarch64'
+}
+
+test_toolchain() {
+  run tuxmake --toolchain="${gcc_v}"
+  assertEquals 0 "$rc"
+  assertFalse 'no ARCH=' 'grep ARCH= stdout'
+  assertFalse 'no CROSS_COMPILE=' 'grep CROSS_COMPILE= stdout'
+}
+
+test_cross_toolchain() {
+  run tuxmake --target-arch=arm64 --toolchain="${gcc_v}"
+  assertEquals 0 "$rc"
+  assertTrue 'ARCH=' "grep 'ARCH=arm64' stdout"
+  assertTrue 'CROSS_COMPILE=' "grep 'CROSS_COMPILE=aarch64-linux-gnu-' stdout"
+  assertTrue 'Image.gz' 'test -f $XDG_CACHE_HOME/tuxmake/builds/1/Image.gz'
+}
+
+test_fail() {
+  run tuxmake --env=FAIL=kernel
+  assertEquals 2 "$rc"
+  assertTrue 'grep "config: PASS" stderr'
+  assertTrue 'grep "default: FAIL" stderr'
+}
+
+test_skip_kernel_if_config_fails() {
+  run tuxmake --env=FAIL=defconfig
+  assertTrue 'grep "config: FAIL" stderr'
+  assertTrue 'grep "kernel: SKIP" stderr'
+}
+
+test_log_command_line() {
+  run tuxmake --target-arch=arm64 --toolchain="${gcc_v}"
+  assertTrue 'command line logged' "grep \"tuxmake.*--target-arch=arm64.*--toolchain=${gcc_v}\" $XDG_CACHE_HOME/tuxmake/builds/1/build.log"
+}
+
+test_config_only() {
+  run tuxmake --target-arch=arm64 config
+  assertTrue "config produced" "test -f $XDG_CACHE_HOME/tuxmake/builds/1/config"
+  assertFalse "kernel image not produced" "test -f $XDG_CACHE_HOME/tuxmake/builds/1/Image.gz"
+}
+
+test_modules() {
+  run tuxmake modules
+  assertTrue "build modules on defconfig" "grep 'modules: PASS' stderr"
+
+  run tuxmake --kconfig=tinyconfig modules
+  assertTrue "skip modules on tinyconfig" "grep 'modules: SKIP' stderr"
+}
+
+test_dtbs() {
+  run tuxmake --target-arch=arm64 dtbs
+  assertTrue "build dtbs on arm64" "grep 'dtbs: PASS' stderr"
+
+  run tuxmake --target-arch=x86_64 dtbs
+  assertTrue "does not build dtbs on x86_64" "grep 'dtbs: SKIP' stderr"
+}
+
+test_dtbs_armv5() {
+  run tuxmake --target-arch=armv5 dtbs
+  assertTrue "build dtbs on armv5" "grep 'dtbs: PASS' stderr"
+}
+
+test_ccache() {
+  run tuxmake --wrapper=ccache
+  assertTrue 'CC=' "grep \"'CC=ccache gcc'\" stdout"
+}
+
+test_output_dir() {
+  run tuxmake --output-dir=${tmpdir}/output config
+  assertEquals "$rc" 0
+  assertTrue 'test -f ${tmpdir}/output/config'
+  assertTrue 'test -f ${tmpdir}/output/build.log'
+}
+
+test_reuse_output_dir() {
+  mkdir ${tmpdir}/output
+  run tuxmake --output-dir=${tmpdir}/output config
+  assertEquals 0 "$rc"
+  assertTrue 'config copied to output dir' 'test -f ${tmpdir}/output/config'
+}
+
+test_build_dir() {
+  run tuxmake --build-dir=build config
+  assertTrue 'test -f build/.config'
+}
+
+test_build_dir_with_incremental_build() {
+  run tuxmake --build-dir=build config
+  assertEquals 0 "$rc"
+  assertTrue 'runs config target' 'grep defconfig stdout'
+  assertTrue "config copied to output directory" "test -f $XDG_CACHE_HOME/tuxmake/builds/1/config"
+  run tuxmake --build-dir=build debugkernel
+  assertEquals 0 "$rc"
+  assertFalse 'does not run config target' 'grep "make.*O=.*defconfig" stdout'
+  assertTrue "config copied to output directory" "test -f $XDG_CACHE_HOME/tuxmake/builds/2/config"
+  assertTrue "config copied to output directory" "test -f $XDG_CACHE_HOME/tuxmake/builds/2/vmlinux.xz"
+  assertTrue 'test -f build/vmlinux.xz'
+}
+
+test_missing_artifact() {
+  # hack fakelinux so that it does not produce a kernel image
+  sed -i -e '/\$(COMPRESS)/d' Makefile
+
+  run tuxmake
+  assertNotEquals 0 "$rc"
+  assertTrue "grep '^I: kernel: FAIL' stderr"
+}
+
+test_custom_kernel_image() {
+  run tuxmake --target-arch=arm64 --kernel-image=Image.bz2
+  assertEquals 0 "$rc"
+  assertTrue "test -f ${XDG_CACHE_HOME}/tuxmake/builds/1/Image.bz2"
+}
+
+test_no_network_access() {
+  skip_if docker_runtime
+  skip_if under_docker
+
+  sed -i -e 's#\S*call maybefail,debugkernel.*#wget http://tuxmake.org/#' Makefile
+  run tuxmake
+  assertFalse 'wget needs to be installed in the build environment' 'grep "wget: Command not found" stdout'
+  assertFalse 'wget needs to be installed in the build environment' 'grep "wget: No such file or directory" stdout'
+  assertTrue 'network access attempt should fail the build' 'grep wget stdout && [ $rc -ne 0 ]'
+}
+
+test_check_environment() {
+  skip_if docker_in_docker
+
+  run tuxmake --check-environment
+  assertEquals 0 "${rc}"
+}
+
+test_check_environment_fails() {
+  skip_if docker_runtime
+  skip_if podman_runtime
+  skip_if docker_in_docker
+
+  export TUXMAKE_WHICH_MISSING=make
+  run tuxmake --check-environment
+  assertNotEquals 0 "${rc}"
+}
+
+__test_reproducible_builds__() {
+  skip_if not command -v diffoscope
+
+  diffoscope_version="$(diffoscope --version 2>/dev/null | awk '{print($2)}')"
+  skip_if [ "${diffoscope_version}" -lt 113 ]
+
+  git init --quiet
+  git config user.name 'Foo Bar'
+  git config user.email 'foo.bar@example.com'
+  git add .
+  GIT_COMMITTER_DATE='2021-05-14 15:00 -0300' git commit --quiet -m 'Initial commit'
+  run tuxmake "$@"
+  assertEquals 0 "${rc}"
+  run faketime '+1 year' tuxmake "$@"
+  assertEquals 0 "${rc}"
+  builds="$XDG_CACHE_HOME/tuxmake/builds"
+  run diffoscope \
+    --exclude=metadata.json \
+    --exclude=build.log \
+    --exclude=build-debug.log \
+    --exclude-directory-metadata=yes \
+    ${builds}/1 ${builds}/2
+  assertEquals 0 "${rc}"
+}
+
+test_reproducible_builds_x86_64() {
+  __test_reproducible_builds__ --target-arch=x86_64
+}
+
+test_reproducible_builds_arm64() {
+  __test_reproducible_builds__ --target-arch=arm64
+}
+
+test_targz_pkg() {
+  run tuxmake targz-pkg
+  assertEquals 0 "${rc}"
+  assertTrue "test -f $XDG_CACHE_HOME/tuxmake/builds/1/linux-*.tar.gz"
+}
+
+test_linux32() {
+  # This test checks that on 64-bit architectures that support 32-bit
+  # compatibility mode (e.g. x86_64, aarch64), we can still use tuxmake when
+  # they *are* running in 32-bit mode.
+  skip_if test "$(linux32 uname -m)" = "$(uname -m)" -o docker_runtime
+
+  run linux32 tuxmake config
+  assertEquals 0 "${rc}"
+}
+
+if [ $# -gt 0 ]; then
+  export TESTCASES="$(echo "$@")"
+  set --
+  suite() {
+    for t in $TESTCASES; do
+      suite_addTest "$t"
+    done
+  }
+fi
+
+if [ -e /usr/bin/shunit2 ]; then
+  . /usr/bin/shunit2
+else
+  . /usr/share/shunit2/shunit2
+fi

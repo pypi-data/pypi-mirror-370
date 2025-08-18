@@ -1,0 +1,243 @@
+ARG BASE
+FROM ${BASE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG PACKAGES
+ARG INSTALL_OPTIONS
+# arch for which we are building for (i.e. the cross arch)
+ARG HOSTARCH
+
+ARG EXTRA_APT_REPO_KEY
+ARG EXTRA_APT_REPO
+
+RUN echo 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries
+
+RUN if [ -f /etc/apt/sources.list.d/extra.list ]; then exit; fi; \
+    if [ -n "${EXTRA_APT_REPO_KEY}" ]; then \
+	apt install --reinstall --assume-yes --no-install-recommends --option=debug::pkgProblemResolver=yes ca-certificates && update-ca-certificates && wget -O /etc/apt/trusted.gpg.d/extra.asc "${EXTRA_APT_REPO_KEY}"; \
+    fi; \
+    if [ -n "${EXTRA_APT_REPO}" ] && [ "${HOSTARCH}" = riscv64 ]; then \
+        if [ "${INSTALL_OPTIONS}" = "-t llvm-toolchain-bullseye" ]; then \
+            INSTALL_OPTIONS="-t llvm-toolchain"; \
+            CLANG_VERSION=""; \
+        else \
+            CLANG_VERSION="-$(echo ${INSTALL_OPTIONS}|awk -F'-' '{print $NF}')"; \
+            INSTALL_OPTIONS="-t llvm-toolchain${CLANG_VERSION}"; \
+        fi; \
+        echo "$INSTALL_OPTIONS" > /root/tmp_install_options; \
+        EXTRA_APT_REPO=$(echo "deb http://apt.llvm.org/unstable llvm-toolchain${CLANG_VERSION} main"); \
+    fi; \
+    if [ -n "${EXTRA_APT_REPO}" ]; then \
+        echo "${EXTRA_APT_REPO}" > /etc/apt/sources.list.d/extra.list; \
+    fi;
+
+
+# Install basic toolchain packages. Which toolchain exactly is defined by the
+# $PACKAGES build argument
+RUN if [ -f /root/tmp_install_options ]; then \
+        INSTALL_OPTIONS=$(cat /root/tmp_install_options); \
+    fi; \
+    if [ "${HOSTARCH}" = loongarch64 ]; then \
+        allow_failure=true;  \
+    else  \
+        allow_failure=false; \
+    fi && \
+    apt-get update -q && \
+    apt-get install \
+        --assume-yes \
+        --no-install-recommends \
+        --option=debug::pkgProblemResolver=yes \
+        ${INSTALL_OPTIONS} \
+        $PACKAGES || ${allow_failure}
+
+# Install extra development packages
+#
+# The first set of packages is for basic cross building and is supported on all
+# architectures that are also supported in some way by Debian.
+#
+# The second set is the requirements to built (most of) kselftest. Only
+# official Debian architectures are supported, as those are the only ones where
+# we can ensure that the foreign userspace libraries needed to cross compile
+# are available and in good shape enough to be installable and usable.
+RUN set -x; \
+    if [ -f /root/tmp_install_options ]; then \
+        INSTALL_OPTIONS=$(cat /root/tmp_install_options); \
+    fi; \
+    if [ -z "${HOSTARCH}" ]; then exit; fi; \
+    if [ "${HOSTARCH}" = armeabihf ]; then \
+        arch=armhf; \
+    elif [ "${HOSTARCH}" = "armeabi" ]; then \
+        arch=armel; \
+    else \
+        arch=$(dpkg-architecture --host-type=${HOSTARCH}-linux-gnu --query=DEB_HOST_ARCH); \
+    fi; \
+    case "${arch}" in \
+        amd64|arm64|armel|armhf|i386|mips64el|mipsel|ppc64el|riscv64|s390x) \
+            supported=yes; \
+            ;; \
+        *) \
+            supported=no; \
+            ;; \
+    esac; \
+    if [ "$(uname -m)" != "${HOSTARCH}" -a -n "${HOSTARCH}" ]; then \
+        dpkg --add-architecture ${arch}; \
+    fi && \
+    apt-get update && \
+    gccversion=$(gcc -dumpversion 2>/dev/null || (apt-cache policy gcc | sed -e '/Candidate:/!d; s/\s*Candidate:\s*.*://; s/\..*//')) && \
+    apt-get install \
+        --assume-yes \
+        --no-install-recommends \
+        --option=debug::pkgProblemResolver=yes \
+        ${INSTALL_OPTIONS} \
+        libgcc-${gccversion}-dev-${arch}-cross \
+        libstdc++-${gccversion}-dev-${arch}-cross \
+        libc-dev-bin && \
+    if [ "${supported}" = no ]; then exit; fi && \
+    apt-get install \
+        --assume-yes \
+        --no-install-recommends \
+        --option=debug::pkgProblemResolver=yes \
+        ${INSTALL_OPTIONS} \
+        libbinutils \
+        libc6-dev && \
+    : libcap-ng-dev is affected by https://bugs.debian.org/983476 && \
+    : systemtap-sdt-dev is not multiarch-ready && \
+    debianversion=$(dpkg-query --show base-files | cut -f2) && \
+    if dpkg --compare-versions "${debianversion}" lt 11; then exit; fi && \
+    apt-get install \
+        --assume-yes \
+        --no-install-recommends \
+        --option=debug::pkgProblemResolver=yes \
+        libbabeltrace-dev \
+        libc6-dev-${arch}-cross \
+        libasound2-dev \
+        libcap-dev \
+        libdrm-dev \
+        libdw-dev \
+        libelf-dev \
+        libfuse-dev \
+        libhugetlbfs-dev \
+        libiberty-dev \
+        libkeyutils-dev \
+        libmnl-dev \
+        libmount-dev \
+        libnuma-dev \
+        libperl-dev \
+        libpfm4-dev \
+        libpci-dev \
+        libpopt-dev \
+        libpython3-dev \
+        libreadline-dev \
+        libreadline-dev \
+        libslang2-dev \
+        libssl-dev \
+        libtraceevent-dev \
+        $(test "${arch}" != "s390x" && echo libunwind-dev ) \
+        liburing-dev \
+        libzstd-dev \
+        linux-libc-dev \
+        linux-libc-dev-${arch}-cross \
+        libopencsd-dev \
+        && \
+    if dpkg --compare-versions "${debianversion}" ge 12; then \
+        apt-get install  \
+            --assume-yes \
+            --no-install-recommends \
+            --option=debug::pkgProblemResolver=yes \
+            pkg-config:${arch}; \
+    fi && \
+    : This is a horrible hack, but a foreign binutils-dev is not installable && \
+    : See https://bugs.debian.org/983540 && \
+    apt-get download ${INSTALL_OPTIONS} binutils-dev:${arch} && \
+    dpkg -x binutils-dev*.deb /tmp/binutils-dev && \
+    rsync -avp /tmp/binutils-dev/ / && \
+    : Install all target architecture host packages separately and allow it to fail && \
+    : for riscv64 && \
+    if [ "${HOSTARCH}" = riscv64 ]; then \
+        allow_failure=true;  \
+    else  \
+        allow_failure=false; \
+    fi && \
+    apt-get install \
+        --assume-yes \
+        --no-install-recommends \
+        --option=debug::pkgProblemResolver=yes \
+        libbinutils:${arch} \
+        libc6-dev:${arch} \
+        libbabeltrace-dev:${arch} \
+        libasound2-dev:${arch} \
+        libcap-dev:${arch} \
+        libcap-ng-dev:${arch} \
+        libdrm-dev:${arch} \
+        libdw-dev:${arch} \
+        libelf-dev:${arch} \
+        libfuse-dev:${arch} \
+        libhugetlbfs-dev:${arch} \
+        libiberty-dev:${arch} \
+        libkeyutils-dev:${arch} \
+        libmnl-dev:${arch} \
+        libmount-dev:${arch} \
+        libnuma-dev:${arch} \
+        libperl-dev:${arch} \
+        libpfm4-dev:${arch} \
+        libpci-dev:${arch} \
+        libpopt-dev:${arch} \
+        libpython3-dev:${arch} \
+        libreadline-dev:${arch} \
+        libslang2-dev:${arch} \
+        libssl-dev:${arch} \
+        libtraceevent-dev:${arch} \
+        $(test "${arch}" != "s390x" && echo libunwind-dev:${arch}) \
+        liburing-dev:${arch} \
+        libzstd-dev:${arch} \
+        libopencsd-dev:${arch} \
+        systemtap-sdt-dev:${arch} || \
+         ${allow_failure} && \
+    rm -rf binutils-dev*.deb /tmp/binutils-dev
+
+# For gcc images, symlink all binaries with unversioned names into $PATH
+ARG TOOLCHAIN_VERSION
+RUN for bin in $(ls -1 /usr/bin/*-${TOOLCHAIN_VERSION} | xargs -n 1 basename); do \
+    unver=${bin%-[0-9]*}; \
+    if [ ! -x /usr/bin/${unver} ]; then \
+        ln -sfv /usr/bin/$bin /usr/local/bin/${unver}; \
+        fi; \
+    done
+
+# For clang images, symlink all the binaries in $PATH
+RUN if [ -d /usr/lib/llvm-*/bin ]; then ln -sfv /usr/lib/llvm-*/bin/* /usr/local/bin/; fi
+
+# The GCC plugins have no default package name, so we must discover the installed
+# GCC version in order to install them. :(
+RUN apt-get install \
+        --assume-yes \
+        --no-install-recommends \
+        --option=debug::pkgProblemResolver=yes \
+        $(dpkg -l 'gcc-*' | grep ^.i | awk '{print $2}' | \
+          grep -E '^gcc-[0-9]*-(.*)-base(:.*)*$' | grep -v -- -cross-base | \
+          sed -e 's/^gcc-\([0-9]*\)-/gcc-\1-plugin-dev-/; s/-base//;')
+
+
+ARG INSTALL_RUST
+
+RUN if [ -z "${INSTALL_RUST}" ]; then exit; fi; \
+    apt-get install \
+        --assume-yes \
+        --no-install-recommends \
+        --option=debug::pkgProblemResolver=yes \
+        rustc rust-src bindgen rustfmt rust-clippy \
+        rustc:${arch} rust-src:${arch} bindgen:${arch} rustfmt:${arch} rust-clippy:${arch}
+
+# Compile and install pahole until 1.25 version is available
+RUN apt-get install -qy cmake libdw-dev && \
+    git clone --depth=1 https://git.kernel.org/pub/scm/devel/pahole/pahole.git -b v1.25 && \
+    cd pahole && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF .. && \
+    make install && \
+    cd ../../ && \
+    rm -rf pahole
+
+# vim: ft=dockerfile
