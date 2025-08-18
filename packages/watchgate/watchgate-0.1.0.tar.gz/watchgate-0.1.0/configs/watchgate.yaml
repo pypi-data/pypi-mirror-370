@@ -1,0 +1,50 @@
+# Watchgate Configuration for Claude Desktop + Filesystem MCP Server
+proxy:
+  # Transport type: "stdio" for command-line MCP servers, "http" for HTTP-based servers
+  transport: stdio
+    
+  upstreams:
+    - name: "filesystem"
+      command: "npx @modelcontextprotocol/server-filesystem /Users/dbright/mcp/watchgate/claude-sandbox/"
+
+# Logging configuration
+logging:
+  level: "DEBUG"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  handlers: ["stderr", "file"]  # Options: stderr, file (can use both)
+  file_path: "logs/watchgate.log"  # Relative to config file location
+  # max_file_size_mb: 10  # Rotate log file when it reaches this size
+  # backup_count: 5       # Keep this many rotated log files (watchgate.log.1, .2, etc.)
+  # format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  # date_format: "%Y-%m-%d %H:%M:%S"
+
+# Plugin configuration
+plugins:
+  security:
+    _global:
+      - policy: "tool_allowlist"
+        enabled: true
+        config:
+          mode: "allowlist"  # Options: allowlist, blocklist, allow_all
+          priority: 10  # High priority for security
+          tools:
+            # Filesystem server tools
+            - "read_file"
+            - "write_file"
+            - "create_directory"
+            - "list_directory"
+            - "list_allowed_directories"
+            - "move_file"
+            - "search_files"
+          block_message: "Tool access denied by security policy"
+  
+  auditing:
+    _global:
+      - policy: "line_auditing"
+        enabled: true
+        config:
+          output_file: "logs/audit.log"  # Relative to config file location
+          priority: 80  # Lower priority for auditing
+          max_file_size_mb: 10
+          backup_count: 5
+          mode: "all_events"  # Options: security_only, operations_only, all_events
+          critical: false  # Whether plugin failures should halt processing

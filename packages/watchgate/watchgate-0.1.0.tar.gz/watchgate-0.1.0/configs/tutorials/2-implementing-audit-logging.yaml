@@ -1,0 +1,40 @@
+# Watchgate Configuration for Audit Logging
+proxy:
+  # How Watchgate communicates with the MCP server (stdio = command-line interface)
+  transport: stdio
+  upstreams:
+    - name: "filesystem"
+      # This starts the filesystem MCP server using npx (Node.js package runner)
+      # @modelcontextprotocol/server-filesystem is the official filesystem server
+      # ~/claude-sandbox/ is the directory the filesystem server will operate within
+      command: "npx @modelcontextprotocol/server-filesystem ~/claude-sandbox/"
+
+plugins:
+  # Audit logging configuration
+  auditing:
+    # Enable the file auditing plugin to log all MCP communications
+    - policy: "json_auditing"
+      enabled: true
+      config:
+        # Where to store audit logs (directory will be created if it doesn't exist)
+        output_file: "logs/audit.log"
+        # Using JSON auditing for machine-readable output
+        # Log rotation settings to prevent disk space issues
+        max_file_size_mb: 10
+        backup_count: 5
+
+  # Optional: Add security controls to demonstrate security event logging
+  security:
+    _global:
+        - policy: "tool_allowlist"
+      enabled: true
+      config:
+        # "allowlist" mode: only specified tools are permitted
+        mode: "allowlist"
+        tools:
+          - "read_file"
+          - "write_file"
+          - "create_directory"
+          - "list_directory"
+          - "search_files"
+        block_message: "Tool access denied by security policy"

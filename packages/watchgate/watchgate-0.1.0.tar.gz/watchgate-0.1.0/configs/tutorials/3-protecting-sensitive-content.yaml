@@ -1,0 +1,40 @@
+# Watchgate Configuration for Content Access Control
+proxy:
+  # How Watchgate communicates with the MCP server (stdio = command-line interface)
+  transport: stdio
+  upstreams:
+    - name: "filesystem"
+      # This starts the filesystem MCP server using npx (Node.js package runner)
+      # @modelcontextprotocol/server-filesystem is the official filesystem server
+      # ~/secure-workspace/ is the directory the filesystem server will operate within
+      command: "npx @modelcontextprotocol/server-filesystem ~/secure-workspace/"
+
+plugins:
+  security:
+    # Enable the content access control plugin for resource-level security
+    - policy: "content_access_control"
+      enabled: true
+      config:
+        # "allowlist" mode: only specified resources are accessible (most secure)
+        # Other options: "blocklist" (block specific resources), "allow_all" (no restrictions)
+        mode: "allowlist"
+        resources:
+          # List of file patterns that Claude is allowed to access
+          # These are the only files/directories Claude can read from or write to
+          - "public/**/*"      # Allow all files in public directory tree
+          - "docs/**/*.md"     # Allow markdown files in docs directory tree
+          - "config/*.json"    # Allow JSON config files
+          - "!**/.env*"        # Block all environment files (secrets)
+          - "!**/secrets/*"    # Block any directory named 'secrets'
+          - "!**/*.key"        # Block all key files
+        # Message shown when a blocked resource is attempted
+        block_message: "Resource access denied by content security policy"
+
+  # Optional: Include audit logging to monitor access attempts
+  auditing:
+    _global:
+        - policy: "line_auditing"
+      enabled: true
+      config:
+        output_file: "logs/content-audit.log"
+        mode: "all"

@@ -1,0 +1,217 @@
+# Watchgate Validation Test Configuration
+# This config tests multi-upstream functionality with per-upstream plugin configuration
+
+proxy:
+  transport: "stdio"
+  upstreams:
+    - name: "filesystem"
+      command: "npx @modelcontextprotocol/server-filesystem /Users/dbright/mcp/watchgate/tests/validation/test-files"
+    - name: "sqlite"
+      command: "npx mcp-server-sqlite-npx /Users/dbright/mcp/watchgate/tests/validation/test-files/test-database.db"
+
+# Plugin configuration with per-upstream overrides
+plugins:
+  security:
+    # Global plugins apply to all upstreams unless overridden
+    _global:
+      - policy: "tool_allowlist"
+        enabled: true
+        priority: 5
+        config:
+          mode: "allowlist"
+          tools:
+            _global: ["read_file", "write_file", "read_query", "list_tables"]
+    
+    # Filesystem server - permissive with PII redaction
+    filesystem:
+      - policy: "tool_allowlist"
+        enabled: true
+        priority: 5
+        config:
+          mode: "allowlist"
+          tools:
+            filesystem: ["read_file", "write_file", "list_directory", "get_file_info"]
+      
+      - policy: "pii"
+        enabled: true
+        priority: 10
+        config:
+          action: "redact"
+          pii_types:
+            ssn:
+              enabled: true
+              formats: ["us"]
+            credit_card:
+              enabled: true
+            email:
+              enabled: true
+            phone:
+              enabled: true
+              formats: ["us", "international"]
+            ip_address:
+              enabled: true
+              formats: ["ipv4"]
+      
+      - policy: "secrets"
+        enabled: true
+        priority: 15
+        config:
+          action: "block"
+          detection_types:
+            aws_access_keys:
+              enabled: true
+            github_tokens:
+              enabled: true
+            google_api_keys:
+              enabled: true
+            jwt_tokens:
+              enabled: true
+            ssh_private_keys:
+              enabled: true
+      
+      - policy: "prompt_injection"
+        enabled: true
+        priority: 20
+        config:
+          action: "block"
+          detection_patterns:
+            delimiters:
+              enabled: true
+            role_manipulation:
+              enabled: true
+            context_breaking:
+              enabled: true
+    
+    # SQLite server - restrictive with comprehensive security
+    sqlite:
+      - policy: "tool_allowlist"
+        enabled: true
+        priority: 5
+        config:
+          mode: "allowlist"
+          tools:
+            sqlite: ["read_query", "list_tables", "describe_table"]
+      
+      - policy: "pii"
+        enabled: true
+        priority: 10
+        config:
+          action: "block"
+          pii_types:
+            ssn:
+              enabled: true
+              formats: ["us"]
+            credit_card:
+              enabled: true
+            email:
+              enabled: true
+            phone:
+              enabled: true
+              formats: ["us", "international"]
+            ip_address:
+              enabled: true
+              formats: ["ipv4"]
+      
+      - policy: "secrets"
+        enabled: true
+        priority: 15
+        config:
+          action: "block"
+          detection_types:
+            aws_access_keys:
+              enabled: true
+            github_tokens:
+              enabled: true
+            google_api_keys:
+              enabled: true
+            jwt_tokens:
+              enabled: true
+            ssh_private_keys:
+              enabled: true
+          entropy_detection:
+            enabled: true
+            min_entropy: 5.0
+            min_length: 20
+
+  auditing:
+    # Global auditing applies to all servers
+    _global:
+      # Line format - human-readable single line
+      - policy: "line_auditing"
+        enabled: true
+        config:
+          output_file: "logs/validation-line.log"
+          max_file_size_mb: 5
+          backup_count: 3
+          critical: false
+      
+      # Debug format - detailed debugging output
+      - policy: "debug_auditing"
+        enabled: true
+        config:
+          output_file: "logs/validation-debug.log"
+          max_file_size_mb: 5
+          backup_count: 3
+          critical: false
+      
+      # JSON format - structured JSON Lines
+      - policy: "json_auditing"
+        enabled: true
+        config:
+          output_file: "logs/validation-json.jsonl"
+          pretty_print: false  # Must be false for JSONL format
+          include_request_body: true
+          critical: false
+      
+      # CSV format - comma-separated values
+      - policy: "csv_auditing"
+        enabled: true
+        config:
+          output_file: "logs/validation-csv.csv"
+          csv_config:
+            delimiter: ","
+            quote_char: "\""
+            include_headers: true
+          critical: false
+      
+      # CEF format - Common Event Format for SIEM
+      - policy: "cef_auditing"
+        enabled: true
+        config:
+          output_file: "logs/validation-cef.log"
+          cef_config:
+            device_vendor: "Watchgate"
+            device_product: "MCP-Proxy"
+            device_version: "0.1.0"
+          critical: false
+      
+      # Syslog format - RFC5424 syslog
+      - policy: "syslog_auditing"
+        enabled: true
+        config:
+          output_file: "logs/validation-syslog.log"
+          syslog_config:
+            rfc_format: "5424"
+            facility: 16
+            hostname: "watchgate-validator"
+          critical: false
+      
+      # OpenTelemetry format - OTLP traces
+      - policy: "otel_auditing"
+        enabled: true
+        config:
+          output_file: "logs/validation-otel.jsonl"
+          service_name: "watchgate-validation"
+          service_version: "0.1.0"
+          deployment_environment: "validation"
+          critical: false
+
+# Enhanced logging configuration
+logging:
+  level: "DEBUG"
+  handlers: ["stderr", "file"]
+  file_path: "logs/validation.log"
+  max_file_size_mb: 10
+  backup_count: 3
+  format: "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S UTC"

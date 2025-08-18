@@ -1,0 +1,44 @@
+# Watchgate Configuration for Advanced System Logging
+proxy:
+  transport: stdio
+  upstreams:
+    - name: "filesystem"
+      command: "npx @modelcontextprotocol/server-filesystem ~/workspace/"
+
+# System logging configuration - controls Watchgate's internal operational logs
+logging:
+  level: "INFO"                     # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  handlers: ["stderr", "file"]      # Both console and file output
+  file_path: "logs/watchgate.log"  # Where to write system log files
+  # Log rotation settings to prevent disk space issues
+  max_file_size_mb: 10              # Rotate when log reaches this size
+  backup_count: 5                   # Keep this many rotated log files
+  # Custom format for detailed information
+  format: "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s: %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+
+plugins:
+  # Example security plugin to generate system log entries
+  security:
+    _global:
+        - policy: "tool_allowlist"
+      enabled: true
+      config:
+        mode: "allowlist"
+        tools:
+          - "read_file"
+          - "write_file"
+          - "create_directory"
+          - "list_directory"
+          - "search_files"
+        block_message: "Tool access denied by security policy"
+
+  # Auditing configuration - separate from system logging
+  auditing:
+    _global:
+        - policy: "line_auditing"
+      enabled: true
+      config:
+        output_file: "logs/audit.log"  # Separate from system logs
+        max_file_size_mb: 10
+        backup_count: 5

@@ -1,0 +1,63 @@
+# Multi-Layer Security Configuration for Watchgate
+proxy:
+  # How Watchgate communicates with the MCP server (stdio = command-line interface)
+  transport: stdio
+  upstreams:
+    - name: "filesystem"
+      # This starts the filesystem MCP server using npx (Node.js package runner)
+      # @modelcontextprotocol/server-filesystem is the official filesystem server
+      # ~/secure-workspace/ is the directory the filesystem server will operate within
+      command: "npx @modelcontextprotocol/server-filesystem ~/secure-workspace/"
+
+plugins:
+  security:
+    # Layer 1: Tool Access Control (High Priority)
+    - policy: "tool_allowlist"
+      enabled: true
+      priority: 10  # Execute first (lower numbers = higher priority)
+      config:
+        # "allowlist" mode: only specified tools are permitted
+        mode: "allowlist"
+        tools:
+          # List of filesystem operations that Claude is allowed to use
+          - "read_file"        # Read file contents
+          - "write_file"       # Create or modify files
+          - "create_directory" # Create new directories
+          - "list_directory"   # List directory contents
+          - "search_files"     # Search for files by name/pattern
+        # Message shown when a blocked tool is attempted
+        block_message: "Tool access denied by security policy"
+    
+    # Layer 2: Content Access Control (Medium Priority)  
+    - policy: "content_access_control"
+      enabled: true
+      priority: 20  # Execute after tool control (higher number = lower priority)
+      config:
+        # "allowlist" mode: only specified resources are accessible
+        mode: "allowlist"
+        resources:
+          # List of file patterns that Claude is allowed to access
+          - "public/**/*"         # Allow all files in public directory tree
+          - "docs/**/*.md"        # Allow markdown files in docs directory tree
+          - "config/*.json"       # Allow JSON config files
+          - "temp/*.txt"          # Allow text files in temp directory
+          - "!**/.env*"          # Block all environment files (secrets)
+          - "!**/secrets/*"      # Block any directory named 'secrets'
+          - "!**/*.key"          # Block all key files
+        # Message shown when a blocked resource is attempted
+        block_message: "Resource access denied by content security policy"
+
+  # Comprehensive audit logging (Highest Priority)
+  auditing:
+    _global:
+        - policy: "debug_auditing"
+      enabled: true
+      priority: 5   # Execute first to capture everything (highest priority)
+      config:
+        output_file: "logs/security-audit.log"
+        # Use debug auditing for comprehensive security information
+        # Log "all" events to capture complete audit trail
+        mode: "all"
+        # Configure log rotation to prevent disk space issues
+        max_file_size_mb: 50
+        backup_count: 10
