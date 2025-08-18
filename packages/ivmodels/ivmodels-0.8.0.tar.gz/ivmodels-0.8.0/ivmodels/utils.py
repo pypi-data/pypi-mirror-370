@@ -1,0 +1,332 @@
+import numpy as np
+import scipy
+
+try:
+    import pandas as pd
+
+    _PANDAS_INSTALLED = True
+except ImportError:
+    _PANDAS_INSTALLED = False
+
+
+def _copy_attributes(old, new):
+    """
+    Copy-paste attributes from old to new.
+
+    Attributes are shape if old is a numpy array, index and (column) name(s) if old is a
+    pandas DataFrame or Series.
+    """
+    if isinstance(old, np.ndarray):
+        new = new.reshape(old.shape)
+    elif _PANDAS_INSTALLED and isinstance(old, pd.DataFrame):
+        new = pd.DataFrame(new, index=old.index, columns=old.columns)
+    elif _PANDAS_INSTALLED and isinstance(old, pd.Series):
+        new = pd.Series(new, index=old.index, name=old.name)
+
+    return new
+
+
+def proj(Z, *args):
+    """Project f onto the subspace spanned by Z.
+
+    Parameters
+    ----------
+    Z: np.ndarray or pd.DataFrame of dimension (n, d_Z)
+        The Z matrix. If None, returns np.zeros_like(f).
+    *args: np.ndarrays or pd.DataFrames or pd.Series of dimension (n, d_f) or (n,)
+        Vector or matrices to project.
+
+    Returns
+    -------
+    np.ndarray or pd.DataFrames or pd.Series of dimension (n, d_f) or (n,)
+        Projection of args onto the subspace spanned by Z. Same number of
+        outputs as args. Same dimension as args. If args were pandas objects,
+        the output will also be pandas objects with the same index and columns.
+    """
+    if Z is None:
+        return (*(_copy_attributes(f, np.zeros_like(f)) for f in args),)
+
+    for f in args:
+        if len(f.shape) > 2:
+            raise ValueError(
+                f"*args should have shapes (n, d_f) or (n,). Got {f.shape}."
+            )
+        if f.shape[0] != Z.shape[0]:
+            raise ValueError(f"Shape mismatch: Z.shape={Z.shape}, f.shape={f.shape}.")
+
+    if len(args) == 1:
+        # The gelsy driver raises in this case - we handle it separately
+        if len(args[0].shape) == 2 and args[0].shape[1] == 0:
+            return _copy_attributes(args[0], np.zeros_like(args[0]))
+
+        # return np.dot(Z, scipy.linalg.pinv(Z.T @ Z) @ Z.T @ args[0])
+        return _copy_attributes(
+            args[0],
+            np.dot(
+                Z, scipy.linalg.lstsq(Z, args[0], cond=None, lapack_driver="gelsy")[0]
+            ),
+        )
+
+    csum = np.cumsum([f.shape[1] if len(f.shape) == 2 else 1 for f in args])
+    csum = [0] + csum.tolist()
+
+    fs = np.hstack([f.reshape(Z.shape[0], -1) for f in to_numpy(*args)])
+
+    if fs.shape[1] == 0:
+        # The gelsy driver raises in this case - we handle it separately
+        return (*(_copy_attributes(f, np.zeros_like(f)) for f in args),)
+
+    # fs = np.dot(Z, scipy.linalg.pinv(Z.T @ Z) @ Z.T @ fs)
+    fs = np.dot(Z, scipy.linalg.lstsq(Z, fs, cond=None, lapack_driver="gelsy")[0])
+    return (
+        *(
+            _copy_attributes(f, fs[:, i:j].reshape(f.shape))
+            for i, j, f in zip(csum[:-1], csum[1:], args)
+        ),
+    )
+
+
+def oproj(Z, *args):
+    """Project f onto the subspace orthogonal to Z.
+
+    Parameters
+    ----------
+    Z: np.ndarray or pd.DataFrame of dimension (n, d_Z)
+        The Z matrix. If None, returns np.zeros_like(f).
+    *args: np.ndarrays or pd.DataFrames or pd.Series of dimension (n, d_f) or (n,)
+        Vector or matrices to project.
+
+    Returns
+    -------
+    np.ndarray or pd.DataFrames or pd.Series of dimension (n, d_f) or (n,)
+        Projection of args onto the subspace orthogonal to Z. Same number of
+        outputs as args. Same dimension as args. If args were pandas objects,
+        the output will also be pandas objects with the same index and columns.
+    """
+    if Z is None:
+        return (*args,)
+
+    if len(args) == 1:
+        return args[0] - proj(Z, args[0])
+
+    else:
+        return (*(x - x_proj for x, x_proj in zip(args, proj(Z, *args))),)
+
+
+def to_numpy(*args):
+    """Convert input args to a numpy array."""
+    out = []
+    for x in args:
+        if x is None:
+            out.append(None)
+        elif isinstance(x, np.ndarray):
+            out.append(x)
+        elif _PANDAS_INSTALLED and isinstance(x, (pd.DataFrame, pd.Series)):
+            out.append(x.to_numpy())
+        else:
+            raise ValueError(f"Invalid type: {type(x)}")
+
+    if len(args) == 1:
+        return out[0]
+    else:
+        return (*out,)
+
+
+def _check_inputs(Z, X, y, W=None, C=None, D=None, beta=None):
+    """
+    Test dimensions of inputs to tests and estimators.
+
+    Parameters
+    ----------
+    Z: np.ndarray of dimension (n, k)
+        Instruments.
+    X: np.ndarray of dimension (n, mx)
+        Regressors of interest.
+    y: np.ndarray of dimension (n,)
+        Outcomes.
+    W: np.ndarray of dimension (n, mw), optional, default=None
+        Regressors to control for.
+    C: np.ndarray of dimension (n, r), optional, default=None
+        Exogenous regressors not of interest.
+    D: np.ndarray of dimension (n, md), optional, default=None
+        Exogenous regressors of interest.
+    beta: np.ndarray of dimension (mx + md,), optional, default=None
+        Coefficients.
+
+    Returns
+    -------
+    Z: np.ndarray of dimension (n, k)
+        Instruments.
+    X: np.ndarray of dimension (n, mx)
+        Regressors of interest.
+    y: np.ndarray of dimension (n,)
+        Outcomes.
+    W: np.ndarray of dimension (n, mw)
+        Regressors to control for. If input was None, returns an empty matrix of
+        shape (n, 0).
+    C: np.ndarray of dimension (n, mc)
+        Exogenous regressors not of interest. If input was None, returns an empty matrix
+        of shape (n, 0).
+    D: np.ndarray of dimension (n, md)
+        Exogenous regressors of interest. If input was None, returns an empty matrix of
+        shape (n, 0).
+    beta: np.ndarray of dimension (mx + md,) or None
+        Coefficients.
+
+    Raises
+    ------
+    ValueError:
+        If the dimensions of the inputs are incorrect.
+
+    """
+    if X is None:
+        X = np.empty((Z.shape[0], 0))
+
+    if W is None:
+        W = np.empty((Z.shape[0], 0))
+
+    if C is None:
+        C = np.empty((Z.shape[0], 0))
+
+    if D is None:
+        D = np.empty((Z.shape[0], 0))
+
+    Z, X, y, W, C, D = to_numpy(Z, X, y, W, C, D)
+
+    if Z.ndim != 2:
+        raise ValueError(f"Z must be a matrix. Got shape {Z.shape}.")
+    if X.ndim != 2:
+        raise ValueError(f"X must be a matrix. Got shape {X.shape}.")
+    if y is None or y.ndim != 1:
+        if y is None:
+            y = np.empty(Z.shape[0])
+        elif y.shape[1] != 1:
+            raise ValueError(f"y must be a vector. Got shape {y.shape}.")
+        else:
+            y = y.flatten()
+    if W.ndim != 2:
+        raise ValueError(f"W must be a matrix. Got shape {W.shape}.")
+    if C.ndim != 2:
+        raise ValueError(f"C must be a matrix. Got shape {C.shape}.")
+    if D.ndim != 2:
+        raise ValueError(f"D must be a matrix. Got shape {D.shape}.")
+
+    if (
+        not Z.shape[0]
+        == X.shape[0]
+        == y.shape[0]
+        == W.shape[0]
+        == C.shape[0]
+        == D.shape[0]
+    ):
+        raise ValueError(
+            f"Z, X, y, W, C, and D must have the same number of rows. Got shapes "
+            f"{Z.shape}, {X.shape}, {y.shape}, {W.shape}, {C.shape}, and {D.shape}."
+        )
+
+    if beta is not None and beta.ndim != 1:
+        if beta.shape[1] != 1:
+            raise ValueError(f"beta must be a vector. Got shape {beta.shape}.")
+        else:
+            beta = beta.flatten()
+
+    if beta is not None:
+        if beta.shape[0] != X.shape[1] + D.shape[1]:
+            raise ValueError(
+                "beta must have the same length or number of rows as X and D have "
+                f"columns. Got shapes {beta.shape} and {X.shape}, {D.shape}."
+            )
+
+    return Z, X, y, W, C, D, beta
+
+
+def _find_roots(f, a, b, tol, max_value, max_eval, n_points=100, max_depth=5):
+    """
+    Find roots of function ``f`` between ``a`` and ``b``.
+
+    Assumes ``f(a) < 0`` and ``f(b) > 0``. Finds root by building a grid between ``a``
+    and ``b`` with ``n_points``, evaluating ``f`` at each point, and finding indices
+    where ``f`` switches sign. If ``b`` is infinite, uses a logarithmic grid between
+    ``a`` and ``a + sign(b - a) * max_value``. The function is then called recursively
+    on the new interval until the size of the interval is less than ``tol`` or the
+    maximum number of evaluations ``max_eval`` of ``f`` is reached.
+
+    There is no scipy root finding algorithm that ensures that the root found is the
+    closest to ``b``. Note that this is also not strictly ensured by this function.
+    """
+    if np.isinf(a):
+        return [a]
+
+    if f(a) >= 0:
+        raise ValueError("f(a) must be negative")
+
+    if np.isfinite(b) and f(b) <= 0:
+        raise ValueError("f(b) must be positive")
+
+    if np.isinf(b):
+        sgn = np.sign(b - a)
+        grid = np.ones(n_points) * a
+        grid[1:] += sgn * np.logspace(np.log10(tol), np.log10(max_value), n_points - 1)
+    else:
+        grid = np.linspace(a, b, n_points)
+
+    y = np.array([f(x) for x in grid])
+
+    where = np.where(y[1:] * y[:-1] <= 0)[0]
+    roots = np.empty(len(where), dtype=float)
+
+    for i, x in enumerate(where):
+        roots[i] = scipy.optimize.brentq(f, grid[x], grid[x + 1], xtol=tol)
+
+    roots = np.unique(np.round(roots, decimals=12)).tolist()
+
+    if np.isinf(b) and y[-1] < 0:
+        if sgn == 1:
+            roots.append(b)
+        else:
+            roots.insert(0, b)
+
+    return roots
+
+
+def _characteristic_roots(a, b, subset_by_index=None):
+    """
+    Compute the solutions to det(A - B * lambda) = 0.
+
+    If B is full rank, this is equivalent to the generalized eigenvalue problem
+    A * v = lambda * B * v, where A and B are symmetric matrices.
+
+    Parameters
+    ----------
+    a: np.ndarray of dimension (n, n)
+        The matrix A. Must be symmetric.
+    b: np.ndarray of dimension (n, n)
+        The matrix B. Must be symmetric.
+    subset_by_index: List[int] or None, optional, default=None
+        The subset of roots to return. If None, returns all roots.
+
+    Returns
+    -------
+    np.ndarray of dimension (n,)
+        The characteristic roots of the generalized eigenvalue problem.
+    """
+    eps = np.finfo(b.dtype).eps * 1e2
+    if a.shape == (1, 1) and np.abs(b.item() / a.item()) < eps:
+        return np.array([np.inf])
+
+    cond = np.linalg.cond(b)
+
+    if cond < 1 / eps:
+        return scipy.linalg.eigvalsh(a=a, b=b, subset_by_index=subset_by_index)
+
+    else:
+        # If b is singular, eigvalsh will raise an error.
+        eigvals = np.clip(np.real(scipy.linalg.eigvals(a=a, b=b)), 0, None)
+        eigvals = np.sort(eigvals[np.isfinite(eigvals) & (np.abs(eigvals) < 1 / eps)])
+
+        if subset_by_index is not None:
+            left = min(subset_by_index[0], eigvals.shape[0] - 1)
+            right = min(subset_by_index[-1] + 1, eigvals.shape[0])
+            return eigvals[left:right]
+        else:
+            return eigvals
