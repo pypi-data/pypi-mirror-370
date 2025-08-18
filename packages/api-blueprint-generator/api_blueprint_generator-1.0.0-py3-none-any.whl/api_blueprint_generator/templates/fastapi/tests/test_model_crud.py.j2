@@ -1,0 +1,126 @@
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app import crud, schemas
+
+API_ENDPOINT = "{{ api_prefix }}/{{ model.name_plural_snake }}"
+
+def test_create_{{ model.name_snake }}({% if auth_enabled %}auth_client: TestClient, test_user{% else %}client: TestClient{% endif %}, db_session: Session):
+    """Test creating a {{ model.name_snake }}."""
+    {% if auth_enabled %}client = auth_client{% endif %}
+    # Dynamically generate test data based on the model's fields
+    data = {
+        {%- for field in model.fields if not field.options.get('primary_key') and 'created_at' not in field.name and 'updated_at' not in field.name and not field.options.get('write_only') %}
+        {%- if field.is_foreign_key and 'User' in field.foreign_key_to %}
+        "{{ field.name }}": test_user.id,
+        {%- elif field.type == 'string' %}
+        "{{ field.name }}": "Test {{ field.name | title }}",
+        {%- elif field.type == 'text' %}
+        "{{ field.name }}": "Some test content for the {{ field.name }} field.",
+        {%- elif field.type == 'integer' %}
+        "{{ field.name }}": 123,
+        {%- elif field.type == 'boolean' %}
+        "{{ field.name }}": False,
+        {%- endif %}
+        {%- if not loop.last %},{% endif %}
+        {%- endfor %}
+    }
+    response = client.post(API_ENDPOINT, json=data)
+    assert response.status_code == 201
+    created_item = response.json()
+    assert created_item["{{ model.fields[1].name }}"] == data["{{ model.fields[1].name }}"]  # Check the first non-ID field
+    assert "id" in created_item
+
+def test_read_{{ model.name_plural_snake }}(client: TestClient, db_session: Session{% if auth_enabled %}, test_user{% endif %}):
+    """Test reading multiple {{ model.name_plural_snake }}."""
+    # Dynamically generate test data
+    data1 = {
+        {%- for field in model.fields if not field.options.get('primary_key') and 'created_at' not in field.name and 'updated_at' not in field.name and not field.options.get('write_only') %}
+        "{{ field.name }}": {% if field.is_foreign_key and 'User' in field.foreign_key_to %}test_user.id{% elif field.type == 'string' %}"First {{ field.name | title }}"{% elif field.type == 'text' %}"Content 1"{% elif field.type == 'integer' %}1{% else %}False{% endif %},
+        {%- endfor %}
+    }
+    data2 = {
+        {%- for field in model.fields if not field.options.get('primary_key') and 'created_at' not in field.name and 'updated_at' not in field.name and not field.options.get('write_only') %}
+        "{{ field.name }}": {% if field.is_foreign_key and 'User' in field.foreign_key_to %}test_user.id{% elif field.type == 'string' %}"Second {{ field.name | title }}"{% elif field.type == 'text' %}"Content 2"{% elif field.type == 'integer' %}2{% else %}True{% endif %},
+        {%- endfor %}
+    }
+    crud.create_{{ model.name_snake }}(db_session, schemas.{{ model.name_pascal }}Create(**data1))
+    crud.create_{{ model.name_snake }}(db_session, schemas.{{ model.name_pascal }}Create(**data2))
+
+    response = client.get(API_ENDPOINT)
+    assert response.status_code == 200
+    items = response.json()
+    assert len(items) >= 2
+
+def test_read_{{ model.name_snake }}(client: TestClient, db_session: Session{% if auth_enabled %}, test_user{% endif %}):
+    """Test reading a single {{ model.name_snake }}."""
+    {% if model.name == 'Post' %}
+    item = crud.create_post(db_session, schemas.PostCreate(title="Readable", content="...", author_id=test_user.id))
+    {% else %}
+    # Add creation logic for your model here
+    item = None # Placeholder
+    assert item is not None, "Test setup: Create an item to read"
+    {% endif %}
+    response = client.get(f"{API_ENDPOINT}/{item.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == item.id
+    assert data["title"] == "Readable"
+
+def test_update_{{ model.name_snake }}({% if auth_enabled %}auth_client: TestClient, test_user{% else %}client: TestClient{% endif %}, db_session: Session):
+    """Test updating a {{ model.name_snake }}."""
+    {% if auth_enabled %}client = auth_client{% endif %}
+    {% if model.name == 'Post' %}
+    item = crud.create_post(db_session, schemas.PostCreate(title="Original", content="...", author_id=test_user.id))
+    {% else %}
+    item = None # Placeholder
+    assert item is not None, "Test setup: Create an item to update"
+    {% endif %}
+    update_data = {"title": "Updated Title"}
+    response = client.put(f"{API_ENDPOINT}/{item.id}", json=update_data)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["title"] == "Updated Title"
+
+def test_delete_{{ model.name_snake }}(
+    client: TestClient,
+    db_session: Session,
+    {% if auth_enabled %}
+    auth_client: TestClient,
+    admin_auth_client: TestClient,
+    test_user
+    {% endif %}
+):
+    """Test deleting a {{ model.name_snake }} with permission checks."""
+    {% if model.name == 'Post' %}
+    item = crud.create_post(db_session, schemas.PostCreate(title="To Be Deleted", content="...", author_id=test_user.id))
+    {% else %}
+    item = None # Placeholder
+    assert item is not None, "Test setup: Create an item to delete"
+    {% endif %}
+
+    {% if permissions.delete == 'admin' %}
+    # A regular user should NOT be able to delete.
+    response = auth_client.delete(f"{API_ENDPOINT}/{item.id}")
+    assert response.status_code == 403
+
+    # An admin user SHOULD be able to delete.
+    response = admin_auth_client.delete(f"{API_ENDPOINT}/{item.id}")
+    assert response.status_code == 204
+    {% elif auth_enabled %}
+    # Unauthenticated user should NOT be able to delete.
+    response = client.delete(f"{API_ENDPOINT}/{item.id}")
+    assert response.status_code == 401
+
+    # Authenticated user SHOULD be able to delete.
+    response = auth_client.delete(f"{API_ENDPOINT}/{item.id}")
+    assert response.status_code == 204
+    {% else %}
+    # No auth, anyone can delete.
+    response = client.delete(f"{API_ENDPOINT}/{item.id}")
+    assert response.status_code == 204
+    {% endif %}
+
+    # Verify the item is gone from the database.
+    db_item = crud.get_{{ model.name_snake }}(db_session, item.id)
+    assert db_item is None

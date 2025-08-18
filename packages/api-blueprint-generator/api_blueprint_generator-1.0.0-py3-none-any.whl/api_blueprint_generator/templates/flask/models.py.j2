@@ -1,0 +1,33 @@
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+
+db = SQLAlchemy()
+
+{% for model in models %}
+class {{ model.name }}(db.Model):
+    __tablename__ = '{{ model.name|lower }}s'
+    
+    {% for field in model.fields %}
+    {{ field.name }} = db.Column(
+        {% if field.type == 'integer' %}db.Integer
+        {% elif field.type == 'string' %}db.String({% if field.options.max_length %}{{ field.options.max_length }}{% else %}255{% endif %})
+        {% elif field.type == 'boolean' %}db.Boolean
+        {% elif field.type == 'datetime' %}db.DateTime
+        {% endif %},
+        {% if 'primary_key' in field.options %}primary_key=True, {% endif %}
+        {% if 'required' in field.options %}nullable=False, {% else %}nullable=True, {% endif %}
+        {% if 'default' in field.options %}default={% if field.type == 'boolean' %}{{ field.options.default|lower }}{% else %}{{ field.options.default }}{% endif %}, {% endif %}
+    )
+    {% endfor %}
+    
+    def __repr__(self):
+        return f'<{{ model.name }} {self.id}>'
+    
+    def to_dict(self):
+        return {
+            {% for field in model.fields %}
+            '{{ field.name }}': self.{{ field.name }},
+            {% endfor %}
+        }
+
+{% endfor %}

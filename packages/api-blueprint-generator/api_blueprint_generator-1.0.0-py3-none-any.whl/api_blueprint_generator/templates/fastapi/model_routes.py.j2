@@ -1,0 +1,116 @@
+# This file is auto-generated from the API specification. Do not edit manually.
+{% for imp in imports %}
+{{ imp }}
+{% endfor %}
+
+router = APIRouter()
+
+# --- CRUD Endpoints for {{ model.name_pascal }} ---
+
+{% if not (auth_enabled and model.name == 'User') %}
+@router.post(
+    "/",
+    response_model=schemas.{{ model.name_pascal }}Response,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new {{ model.name_snake }}"
+)
+def create_{{ model.name_snake }}(
+    {{ model.name_snake }}_in: schemas.{{ model.name_pascal }}Create,
+    db: Session = Depends(get_db){% if permissions.create %},
+    # This endpoint is protected and requires the '{{ permissions.create }}' role.
+    _: models.User = Depends(auth.require_role("{{ permissions.create }}"))
+{%- elif auth_enabled %},
+    # This endpoint requires authentication but no specific role.
+    current_user: models.User = Depends(get_current_active_user)
+{%- endif %}
+):
+    """
+    Create a new {{ model.name_snake }}.
+    """
+    return crud.create_{{ model.name_snake }}(db=db, {{ model.name_snake }}={{ model.name_snake }}_in)
+{% endif %}
+
+
+@router.get(
+    "/",
+    response_model=List[schemas.{{ model.name_pascal }}Response],
+    summary="Get all {{ model.name_plural_snake }}"
+)
+def read_{{ model.name_plural_snake }}(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve a list of {{ model.name_plural_snake }}.
+    """
+    items = crud.get_{{ model.name_snake | pluralize }}(db, skip=skip, limit=limit)
+    return items
+
+
+@router.get(
+    "/{ {{ model.name_snake }}_id }",
+    response_model=schemas.{{ model.name_pascal }}Response,
+    summary="Get a specific {{ model.name_snake }}"
+)
+def read_{{ model.name_snake }}(
+    {{ model.name_snake }}_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a single {{ model.name_snake }} by its ID.
+    """
+    db_item = crud.get_{{ model.name_snake }}(db, {{ model.name_snake }}_id={{ model.name_snake }}_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="{{ model.name_pascal }} not found")
+    return db_item
+
+
+@router.put(
+    "/{ {{ model.name_snake }}_id }",
+    response_model=schemas.{{ model.name_pascal }}Response,
+    summary="Update a {{ model.name_snake }}"
+)
+def update_{{ model.name_snake }}(
+    {{ model.name_snake }}_id: int,
+    item_in: schemas.{{ model.name_pascal }}Update,
+    db: Session = Depends(get_db){% if permissions.update %},
+    _: models.User = Depends(auth.require_role("{{ permissions.update }}"))
+{%- elif auth_enabled %},
+    current_user: models.User = Depends(get_current_active_user)
+{%- endif %}
+):
+    """
+    Update an existing {{ model.name_snake }}.
+    """
+    db_item = crud.get_{{ model.name_snake }}(db, {{ model.name_snake }}_id={{ model.name_snake }}_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="{{ model.name_pascal }} not found")
+    {% if auth_enabled and model.name == 'User' %}
+    return crud.update_user(db=db, db_obj=db_item, obj_in=item_in)
+    {% else %}
+    return crud.update_{{ model.name_snake }}(db=db, db_obj=db_item, obj_in=item_in)
+    {% endif %}
+
+
+@router.delete(
+    "/{ {{ model.name_snake }}_id }",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a {{ model.name_snake }}"
+)
+def delete_{{ model.name_snake }}(
+    {{ model.name_snake }}_id: int,
+    db: Session = Depends(get_db){% if permissions.delete %},
+    _: models.User = Depends(auth.require_role("{{ permissions.delete }}"))
+{%- elif auth_enabled %},
+    current_user: models.User = Depends(get_current_active_user)
+{%- endif %}
+):
+    """
+    Delete a {{ model.name_snake }}.
+    """
+    db_item = crud.get_{{ model.name_snake }}(db, {{ model.name_snake }}_id={{ model.name_snake }}_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="{{ model.name_pascal }} not found")
+    crud.delete_{{ model.name_snake }}(db=db, db_obj=db_item)
+    return

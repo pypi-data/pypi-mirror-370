@@ -1,0 +1,51 @@
+# --- Pydantic Schemas ---
+# This file is auto-generated from the API specification. Do not edit manually.
+
+{% for imp in imports %}
+{{ imp }}
+{% endfor %}
+
+# --- Model Schemas ---
+{% for schema in schemas %}
+class {{ schema.name }}{% if schema.base %}({{ schema.base }}){% else %}(BaseModel){% endif %}:
+    {% if not schema.fields and not schema.base %}pass{% endif %}
+    {% for field in schema.fields %}
+    {{ field.name }}: {% if field.optional %}Optional[{{ field.type }}]{% else %}{{ field.type }}{% endif %}{% if field.default is not none %} = {{ field.default }}{% endif %}
+    {% endfor %}
+
+    {% if schema.config %}
+    class Config:
+        {% for key, value in schema.config.items() %}
+        {{ key }} = {{ value }}
+        {% endfor %}
+    {% endif %}
+
+{% endfor %}
+# --- Authentication Schemas ---
+{% if auth_enabled %}
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+{% endif %}
+
+# --- Common Schemas ---
+class HTTPError(BaseModel):
+    detail: str
+
+    class Config:
+        schema_extra = {
+            "example": {"detail": "Error message"},
+        }
+
+# --- Update Forward References ---
+# This allows Pydantic to resolve circular dependencies between schemas.
+{% for schema_name in response_schema_names %}
+{{ schema_name }}.update_forward_refs()
+{% endfor %}

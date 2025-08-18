@@ -1,0 +1,51 @@
+from fastapi import FastAPI
+{% if cors_enabled %}
+from fastapi.middleware.cors import CORSMiddleware
+{% endif %}
+
+from .database import engine, Base
+
+# Create all database tables. In a production application, you would use
+# a migration tool like Alembic.
+# Base.metadata.create_all(bind=engine)
+
+app = FastAPI(
+    title="{{ app_name }}",
+    version="1.0.0",
+    description="API generated from a blueprint specification."
+)
+
+{% if cors_enabled %}
+# Set up CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # WARNING: Restrict this in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+{% endif %}
+
+# Import and include routers from the generated routes
+{% for router in routers %}
+from .routes.{{ router.module }} import router as {{ router.name }}
+{% endfor %}
+
+{% for router in routers %}
+app.include_router({{ router.name }}, prefix="{{ router.prefix }}", tags={{ router.tags }})
+{% endfor %}
+
+# Health check endpoint
+@app.get("/health", tags=["Monitoring"], summary="Health Check")
+def health_check():
+    """Check if the API is running and healthy."""
+    return {"status": "ok"}
+
+# Root endpoint
+@app.get("/", tags=["Root"], summary="API Info")
+def read_root():
+    """A simple endpoint to confirm the API is running."""
+    return {
+        "message": "Welcome to the {{ app_name }}",
+        "docs_url": "/docs"
+    }
