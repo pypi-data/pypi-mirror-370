@@ -1,0 +1,42 @@
+FROM --platform=linux/amd64 {{ sdk_type }}:{{ sdk_version }} AS builder
+
+WORKDIR /python/src
+
+ADD ./plugin.spec.yaml /plugin.spec.yaml
+ADD ./requirements.txt /python/src/requirements.txt
+ADD . /python/src
+
+{% if packages %}
+RUN {{ install_package_command }}{% for package in packages %} {{ package }}{% endfor %}{% if "slim" in sdk_type %} -y{% endif %}
+{% endif %}
+
+RUN pip install .
+RUN pip uninstall -y setuptools
+
+FROM --platform=linux/amd64 {{ sdk_type }}:{{ sdk_version }}
+
+LABEL organization={{ vendor }}
+LABEL sdk=python
+
+WORKDIR /python/src
+
+COPY --from=builder /python/src /python/src
+COPY --from=builder /plugin.spec.yaml /plugin.spec.yaml
+
+{%- if custom_cmd %}{{ "\n" }}
+{%- for cmd in custom_cmd %}
+{{ cmd }}
+{%- endfor %}
+{%- endif %}
+
+
+RUN if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+ENV PYTHONPATH="/python/src:${PYTHONPATH}"
+
+RUN rm -rf /root/.cache;
+
+# User to run plugin code. The two supported users are: root, nobody
+USER {{ user }}
+
+ENTRYPOINT ["python", "/python/src/bin/{{prefix}}_{{ plugin_name }}"]
