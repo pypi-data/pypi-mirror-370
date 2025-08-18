@@ -1,0 +1,215 @@
+Metadata-Version: 2.4
+Name: l0-python
+Version: 0.1.0
+Summary: L0 regularization for sparse neural networks and intelligent sampling
+Author-email: PolicyEngine <hello@policyengine.org>
+License: MIT License
+        
+        Copyright (c) 2025 PolicyEngine
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/PolicyEngine/L0
+Project-URL: Repository, https://github.com/PolicyEngine/L0
+Project-URL: Documentation, https://github.com/PolicyEngine/L0#readme
+Project-URL: Issues, https://github.com/PolicyEngine/L0/issues
+Keywords: l0,regularization,sparsity,neural networks,calibration
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.13
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: torch>=2.0.0
+Requires-Dist: numpy>=1.20.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=3.0; extra == "dev"
+Requires-Dist: black>=22.0; extra == "dev"
+Requires-Dist: mypy>=0.900; extra == "dev"
+Requires-Dist: ruff>=0.0.280; extra == "dev"
+Requires-Dist: pre-commit>=3.0; extra == "dev"
+Requires-Dist: build>=1.3; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: mystmd>=1.3; extra == "docs"
+Requires-Dist: jupyter>=1.0; extra == "docs"
+Requires-Dist: notebook>=7.0; extra == "docs"
+Requires-Dist: ipykernel>=6.0; extra == "docs"
+Provides-Extra: examples
+Requires-Dist: matplotlib>=3.3; extra == "examples"
+Requires-Dist: tqdm>=4.60; extra == "examples"
+Requires-Dist: pandas>=1.3; extra == "examples"
+Requires-Dist: scikit-learn>=1.0; extra == "examples"
+Requires-Dist: torchvision>=0.15; extra == "examples"
+Dynamic: license-file
+
+# L0 Regularization
+
+A PyTorch implementation of L0 regularization for neural network sparsification and intelligent sampling, based on [Louizos, Welling, & Kingma (2017)](https://arxiv.org/abs/1712.01312).
+
+## Features
+
+- **Hard Concrete Distribution**: Differentiable approximation of L0 norm
+- **Sparse Neural Network Layers**: L0Linear, L0Conv2d with automatic pruning
+- **Intelligent Sampling**: Sample/feature selection gates for calibration
+- **L0L2 Combined Penalty**: Recommended approach to prevent overfitting
+- **Temperature Scheduling**: Annealing for improved convergence
+- **TDD Development**: Comprehensive test coverage
+
+## Installation
+
+```bash
+pip install l0
+```
+
+For development:
+```bash
+git clone https://github.com/PolicyEngine/L0.git
+cd L0
+pip install -e .[dev]
+```
+
+## Quick Start
+
+### Neural Network Sparsification
+
+```python
+import torch
+from l0 import L0Linear, compute_l0l2_penalty, TemperatureScheduler, update_temperatures
+
+# Create a sparse model
+class SparseModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = L0Linear(784, 256, init_sparsity=0.5)
+        self.fc2 = L0Linear(256, 10, init_sparsity=0.7)
+    
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        return self.fc2(x)
+
+model = SparseModel()
+optimizer = torch.optim.Adam(model.parameters())
+scheduler = TemperatureScheduler(initial_temp=1.0, final_temp=0.1)
+
+# Training loop
+for epoch in range(100):
+    # Update temperature
+    temp = scheduler.get_temperature(epoch)
+    update_temperatures(model, temp)
+    
+    # Forward pass
+    output = model(input_data)
+    ce_loss = criterion(output, target)
+    
+    # Add L0L2 penalty
+    penalty = compute_l0l2_penalty(model, l0_lambda=1e-3, l2_lambda=1e-4)
+    loss = ce_loss + penalty
+    
+    # Backward pass
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+```
+
+### Intelligent Sample Selection
+
+```python
+from l0 import SampleGate, HybridGate
+
+# Pure L0 selection
+gate = SampleGate(n_samples=10000, target_samples=1000)
+selected_data, indices = gate.select_samples(data)
+
+# Hybrid selection (25% L0, 75% random)
+hybrid = HybridGate(
+    n_items=10000,
+    l0_fraction=0.25,
+    random_fraction=0.75,
+    target_items=1000
+)
+selected, indices, types = hybrid.select(data)
+```
+
+### Feature Selection
+
+```python
+from l0 import FeatureGate
+
+# Select top features
+gate = FeatureGate(n_features=1000, max_features=50)
+selected_data, feature_indices = gate.select_features(data)
+
+# Get feature importance
+importance = gate.get_feature_importance()
+```
+
+## Integration with PolicyEngine
+
+This package is designed to work with PolicyEngine's calibration system:
+
+```python
+# In policyengine-us-data or similar
+from l0 import HardConcrete
+
+# Use for household selection in CPS calibration
+gates = HardConcrete(
+    len(household_weights),
+    temperature=0.25,
+    init_mean=0.999  # Start with most households
+)
+
+# Apply gates during reweighting
+masked_weights = weights * gates()
+```
+
+## Documentation
+
+Full documentation available at: https://policyengine.github.io/L0/
+
+## Testing
+
+Run tests with:
+```bash
+pytest tests/ -v --cov=l0
+```
+
+## Acknowledgments
+
+This implementation is inspired by and builds upon the [original L0 regularization code](https://github.com/AMLab-Amsterdam/L0_regularization) by AMLab Amsterdam, which accompanied the paper by Louizos et al. (2018).
+
+## Citation
+
+If you use this package, please cite:
+
+```bibtex
+@article{louizos2017learning,
+  title={Learning Sparse Neural Networks through L0 Regularization},
+  author={Louizos, Christos and Welling, Max and Kingma, Diederik P},
+  journal={arXiv preprint arXiv:1712.01312},
+  year={2017}
+}
+```
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
