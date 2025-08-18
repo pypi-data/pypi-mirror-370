@@ -1,0 +1,57 @@
+name: langgraph-openai-serve
+
+networks:
+  langgraph-openai-serve-network:
+    name: langgraph-openai-serve-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.31.0/24
+
+services:
+  langgraph-openai-serve-dev:
+    image: langgraph-openai-serve-dev:latest
+    container_name: langgraph-openai-serve-dev
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: development
+    networks:
+      - langgraph-openai-serve-network
+    # ports:
+    #   - 8080:8080
+    command: ["tail", "-f", "/dev/null"] # NOTE: For testing the container
+    restart: "no"
+    develop:
+      watch:
+        # Sync the working directory with the `/app` directory in the container
+        - action: sync
+          path: .
+          target: /app
+          # Exclude the project virtual environment
+          ignore:
+            - .venv/
+
+        # Rebuild the image on changes to the `pyproject.toml`
+        - action: rebuild
+          path: ./pyproject.toml
+
+  # NOTE: Disable Title Generation: Admin Panel -> Interface -> Title Generation -> Disable
+  open-webui:
+    container_name: open-webui
+    image: ghcr.io/open-webui/open-webui:latest
+    restart: "no"
+    networks:
+      - langgraph-openai-serve-network
+    ports:
+      - 8080:8080
+    volumes:
+      - ./docker/volumes/open-webui:/app/backend/data
+    environment:
+      - ENABLE_OLLAMA_API=false
+      - USE_OLLAMA_DOCKER=false
+      - ENABLE_IMAGE_GENERATION=false
+      - ENABLE_TAGS_GENERATION=false
+      #### OPENAI API ####
+      - OPENAI_API_BASE_URL=http://192.168.2.12:8000/v1
+      - OPENAI_API_KEY=DUMMY
