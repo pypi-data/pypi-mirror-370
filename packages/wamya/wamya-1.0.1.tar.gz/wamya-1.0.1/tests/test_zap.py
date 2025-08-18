@@ -1,0 +1,223 @@
+# Original long line:
+import unittest
+import tempfile
+import os
+import sys
+import subprocess
+from src import parser, checker, uninstaller
+
+
+class TestZapFunctionality(unittest.TestCase):
+
+    def test_read_requirements_valid_file(self) -> None:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
+            temp_path = f.name
+            content = (
+                "requests>=2.25.0\nnumpy>=1.20.0\n"
+                "# This is a comment\n\npandas>=1.3.0"
+            )
+            f.write(content)
+
+        try:
+            packages = parser.read_requirements(temp_path)
+            self.assertEqual(len(packages), 3)
+            self.assertIn("requests>=2.25.0", packages)
+            self.assertIn("numpy>=1.20.0", packages)
+            self.assertIn("pandas>=1.3.0", packages)
+        finally:
+            try:
+                os.unlink(temp_path)
+            except (OSError, PermissionError):
+                pass
+
+    def test_read_requirements_nonexistent_file(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            parser.read_requirements("nonexistent_file.txt")
+
+    def test_parse_package_name(self) -> None:
+        self.assertEqual(
+            parser.parse_package_name("requests>=2.25.0"), "requests"
+        )
+        self.assertEqual(parser.parse_package_name("numpy==1.20.0"), "numpy")
+        self.assertEqual(parser.parse_package_name("pandas"), "pandas")
+        self.assertEqual(parser.parse_package_name("scipy<=1.5.0"), "scipy")
+
+    def test_check_installed_packages(self) -> None:
+        # Test with an empty list
+        missing, installed = checker.check_installed_packages([])
+        self.assertIsInstance(missing, list)
+        self.assertIsInstance(installed, list)
+
+
+class TestZapCLI(unittest.TestCase):
+
+    def test_zap_version_command(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "src", "--version"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("1.0.0", result.stdout)
+
+    def test_zap_help_command(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "src", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("usage:", result.stdout.lower())
+
+    def test_zap_dry_run_with_sample_file(self) -> None:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
+            temp_path = f.name
+            f.write(
+                "fake-package-that-doesnt-exist>=1.0.0\n"
+                "another-fake-package>=2.0.0\n"
+            )
+
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "src", "--dry-run", temp_path],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("DRY RUN", result.stdout.upper())
+            self.assertIn("Would install", result.stdout)
+
+        finally:
+            try:
+                os.unlink(temp_path)
+            except (OSError, PermissionError):
+                pass
+
+    def test_zap_nonexistent_file(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "src", "nonexistent.txt"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+
+
+class TestZapUninstaller(unittest.TestCase):
+
+    def test_check_packages_to_uninstall_with_valid_file(self) -> None:
+        """Test checking packages to uninstall with valid file."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
+            temp_path = f.name
+            f.write("setuptools>=40.0.0\npip>=20.0.0\n# Comment\n")
+
+        try:
+            to_uninstall, not_installed = (
+                uninstaller.check_packages_to_uninstall(temp_path)
+            )
+            self.assertIsInstance(to_uninstall, list)
+            self.assertIsInstance(not_installed, list)
+            # At least one of setuptools or pip should be found
+            package_names = [
+                pkg.split(">=")[0].lower() for pkg in to_uninstall
+            ]
+            self.assertTrue(
+                any(name in ["setuptools", "pip"] for name in package_names)
+            )
+        finally:
+            try:
+                os.unlink(temp_path)
+            except (OSError, PermissionError):
+                pass
+
+    def test_check_packages_to_uninstall_nonexistent_file(self) -> None:
+        """Test checking packages to uninstall with nonexistent file."""
+        with self.assertRaises(FileNotFoundError):
+            uninstaller.check_packages_to_uninstall("nonexistent_file.txt")
+
+    def test_uninstall_packages_dry_run(self) -> None:
+        """Test uninstall packages in dry run mode."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
+            temp_path = f.name
+            f.write("fake-package-that-doesnt-exist>=1.0.0\n")
+
+        try:
+            # This should not raise an exception and should handle dry run
+            result = uninstaller.uninstall_packages(temp_path, dry_run=True)
+            # Should return 0 for successful dry run
+            self.assertEqual(result, 0)
+        finally:
+            try:
+                os.unlink(temp_path)
+            except (OSError, PermissionError):
+                pass
+
+
+class TestZapUninstallCLI(unittest.TestCase):
+
+    def test_zap_uninstall_help(self) -> None:
+        """Test that uninstall option appears in help."""
+        result = subprocess.run(
+            [sys.executable, "-m", "src", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("--uninstall", result.stdout)
+        self.assertIn("-u", result.stdout)
+
+    def test_zap_uninstall_dry_run_with_sample_file(self) -> None:
+        """Test uninstall command with dry run flag."""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, encoding="utf-8"
+        ) as f:
+            temp_path = f.name
+            f.write(
+                "fake-package-that-doesnt-exist>=1.0.0\n"
+                "another-fake-package>=2.0.0\n"
+            )
+
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "src",
+                    "--uninstall",
+                    "--dry-run",
+                    temp_path,
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            # Should succeed even if no packages to uninstall
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("No packages to uninstall", result.stdout)
+
+        finally:
+            try:
+                os.unlink(temp_path)
+            except (OSError, PermissionError):
+                pass
+
+    def test_zap_uninstall_nonexistent_file(self) -> None:
+        """Test uninstall command with nonexistent file."""
+        result = subprocess.run(
+            [sys.executable, "-m", "src", "--uninstall", "nonexistent.txt"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
