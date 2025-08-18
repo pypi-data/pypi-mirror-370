@@ -1,0 +1,276 @@
+Metadata-Version: 2.4
+Name: weblate_fedora_messaging
+Version: 0.12
+Summary: Weblate Fedora Messaging integration
+Author-email: Michal Čihař <michal@weblate.org>
+License-Expression: GPL-3.0-or-later
+Project-URL: Documentation, https://docs.weblate.org/
+Project-URL: Download, https://github.com/WeblateOrg/fedora_mesaging
+Project-URL: Funding, https://weblate.org/donate/
+Project-URL: Homepage, https://weblate.org/
+Project-URL: Issue Tracker, https://github.com/WeblateOrg/fedora_messaging/issues
+Project-URL: Source Code, https://github.com/WeblateOrg/fedora_messaging
+Project-URL: Twitter, https://twitter.com/WeblateOrg
+Keywords: gettext,git,i18n,l10n,mercurial,translate
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development :: Internationalization
+Classifier: Topic :: Software Development :: Localization
+Requires-Python: >=3.11
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: cryptography>=42.0.2
+Requires-Dist: django-appconf<1.2,>=1.0.0
+Requires-Dist: Django<5.3,>=5.0
+Requires-Dist: fedora-messaging==3.8.0
+Requires-Dist: twisted>=23.8.0
+Requires-Dist: Weblate>=5.11
+Requires-Dist: weblate_schemas>=2025.1
+Provides-Extra: lint
+Requires-Dist: pre-commit==4.3.0; extra == "lint"
+Provides-Extra: test
+Requires-Dist: coverage==7.10.4; extra == "test"
+Dynamic: license-file
+
+.. image:: https://s.weblate.org/cdn/Logo-Darktext-borders.png
+   :alt: Weblate
+   :target: https://weblate.org/
+   :height: 80px
+
+**Weblate is libre software web-based continuous localization system,
+used by over 2500 libre projects and companies in more than 165 countries.**
+
+
+Fedora messaging integration and AMQP publisher for Weblate.
+
+.. image:: https://img.shields.io/badge/website-weblate.org-blue.svg
+    :alt: Website
+    :target: https://weblate.org/
+
+.. image:: https://hosted.weblate.org/widgets/weblate/-/svg-badge.svg
+    :alt: Translation status
+    :target: https://hosted.weblate.org/engage/weblate/?utm_source=widget
+
+.. image:: https://bestpractices.coreinfrastructure.org/projects/552/badge
+    :alt: CII Best Practices
+    :target: https://bestpractices.coreinfrastructure.org/projects/552
+
+.. image:: https://img.shields.io/pypi/v/weblate-fedora-messaging.svg
+    :target: https://pypi.org/project/weblate-fedora-messaging/
+    :alt: PyPI package
+
+.. image:: https://readthedocs.org/projects/weblate/badge/
+    :alt: Documentation
+    :target: https://docs.weblate.org/
+
+Installation
+------------
+
+Install from PyPI:
+
+.. code-block:: sh
+
+    pip install weblate-fedora-messaging
+
+Sources are available at <https://github.com/WeblateOrg/fedora_messaging>.
+
+Configure Weblate integration:
+
+.. code-block:: python
+
+   # Add to installed apps
+   INSTALLED_APPS.append("weblate_fedora_messaging")
+   # Path to configuration file
+   FEDORA_MESSAGING_CONF = "/etc/fedora-messaging/config.toml"
+   # fedora_messaging_task retry settings (optional, the following are the default values)
+   FEDORA_MESSAGING_TASK_RETRY_BACKOFF = 600
+   FEDORA_MESSAGING_TASK_RETRY_BACKOFF_MAX = 3600
+   FEDORA_MESSAGING_TASK_RETRY_JITTER = True
+   FEDORA_MESSAGING_TASK_MAX_RETRIES = 3
+   # Route messaging to notify queue
+   CELERY_TASK_ROUTES["weblate_fedora_messaging.tasks.*"] = {"queue": "notify"}
+
+
+Messages content
+----------------
+
+Topic
++++++
+
+All messages have topic
+``weblate.<action>.<project>.<component>.<translation>``. The action is
+lowercase textual representation of action with underscores instead of space,
+for example ``resource_update``, all other parts are optional and represent
+slug of the object or a language code.
+
+Body
+++++
+
+The body consists of following fields (given that they are available for the event):
+
+``id``
+   Numerical ID of change
+``action``
+   Verbose name of the change, see `Change actions source code`_ for possible values
+``timestamp``
+   ISO formatted timestamp
+``target``
+   New value of the change (eg. new translation of the string)
+``old``
+   Old value of the change (eg. previous translation of the string)
+``source``
+   Source string.
+``url``
+   Absolute URL to view the related object.
+``author``
+   Author username (this can be different from user for example when accepting suggestions)
+``user``
+   Acting username
+``project``
+   Project slug
+``component``
+   Component slug
+``translation``
+   Translation language code
+
+Headers
++++++++
+
+There are additional headers which you might utilize for routing as well:
+
+``action``
+   Verbose name of the change, see `Change actions source code`_ for possible values
+``project``
+   Project slug
+``component``
+   Component slug
+
+
+.. _Change actions source code: https://github.com/WeblateOrg/weblate/blob/master/weblate/trans/models/change.py#L218
+
+
+Example messages
+----------------
+
+Repository merge event:
+
+.. code-block:: json
+
+    {
+      "id": 1,
+      "action": "Merged repository",
+      "timestamp": "2017-06-15T11:30:47.325000+00:00",
+      "url": "http://example.com/projects/test/test/",
+      "component": "test"
+    }
+
+New source string event:
+
+.. code-block:: json
+
+    {
+      "id": 2,
+      "action": "New source string",
+      "timestamp": "2017-06-15T11:30:47.372000+00:00",
+      "url": "http://example.com/translate/test/test/cs/?checksum=6412684aaf018e8e",
+      "component": "test",
+      "translation": "cs",
+      "source": ["Hello, world!\n"]
+    }
+
+Resource update event:
+
+.. code-block:: json
+
+    {
+      "id": 6,
+      "action": "Resource update",
+      "timestamp": "2017-06-15T11:30:47.410000+00:00",
+      "url": "http://example.com/projects/test/test/cs/",
+      "project": "test",
+      "component": "test",
+      "translation": "cs"
+    }
+    {
+      "id": 7,
+      "action": "Resource update",
+      "timestamp": "2017-06-15T11:30:47.510000+00:00",
+      "url": "http://example.com/projects/test/test/de/",
+      "project": "test",
+      "component": "test",
+      "translation": "de"
+    }
+    {
+      "id": 8,
+      "action": "Resource update",
+      "timestamp": "2017-06-15T11:30:47.595000+00:00",
+      "url": "http://example.com/projects/test/test/it/",
+      "project": "test",
+      "component": "test",
+      "translation": "it"
+    }
+
+Project removal event:
+
+.. code-block:: json
+
+    {
+      "id": 9,
+      "action": "Removed project",
+      "timestamp": "2019-10-17T15:57:08.559420+00:00",
+      "target": "test",
+      "user": "testuser"
+    }
+
+New contributor event:
+
+.. code-block:: json
+
+    {
+      "id": 11,
+      "action": "New contributor",
+      "timestamp": "2019-10-17T15:57:08.759960+00:00",
+      "url": "http://example.com/translate/test/test/cs/?checksum=6412684aaf018e8e",
+      "author": "testuser",
+      "user": "testuser",
+      "project": "test",
+      "component": "test",
+      "translation": "cs",
+      "source": ["Hello, world!\n"]
+    }
+
+New translation event:
+
+.. code-block:: json
+
+    {
+      "id": 12,
+      "action": "New translation",
+      "timestamp": "2019-10-17T15:57:08.772591+00:00",
+      "url": "http://example.com/translate/test/test/cs/?checksum=6412684aaf018e8e",
+      "target": ["Ahoj svete!\n"],
+      "author": "testuser",
+      "user": "testuser",
+      "project": "test",
+      "component": "test",
+      "translation": "cs",
+      "source": ["Hello, world!\n"]
+    }
+
+Contributing
+------------
+
+Contributions are welcome! See `documentation <https://docs.weblate.org/en/latest/contributing/modules.html>`__ for more information.
