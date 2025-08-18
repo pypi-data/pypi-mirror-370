@@ -1,0 +1,14 @@
+# filepath: /Users/dbright/mcp/watchgate/watchgate/transport/__init__.py
+"""Transport layer for MCP communication.
+
+This module provides transport abstractions and implementations for communicating
+with MCP servers. Currently supports stdio-based transport for process communication.
+"""
+
+from .base import Transport
+from .stdio import StdioTransport
+
+__all__ = [
+    'Transport',
+    'StdioTransport'
+]

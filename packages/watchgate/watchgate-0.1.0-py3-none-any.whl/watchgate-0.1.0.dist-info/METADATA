@@ -1,0 +1,408 @@
+Metadata-Version: 2.4
+Name: watchgate
+Version: 0.1.0
+Summary: Secure MCP gateway with auditing and access control
+License: Apache-2.0
+License-File: LICENSE
+Requires-Python: >=3.11
+Requires-Dist: aiohttp==3.12.4
+Requires-Dist: pathspec==0.12.1
+Requires-Dist: pydantic==2.11.5
+Requires-Dist: pyyaml==6.0.2
+Requires-Dist: textual>=0.47.0
+Provides-Extra: dev
+Requires-Dist: black>=23.0; extra == 'dev'
+Requires-Dist: mypy>=1.5; extra == 'dev'
+Requires-Dist: pytest-asyncio>=0.21; extra == 'dev'
+Requires-Dist: pytest-cov>=4.0; extra == 'dev'
+Requires-Dist: pytest>=7.0; extra == 'dev'
+Requires-Dist: ruff>=0.0.290; extra == 'dev'
+Description-Content-Type: text/markdown
+
+# Watchgate
+
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/watchgate/watchgate/releases)
+[![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
+**A simple, focused proxy for Model Context Protocol (MCP) communications with basic auditing and tool filtering.**
+
+Watchgate sits between your MCP client and server to give you visibility and basic control over what your AI agents are doing. This initial release focuses on the core proxy functionality with basic tool filtering and auditing.
+
+**How it works:** Your MCP client connects to Watchgate as if it were any other MCP server, while Watchgate forwards requests to your actual MCP server with filtering and auditing.
+
+## 🎯 Is This For You?
+
+Watchgate is useful if you're dealing with any of these:
+
+- **"I need to protect sensitive data in transit"** - Block and log personally identifiable information, security tokens, and malicious prompts flowing between your LLM/MCP client and server
+- **"I need to control tool access"** - Built-in allowlist/blocklist for tool execution, plus plugin support for advanced security policies
+- **"I need audit logs"** - Plain text logs out of the box, or build custom formats and destinations via plugins
+- **"I need to tweak messages"** en-route between my MCP client and server
+
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.11 or higher
+- An existing MCP server to proxy
+
+### Installation
+
+```bash
+# Install from PyPI (recommended)
+uv add watchgate
+
+# Or install from source
+git clone https://github.com/watchgate/watchgate.git
+cd watchgate
+uv sync
+```
+
+### Basic Usage
+
+1. **Create a configuration file**:
+
+```bash
+# Option 1: Start with the full example (recommended for new users)
+cp watchgate.example.yaml watchgate.yaml
+
+# Option 2: Start with minimal configuration (for experienced users)
+cp watchgate.minimal.yaml watchgate.yaml
+```
+
+2. **Edit `watchgate.yaml`** to match your MCP server setup:
+
+```yaml
+# Minimal example - edit the command to start your MCP server
+proxy:
+  transport: stdio
+  upstream:
+    command: "python -m your_mcp_server"  # <- Change this
+  timeouts:
+    connection_timeout: 30
+    request_timeout: 60
+```
+
+3. **Start Watchgate**:
+
+```bash
+watchgate --config watchgate.yaml
+```
+
+3. **Connect your MCP client** to Watchgate instead of directly to your MCP server.
+
+### Usage Examples
+
+```bash
+# Basic usage with default config
+watchgate --config watchgate.yaml
+
+# Enable verbose logging
+watchgate --config watchgate.yaml --verbose
+
+# Show version
+watchgate --version
+
+# Show help
+watchgate --help
+```
+
+## 🔧 Features
+
+### Core Capabilities (v0.1.0)
+
+- **✅ Foundation Components** - Protocol, transport, and config systems (90% test coverage)
+- **✅ YAML Configuration** - Simple configuration file support with plugin parameters
+- **✅ Plugin System Architecture** - Plugin interfaces, manager, and discovery
+- **✅ Tool Allowlist Plugin** - Tool allowlist/blocklist with comprehensive validation
+
+- **✅ Default Auditing Plugin** - File-based logging with rotation and error handling
+- **✅ MCP Gateway Server** - Complete request/response pipeline with plugin integration
+- **✅ Stdio Transport** - Full stdio communication with subprocess management
+- **✅ Concurrent Request Handling** - High-performance parallel processing of multiple MCP requests
+
+### Performance
+
+Watchgate handles concurrent requests efficiently with significant performance improvements:
+
+- **Concurrent Processing**: Up to 100 simultaneous requests by default
+- **Performance Gains**: 5-250x faster than sequential processing for concurrent workloads
+- **Resource Management**: Automatic cleanup and configurable request limits
+- **High Throughput**: Optimized for production environments with multiple clients
+
+### Additional Features
+
+The plugin architecture supports extensibility for additional transport protocols, advanced security policies, and enterprise features as needed.
+
+### Architecture
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ MCP Client  │───▶│ Watchgate  │───▶│ MCP Server  │
+│             │    │ (filter,    │    │             │
+│             │    │  log)       │    │             │
+│             │◀───│             │◀───│             │
+└─────────────┘    └─────────────┘    └─────────────┘
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │ Text Logs   │
+                   └─────────────┘
+```
+
+## 📖 Configuration
+
+### Configuration File Structure
+
+```yaml
+# Plugin-based configuration
+proxy:
+  transport: stdio
+  upstream:
+    command: "python -m my_mcp_server"
+  timeouts:
+    connection_timeout: 30
+    request_timeout: 120
+
+# Plugin configuration (policy-based)
+plugins:
+  security:
+    - policy: "tool_allowlist"
+      enabled: true
+      config:
+        mode: "allowlist"  # allowlist, blocklist, or allow_all
+        tools:
+          - "read_file"
+          - "write_file"
+        priority: 50  # Optional: execution order (lower = higher priority)
+  
+  auditing:
+    - policy: "file_auditing"
+      enabled: true
+      config:
+        file: "watchgate.log"
+        format: "simple"
+```
+
+## 📊 Basic Auditing
+
+Watchgate provides simple text file auditing:
+
+```
+YYYY-MM-DD HH:MM:SS,mmm INFO [watchgate.proxy] MCP Request: tools/list from client
+YYYY-MM-DD HH:MM:SS,mmm INFO [watchgate.policy] Tool allowed: file_read (allowlist match)
+YYYY-MM-DD HH:MM:SS,mmm INFO [watchgate.proxy] MCP Response: success (42 tools)
+YYYY-MM-DD HH:MM:SS,mmm WARN [watchgate.policy] Tool blocked: system_exec (blocklist match)
+```
+
+## 🔒 Simple Security Features
+
+### Plugin-Based Architecture
+
+Watchgate uses a modern plugin-based architecture for flexibility and extensibility:
+
+- **Plugin Discovery**: Automatic discovery of available plugins by policy name
+- **Execution Sequencing**: Configurable plugin execution order with priority and dependency support
+- **Request/Response Filtering**: Plugins can modify requests and responses in addition to allowing/blocking requests
+
+### Built-in Security Plugins
+
+#### Tool Access Control Plugin
+- **Dual Protection**: Filters both `tools/call` requests and `tools/list` responses
+- **Multiple Modes**: Allowlist, blocklist, and allow_all modes
+- **Consistent Policy**: Same security rules apply to tool execution and tool discovery
+- **Detailed Auditing**: Comprehensive logging of all filtering decisions
+
+Example audit log:
+```
+Tool access control filtered tools/list response: original=5 tools, filtered=2 tools, 
+removed=['delete_file', 'execute_command'], allowed=['read_file', 'write_file'], 
+mode=allowlist, request_id=123
+```
+
+### Basic Policy Engine
+
+Watchgate includes a simple policy engine for basic access control:
+
+- **Tool Allowlists** - Only specified tools are permitted
+- **Tool Blocklists** - Specified tools are always denied
+- **Pass-through Mode** - If no policy configured, all tools allowed
+- **Sequential Processing** - Plugins execute in configurable order
+
+## 🔧 Development
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=watchgate --cov-report=term
+
+# Run specific test categories
+pytest tests/unit/          # Unit tests
+pytest tests/integration/   # Integration tests
+pytest tests/performance/   # Performance tests
+```
+
+### Development Setup
+
+```bash
+# Clone and setup development environment
+git clone https://github.com/watchgate/watchgate.git
+cd watchgate
+
+# Ensure Python 3.11+ is available
+python --version  # Should show 3.11.x or higher
+
+# Install in development mode
+pip install -e .
+
+# Or use uv for faster development setup
+uv sync --dev
+
+# Install pre-commit hooks
+pre-commit install
+
+# Run linting
+black watchgate/
+ruff watchgate/
+mypy watchgate/
+```
+
+### Project Structure
+
+```
+watchgate/
+├── watchgate/           # Main package
+│   ├── proxy/           # Core proxy implementation ✅
+│   │   ├── server.py    # Main MCP gateway server
+│   │   └── stdio_server.py # Stdio server management
+│   ├── plugins/         # Plugin architecture ✅
+│   │   ├── security/    # Security plugins ✅
+│   │   └── auditing/    # Auditing plugins ✅
+│   ├── protocol/        # MCP protocol layer ✅
+│   ├── transport/       # Transport protocols ✅
+│   └── config/          # Configuration system ✅
+├── tests/               # Test suite (285+ tests)
+│   ├── unit/           # Unit tests ✅
+│   ├── integration/    # Integration tests ✅
+│   └── performance/    # Performance tests
+├── docs/                # Documentation
+└── examples/            # Usage examples
+```
+
+## 📈 Performance
+
+### Current Capabilities
+
+- **Basic Functionality**: MCP gateway works correctly
+- **Startup**: <5 seconds to get running
+- **Memory**: Reasonable resource usage for development
+- **Latency**: Minimal proxy overhead
+
+## 🛠️ Supported MCP Methods
+
+### Core Methods
+
+- ✅ `initialize` - Protocol initialization  
+- ✅ `tools/list` - List available tools
+- ✅ `tools/call` - Execute tools (with policy filtering)
+- ✅ `resources/list` - List resources
+- ✅ `resources/read` - Read resource content
+- 🔄 `prompts/list` - List prompts
+- 🔄 `prompts/get` - Get prompt content  
+- 🔄 `notifications` - Server notifications
+- 🔄 Custom methods and extensions
+
+## 🔧 Transport Protocols
+
+### Standard I/O (stdio)
+
+Current transport supported:
+
+```yaml
+server:
+  command: "python -m your_server"
+```
+
+The plugin architecture supports extensibility for additional transport protocols as needed.
+
+## 🚧 Development Status
+
+**Current Version**: v0.1.0
+
+### Implementation Progress
+
+#### ✅ Foundation Components - **COMPLETED**
+- ✅ **Protocol Layer** - Message types, validation, error handling (90% test coverage)
+- ✅ **Transport Layer** - Stdio transport with subprocess management (90% test coverage)  
+- ✅ **Configuration System** - YAML loading and validation (90% test coverage)
+
+#### ✅ Plugin System Architecture - **COMPLETED**
+- ✅ **Plugin Interfaces** - Abstract base classes for security and auditing plugins (14 tests, 85% coverage)
+- ✅ **Plugin Manager** - Dynamic loading, orchestration, and error isolation (30 tests, 97% coverage)
+- ✅ **Plugin Discovery** - Automatic plugin detection and configuration system
+
+#### ✅ Plugin Implementation - **COMPLETED**
+- ✅ **Default Security Plugin** - Tool allowlist/blocklist implementation with comprehensive validation
+- ✅ **Default Auditing Plugin** - File-based logging with rotation and error handling
+- ✅ **Core Proxy Server** - Plugin-integrated message forwarding with stdio server support
+- ✅ **Configuration Extension** - YAML-based plugin configuration with path-based discovery
+
+### Current Test Status
+
+```bash
+# Run all tests
+uv run pytest --no-header -v
+
+# Current results: 285 passed, 1 skipped
+# Test Coverage: 90%+ across all components
+```
+
+### Environment Notes
+
+**Python Version**: Requires Python 3.11+ (aligned with `.python-version` and `pyproject.toml`)
+- All asyncio compatibility issues resolved for Python 3.11+
+
+## 📚 Documentation
+
+- [Requirements Overview](docs/overview.md) - High-level project requirements and strategy
+- [v0.1.0 Requirements](docs/versions/v0.1.0/v0.1.0-requirements.md) - Complete v0.1.0 specifications
+- [v0.1.0 Implementation Plan](docs/versions/v0.1.0/v0.1.0-implementation-plan.md) - Implementation strategy and components
+- [v0.1.0 Test Plan](docs/versions/v0.1.0/v0.1.0-test-plan.md) - Comprehensive testing strategy
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md) for details.
+
+### Development Process
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for your changes
+4. Ensure all tests pass with `uv run pytest`
+5. Submit a pull request
+
+### Reporting Issues
+
+Please use the [GitHub Issues](https://github.com/watchgate/watchgate/issues) tracker to report bugs or request features.
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## 📞 Support & Documentation
+
+- **📖 Project Overview**: [docs/overview.md](docs/overview.md) - Project strategy, architecture, and requirements
+- **📋 Requirements & Status**: [docs/versions/v0.1.0/](docs/versions/v0.1.0/) - Detailed v0.1.0 requirements and progress
+- **📁 Documentation Guide**: [docs/README.md](docs/README.md) - Complete documentation structure
+- **🐛 Issues**: [GitHub Issues](https://github.com/watchgate/watchgate/issues)
+- **💬 Discussions**: [GitHub Discussions](https://github.com/watchgate/watchgate/discussions)
+
+---
+
+**Watchgate v0.1.0** - An MCP server proxy for monitoring and controlling AI tool usage
