@@ -1,0 +1,11 @@
+# flake8: noqa
+
+# import apis into api package
+from wink_sdk_extranet_distribution.api.affiliate_api import AffiliateApi
+from wink_sdk_extranet_distribution.api.daily_rate_api import DailyRateApi
+from wink_sdk_extranet_distribution.api.inventory_api import InventoryApi
+from wink_sdk_extranet_distribution.api.inventory_usage_api import InventoryUsageApi
+from wink_sdk_extranet_distribution.api.sales_channel_api import SalesChannelApi
+from wink_sdk_extranet_distribution.api.sales_channel_request_api import SalesChannelRequestApi
+from wink_sdk_extranet_distribution.api.scheduler_api import SchedulerApi
+
