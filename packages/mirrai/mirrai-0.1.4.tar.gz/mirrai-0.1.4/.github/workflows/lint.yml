@@ -1,0 +1,64 @@
+name: Lint and Type Check
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  lint:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - check: "Python Type Check"
+            command: "typecheck-py"
+            needs-node: false
+          
+          - check: "Python Format"
+            command: "format-py --check"
+            needs-node: false
+          
+          - check: "TypeScript Type Check"
+            command: "typecheck-ts"
+            needs-node: true
+          
+          - check: "TypeScript Format"
+            command: "format-ts --check"
+            needs-node: true
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      
+      - name: Install Python dependencies
+        run: uv sync --all-extras
+      
+      - name: Set up Node.js
+        if: matrix.needs-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+      
+      - name: Install UI dependencies
+        if: matrix.needs-node
+        working-directory: ui
+        run: npm ci
+      
+      - name: Run ${{ matrix.check }}
+        run: uv run invoke ${{ matrix.command }}
