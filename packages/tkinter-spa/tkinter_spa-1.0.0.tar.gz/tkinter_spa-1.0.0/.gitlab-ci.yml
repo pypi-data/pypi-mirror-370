@@ -1,0 +1,64 @@
+default:
+  image: python:3.11.13
+  artifacts:
+    expire_in: 10 mins
+
+stages:
+  - coverage
+  - build
+  - publish
+  - doc
+
+variables:
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONIOENCODING: utf-8
+  GIT_DEPTH: 0
+
+coverage-report:
+  stage: coverage
+  before_script:
+   - apt update && apt install -y xvfb
+  script:
+   - pip install pytest==8.4.1 coverage==7.10.3 -e .
+   - xvfb-run -a coverage run -m pytest
+   - coverage report
+  coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+%)/'
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main"'
+
+build-package:
+  stage: build
+  script:
+    - pip install build
+    - python -B -m build
+  artifacts:
+    paths:
+      - dist/
+  rules:
+    - if: $CI_COMMIT_TAG
+
+publish-to-pypi:
+  stage: publish
+  dependencies:
+    - build-package
+  id_tokens:
+    PYPI_ID_TOKEN:
+      aud: pypi
+  environment:
+    name: release
+  script:
+    - pip install twine
+    - twine upload --verbose --non-interactive --repository pypi dist/*
+  rules:
+    - if: $CI_COMMIT_TAG
+
+deploy-docs:
+  stage: doc
+  script:
+    - pip install furo==2025.7.19 .
+    - sphinx-build -M dirhtml docs/source public/
+    - mv public/dirhtml/* public/
+  pages:
+    publish: public
+  rules:
+    - if: $CI_COMMIT_TAG
