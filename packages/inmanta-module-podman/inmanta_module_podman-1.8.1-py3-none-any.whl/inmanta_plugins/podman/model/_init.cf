@@ -1,0 +1,276 @@
+"""
+    Copyright 2025 Guillaume Everarts de Velp
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: edvgui@gmail.com
+"""
+import std
+import mitogen
+import podman::container_like
+import podman::container
+import podman::network
+import podman::services
+import podman::helpers
+
+
+entity ResourceABC extends std::PurgeableResource, std::ManagedResource:
+    """
+    Base resource for all podman resources.
+
+    A podman resource is identified by its name, and its owner.  A name
+    should be unique across all resources types.
+
+    :attr owner: The resource owner, on the host where podman is running.
+        This should be an existing user on the machine.  If set to null, will
+        match the user that is used to access the machine.
+    :attr name: The resource name
+    """
+    string? owner = null
+    string name
+end
+ResourceABC.host [1] -- std::Host
+"""
+The host where the resource should be deployed.
+"""
+
+ResourceABC.via [0:1] -- mitogen::Context
+"""
+Dedicated mitogen context for this resource, to overwrite the one attached
+to the host.
+"""
+
+
+entity Network extends ResourceABC:
+    """
+    Create a podman network, using the podman cli.
+    podman network create [options] [name]
+    cf. https://docs.podman.io/en/latest/markdown/podman-network-create.1.html
+
+    :attr dns_enabled: Whether to enable the dns plugin
+    :attr dns: DNS servers this network will use
+    :attr internal: Restrict external access from this network
+    :attr driver: Driver to manage the network (default "bridge")
+    :attr ipv6_enabled: Enable IPv6 networking
+    :attr labels: Set metadata on a network
+    :attr options: Set options on a network
+    """
+    bool dns_enabled = true
+    string[] dns = []
+    bool internal = false
+    string? driver = null
+    bool ipv6_enabled = false
+    dict labels = {}
+    dict options = {}
+end
+Network.subnets [0:] -- podman::network::Subnet.network [1]
+"""
+    The subnet in CIDR notation. Can be specified multiple times to allocate
+    more than one subnet for this network.
+"""
+
+index Network(host, owner, name)
+
+
+entity NetworkDiscovery extends ResourceABC:
+    """
+    Discovery resource, to lookup networks owned by a user on a host.
+
+    :attr name: The name of the resource is also a filter to apply on the
+        discovered networks names.  The filter is a valid podman regex.
+    """
+    string name = ".*"
+end
+
+index NetworkDiscovery(host, owner, name)
+
+
+entity ContainerLike extends ResourceABC:
+    """
+    Abstraction gathering the properties that both containers and pods
+    can have.
+
+    :attr hostname: Set a hostname to the container.
+    :attr labels: Add metadata to a container.
+    :attr no_hosts: Do not create /etc/hosts within the container, instead use the version from the image
+    :attr userns: Set the user namespace mode for the container.
+    """
+    string? hostname = null
+    dict labels = {}
+    bool no_hosts = false
+    string? userns = null
+end
+ContainerLike.networks [0:] -- podman::container_like::Network.container_like [1]
+"""Set the network mode for the container."""
+
+ContainerLike.hosts [0:] -- podman::container_like::Host.container_like [1]
+"""Configure additional /etc/hosts entries for the container."""
+
+ContainerLike.publish [0:] -- podman::container_like::Publish.container_like [1]
+"""Publish a container's port, or range of ports, to the host."""
+
+ContainerLike.gidmap [0:] -- podman::container_like::IdMap
+"""Map the group ids of the container to ids on the host"""
+
+ContainerLike.uidmap [0:] -- podman::container_like::IdMap
+"""Map the user ids of the container to ids on the host"""
+
+ContainerLike.extra_args [0:] -- podman::container_like::ExtraArg
+"""
+Relation to insert any currently unsupported argument type in any of the commands
+that might be used to create/start/stop/remove the pod or container
+"""
+
+
+entity Pod extends ContainerLike:
+    """
+    Run a pod.
+    """
+end
+
+index Pod(host, owner, name)
+
+
+entity Container extends ContainerLike:
+    """
+    Run a process in a new container. 
+    
+    Podman run starts a process with its own file system, its own networking,
+    and its own isolated process tree.
+
+    :attr image: The image of the container
+    :attr env: Set environment variables.
+    :attr env_file: Read the environment variables from the file.
+    :attr entrypoint: Override the default ENTRYPOINT from the image.
+    :attr command: Override the default COMMAND from the image.
+    :attr user: Sets the username or UID used and, optionally, the groupname or GID for the specified command.
+        Both user and group may be symbolic or numeric.
+        Format: user[:group]
+    """
+    string image
+    dict env = {}
+    string? env_file = null
+    string? entrypoint = null
+    string? command = null
+    string? user = null
+end
+Container.volumes [0:] -- podman::container::Volume.container [1]
+"""Create a bind mount."""
+
+Container.pod [0:1] -- Pod.containers [0:]
+"""Run container in an existing pod."""
+
+index Container(host, owner, name)
+
+
+entity Image extends ResourceABC:
+    """
+    Make sure a container image is present (or not) on a given host.
+    """
+end
+
+index Image(host, owner, name)
+
+
+entity ImageDiscovery extends ResourceABC:
+    """
+    Discovery resource, to lookup images owned by a user on a host.
+
+    :attr name: The name of the resource is also a filter to apply on the
+        discovered image names.  The filter is a valid podman regex.
+    """
+    string name = ".*"
+end
+
+index ImageDiscovery(host, owner, name)
+
+
+entity ImageFromSource extends Image:
+    """
+    Build a container image using a Containerfile
+
+    Builds an image using instructions from one or more Containerfiles or Dockerfiles and a specified build context directory.
+
+    :attr squash: Squash all of the image's new layers into a single new layer; any preexisting layers are not squashed.
+    :attr squash_all: Squash all of the new image's layers (including those inherited from a base image) into a single new layer.
+    :attr pull: Pull image policy. (always, true, missing, never, false, newer)
+    :attr context: The build context directory can be specified as the http(s) URL of an archive, git repository or Containerfile.
+    """
+    bool? squash = null
+    bool? squash_all = null
+    string? pull = null
+    string? context = null
+    string? file = null
+end
+
+
+entity ImageFromRegistry extends Image:
+    """
+    Pull an image from a registry
+    """
+    string? transport = null
+    string? digest = null
+end
+
+
+entity AutoUpdate extends ResourceABC:
+    """
+    Configure podman auto-update service for the given user.
+
+    :attr authfile: Path to the authentication file. Use REGISTRY_AUTH_FILE environment variable to override
+    :attr rollback: Rollback to previous image if update fails (default true)
+    :attr tls_verify: Require HTTPS and verify certificates when contacting registries (default true)
+    """
+    string name = "auto-update"
+    string? authfile = null
+    bool? rollback = null
+    bool? tls_verify = null
+end
+
+index AutoUpdate(host, owner, name)
+
+
+implementation require_agent_config for ResourceABC:
+    """
+    Resources in this module expect the agent name to match the host name.
+    This implementation makes sure that the agent config resource is always
+    deployed before our resources.
+    """
+    agent_config = std::AgentConfig[agentname=self.host.name]
+    agent_config.provides = self
+end
+
+
+implementation pod_consistency for Container:
+    """
+    Make sure that a container is configured to run on the same host as the pod it
+    is part of.  If this is not the case, this will trigger a DoubleSetException.
+    """
+    self.host = self.pod.host
+    self.owner = self.pod.owner
+    self.via = self.pod.via is defined ? self.pod.via : null
+end
+
+
+implement ResourceABC using require_agent_config
+implement Network using parents
+implement NetworkDiscovery using parents
+implement ContainerLike using parents
+implement Pod using parents
+implement Container using parents
+implement Container using pod_consistency when self.pod is defined
+implement Image using parents
+implement ImageDiscovery using parents
+implement ImageFromRegistry using parents
+implement ImageFromSource using parents
+implement AutoUpdate using parents
