@@ -1,0 +1,116 @@
+# resourcemap
+
+**resourcemap** is a Python package that allows you to use application resources without worrying about where they are stored.  
+It provides convenient APIs to load, locate, and manage resource files across different operating systems.
+
+---
+
+## ✨ Features
+- Load JSON, YAML, or other files with automatic encoding detection (`charset-normalizer`)
+- Define relocatable resource paths per application and author
+- Automatically resolve resource locations based on user OS conventions
+- Reuse a single `ResourceMap` object throughout your application
+
+---
+
+## 🚀 Installation
+
+```bash
+pip install resourcemap
+```
+
+---
+
+## 📖 Usage
+
+### 1. Basic Example
+Load a file directly:
+
+```python
+import resourcemap as resmap
+
+# Direct load
+file = resmap.load_json('path/to/file')
+
+# Using a custom loader
+file = resmap.load('path/to/file', loader=your_loader)
+```
+
+> **Note**  
+> If `encoding` is not specified in `load_json()` or `load_yaml()`,  
+> `charset-normalizer` will be used to automatically guess the encoding.
+
+---
+
+### 2. Automatic Resource Mapping
+
+```python
+from pathlib import Path
+import resourcemap as resmap
+
+# Define your application info
+APP = 'app_name'
+AUTHOR = 'author_name'
+
+# Save the default dictionary
+resmap.ResourceMap.create(APP, AUTHOR) \
+    .set('config.json', 'path/to/config.json') \
+    .set('query.sql', 'path/to/query.sql') \
+    .set('data.csv', 'path/to/data.csv') \
+    .save(exist_ok=True)
+
+# Automatic resource selection
+config = resmap.load_json('config', APP, AUTHOR)
+query = resmap.load_json('query', APP, AUTHOR, default=Path('default/path/to/query'))
+
+# Get only the path without loading
+data_path = resmap.locate('data', APP, AUTHOR)
+```
+
+`resourcemap` saves the dictionary of resource paths in an OS-appropriate location.  
+
+For example, on **Windows**:  
+```
+%LocalAppData%\AUTHOR\resmap\APP.json
+```
+
+This file specifies where relocatable resources should be placed.  
+By default, create it using `ResourceMap.create()`, `.set()`, and `.save()`.
+
+---
+
+### 3. Application-wide Usage
+
+In most cases, a single `ResourceMap` instance is sufficient.  
+Load it once and reuse it across the entire app.
+
+```python
+# app/path/to/resmap.py
+import resourcemap as resmap
+
+# Load the RESMAP used throughout the application
+RESMAP = resmap.ResourceMap.load(APP, AUTHOR)
+```
+
+```python
+# app/path/to/your_code.py
+from pathlib import Path
+import resourcemap as resmap
+from app.path.to.resmap import RESMAP
+
+config = resmap.load_json('config', RESMAP)
+query = resmap.load_json('query', RESMAP, default=Path('default/path/to/query'))
+data_path = resmap.locate('data', RESMAP)
+```
+
+---
+
+## 📦 Dependencies
+- [appdirs](https://pypi.org/project/appdirs/)  
+- [pydantic](https://pypi.org/project/pydantic/)  
+- [charset-normalizer](https://pypi.org/project/charset-normalizer/)  
+
+---
+
+## 📝 License
+Apache License 2.0

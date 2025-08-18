@@ -1,0 +1,26 @@
+from pathlib import Path
+from typing import Dict
+
+from pydantic import BaseModel
+
+from resourcemap.core.format import Format
+
+class ResourceMap(BaseModel):
+    author: str
+    app: str
+    format: Format
+    map: Dict[str, Path]
+
+    def get(self, key: str) -> Path: ...
+    def set(self, key: str|Path, path: Path) -> 'ResourceMap': ...
+    def set_default(self, key: str|Path) -> 'ResourceMap':...
+    def save(self, exist_ok = False, encoding='utf-8-sig'): ...
+    
+    @staticmethod
+    def path(app_name: str, author_name: str, format: Format) -> Path: ...
+    @staticmethod
+    def load(app_name: str, author_name: str, encoding='utf-8-sig', format: Format=Format.JSON) -> 'ResourceMap': ...
+    @staticmethod
+    def create(app_name: str, author_name: str, format: Format=Format.JSON) -> 'ResourceMap': ...
+
+def _extract_key(path: Path|str) -> str: ...
