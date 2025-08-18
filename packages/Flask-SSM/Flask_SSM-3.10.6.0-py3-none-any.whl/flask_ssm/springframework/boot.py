@@ -1,0 +1,207 @@
+# -*- coding: utf-8 -*-
+import os
+import sys
+from typing import List
+from types import ModuleType, MethodType
+import inspect
+import pkgutil
+import logging
+from pathlib import Path
+from functools import wraps
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from flask import Flask, Blueprint
+from flask.config import Config
+from flask_apscheduler import APScheduler
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from flask_ssm.springframework.stereotype import Controller, Service, Repository
+from flask_ssm.springframework.context.annotation import Configuration
+from flask_ssm.springframework.scheduling.annotation import Scheduled
+from flask_ssm.utils.module_utils import walk_sub_modules, run_with_outside_server
+from flask_ssm.utils.context_utils import add_app_context
+
+
+class SpringApplication:
+
+    def __init__(self):
+        """
+        构造方法\n
+        """
+        # 记录下哪些包需要自动导入
+        self.__config_packages__: List[ModuleType] = list()
+        self.__controller_packages__: List[ModuleType] = list()
+        self.__service_packages__: List[ModuleType] = list()
+        self.__dao_packages__: List[ModuleType] = list()
+        self.__task_packages__: List[ModuleType] = list()
+        # 遍历子包，自动导入
+        self.base_package = inspect.getmodule(inspect.stack()[1].frame)
+        for _sub_package_ in pkgutil.iter_modules([os.path.dirname(self.base_package.__file__)]):
+            if _sub_package_.ispkg:
+                _import_package_ = __import__(".".join([self.base_package.__package__, _sub_package_.name]), fromlist=[_sub_package_.name])
+                if inspect.getmembers(_import_package_, lambda x: x is Configuration):
+                    self.__config_packages__.append(_import_package_)
+                    logging.info("已发现config包: " + _import_package_.__package__)
+                if inspect.getmembers(_import_package_, lambda x: x is Controller):
+                    self.__controller_packages__.append(_import_package_)
+                    logging.info("已发现controller包: " + _import_package_.__package__)
+                if inspect.getmembers(_import_package_, lambda x: x is Repository):
+                    self.__dao_packages__.append(_import_package_)
+                    logging.info("已发现dao包: " + _import_package_.__package__)
+                if inspect.getmembers(_import_package_, lambda x: x is Service):
+                    self.__service_packages__.append(_import_package_)
+                    logging.info("已发现service包: " + _import_package_.__package__)
+                if inspect.getmembers(_import_package_, lambda x: x is Scheduled):
+                    self.__task_packages__.append(_import_package_)
+                    logging.info("已发现task包: " + _import_package_.__package__)
+
+    def init_app(self, app: Flask):
+        """
+        初始化框架\n
+        :param app: Flask对象
+        :return:
+        """
+        self.__init_self__(app)
+        self.__init_config__(app)
+        self.__init_dao__(app)
+        self.__init_service__(app)
+        self.__init_controller__(app)
+        self.__init_task__(app)
+        self.__init_cors__(app)
+        self.__init_run__(app)
+
+    def __init_self__(self, app: Flask):
+        """
+        初始化Flask-SSM与Flask的关联\n
+        """
+        if not hasattr(app, 'extensions'):
+            app.extensions = dict()
+        app.extensions["spring"] = self
+        app.jinja_env.globals['spring'] = self
+        app.config.setdefault('APP_HOST', '0.0.0.0')
+        app.config.setdefault('APP_PORT', 5000)
+        app.config.setdefault('APP_THREAD', False)
+        app.config.setdefault('APP_PROCESS', 1)
+        app.config.setdefault("APP_STATIC", "static")
+        app.config.setdefault("APP_TEMPLATES", "templates")
+        app.config.setdefault("APP_RELOADER", False)
+        app.config.setdefault("APPLICATION_ROOT", "/")
+        app.config.setdefault("DEBUG", False)
+
+    def __init_config__(self, app: Flask):
+        """
+        初始化配置包\n
+        :param app: Flask对象
+        :return:
+        """
+        for __config_package__ in self.__config_packages__:
+            for __config_module__ in walk_sub_modules(__config_package__):
+                app.config.from_object(__config_module__)
+                for __key__ in dir(__config_module__):
+                    if __key__.isupper():
+                        __value__ = app.config.get(__key__)
+                        __env_value__ = os.getenv(__key__)
+                        if __env_value__ is not None:
+                            logging.warning(f"使用环境变量{__key__}={__env_value__}配置项")
+                            if type(__value__) is str:
+                                app.config[__key__] = __env_value__
+                            else:
+                                app.config[__key__] = eval(__env_value__)
+        if len(logging.root.handlers) <= 1:
+            __import__("flask_ssm.logging.logs_config")
+        app.logger.info("初始化配置成功")
+
+    def __init_controller__(self, app: Flask):
+        """
+        初始化controller\n
+        :param app: Flask对象
+        :return:
+        """
+        for __controller_package__ in self.__controller_packages__:
+            for __controller_module__ in walk_sub_modules(__controller_package__):
+                _blueprints_ = inspect.getmembers(__controller_module__, lambda x: isinstance(x, Blueprint))
+                for _var_name_, _blueprint_ in _blueprints_:
+                    if "__blueprint__" == _var_name_:
+                        _blueprint_.template_folder = app.config.get("APP_TEMPLATES")
+                        _blueprint_.static_folder = app.config.get("APP_STATIC")
+                        _blueprint_.root_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+                    app.register_blueprint(_blueprint_)
+        app.logger.info("初始化视图成功")
+
+    def __init_dao__(self, app: Flask):
+        """
+        初始化数据交互层\n
+        :param app: Flask对象
+        :return:
+        """
+        db = SQLAlchemy()
+        db.init_app(app)
+        app.logger.info("初始化数据库连接成功")
+
+    def __init_task__(self, app: Flask):
+        """
+        初始化定时任务\n
+        :param app: Flask对象
+        :return:
+        """
+        scheduler = APScheduler()
+        jobs = list()
+        for __task_package__ in self.__task_packages__:
+            for __task_module__ in walk_sub_modules(__task_package__):
+                cfg = Config(os.path.dirname(os.path.abspath(Path(__task_package__.__file__))))
+                cfg.from_object(__task_module__)
+                if not cfg.get("FUNC", None):
+                    continue
+                else:
+                    __func__ = cfg.get("FUNC")
+                    cfg["FUNC"] = __task_module__.__name__ + ":" + cfg.get("FUNC")
+                    _task_function_ = getattr(__task_module__, __func__)
+                    setattr(__task_module__, __func__, add_app_context(app, _task_function_))
+                if "ID" not in cfg.keys():
+                    cfg["ID"] = __task_module__.__name__
+                cfg = {k.lower(): v for k, v in cfg.items() if k.isupper()}
+                jobs.append(dict(cfg))
+        app.config.update({
+            "JOBS": jobs
+        })
+        if self.__task_packages__ and scheduler:
+            scheduler.init_app(app)
+            scheduler.start()
+            app.logger.info("初始化定时任务成功")
+
+    def __init_service__(self, app: Flask):
+        """
+        初始化service包\n
+        :param app: Flask对象
+        :return:
+        """
+        app.logger.info("初始化业务逻辑成功")
+
+    def __init_cors__(self, app: Flask):
+        """
+        初始化跨域\n
+        :param app:
+        :return:
+        """
+        CORS(app, supports_credentials=True)
+        app.logger.info("初始化跨域成功")
+
+    def __init_run__(self, app: Flask):
+        """
+        修改app的run函数\n
+        :param app: Flask对象
+        :return:
+        """
+        @wraps(app.run)
+        def run(*args, **kwargs):
+            kwargs.update(dict(zip(inspect.signature(app.run).parameters.keys(), args)))
+            kwargs["host"] = kwargs.get("host", app.config.get("APP_HOST", None))
+            kwargs["port"] = kwargs.get("port", app.config.get("APP_PORT", None))
+            kwargs["threaded"] = kwargs.get("threaded", app.config.get("APP_THREAD", None))
+            kwargs["processes"] = kwargs.get("processes", app.config.get("APP_PROCESS", None))
+            kwargs["use_reloader"] = kwargs.get("use_reloader", app.config.get("APP_RELOADER", None))
+            return Flask.run(app, **kwargs)
+        mounts = None if app.config.get("APPLICATION_ROOT", "/") == "/" else {app.config.get("APPLICATION_ROOT", "/"): app}
+        app.wsgi_app = DispatcherMiddleware(app.wsgi_app, mounts=mounts)
+        app.run = run
+        app.run_with_outside_server = MethodType(run_with_outside_server, app)
+        app.logger.info("初始化运行入口成功")
