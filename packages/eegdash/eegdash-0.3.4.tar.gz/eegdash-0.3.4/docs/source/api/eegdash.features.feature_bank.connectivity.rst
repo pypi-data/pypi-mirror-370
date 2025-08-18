@@ -1,0 +1,7 @@
+eegdash.features.feature\_bank.connectivity module
+==================================================
+
+.. automodule:: eegdash.features.feature_bank.connectivity
+   :members:
+   :undoc-members:
+   :show-inheritance:
