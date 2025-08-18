@@ -1,0 +1,448 @@
+from enum import IntEnum, StrEnum
+
+
+class OrderType(IntEnum):
+	ONLINE_STORE = 1
+	REGULAR_DELIVERY = 2
+
+class TariffCode(IntEnum):
+	EXPRESS_DOOR_TO_DOOR = 1
+	EXPRESS_DOOR_TO_PICKUP = 2
+	EXPRESS_PICKUP_TO_DOOR = 3
+	EXPRESS_PICKUP_TO_PICKUP = 4
+	ECONOMY_DOOR_TO_DOOR = 5
+	ECONOMY_DOOR_TO_PICKUP = 6
+	ECONOMY_PICKUP_TO_DOOR = 7
+	ECONOMY_PICKUP_TO_PICKUP = 8
+	SUPER_EXPRESS_9_18 = 10
+	SUPER_EXPRESS_10_16 = 11
+	SUPER_EXPRESS_18_20 = 12
+	OVERNIGHT_EXPRESS = 15
+	ECONOMY_EXPRESS = 16
+	CARGO_DOOR_TO_DOOR = 62
+	CARGO_DOOR_TO_PICKUP = 63
+	CARGO_PICKUP_TO_DOOR = 64
+	CARGO_PICKUP_TO_PICKUP = 65
+	EXPRESS_LIGHT = 136
+	POSTAMAT = 137
+	ECONOMY_PICKUP_TO_POSTAMAT = 138
+	SUPER_EXPRESS_9_18_DOCUMENTS = 233
+	ECONOMY_EXPRESS_PICKUP_TO_PICKUP = 234
+	ECONOMY_EXPRESS_DOOR_TO_PICKUP = 235
+	ECONOMY_EXPRESS_PICKUP_TO_DOOR = 236
+	ECONOMY_EXPRESS_DOOR_TO_DOOR = 291
+	ECONOMY_PICKUP_TO_PICKUP_STANDARD = 293
+	ECONOMY_DOOR_TO_PICKUP_STANDARD = 294
+	ECONOMY_PICKUP_TO_DOOR_STANDARD = 295
+	ECONOMY_DOOR_TO_DOOR_STANDARD = 366
+	ECONOMY_EXPRESS_WAREHOUSE = 368
+	ECONOMY_EXPRESS_WAREHOUSE_PICKUP = 378
+	POSTAMAT_DOOR = 480
+	POSTAMAT_PICKUP = 481
+	EXPRESS_LIGHT_PICKUP = 482
+	EXPRESS_LIGHT_DOOR = 483
+	CARGO_EXPRESS = 485
+	CARGO_SUPER_EXPRESS = 486
+
+
+class DeliveryMode(StrEnum):
+	DOOR = "door"
+	PICKUP = "pickup"
+	POSTAMAT = "postamat"
+
+
+class PackageType(StrEnum):
+	PACKAGE = "package"
+	ENVELOPE = "envelope"
+	CARGO = "cargo"
+
+
+class ServiceCode(StrEnum):
+	INSURANCE = "INSURANCE"
+	DANGEROUS_GOODS = "DANGEROUS_GOODS"
+	TRYING_ON = "TRYING_ON"
+	PARTIAL_DELIVERY = "PARTIAL_DELIVERY"
+	INSPECTION_CARGO = "INSPECTION_CARGO"
+	REVERSE_SHIPMENT = "REVERSE_SHIPMENT"
+	DELIVERY_TO_FLOOR = "DELIVERY_TO_FLOOR"
+	SMS_NOTIFICATION = "SMS_NOTIFICATION"
+	CALL_NOTIFICATION = "CALL_NOTIFICATION"
+	FRAGILE_CARGO = "FRAGILE_CARGO"
+	OVERSIZED_CARGO = "OVERSIZED_CARGO"
+	HEAVY_CARGO = "HEAVY_CARGO"
+	TEMPERATURE_MODE = "TEMPERATURE_MODE"
+	PAYMENT_CARD = "PAYMENT_CARD"
+	CARGO_CHECK = "CARGO_CHECK"
+	RETURN_RECEIPT = "RETURN_RECEIPT"
+	DOCUMENTS_COPY = "DOCUMENTS_COPY"
+	PHOTO_DOCUMENT = "PHOTO_DOCUMENT"
+	PERSONAL_DELIVERY = "PERSONAL_DELIVERY"
+	NOTIFICATIONS = "NOTIFICATIONS"
+	COURIER_PACKAGE_A2 = "COURIER_PACKAGE_A2"
+	COURIER_PACKAGE_A3 = "COURIER_PACKAGE_A3"
+	COURIER_PACKAGE_A4 = "COURIER_PACKAGE_A4"
+	COURIER_PACKAGE_A5 = "COURIER_PACKAGE_A5"
+	SECURE_PACKAGE_A3 = "SECURE_PACKAGE_A3"
+	SECURE_PACKAGE_A4 = "SECURE_PACKAGE_A4"
+	SECURE_PACKAGE_A5 = "SECURE_PACKAGE_A5"
+
+
+class OrderStatus(StrEnum):
+	CREATED = "CREATED"
+	ACCEPTED = "ACCEPTED"
+	READY_FOR_SHIPMENT = "READY_FOR_SHIPMENT"
+	SHIPPED = "SHIPPED"
+	IN_TRANSIT = "IN_TRANSIT"
+	IN_CITY = "IN_CITY"
+	ARRIVED_AT_DELIVERY_POINT = "ARRIVED_AT_DELIVERY_POINT"
+	DELIVERED = "DELIVERED"
+	NOT_DELIVERED = "NOT_DELIVERED"
+	RETURNED = "RETURNED"
+	PARTIALLY_DELIVERED = "PARTIALLY_DELIVERED"
+	CANCELLED = "CANCELLED"
+	INVALID = "INVALID"
+
+
+class PackageStatus(StrEnum):
+	CREATED = "CREATED"
+	ACCEPTED = "ACCEPTED"
+	READY_FOR_SHIPMENT = "READY_FOR_SHIPMENT"
+	SHIPPED = "SHIPPED"
+	IN_TRANSIT = "IN_TRANSIT"
+	IN_CITY = "IN_CITY"
+	ARRIVED_AT_DELIVERY_POINT = "ARRIVED_AT_DELIVERY_POINT"
+	DELIVERED = "DELIVERED"
+	NOT_DELIVERED = "NOT_DELIVERED"
+	RETURNED = "RETURNED"
+	CANCELLED = "CANCELLED"
+
+
+class DeliveryPointType(StrEnum):
+	PVZ = "PVZ"
+	POSTAMAT = "POSTAMAT"
+	ALL = "ALL"
+
+
+class PaymentMethod(StrEnum):
+	CASH = "CASH"
+	CARD = "CARD"
+
+
+class WeightLimit(IntEnum):
+	MIN_WEIGHT = 1
+	MAX_WEIGHT_EXPRESS = 30000
+	MAX_WEIGHT_ECONOMY = 50000
+	MAX_WEIGHT_CARGO = 1500000
+
+
+class DimensionLimit(IntEnum):
+	MIN_DIMENSION = 1
+	MAX_DIMENSION_EXPRESS = 150
+	MAX_DIMENSION_ECONOMY = 200
+	MAX_DIMENSION_CARGO = 300
+
+
+class CountryCode(StrEnum):
+	AD = "AD"
+	AE = "AE"
+	AF = "AF"
+	AG = "AG"
+	AI = "AI"
+	AL = "AL"
+	AM = "AM"
+	AO = "AO"
+	AQ = "AQ"
+	AR = "AR"
+	AS = "AS"
+	AT = "AT"
+	AU = "AU"
+	AW = "AW"
+	AX = "AX"
+	AZ = "AZ"
+	BA = "BA"
+	BB = "BB"
+	BD = "BD"
+	BE = "BE"
+	BF = "BF"
+	BG = "BG"
+	BH = "BH"
+	BI = "BI"
+	BJ = "BJ"
+	BL = "BL"
+	BM = "BM"
+	BN = "BN"
+	BO = "BO"
+	BQ = "BQ"
+	BR = "BR"
+	BS = "BS"
+	BT = "BT"
+	BV = "BV"
+	BW = "BW"
+	BY = "BY"
+	BZ = "BZ"
+	CA = "CA"
+	CC = "CC"
+	CD = "CD"
+	CF = "CF"
+	CG = "CG"
+	CH = "CH"
+	CI = "CI"
+	CK = "CK"
+	CL = "CL"
+	CM = "CM"
+	CN = "CN"
+	CO = "CO"
+	CR = "CR"
+	CU = "CU"
+	CV = "CV"
+	CW = "CW"
+	CX = "CX"
+	CY = "CY"
+	CZ = "CZ"
+	DE = "DE"
+	DJ = "DJ"
+	DK = "DK"
+	DM = "DM"
+	DO = "DO"
+	DZ = "DZ"
+	EC = "EC"
+	EE = "EE"
+	EG = "EG"
+	EH = "EH"
+	ER = "ER"
+	ES = "ES"
+	ET = "ET"
+	FI = "FI"
+	FJ = "FJ"
+	FK = "FK"
+	FM = "FM"
+	FO = "FO"
+	FR = "FR"
+	GA = "GA"
+	GB = "GB"
+	GD = "GD"
+	GE = "GE"
+	GF = "GF"
+	GG = "GG"
+	GH = "GH"
+	GI = "GI"
+	GL = "GL"
+	GM = "GM"
+	GN = "GN"
+	GP = "GP"
+	GQ = "GQ"
+	GR = "GR"
+	GS = "GS"
+	GT = "GT"
+	GU = "GU"
+	GW = "GW"
+	GY = "GY"
+	HK = "HK"
+	HM = "HM"
+	HN = "HN"
+	HR = "HR"
+	HT = "HT"
+	HU = "HU"
+	ID = "ID"
+	IE = "IE"
+	IL = "IL"
+	IM = "IM"
+	IN = "IN"
+	IO = "IO"
+	IQ = "IQ"
+	IR = "IR"
+	IS = "IS"
+	IT = "IT"
+	JE = "JE"
+	JM = "JM"
+	JO = "JO"
+	JP = "JP"
+	KE = "KE"
+	KG = "KG"
+	KH = "KH"
+	KI = "KI"
+	KM = "KM"
+	KN = "KN"
+	KP = "KP"
+	KR = "KR"
+	KW = "KW"
+	KY = "KY"
+	KZ = "KZ"
+	LA = "LA"
+	LB = "LB"
+	LC = "LC"
+	LI = "LI"
+	LK = "LK"
+	LR = "LR"
+	LS = "LS"
+	LT = "LT"
+	LU = "LU"
+	LV = "LV"
+	LY = "LY"
+	MA = "MA"
+	MC = "MC"
+	MD = "MD"
+	ME = "ME"
+	MF = "MF"
+	MG = "MG"
+	MH = "MH"
+	MK = "MK"
+	ML = "ML"
+	MM = "MM"
+	MN = "MN"
+	MO = "MO"
+	MP = "MP"
+	MQ = "MQ"
+	MR = "MR"
+	MS = "MS"
+	MT = "MT"
+	MU = "MU"
+	MV = "MV"
+	MW = "MW"
+	MX = "MX"
+	MY = "MY"
+	MZ = "MZ"
+	NA = "NA"
+	NC = "NC"
+	NE = "NE"
+	NF = "NF"
+	NG = "NG"
+	NI = "NI"
+	NL = "NL"
+	NO = "NO"
+	NP = "NP"
+	NR = "NR"
+	NU = "NU"
+	NZ = "NZ"
+	OM = "OM"
+	PA = "PA"
+	PE = "PE"
+	PF = "PF"
+	PG = "PG"
+	PH = "PH"
+	PK = "PK"
+	PL = "PL"
+	PM = "PM"
+	PN = "PN"
+	PR = "PR"
+	PS = "PS"
+	PT = "PT"
+	PW = "PW"
+	PY = "PY"
+	QA = "QA"
+	RE = "RE"
+	RO = "RO"
+	RS = "RS"
+	RU = "RU"
+	RW = "RW"
+	SA = "SA"
+	SB = "SB"
+	SC = "SC"
+	SD = "SD"
+	SE = "SE"
+	SG = "SG"
+	SH = "SH"
+	SI = "SI"
+	SJ = "SJ"
+	SK = "SK"
+	SL = "SL"
+	SM = "SM"
+	SN = "SN"
+	SO = "SO"
+	SR = "SR"
+	SS = "SS"
+	ST = "ST"
+	SV = "SV"
+	SX = "SX"
+	SY = "SY"
+	SZ = "SZ"
+	TC = "TC"
+	TD = "TD"
+	TF = "TF"
+	TG = "TG"
+	TH = "TH"
+	TJ = "TJ"
+	TK = "TK"
+	TL = "TL"
+	TM = "TM"
+	TN = "TN"
+	TO = "TO"
+	TR = "TR"
+	TT = "TT"
+	TV = "TV"
+	TW = "TW"
+	TZ = "TZ"
+	UA = "UA"
+	UG = "UG"
+	UM = "UM"
+	US = "US"
+	UY = "UY"
+	UZ = "UZ"
+	VA = "VA"
+	VC = "VC"
+	VE = "VE"
+	VG = "VG"
+	VI = "VI"
+	VN = "VN"
+	VU = "VU"
+	WF = "WF"
+	WS = "WS"
+	YE = "YE"
+	YT = "YT"
+	ZA = "ZA"
+	ZM = "ZM"
+	ZW = "ZW"
+	OS = "OS"
+	AB = "AB"
+	XK = "XK"
+	AN = "AN"
+	RC = "RC"
+	nil = ""
+
+
+class Currency(StrEnum):
+	RUB = "RUB"
+	KZT = "KZT"
+	USD = "USD"
+	EUR = "EUR"
+	GBP = "GBP"
+	CNY = "CNY"
+	BYR = "BYR"
+	UAH = "UAH"
+	KGS = "KGS"
+	AMD = "AMD"
+	TRY = "TRY"
+	THB = "THB"
+	KRW = "KRW"
+	AED = "AED"
+	UZS = "UZS"
+	MNT = "MNT"
+	PLN = "PLN"
+	AZN = "AZN"
+	GEL = "GEL"
+	JPY = "JPY"
+	VND = "VND"
+
+
+class VATRate(IntEnum):
+	ZERO = 0
+	TEN = 10
+	TWENTY = 20
+
+
+class PrintFormat(StrEnum):
+	A4 = "A4"
+	A5 = "A5"
+	A6 = "A6"
+
+
+class WebhookType(StrEnum):
+	ORDER_STATUS = "ORDER_STATUS"
+	PRINT_FORM = "PRINT_FORM"
+	DELIVERY_STATUS = "DELIVERY_STATUS"
+
+
+class Language(StrEnum):
+	RU = "rus"
+	EN = "eng"
+	ZH = "zho"
