@@ -1,0 +1,103 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: "1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test_full:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-suffix: ${{ matrix.pyv }}
+          cache-dependency-glob: pyproject.toml
+
+      - name: Full install
+        run: uv pip install -e '.[dev]' --system
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit/
+          key: pre-commit-4|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: pre-commit
+        run: uv tool run pre-commit run --show-diff-on-failure --color=always --all-files
+
+      - name: mypy
+        run: mypy
+
+      - name: Run tests
+        run: pytest -v tests --cov --cov-report=xml --cov-config=pyproject.toml
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          flags: dvclive
+
+  test_core:
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        pyv: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.pyv }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.pyv }}
+          cache: "pip"
+          cache-dependency-path: setup.cfg
+
+      - name: Upgrade pip
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip --version
+
+      - name: Install core
+        run: |
+          pip install -e '.[tests]'
+
+      - name: Run tests
+        run: pytest -v tests --ignore=tests/frameworks
+
+  check:
+    if: always()
+    needs: [test_full, test_core]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
