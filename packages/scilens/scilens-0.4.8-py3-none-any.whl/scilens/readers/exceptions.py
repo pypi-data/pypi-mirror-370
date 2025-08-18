@@ -1,0 +1,1 @@
+class NoReaderFound(Exception):0

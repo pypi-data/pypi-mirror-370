@@ -1,0 +1,159 @@
+{% for file in data.files %}
+
+{% set file_index = loop.index %}
+
+{% if not file.skipped %}
+
+
+<section id="section_{{ file_index }}" style="display: none;">
+  <!-- TITLE -->
+  <h2>
+    {{ file.name }}
+    <span class="{{ ns.statuses[file_index] }}">{{ ns.statuses[file_index] }}</span>
+    <span style="font-size:0.9rem;color:#666;">(#{{ file_index }})</span>
+    <!-- actions -->
+    <action data-command="toogle" data-args="file_content_{{ file_index|string }}"></action>
+    {% if file.test.origin and file.test.origin.path %}<action data-command="open_file" data-args="{{ file.test.origin.path.replace(meta.execution_dir, "") }}" data-label="Open Test"></action>{% endif %}
+    {% if file.ref.origin and file.ref.origin.path  %}<action data-command="open_file" data-args="{{ file.ref.origin.path.replace(meta.execution_dir, "") }}" data-label="Open Ref."></action>{% endif %}
+  </h2>
+  <!-- CONTENT -->
+  <div id="file_content_{{ file_index }}" style="{% if not file.error and meta.config.collapse_if_successful %} display:none;{% endif %}">
+    
+    <!--GENERAL ERROR-->
+    {% if file.error %}
+      <div>
+        <h3>Error</h3>
+        <span class="ERROR"><code>{{ file.error }}</code></span>
+      </div>
+    {% endif %}
+
+
+    {% if file.test.reader == 'ReaderImg' %}
+      {% include 'compare_13_section_images.html' %}
+    {% endif %}
+
+    <h3>Informations <action data-command="toogle" data-args="info_{{ (file_index-1)|string }}"></action></h3>
+    <div id="info_{{ file_index-1 }}">
+
+        <!--error_rule_patterns-->
+        {% if file.test.read_data and file.test.read_data.error_rule_patterns %}
+          <div>
+            <h4>Error pattern<action data-command="toogle" data-args="info_error_pattern_{{ (file_index-1)|string }}"></action></h4>
+            <div id="info_error_pattern_{{ file_index-1 }}">
+              <table>
+                <tr>
+                  <th>Pattern</th>
+                  <th>Found at lines</th>
+                </tr>
+                {% for item in file.test.read_data.error_rule_patterns.data %}
+                <tr>
+                  <td class="test-bg-50">{{ item.pattern }}</td>
+                  <td class="test-bg-20">{{ item.lines }}</td>
+                </tr>
+                {% endfor %}
+              </table>
+            </div>
+          </div>
+        {% endif %}
+
+        <!--ignore_lines-->
+        {% if file.test.ignore_lines or file.ref.ignore_lines %}
+          <div>
+            <h4>Ignoring lines <action data-command="toogle" data-args="info_ignore_{{ (file_index-1)|string }}"></action></h4>
+            <div id="info_ignore_{{ file_index-1 }}">
+              <table>
+                <tr>
+                  <th>File</th>
+                  <th>Patterns</th>
+                  <th>Nb Found<h/th>
+                  <th>Lines Found</th>
+                </tr>
+                <tr>
+                  <td class="test-bg-50">Test</td>
+                  <td class="test-bg-20">{{ file.test.ignore_patterns }}</td>
+                  <td class="test-bg-20 number">{{ file.test.ignore_lines_number }}</td>
+                  <td class="test-bg-20">{{ file.test.ignore_lines }}</td>
+                </tr>
+                <tr>
+                  <td class="refe-bg-50">Ref.</td>
+                  <td class="refe-bg-20">{{ file.ref.ignore_patterns }}</td>
+                  <td class="refe-bg-20 number">{{ file.ref.ignore_lines_number }}</td>
+                  <td class="refe-bg-20">{{ file.ref.ignore_lines }}</td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        {% endif %}
+
+      {% if file.float_thresholds %}
+      <h4>Float Thresholds <action data-command="toogle" data-args="info_thresholds_{{ (file_index-1)|string }}"></action></h4>
+      <div id="info_thresholds_{{ file_index-1 }}">
+        <table>
+          <tr>
+            <th>Variable</th>
+            <th>Value</th>
+          </tr>
+          <tr><td>Threshold - Relative vs Absolute Error Min</td><td class="number">{{ file.float_thresholds.relative_vs_absolute_min }}</td></tr>
+          <tr><td>Threshold - Relative Error Min</td><td class="number">{{ file.float_thresholds.relative_error_min }}</td></tr>
+          <tr><td>Threshold - Relative Error Max</td><td class="number">{{ file.float_thresholds.relative_error_max }}</td></tr>
+          <tr><td>Threshold - Absolute Error Min</td><td class="number">{{ file.float_thresholds.absolute_error_min }}</td></tr>
+          <tr><td>Threshold - Absolute Error Max</td><td class="number">{{ file.float_thresholds.absolute_error_max }}</td></tr>
+        </table>
+      </div>
+      {% endif %}
+
+    </div>
+    
+
+
+    {% if file.test %}
+
+    <!--CURVES-->
+    {% if file.test.curves %}
+    <h3>Curves <action data-command="toogle" data-args="curves_{{ (file_index-1)|string }}"></action></h3>
+    <div id="curves_{{ file_index-1 }}"></div>
+    {% endif %}
+
+    <!--ANIMATIONS-->
+    {% if file.test.animations %}
+    <h3>Animations <action data-command="toogle" data-args="animations_{{ file_index|string }}"></action></h3>
+    <div id="animations_{{ file_index }}" ></div>
+    {% endif %}
+
+
+    <!--FRAMESSERIES-->
+    {% if file.test.framesseries %}
+    <h3>Frames Series <action data-command="toogle" data-args="framesseries_{{ file_index|string }}"></action></h3>
+    <div id="framesseries_{{ file_index }}" ></div>
+    {% endif %}
+
+    
+    <!-- MATRICES -->
+    {% if file.test.matrices %}
+    {% for item in [{"id": "spectrograms", "label": "Spectrograms"}, {"id": "frameseries", "label": "Frameseries"}] %}
+    {% if meta.config.matrix[item.id] %}
+    <h3>{{ item.label }} <action data-command="toogle" data-args="{{ item.id }}_{{ file_index|string }}"></action></h3>
+    <div id="{{ item.id }}_{{ file_index }}" ></div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+
+    <!--COMPARISONS ERRORS AND WARNINGS-->
+    {% if file.comparison_errors and (file.comparison_errors.error_nb or file.comparison_errors.warning_nb) %}
+    <h3>Number Comparison<action data-command="toogle" data-args="numbers_errors_{{ file_index|string }}"></action></h3>
+    <div id="numbers_errors_{{ file_index }}" >
+      {% with file=file %}
+        {% include 'compare_13_section_numbers.html' %}
+      {% endwith %}
+    </div>
+    {% endif %}
+    
+    {% endif %}
+
+  </div>
+
+</section>
+
+{% endif %}
+{% endfor %}

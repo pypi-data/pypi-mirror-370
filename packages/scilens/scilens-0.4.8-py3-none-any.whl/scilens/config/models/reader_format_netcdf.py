@@ -1,0 +1,6 @@
+_B=False
+_A=None
+from typing import Literal
+from pydantic import BaseModel,Field
+CurveParser=Literal['simple_1D','frameseries_2D']
+class ReaderNetcdfConfig(BaseModel,extra='forbid'):groups_depth:int|_A=Field(default=_A,description='Définit la profondeur de recherche des groupes. Si vide prendra tous les groupes.');units_attributes:list[str]|_A=Field(default=_A,description='Noms des attributs de variable qui spécifient les unités.');curve_parser:CurveParser|_A=Field(default=_A,description='Parser de courbes: `simple_1D` or `frameseries_2D`.');matrices_display_spectrogram:bool=Field(default=_B,description='Parseur de courbes les variables matricielles (`2D`).');curve_x_variable:str|_A=Field(default=_A,description='Nom de variable (`1D`) pour les axes X (tout parseur).');curve_y_variable:str|_A=Field(default=_A,description='Nom de variable (`1D`) pour les axes Y (`curve_parser_frameseries`).');curve_step_variable:str|_A=Field(default=_A,description='Nom de variable `Step` (`1D`) (`curve_parser_frameseries`).');compare_1D:bool=Field(default=_B,description='Pour les processeurs qui comparent, compare les variables vecteurs (`1D`).');compare_2D:bool=Field(default=_B,description='Pour les processeurs qui comparent, compare les variables matrices (`2D`).')

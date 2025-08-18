@@ -1,0 +1,8 @@
+_C='forbid'
+_B=False
+_A=None
+from pydantic import BaseModel,Field
+from scilens.config.models.reader_format_cols import ReaderColsConfig
+from scilens.config.models.reader_metrics import ReaderColsMetricsConfig
+class ReaderCsvMatrixConfig(BaseModel,extra=_C):x_value_line:int|_A=Field(default=_A,description="Indique la ligne des valeurs x si applicable. Peut être la ligne d'en-tête (=1).");has_y:bool=Field(default=_B,description='Indique si la première colonne est la colonne des valeurs y.');x_name:str=Field(default='X',description='Nom de la colonne des valeurs x.');y_name:str=Field(default='Y',description='Nom de la colonne des valeurs y.');export_report:bool=Field(default=_B,description='Indique si les matrices doivent être exportées dans les rapports.')
+class ReaderCsvConfig(BaseModel,extra=_C):delimiter:str|_A=Field(default=',',description='Délimiteur de colonnes.');quotechar:str|_A=Field(default='"',description='Délimiteur de texte.');has_header:bool|_A=Field(default=_A,description="Indique si la 1ère ligne est une ligne d'en-tête. Si non spécifié, il y aura une détection automatique.");is_matrix:bool=Field(default=_B,description='Indique si le fichier est une matrice.');matrix:ReaderCsvMatrixConfig|_A=Field(default=_A,description='Configuration de la matrice. (Valide seulement si `is_matrix` est vrai)');cols:ReaderColsConfig|_A=Field(default=_A,description='Configuration des colonnes. (Valide seulement si non matrice)');metrics:list['ReaderColsMetricsConfig']|_A=Field(default=_A,description='Liste des métriques à calculer pour les colonnes. (Valide seulement si non matrice)')

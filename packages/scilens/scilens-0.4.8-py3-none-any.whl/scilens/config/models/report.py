@@ -1,0 +1,6 @@
+_A=None
+from pydantic import BaseModel,Field
+from scilens.app import product_name
+from scilens.config.models.report_html import ReportHtmlConfig
+from scilens.config.models.report_output import ReportOutputConfig
+class ReportConfig(BaseModel,extra='forbid'):debug:bool=Field(default=False,description='If `true` the report will be more verbose and displays template input data.');title:str=Field(default=_A,description='Titre du rapport');title_prefix:str=Field(default=f"{product_name} Report",description='Préfixe au Titre du rapport');description:str|_A=Field(default=_A,description='Description inclu dans une section spécifique description des rapports');logo:str|_A=Field(default=_A,description="Source d'une image logo. Peut être une url ou une url data image encodée base64 (exclusif avec `logo_file`).");logo_file:str|_A=Field(default=_A,description="Source fichier d'une image logo (exclusif avec `logo`).");output:ReportOutputConfig=ReportOutputConfig();html:ReportHtmlConfig=ReportHtmlConfig()

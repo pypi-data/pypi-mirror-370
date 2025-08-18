@@ -1,0 +1,152 @@
+{% import "html_macros.html" as macros %}
+{% macro but2(action) %}
+  <button onclick="{{ action }}" type="button" class="px-1 py-1 text-xs text-white bg-blue-700 rounded-lg hover:bg-blue-800">
+    Show/Hide
+  </button>
+{% endmacro %}
+{% macro but(action, content) %}
+  <button onclick="{{ action }}" type="button" class="text-xs rounded-lg">
+    {{ content }}
+  </button>
+{% endmacro %}
+{% set ns = namespace(statuses=[''], has_matrices=false, has_spectrograms=false, has_frameseries=false) %}
+{% for file in data.files %}
+    {% set ns.statuses = ns.statuses + ['SKIPPED' if file.skipped else ('ERROR' if file.error else ('WARNING' if file.comparison_errors and file.comparison_errors.error_nb > 0 else 'SUCCESS'))] %}
+    {% if file.test.matrices %}
+      {% set ns.has_matrices = true %}
+      {% if meta.config.matrix.spectrograms %}{% set ns.has_spectrograms = true %}{% endif %}
+      {% if meta.config.matrix.frameseries %}{% set ns.has_frameseries = true %}{% endif %}
+    {% endif %}
+{% endfor %}
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title id="head-title">{{ meta.title }} {{ data.name }}</title>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/resemblejs@5.0.0/resemble.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.34.0.min.js" charset="utf-8"></script>
+
+<script>
+
+((w_1, undef) => { w_1.None = undef; w_1.True = true; ; w_1.False = false; })(window); // for Python None = undef when templating
+{% include 'models.js' %}
+{% include 'js_dom.js' %}
+{% include 'js_palette.js' %}
+{% include 'js_images.js' %}
+
+{% include 'js_com_page.js' with context %}
+{% include 'uti_widget.js' with context %}
+{% include 'js_chartlibs_plotly.js' %}
+{% include 'js_chartlibs_echarts.js' %}
+{% include 'js_curvemgr.js' %}
+{% include 'utils_compare_report_anim.js' %}
+{% include 'utils_compare_report_framesseries.js' %}
+
+{% if meta.config.matrix.spectrograms %}
+{% include 'uti_spectrograms.js' %}
+Spectrograms.config({
+  "DISPLAY_TESTREF": {{ meta.config.matrix.spectrograms.test_ref }},
+  "DISPLAY_DIFF": {{ meta.config.matrix.spectrograms.differences }},
+  "WIDTH": {{ meta.config.matrix.spectrograms.init_width }},
+  "HEIGHT": {{ meta.config.matrix.spectrograms.init_height }},
+  "IS_3D": {{ meta.config.matrix.spectrograms.is_3D }},
+});
+{% endif %}
+{% if meta.config.matrix.frameseries %}
+{% include 'uti_frameseries.js' %}
+{% endif %}
+{% if ns.has_matrices %}{% include 'uti_matrix.js' %}{% endif %}
+
+</script>
+<script>
+function load_animations(){
+  // console.log(global_animations)
+  for (i in global_animations.test) {
+    const data_test = global_animations.test[i]
+    const data_ref  = global_animations.reference[i]
+    // console.log(data_test)
+    const parent = dom.get("animations_"+(1+parseInt(i)))
+    if (data_test) {
+      for (j in data_test) {
+        dom.elt_p(parent,"h4",null,null,data_test.title)
+        const div = dom.elt_p(parent,"div")
+        Anim.create(div, data_test[j], data_ref[j])
+      }
+      // console.log(data_test)
+
+    }
+  }  
+}
+</script>
+<script>
+function load_framesseries(){
+  for (i in global_framesseries.test) {
+    const data_test = global_framesseries.test[i]
+    const data_ref  = global_framesseries.reference[i]
+    const parent = dom.get("framesseries_"+(1+parseInt(i)))
+    if (data_test) {
+      Framesseries.create(parent, data_test, data_ref)
+    }
+  }
+}
+function load_file_section(global_var, section_prefix, cls) {
+  for (i in global_var.test) {
+    const data_test = global_var.test[i]
+    const data_ref  = global_var.reference[i]
+    const parent = dom.get(section_prefix+"_"+(1+parseInt(i)))
+    if (data_test) { cls.create(parent, data_test, data_ref) }
+  }
+}
+
+</script>
+<style type="text/css">{% include 'style.css' %}</style>
+<style type="text/css">
+.noselect {
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none; /* IE 10 and IE 11 */
+  user-select: none; /* Standard syntax */
+}
+</style>
+{% if meta.config.custom_style %}<style type="text/css">{{ meta.config.custom_style }}</style>{% endif %}
+{% if meta.config.custom_script_head %}<script>{{ meta.config.custom_script_head }}</script>{% endif %}
+  </head>
+  <body>
+    {% include 'body_01_title.html' with context %}
+    {% if meta.config.extra_html_start %}{{ meta.config.extra_html_start }}{% endif %}
+    {% include 'body_02_tabs.html' with context %}
+    {% include 'compare_11_summary.html' with context %}
+    {% include 'compare_12_sections.html' with context %}
+    {% if meta.config.extra_html_end %}{{ meta.config.extra_html_end }}{% endif %}
+    {% include 'body_99_footer.html' with context %}
+    <script type="text/javascript">
+      const GLOBAL_VARS = {};
+      const GLOBAL_CONFIG = {{ meta.config_json }};
+      actions.init_page();
+      if (SLImages) SLImages.init();
+    </script>
+    <script type="text/javascript">
+      const global_curves = {
+        test :      [ {% for file in data.files %} {{ file.test.curves or 'null' }} , {% endfor %} ],
+        reference : [ {% for file in data.files %} {{ file.ref.curves or 'null' }} , {% endfor %} ],
+      }
+      curvemgr.init(GLOBAL_CONFIG['curves']);
+    </script>
+    <script type="text/javascript">
+      const global_framesseries = {
+        test :      [ {% for file in data.files %} {{ file.test.framesseries or 'null' }} , {% endfor %} ],
+        reference : [ {% for file in data.files %} {{ file.ref.framesseries or 'null' }} , {% endfor %} ],
+      };
+      load_framesseries();
+    </script>
+    {% if ns.has_matrices %}
+    <script type="text/javascript">
+      GLOBAL_VARS.matrices = {
+        test :      [ {% for file in data.files %} {{ file.test.matrices or 'null' }} , {% endfor %} ],
+        reference : [ {% for file in data.files %} {{ file.ref.matrices or 'null' }} , {% endfor %} ],
+      };
+      MatrixMgmt.loadGlobal({{ns.has_spectrograms}}, {{ns.has_frameseries}});
+    </script>
+    {% endif %}
+    {% if meta.config.custom_script_body %}<script>{{ meta.config.custom_script_body }}</script>{% endif %}
+  </body>
+</html>

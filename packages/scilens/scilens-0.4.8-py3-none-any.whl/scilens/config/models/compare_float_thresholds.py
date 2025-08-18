@@ -1,0 +1,11 @@
+_B='forbid'
+_A=None
+from pydantic import BaseModel,Field,model_validator
+class CompareFloatVectorsConfig(BaseModel,extra=_B):
+	reduction_method:str=Field(default='soften',description="Méthode de réduction de sévérité des erreurs. Peut être `soften` ou `ignore`. Si `soften`, réduit la sévérité de l'erreur. Si `ignore`, ne lève pas d'erreur.");ponderation_method:str=Field(description='Méthode de calcul de reduction de sévérité. Peut être`amplitude_moderation`, `RIAE`, `RIAE_trapezoid` ou `RIAE_midpoint`.');amplitude_moderation_multiplier:float|_A=Field(default=_A,description="Multipler utilisé dans l'amplitude pondérée `multiplier * |Max(Vector)-Min(Vector)|` qui sera comparée à l'erreur absolue `|Test-Reference|`.");riae_threshold:float|_A=Field(default=_A,description="Seuil de l'erreur relative intégrale absolue. Si l'erreur est supérieure à ce seuil, on appliquera la reduction_method globalement.")
+	@model_validator(mode='after')
+	def check_value_required(self):
+		A=self
+		if A.ponderation_method.startswith('RIAE')and not A.riae_threshold:raise ValueError('riae_threshold is required when ponderation_method is "RIAE"')
+		return A
+class CompareFloatThresholdsConfig(BaseModel,extra=_B):relative_vs_absolute_min:float=Field(default=1e-12,description="Si la valeur de test est inférieure à ce seuil, calcul de l'erreur absolue.");relative_error_min:float=Field(default=.001,description="Si l'erreur relative est supérieure à ce seuil, génère une erreur de sévérité `warning`.");relative_error_max:float=Field(default=.01,description="Si l'erreur relative est supérieure à ce seuil, génère une erreur de sévérité `error`.");absolute_error_min:float=Field(default=1e-07,description="Si l'erreur absolue est supérieure à ce seuil, génère une erreur de sévérité `warning`.");absolute_error_max:float=Field(default=1e-06,description="Si l'erreur absolue est supérieure à ce seuil, génère une erreur de sévérité `error`.");vectors:CompareFloatVectorsConfig|_A=Field(default=_A,description='Paramètres pour la comparaison de vecteurs de flottants (csv, nc, ...).')

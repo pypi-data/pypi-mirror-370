@@ -1,0 +1,4 @@
+_A=False
+from pydantic import BaseModel,Field
+from scilens.app import pkg_name
+class ReportOutputConfig(BaseModel,extra='forbid'):filename:str=Field(default=f"{pkg_name}_report",description="Nom de fichier (sans l'extension) des rapports générés.");export_html:bool=Field(default=_A,description='Génère un rapport HTML');export_txt:bool=Field(default=_A,description='Génère un rapport TXT');export_json:bool=Field(default=_A,description='Génère un rapport JSON');export_yaml:bool=Field(default=_A,description='Génère un rapport YAML');export_py:bool=Field(default=_A,description='Génère un rapport Python (Variable)');export_js:bool=Field(default=_A,description='Génère un rapport Javascript (Variable)');export_ts:bool=Field(default=_A,description='Génère un rapport Typecript (Variable)');export_php:bool=Field(default=_A,description='Génère un rapport Php (Variable)')
