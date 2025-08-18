@@ -1,0 +1,7 @@
+# flake8: noqa
+
+# import apis into api package
+from wink_sdk_affiliate_sales_channel.api.available_supplier_api import AvailableSupplierApi
+from wink_sdk_affiliate_sales_channel.api.relationship_request_api import RelationshipRequestApi
+from wink_sdk_affiliate_sales_channel.api.sales_channel_api import SalesChannelApi
+
