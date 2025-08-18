@@ -1,0 +1,266 @@
+import re
+from typing import Any, Dict, List, Optional
+
+from googleapiclient.errors import HttpError
+
+FOLDER_ID_RE = re.compile(r"/folders/([a-zA-Z0-9-_]+)")
+QUERY_ID_RE = re.compile(r"[?&]id=([a-zA-Z0-9-_]+)")
+
+
+def extract_folder_id(url: str | None) -> Optional[str]:
+    if not url:
+        return None
+    match = FOLDER_ID_RE.search(url)
+    if match:
+        return match.group(1)
+    match = QUERY_ID_RE.search(url)
+    return match.group(1) if match else None
+
+
+def extract_google_file_id(url: str) -> str | None:
+    patterns = [
+        r"/d/([a-zA-Z0-9_-]{10,})",  # /d/<id>/
+        r"id=([a-zA-Z0-9_-]{10,})",  # ?id=<id>
+        r"spreadsheets/d/([a-zA-Z0-9_-]{10,})",  # spreadsheets/d/<id>
+        r"drive/folders/([a-zA-Z0-9_-]{10,})",  # folders/<id>
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def get_parent_folder_id(sheets_url: str, auth_secret: str) -> Optional[str]:
+    """Get the parent folder ID of a Google Sheets document.
+    
+    Args:
+        sheets_url: URL of the Google Sheets document
+        auth_secret: Base64 encoded service account credentials
+        
+    Returns:
+        Parent folder ID, or None if not found
+        
+    Raises:
+        Exception: If unable to access the file or Drive API
+    """
+    from urarovite.auth.google_drive import create_drive_service_from_encoded_creds
+    
+    # Extract file ID from the URL
+    file_id = extract_google_file_id(sheets_url)
+    if not file_id:
+        return None
+    
+    try:
+        # Create Drive service
+        drive_service = create_drive_service_from_encoded_creds(auth_secret)
+        
+        # Get file metadata including parents
+        file_metadata = drive_service.files().get(
+            fileId=file_id,
+            fields='parents'
+        ).execute()
+        
+        # Return the first parent folder ID (files can have multiple parents but usually have one)
+        parents = file_metadata.get('parents', [])
+        return parents[0] if parents else None
+        
+    except Exception as e:
+        # Log the error but don't fail completely
+        import logging
+        logging.warning(f"Failed to get parent folder for {sheets_url}: {str(e)}")
+        return None
+
+
+def duplicate_file_to_drive_folder(
+    drive_service: Any,
+    file_url: str,
+    folder_url: str,
+    prefix_file_name: str | None = None,
+) -> Dict[str, Any]:
+    """Duplicate a Google Drive file into a target folder.
+
+    Args:
+        drive_service: Google Drive API service instance.
+        file_url: Full URL of the source Drive file to duplicate.
+        folder_url: Full URL of the destination Drive folder.
+        prefix_file_name: Optional string to prepend to the duplicated file's name.
+
+    Returns:
+        Dict with keys:
+        - success: Boolean
+        - id: The ID of the newly created file when successful, else None.
+        - url: URL of the duplicated file or sheet when successful, else None.
+        - error: Error code string on failure, otherwise None.
+        - error_msg: Optional raw error message from the API when available.
+    """
+    file_id = extract_google_file_id(file_url)
+
+    if not file_id:
+        return {"success": False, "id": None, "url": None, "error": "Invalid file url"}
+
+    folder_id = extract_folder_id(folder_url)
+    if not folder_id:
+        return {
+            "success": False,
+            "id": None,
+            "url": None,
+            "error": "missing_or_malformed_url",
+        }
+
+    try:
+        src = (
+            drive_service.files()
+            .get(fileId=file_id, fields="id,name,mimeType", supportsAllDrives=True)
+            .execute()
+        )
+
+        name = src.get("name", "Copy")
+        if prefix_file_name:
+            name = f"{prefix_file_name}{name}"
+        src_mime = src.get("mimeType", "")
+
+        body = {"name": name, "parents": [folder_id]}
+        dup = (
+            drive_service.files()
+            .copy(fileId=file_id, body=body, fields="id,webViewLink", supportsAllDrives=True)
+            .execute()
+        )
+
+        new_id = dup.get("id")
+
+        if src_mime == "application/vnd.google-apps.spreadsheet":
+            new_url = f"https://docs.google.com/spreadsheets/d/{new_id}/edit"
+        else:
+            new_url = (
+                dup.get("webViewLink")
+                or f"https://drive.google.com/file/d/{new_id}/view"
+            )
+
+        return {"success": True, "id": new_id, "url": new_url, "error": None}
+
+    except Exception as e:
+        msg = str(e)
+        if "HttpError 403" in msg or "HttpError 404" in msg:
+            return {
+                "success": False,
+                "id": None,
+                "url": None,
+                "error": "forbidden_or_not_found",
+                "error_msg": msg,
+            }
+        return {
+            "success": False,
+            "id": None,
+            "url": None,
+            "error": f"request_exception:{e.__class__.__name__}",
+            "error_msg": msg,
+        }
+
+def move_sheets_to_folder(
+    drive_service: Any,
+    sheet_urls: List[str],
+    folder_url: str,
+) -> List[Dict[str, Any]]:
+    """
+    Move files to the destination folder.
+    - If only_google_sheets=True, skips non‑Sheets files.
+    - Works with My Drive and Shared drives (if you have permission).
+    
+    Returns:
+        List of dictionaries, one for each file, with keys:
+        - success: Boolean
+        - id: The ID of the moved file when successful, else None.
+        - name: Name of the file when successful, else None.
+        - error: Error code string on failure, otherwise None.
+        - error_msg: Optional raw error message from the API when available.
+    """
+    results = []
+    
+    # Extract folder ID from URL
+    folder_id = extract_folder_id(folder_url)
+    if not folder_id:
+        # Return error for all files if folder URL is invalid
+        return [
+            {
+                "success": False,
+                "id": None,
+                "name": None,
+                "error": "missing_or_malformed_folder_url",
+                "error_msg": f"Could not extract folder ID from: {folder_url}"
+            }
+            for _ in sheet_urls
+        ]
+    
+    # We'll set supportsAllDrives on read & write in case of Shared drives
+    for sheet_url in sheet_urls:
+        # Extract file ID from URL
+        file_id = extract_google_file_id(sheet_url)
+        if not file_id:
+            results.append({
+                "success": False,
+                "id": None,
+                "name": None,
+                "error": "invalid_file_url",
+                "error_msg": f"Could not extract file ID from: {sheet_url}"
+            })
+            continue
+            
+        try:
+            file = drive_service.files().get(
+                fileId=file_id,
+                fields="id, name, parents, mimeType, driveId",
+                supportsAllDrives=True,
+            ).execute()
+
+            name = file.get("name", "Unknown")
+            parents = file.get("parents", [])
+
+            add_parents = folder_id
+            remove_parents = ",".join(parents) if parents else ""
+
+            drive_service.files().update(
+                fileId=file_id,
+                addParents=add_parents,
+                removeParents=remove_parents,
+                fields="id, name, parents",
+                supportsAllDrives=True,
+            ).execute()
+
+            results.append({
+                "success": True,
+                "id": file_id,
+                "name": name,
+                "error": None,
+                "error_msg": None
+            })
+            
+        except HttpError as e:
+            # Helpful error context
+            status = getattr(e, "status_code", None) or getattr(e, "resp", {}).get("status")
+            error_msg = f"HTTP {status} - {e}"
+            
+            if status in [403, 404]:
+                error_code = "forbidden_or_not_found"
+            else:
+                error_code = f"http_error_{status}"
+                
+            results.append({
+                "success": False,
+                "id": file_id,
+                "name": None,
+                "error": error_code,
+                "error_msg": error_msg
+            })
+            
+        except Exception as e:
+            results.append({
+                "success": False,
+                "id": file_id,
+                "name": None,
+                "error": f"request_exception:{e.__class__.__name__}",
+                "error_msg": str(e)
+            })
+    
+    return results
