@@ -1,0 +1,205 @@
+# 验证码生成工具
+
+## 项目概述
+这是一个基于FastMCP框架构建的验证码生成工具，提供多种类型的验证码生成功能，可以轻松集成到各种Python和TypeScript项目中，也可以作为CodeBuddy的MCP服务使用。
+
+## 功能特性
+- **验证码生成**
+  - 生成纯数字验证码
+  - 生成纯字母验证码（包含大小写）
+  - 生成字母和数字混合验证码
+- **TypeScript开发工具**
+  - 代码格式化
+  - 代码分析
+  - 代码模板获取
+  - 代码审查提示词生成
+  - 项目设置提示词生成
+
+## 安装方法
+
+### 从PyPI安装（推荐）
+```bash
+# 使用pip安装（清华源）
+pip install laiyuzheng-verification-code-gen -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 或使用官方源
+pip install laiyuzheng-verification-code-gen
+```
+
+### 从源码安装
+```bash
+# 克隆代码库
+git clone https://github.com/yourusername/verification-code-generator.git
+cd verification-code-generator
+
+# 安装依赖
+pip install -e .
+```
+
+## 使用方法
+
+### 作为MCP服务器
+```python
+# 方法1：使用命令行工具
+verification-code-server  # 启动标准服务器
+verification-code-sse-server  # 启动SSE服务器
+
+# 方法2：在Python代码中使用
+from mcp_ts.server import create_and_run_server, create_and_run_sse_server
+
+# 启动标准服务器
+create_and_run_server(name="VerificationCodeServer", description="验证码生成服务器")
+
+# 或启动SSE服务器
+create_and_run_sse_server(name="VerificationCodeServer", description="验证码生成服务器", port=8080)
+```
+
+### 使用服务器类
+```python
+# 导入服务器类
+from mcp_ts.server import MCPTSServer
+import asyncio
+
+async def main():
+    # 创建服务器实例
+    server = MCPTSServer(name="VerificationCodeServer", description="验证码生成服务器")
+    
+    # 运行服务器（异步方式）
+    await server.run_sse_async(host="127.0.0.1", port=8000)
+    
+    # 或使用标准输入输出方式
+    # await server.run_async(transport="stdio")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### 客户端示例
+```python
+from mcp.client.client import Client as MCPClient
+import asyncio
+
+async def main():
+    client = MCPClient(name="TSClient", description="TS客户端")
+    
+    try:
+        # 连接到服务器
+        await client.connect(transport="stdio")
+        
+        # 调用验证码生成工具
+        code = await client.call_tool(
+            "generate_mixed_verification_code",
+            {"length": 8}
+        )
+        print(f"验证码: {code}")
+        
+        # 获取TypeScript模板
+        template = await client.access_resource("ts-template://class")
+        print(f"类模板: {template}")
+        
+    finally:
+        await client.disconnect()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### 与CodeBuddy集成
+本项目可以作为CodeBuddy的MCP服务使用，提供验证码生成功能。
+
+#### 配置步骤
+1. 编辑CodeBuddy的MCP服务器配置文件：
+   ```
+   c:/Users/[用户名]/AppData/Roaming/CodeBuddy/User/globalStorage/tencent.planning-genie/settings/codebuddy_mcp_settings.json
+   ```
+
+2. 添加以下配置：
+   ```json
+   "验证码生成工具": {
+     "disabled": false,
+     "timeout": 60,
+     "type": "stdio",
+     "command": "python",
+     "args": [
+       "d:/MCP_test2/start_mcp_server_for_codebuddy.py"
+     ],
+     "cwd": "d:/MCP_test2"
+   }
+   ```
+
+3. 重启CodeBuddy或刷新MCP服务
+
+#### 使用方法
+在CodeBuddy中，可以直接调用验证码生成工具：
+
+```
+请使用验证码生成工具生成一个8位混合验证码
+```
+
+或者：
+
+```
+请使用验证码生成工具生成一个6位纯数字验证码
+```
+
+## 配置文件
+项目使用JSON配置文件（`mcp_ts/config.json`）来控制服务器行为：
+
+```json
+{
+  "server": {
+    "name": "VerificationCodeServer",
+    "description": "验证码生成服务器",
+    "default_transport": "stdio",
+    "sse": {
+      "host": "127.0.0.1",
+      "port": 8000
+    }
+  },
+  "tools": {
+    "verification_code": {
+      "enabled": true,
+      "default_length": 6
+    },
+    "typescript": {
+      "enabled": true,
+      "formatter": {
+        "indent_size": 2,
+        "use_tabs": false,
+        "single_quotes": true
+      }
+    }
+  },
+  "resources": {
+    "templates": {
+      "enabled": true,
+      "cache_templates": true
+    }
+  },
+  "prompts": {
+    "enabled": true,
+    "default_style": "friendly"
+  },
+  "logging": {
+    "level": "info",
+    "file": "mcp_ts_server.log",
+    "console": true
+  }
+}
+```
+
+## 开发指南
+
+### 安装开发依赖
+```bash
+pip install -e ".[dev]"
+```
+
+### 构建并上传到PyPI
+```bash
+# 使用提供的脚本
+python build_and_upload.py
+```
+
+## 许可证
+[MIT License](LICENSE)
