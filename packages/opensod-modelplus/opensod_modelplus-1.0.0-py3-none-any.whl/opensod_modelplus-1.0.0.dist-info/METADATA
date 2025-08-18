@@ -1,0 +1,248 @@
+Metadata-Version: 2.4
+Name: opensod-modelplus
+Version: 1.0.0
+Summary: Reusable abstract django models
+Author-email: Sandi Šaban <sandi.saban@gmail.com>
+License: Copyright (c) 2025 Sandi Šaban
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+License-File: AUTHORS.md
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.12
+Requires-Dist: django>=5.1
+Description-Content-Type: text/markdown
+
+# opensod-modelplus
+
+Django application `modelplus` defines reusable abstract models that can be used to quickly and consistently add common fields and their functionalities to your models.
+
+
+## Installation
+
+If using Astral's uv for virtual environment and project dependencies:
+
+```
+$ uv add opensod-modelplus
+```
+
+Or, with pip in your virtual environment:
+
+```
+$ pip install opensod-modelplus
+```
+
+
+## Quick setup
+
+Add application to `settings.py`:
+
+```
+INSTALLED_APPS = [
+    ...
+    "modelplus",
+]
+```
+
+If using abstract model `UserstampableModel`, `CurrentUserMiddleware` has be added to `settings.py` after `django.contrib.auth.middleware.AuthenticationMiddleware`:
+
+```
+MIDDLEWARE = [
+    ...
+    "modelplus.middleware.CurrentUserMiddleware",
+]
+```
+
+
+## Abstract models
+
+### ActivatableModel and ActivatableQuerySet
+
+Frequently objects need to have some kind of *active* flag, because deleting records is not an option.
+
+Abstract model `ActivatableModel` defines `is_active` field for this purpose, which is `True` by default.
+
+`ActivatableQuerySet` is a corresponding QuerySet that defines filters `active` and `inactive` for models which have `ActivatableModel` as parent.
+
+```
+class MyModel(ActivatableModel):
+    ...
+
+    objects = ActivatableQueryset.as_manager()
+```
+
+or:
+
+```
+class MyQueryset(ActivatableQueryset):
+    ...
+
+
+class MyModel(ActivatableModel):
+    ...
+
+    objects = MyQueryset.as_manager()
+```
+
+### CancellableModel and CancellableQuerySet
+
+Sometimes there is a need to mark some objects as cancelled.
+
+Abstract model `CancellableModel` defines field `is_cancelled`, which is `False` by default.
+
+`CancellableQuerySet` is a corresponding QuerySet that defines filters `cancelled` and `not_cancelled` for models which have `CancellableModel` as parent.
+
+```
+class MyModel(CancellableModel):
+    ...
+
+    objects = CancellableQueryset.as_manager()
+```
+
+or:
+
+```
+class MyQueryset(CancellableQueryset):
+    ...
+
+
+class MyModel(CancellableModel):
+    ...
+
+    objects = MyQueryset.as_manager()
+```
+
+### CancellationModel and CancellationQuerySet
+
+Sometimes there is a need to provide some additional information for cancelled objects.
+
+Abstract model `CancellationModel` defines fields `cancelled_at`, `cancelled_by` and `cancellation_reason`, while `CancellationQuerySet` is a corresponding QuerySet that defines filters `cancelled`, `not_cancelled` and `cancelled_by`.
+
+```
+class MyModel(CancellationModel):
+    ...
+
+    objects = CancellationQueryset.as_manager()
+```
+
+or:
+
+```
+class MyQueryset(CancellationQueryset):
+    ...
+
+
+class MyModel(CancellationModel):
+    ...
+
+    objects = MyQueryset.as_manager()
+```
+
+### LockableModel and LockableQuerySet
+
+Sometimes there is a need to mark some objects as locked (not available for further editing).
+
+Abstract model `LockableModel` defines field `is_locked`, which is `False` by default.
+
+`LockableQuerySet` is a corresponding QuerySet that defines filters `locked` and `unlocked` for models which have `LockableModel` as parent.
+
+```
+class MyModel(LockableModel):
+    ...
+
+    objects = LockableQueryset.as_manager()
+```
+
+or:
+
+```
+class MyQueryset(LockableQueryset):
+    ...
+
+
+class MyModel(LockableModel):
+    ...
+
+    objects = MyQueryset.as_manager()
+```
+
+### TimestampableModel
+
+Sometimes there is a need to record when are objects created and last updated.
+
+Abstract model `TimestampableModel` defines fields `created_at` and `updated_at` which store a timestamp when the model instance was created and last updated.
+
+Timestamps are populated using `pre_save` signal timestampable. Unfortunately, creating and updating objects in bulk doesn't update created_by and modified_by fields, since `pre_save` is not called.
+
+```
+class MyModel(TimestampableModel):
+    ...
+
+```
+
+### UserstampableModel and UserstampableQuerySet
+
+Sometimes there is a need to record who has created and last updated an object.
+
+Abstract model `UserstampableModel` defines fields `created_by` and `updated_by` for storing a `User` instance which created and last updated the model instance. Deletion of the referenced created_by and modified_by objects is protected.
+
+`UserstampableQuerySet` is a corresponding QuerySet that defines filters `created_by` and `updated_by`.
+
+```
+class MyModel(UserstampableModel):
+    ...
+
+    objects = UserstampableQueryset.as_manager()
+```
+
+or:
+
+```
+class MyQueryset(UserstampableQueryset):
+    ...
+
+
+class MyModel(UserstampableModel):
+    ...
+
+    objects = MyQueryset.as_manager()
+```
+
+This abstract model uses `CurrentUserMiddleware` which must be added to `settings.MIDDLEWARE` after `django.contrib.auth.middleware.AuthenticationMiddleware`.
+
+
+## Translations
+
+Package comes with translations to:
+
+- Croatian (hr)
+
+To create translations for new language:
+
+```bash
+$ git clone git@gitlab.com:opensod-modelplus.git
+$ cd opensod-modelplus.git
+$ uv sync
+$ uv run django-admin makemessages -l language_code
+# edit django.po file for the new language
+$ make compilemessages
+# build will automatically compile messages
+$ uv build
+```
