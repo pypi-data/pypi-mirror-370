@@ -1,0 +1,237 @@
+
+# HEAS — Hierarchical Evolutionary Agent Simulation
+
+###HEAS is a package for agent simulations with hierarchy, evolutionary search, tournament-style evaluation, and clean visualizations.
+
+•	Hierarchy runtime. Compose simulations from layers of streams; each stream owns a step() and writes to a shared context.
+
+•	Built-in evolutionary tuner. Single or multi-objective, hall-of-fame, checkpoint-friendly.
+
+•	Torch-friendly. Drop in nn.Module policies, flatten/unflatten parameters.
+
+•	Game module. Run scenarios × participants, score, and vote winners with customizable rules.
+
+•	Visualization. Plot per-step traces, tournament outcomes, Pareto fronts, and draw your layer/stream graph.
+
+•	CLI. One command to run sims, tune, evaluate, play tournaments, and export plots.
+
+##Install
+```bash
+pip install heas 
+```
+
+## Quickstart
+###1) Minimal hierarchical sim (2 layers, 2 streams)
+```python
+from typing import Dict, Any
+import random
+from heas.hierarchy import Stream, StreamSpec, LayerSpec, make_model_from_spec
+from heas.config import Experiment
+from heas.api import simulate
+
+# A producer stream that writes a price into the shared context
+class Price(Stream):
+    def __init__(self, name, ctx, start=100.0, drift=0.03, noise=0.05):
+        super().__init__(name, ctx)
+        self.p=float(start); self.drift=float(drift); self.noise=float(noise)
+    def step(self):
+        self.p += self.drift + random.gauss(0, self.noise)
+        self.ctx.data[f"{self.name}.price"] = self.p
+    def metrics_step(self):  return {"price": self.p}
+    def metrics_episode(self): return {"final_price": self.p}
+
+# A consumer stream that reads the price and trades a tiny position
+class Policy(Stream):
+    def __init__(self, name, ctx, alpha=0.05, x_key="L1.price"):
+        super().__init__(name, ctx)
+        self.alpha=float(alpha); self.key=x_key
+        self.pos=0.0; self.pnl=0.0; self.prev=None
+    def step(self):
+        x = float(self.ctx.data.get(self.key, self.prev if self.prev is not None else 100.0))
+        if self.prev is not None:
+            sig = x - self.prev
+            self.pos += self.alpha * sig
+            self.pnl  += self.pos * (x - self.prev)
+        self.prev = x
+        self.ctx.data[f"{self.name}.pnl"] = self.pnl
+    def metrics_step(self):  return {"pos": self.pos, "pnl": self.pnl}
+    def metrics_episode(self): return {"final_pos": self.pos, "final_pnl": self.pnl}
+
+def spec(alpha=0.05, drift=0.03, noise=0.05):
+    return [
+        LayerSpec([StreamSpec("L1", Price,  dict(start=100.0, drift=drift, noise=noise))]),
+        LayerSpec([StreamSpec("L2", Policy, dict(alpha=alpha, x_key="L1.price"))]),
+    ]
+
+# model_factory(kwargs) -> model
+def make_model(kwargs: Dict[str, Any]):
+    return make_model_from_spec(spec(alpha=0.05, drift=0.03, noise=0.05), seed=123)({})
+
+exp = Experiment(model_factory=make_model, steps=20, episodes=1, seed=123)
+sim = simulate(exp)
+print(sim["episodes"][0]["episode"])   # {'L1.final_price': ..., 'L2.final_pos': ..., 'L2.final_pnl': ...}
+```
+
+###2) Evolutionary optimization (single objective)
+```python
+from heas.schemas.genes import Real
+from heas.config import Algorithm
+from heas.api import optimize
+
+# Evolve 'drift' to maximize final PnL => minimize negative PnL
+def objective(genome):
+    drift = float(genome[0])
+    mf = lambda kw: make_model_from_spec(spec(alpha=0.05, drift=drift, noise=0.05), seed=123)({})
+    out = simulate(Experiment(model_factory=mf, steps=40, episodes=1, seed=123))
+    pnl = out["episodes"][0]["episode"]["L2.final_pnl"]
+    return (-pnl,)  # minimize negative PnL
+
+schema = [Real("drift", -0.05, 0.10)]  # search range
+exp_dummy = Experiment(model_factory=lambda kw: None, steps=1, episodes=1, seed=123)
+
+algo = Algorithm(objective_fn=objective, genes_schema=schema, pop_size=16, ngen=4,
+                 strategy="nsga2", out_dir="runs/demo")
+opt = optimize(exp_dummy, algo)
+print("Top solutions:", opt["best"][:3])
+```
+
+###3) Scenarios × participants (Game + Tournament)
+```python
+from heas.game import make_grid, Tournament
+
+# 4 scenarios
+scenarios = make_grid({"region": ["A","B"], "gov": ["Central","Federal"]}).scenarios
+participants = ["TeamA", "TeamB"]
+
+# Build a model from (scenario, participant)
+def build_model(scenario, participant, ctx):
+    drift = 0.02 if scenario.params["region"]=="A" else 0.04
+    alpha = 0.05 if participant=="TeamA" else 0.08
+    return make_model_from_spec(spec(alpha=alpha, drift=drift, noise=0.05), seed=ctx.get("seed", 0))
+
+# Score = final PnL (higher better)
+def score_fn(episode_row, participant):
+    return float(episode_row.get("final_pnl", 0.0))
+
+t = Tournament(build_model)
+play = t.play(scenarios, participants, steps=25, episodes=5, seed=123,
+              score_fn=score_fn, voter="argmax")
+
+print(play.per_episode.head(3))  # tidy per-episode table (+score)
+print(play.votes.head(3))        # winners per scenario×episode
+```
+
+###4) Visualize
+```python
+# pip install matplotlib
+from heas.vis import plot_steps, plot_votes_matrix, plot_tournament_overview, plot_architecture
+
+# Per-step PnL traces, faceted by scenario
+plot_steps(play.per_step, x="t", y_cols=["pnl"], facet_by="scenario", hue="participant",
+           title="PnL over time")
+
+# Winners per scenario×episode as a matrix
+plot_votes_matrix(play.votes)
+
+# Average scores (mean ± std) per scenario
+plot_tournament_overview(play.per_episode)
+
+# Draw the architecture from a spec or a live model
+plot_architecture(spec(alpha=0.05, drift=0.03, noise=0.05))
+```
+
+###Torch: optional policy control
+```python
+import torch
+from torch import nn
+from heas.torch_integration.policies import MLPPolicy
+from heas.torch_integration.params import flatten_params, unflatten_params
+from heas.torch_integration.device import pick_device
+
+DEV = pick_device(prefer_gpu=True)
+
+class TorchPolicy(Policy):
+    def __init__(self, name, ctx, policy: nn.Module, x_key="L1.price", alpha=0.05):
+        super().__init__(name, ctx, alpha=alpha, x_key=x_key)
+        self.net = policy.to(DEV)
+    def step(self):
+        x = float(self.ctx.data.get(self.key, self.prev if self.prev is not None else 100.0))
+        if self.prev is not None:
+            import torch
+            with torch.no_grad():
+                obs = torch.tensor([[x, 1.0]], dtype=torch.float32, device=DEV)
+                delta = float(self.net(obs).squeeze().item())
+            self.pos += 0.1 * delta
+            self.pnl += self.pos * (x - self.prev)
+        self.prev = x
+        self.ctx.data[f"{self.name}.pnl"] = self.pnl
+
+# swap the policy stream in your spec:
+def spec_torch(noise=0.05):
+    net = MLPPolicy(2, 1, (16,)).to(DEV)
+    return [
+        LayerSpec([StreamSpec("L1", Price, dict(start=100.0, drift=0.03, noise=noise))]),
+        LayerSpec([StreamSpec("L2", TorchPolicy, dict(policy=net, x_key="L1.price", alpha=0.05))]),
+    ]
+```
+
+###CLI
+```bash
+# 1) Run a model factory
+heas run --factory path/to/module.py:make_model --steps 20 --episodes 2 --seed 123
+
+# 2) Run a graph/spec/model (auto-coerced)
+heas run-graph --graph heas.examples.hierarchy_example:make_model --steps 20 --episodes 1
+
+# 3) Evolutionary tuning
+heas tune --objective mypkg.objectives:objective --schema mypkg.schemas:SCHEMA \
+          --pop 32 --ngen 6 --strategy nsga2 --out runs/demo
+
+# 4) Evaluate genotypes
+heas eval --objective mypkg.objectives:objective --genotypes genotypes.json
+
+# 5) Arena (scenarios × participants)
+heas arena run \
+  --builder mypkg.builders:build_model \
+  --scenarios '{"grid":{"region":["A","B"],"gov":["Central","Federal"]}}' \
+  --participants "TeamA,TeamB" \
+  --steps 20 --episodes 3 --seed 123 --save-dir out/
+
+# 6) Tournament with scoring + voting
+heas tournament play \
+  --builder mypkg.builders:build_model \
+  --scenarios '{"grid":{"region":["A","B"],"gov":["Central","Federal"]}}' \
+  --participants ["TeamA","TeamB"] \
+  --score mypkg.scoring:score_fn --voter argmax \
+  --steps 25 --episodes 5 --seed 123 --save-dir out/
+
+# 7) Visualizations (from saved CSV/Parquet/JSON)
+heas viz steps  --file out/per_step.parquet --x t --facet scenario --hue participant --save out/steps.png
+heas viz votes  --file out/votes.parquet --save out/votes.png
+heas viz arch   --graph mypkg.graphs:SPEC --save out/arch.png
+heas viz log    --file runs/demo/log.json --save out/log.png
+heas viz pareto --file runs/demo/pareto.json --title "Pareto" --save out/pareto.png
+```
+
+
+###Project layout (high level)
+```bash
+heas/
+  api.py                 # simulate(), optimize(), evaluate()
+  config.py              # Experiment, Algorithm, Evaluation config objects
+  hierarchy/             # layers, streams, model orchestration
+  game/                  # scenarios, arena, tournament, artifacts, checkpoints
+  torch_integration/     # policies, params flatten/unflatten, device helpers
+  vis/                   # plotting utilities (steps, votes, Pareto, architecture)
+  cli/                   # heas CLI entrypoint
+  examples/              # tiny runnable examples
+```
+
+
+###Design ideas
+
+	•	Streams are small, testable units with step() + metric hooks.
+	•	Layers are ordered; all streams in a layer step before the next.
+	•	Context (ctx) is the wiring: streams write data, others read it next step.
+	•	Optimization treats your objective as a black box.
+	•	Games/Tournaments let you compare policies/agents across many scenarios with a voting rule that you control.
