@@ -1,0 +1,45 @@
+# .github/workflows/update-version.yml
+name: Update Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New version (e.g., 0.4.0)"
+        required: true
+        type: string
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install script dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Update version in files
+        run: |
+          VERSION=${{ inputs.version }}
+
+          # Update pyproject.toml
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+
+          # Update __init__.py
+          sed -i "s/__version__ = .*/__version__ = \"$VERSION\"/" src/ctx_gen/__init__.py
+
+          # Run sync script
+          python .github/scripts/sync_version.py
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: "chore: bump version to ${{ inputs.version }}"
+          commit-message: "chore: bump version to ${{ inputs.version }}"
+          branch: version-bump-${{ inputs.version }}
