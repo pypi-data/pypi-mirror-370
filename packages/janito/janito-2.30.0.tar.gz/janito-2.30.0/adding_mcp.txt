@@ -1,0 +1,138 @@
+Below is a **minimal-yet-complete “router loop”** that lets any Chat Completions model talk to a remote **MCP server** exactly the same way the Agents SDK/Responses API does under the hood.
+Feel free to copy-paste and adapt.
+
+---
+
+## 0  Dependencies & setup
+
+```bash
+pip install openai httpx python-dotenv       # ↩︎ async-friendly HTTP client
+export OPENAI_API_KEY=sk-...
+```
+
+---
+
+## 1  One-time discovery of all MCP tools
+
+```python
+import httpx, json, os
+from openai import OpenAI
+
+client = OpenAI()                                   # Chat Completions client
+MCP_SERVERS = {                                     # label → URL
+    "weather": "http://localhost:8000/v1/mcp",
+}
+
+tool_registry = {}          # name → {id, server, schema}
+for label, url in MCP_SERVERS.items():
+    r = httpx.post(url, json={"method": "list_tools", "id": 1})
+    for t in r.json()["result"]:
+        tool_registry[t["name"]] = {
+            "id":     t["id"],
+            "server": url,
+            "schema": t,        # already JSON-Schema compliant ✅
+        }
+
+TOOLS_FOR_OPENAI = [v["schema"] for v in tool_registry.values()]
+```
+
+The list-tools → JSON-Schema mapping is exactly what Chat Completions expects (via the `tools` parameter) ([help.openai.com][1]).
+
+---
+
+## 2  Chat → router loop
+
+```python
+messages = [
+    {"role": "system",
+     "content": "You can call the tools provided to help the user."},
+    {"role": "user",
+     "content": "What’s the weather in Zurich right now?"}
+]
+
+while True:
+    resp = client.chat.completions.create(
+        model       = "gpt-4o-mini",
+        messages    = messages,
+        tools       = TOOLS_FOR_OPENAI,
+        tool_choice = "auto",        # let the model decide :contentReference[oaicite:1]{index=1}
+        temperature = 0,
+    )
+
+    msg = resp.choices[0].message
+
+    # CASE A – assistant wants to call one or more tools
+    if msg.tool_calls:
+        messages.append(msg)                       # keep the call stub
+        for call in msg.tool_calls:
+            tool_name = call.function.name
+            args = json.loads(call.function.arguments)
+
+            m = tool_registry[tool_name]
+            result = httpx.post(
+                m["server"],
+                json={
+                    "method": "call_tool",
+                    "params": {"id": m["id"], "arguments": args},
+                    "id": 42
+                }
+            ).json()["result"]
+
+            # Echo the result back so the model can finish the thought
+            messages.append({
+                "role":         "tool",
+                "tool_call_id": call.id,
+                "content":      json.dumps(result)
+            })
+        continue             # ↩︎ model may want more tool calls.
+
+    # CASE B – we’re done (plain assistant message)
+    print(msg.content)
+    break
+```
+
+**Key points**
+
+| Why                | What to remember                                                             |
+| ------------------ | ---------------------------------------------------------------------------- |
+| **Tool discovery** | Cache the JSON once; refresh on a schedule to save tokens.                   |
+| **Routing**        | Map *tool name* → (MCP URL, tool id). No need to expose ids to the model.    |
+| **Multiple calls** | The loop continues until the model returns a message *without* `tool_calls`. |
+| **Safety**         | Validate the tool name and arguments against `tool_registry` before firing.  |
+
+---
+
+## 3  Streaming (optional)
+
+Add `stream=True` to the `client.chat.completions.create` call and accumulate the chunks’ `delta` fields until you see `finish_reason == "tool_calls"` or `"stop"` ([cookbook.openai.com][2]).
+Streamed tool calls arrive in exactly the same order; route each as soon as the JSON fragment closes to slash latency.
+
+---
+
+## 4  Handling more than one MCP server
+
+Just keep extending `MCP_SERVERS` and the discovery loop; `tool_registry` remains a flat map, so collisions are impossible. The runtime cost is one HTTP request per server at startup.
+
+---
+
+## 5  Production checklist
+
+| Risk                                 | Mitigation                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| **Prompt-injection via tool output** | JSON-schema-validate **again** after the MCP call; escape any HTML.                                                       |
+| **Runaway streams / DoS**            | Timeouts on both Chat Completions and MCP HTTP calls; token/byte ceilings.                                                |
+| **Secrets in tool arguments**        | Never log raw arguments; redact before shipping logs or traces.                                                           |
+| **Token cost for huge schemas**      | SHA-256 hash the last tool list; only resend when it changes.                                                             |
+| **Model refuses to call a tool**     | Use `tool_choice={"type":"function","function":{"name":"…"}}` or `"required"` to force a call ([learn.microsoft.com][3]). |
+
+---
+
+### Why not just switch to the Responses API?
+
+Chat Completions works fine, but with Responses you get automatic **list\_tools/call\_tool** plumbing, background runs, retries, and built-in tracing for free. If you’re starting fresh, Responses is simpler; if you’re locked into Chat Completions (e.g., legacy infra, cost model), the loop above is all you need.
+
+Happy hacking!
+
+[1]: https://help.openai.com/en/articles/8555517-function-calling-in-the-openai-api "Function Calling in the OpenAI API | OpenAI Help Center"
+[2]: https://cookbook.openai.com/examples/how_to_stream_completions "How to stream completions"
+[3]: https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/function-calling "How to use function calling with Azure OpenAI in Azure AI Foundry Models - Azure OpenAI | Microsoft Learn"
