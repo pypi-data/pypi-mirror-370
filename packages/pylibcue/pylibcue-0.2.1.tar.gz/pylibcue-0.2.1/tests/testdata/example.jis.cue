@@ -1,0 +1,8 @@
+PERFORMER "サンドリオン"
+TITLE "天体図"
+FILE "COCC-18150.wav" WAVE
+  TRACK 01 AUDIO
+    TITLE "天体図"
+    PERFORMER "サンドリオン"
+    ISRC JPCO02329890
+    INDEX 01 00:00:00
