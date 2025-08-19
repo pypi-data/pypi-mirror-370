@@ -1,0 +1,9 @@
+import '@jupyter/collaboration/style/index.js';
+import '@jupyterlab/application/style/index.js';
+import '@jupyterlab/filebrowser/style/index.js';
+import '@jupyterlab/ui-components/style/index.js';
+import '@jupyterlab/launcher/style/index.js';
+import '@jupyterlab/console/style/index.js';
+import '@jupyterlab/completer/style/index.js';
+import '../style/index.css';
+import './sharedscope';
