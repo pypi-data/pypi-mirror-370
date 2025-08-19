@@ -1,0 +1,153 @@
+name: fmu-tools
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  release:
+    types:
+      - published
+  schedule:
+    # Run CI every night and check that tests are working with latest dependencies
+    - cron: "0 0 * * *"
+
+permissions: {}
+
+jobs:
+  fmu-tools:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    permissions:
+      contents: write  # For docs
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install requirements
+        if: ${{ always() }}
+        run: |
+          pip install -U pip
+          pip install .[docs,tests]
+
+      - name: List all installed packages
+        if: ${{ always() }}
+        run: pip freeze
+
+      - name: Ruff check
+        if: ${{ always() }}
+        run: ruff check .
+
+      - name: Ruff format check
+        if: ${{ always() }}
+        run: ruff format . --check
+
+      - name: Enforce static typing
+        if: ${{ always() }}
+        run: mypy src/fmu/tools
+
+      - name: Run tests
+        if: ${{ always() }}
+        run: |
+          git clone --depth 1 https://github.com/equinor/xtgeo-testdata ../xtgeo-testdata
+          pytest -n auto tests --disable-warnings
+
+      - name: Syntax check on documentation
+        if: ${{ always() }}
+        run: rstcheck -r docs
+
+      - name: Build documentation
+        if: ${{ always() }}
+        run: |
+          sphinx-apidoc -f -H "API for fmu.tools" -o docs src
+          sphinx-build -W -b html docs build/docs/html
+
+      - name: Update GitHub pages
+        if: |
+          github.repository_owner == 'equinor' && github.ref == 'refs/heads/main' &&
+          matrix.python-version == '3.11'
+        run: |
+          cp -R ./build/docs/html ../html
+          git config --local user.email "fmu-tools-github-action"
+          git config --local user.name "fmu-tools-github-action"
+          git fetch origin gh-pages
+          git checkout --track origin/gh-pages
+          git clean -f -f -d -x  # Double -f is intentional.
+          git rm -r *
+          cp -R ../html/* .
+          touch .nojekyll  # If not, github pages ignores _* directories.
+          git add .
+          if git diff-index --quiet HEAD; then
+            echo "No changes in documentation. Skip documentation deploy."
+          else
+            git commit -m "Update Github Pages"
+            git push "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+          fi
+
+  rms:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "RMS 14.2",
+              os: ubuntu-latest,
+              python: 3.11.3,
+              pip: 23.3.1,
+              wheel: 0.37.1,
+              setuptools: 63.4.3,
+              matplotlib: 3.7.1,
+              numpy: 1.24.3,
+              pandas: 2.0.2,
+              scipy: 1.10.1,
+            }
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.config.python }}
+
+      - name: Install packages
+        run: |
+          pip install pip==${{ matrix.config.pip }}
+          pip install ".[tests]"
+          pip install \
+            wheel==${{ matrix.config.wheel }} \
+            setuptools==${{ matrix.config.setuptools }} \
+            matplotlib==${{ matrix.config.matplotlib }} \
+            numpy==${{ matrix.config.numpy }} \
+            pandas==${{ matrix.config.pandas }} \
+            scipy==${{ matrix.config.scipy }}
+
+      - name: List dependencies
+        run: pip freeze
+
+      - name: Run tests
+        if: ${{ always() }}
+        run: |
+          git clone --depth 1 https://github.com/equinor/xtgeo-testdata ../xtgeo-testdata
+          pytest -n auto tests --disable-warnings
