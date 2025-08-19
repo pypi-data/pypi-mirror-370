@@ -1,0 +1,136 @@
+Transformation functions
+========================
+
+.. currentmodule:: pitchmeld
+
+Most audio processing implies handling the following inherent elements:
+
+* `Clipping <https://en.wikipedia.org/wiki/Clipping_(audio)>`_: A transformation is likely to increase some part of the input waveform above its original level. In the worst case, it can go beyond 1.0 (or lower than -1.0) and thus saturate/clip when saving the transformed waveform into a file. **By default, nothing is done** in pitchmeld to prevent this. However, you can use :py:attr:`clipper_knee=0.66` argument in the functions below to apply a clipping effect that will reduce the distortion of any clipping.
+
+* **Equalisation** and loudness preservation: A transformation is likely to change the spectral balance of the input waveform. The standard way to handle this is by preserving the energy in some frequency bands by applying a `loudness equalisation <https://en.wikipedia.org/wiki/Equalization_(audio)>`_ effect. This is **done by default** in the functions below, but you can disable it by setting :py:attr:`eq=False`. You might want to disable it if you're handling very unatural synthetic signals (ex. a pure tone).
+
+* **Multichannels**: Currently, multichannel is **not supported yet** (but will be soon). In the present version, the functions below will average the channels and process the signal as a monophonic signal. The output channel is then duplicated to the same number of channels as the input to preserve dimensions.
+
+
+
+:Processing flow:
+
+The function :py:attr:`transform` is based on an `Overlap-Add process <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>`_ whose base implementation is `freely available here <https://github.com/gillesdegottex/phaseshift/blob/main/phaseshift/audio_block/ola.h>`_.
+
+The different processing operations are done in the following order:
+
+.. image:: ../../../pitchmeld/audio_block/sola.svg
+
+
+Functions
+---------
+
+.. function:: transform_timescaling(wav: ndarray, fs:float, **kwargs)
+
+    Same arguments and return values as :func:`transform`.
+
+    This function alter a few technical arguments of :func:`transform` in order to optimize speed for time scaling, without compromising audio quality.
+
+.. function:: transform_pitchscaling(wav: ndarray, fs:float, **kwargs)
+
+    Same arguments and return values as :func:`transform`.
+
+    This function alter a few technical arguments of :func:`transform` in order to optimize speed for pitch scaling only, without compromising audio quality. 
+
+.. function:: transform(wav:ndarray, fs:float, pbf:float=1.0, pbfs:ndarray, esf:float=1.0, esp:boolean=True, psf:float=1.0, psfs:ndarray, set_f0:float=None, set_f0s:ndarray, psf_max:float=2.0, clipper_knee:float=None, winlen_inner:float=0.020*fs, timestep:float=0.005*fs, f0_min:float=27.5, f0_max:float=3520, eq:boolean=True, info:boolean=False) -> ndarray[float32]
+
+    This is the generic function to transform a voice signal while applying multiple audio effects.
+    See also below for more functions dedicated to specific tasks.
+
+    .. note::
+        It assumes the signal is *monophonic*, like a voice, a flute, a violin, saxophone, etc.
+
+        It is *not* recommended to use it on polyphonic signals like a piano, a guitar, a drum set, etc.
+
+    :arg wav: Input signal to transform.
+
+    :arg fs: Sampling rate [Hz].
+
+    :arg pbf: Playback factor to do time scaling [coefficient, def. 1.0].
+
+        .. note::
+            The method is designed so that there is no global time drift possible.
+            However, because internal frames need to be time aligned for ensuring signal continuity, audio events might be slightly shifted locally, at most one frame before or further (at most 0.005s by default).
+
+            For example, assuming a speed up of 2, and a timestep of 0.005s,an audio event at 60s, might end up at 30.005s, instead of 30s. Nevertheless, there is no time drift. So an audio event at 120s will not go as far as 60.010s.
+
+    :arg pbfs: Time varying playback factor [2D ndarray, def. None].
+        A 2D numpy array of shape (N, 2) where N is the number of given pairs :py:attr:`[time, pbf]`.
+        The first column is the time in seconds, relative to the original signal (not the transformed one).
+        The second column is the :py:attr:`pbf` playback factor (as above).
+
+    :arg esf: Envelope scaling factor [coefficient, def. 1.0].
+
+    :arg esp: Preserve spectral envelope [boolean, def. True].
+        Also known as "formants preservation".
+
+    :arg psf: Pitch scaling factor [coefficient, def. 1.0].
+
+    :arg psfs: Time varying pitch scaling factor [2D ndarray, def. None].
+        A 2D numpy array of shape (N, 2) where N is the number of given pairs :py:attr:`[time, psf]`.
+        The first column is the time in seconds, relative to the original signal (not the transformed one).
+        The second column is the :py:attr:`psf` playback factor (as above).
+
+    :arg psf_max: Maximum value for pitch scaling factor [coefficient, def. 2.0].
+
+    :arg set_f0: Force the fundamental frequency to a constant value [Hz, def. None].
+        :py:attr:`psf` will be set automatically so that the output fundamental frequency is equal to the given value :py:attr:`f0set_f0`.
+
+    :arg set_f0s: Time varying fundamental frequency [2D ndarray, def. None].
+        A 2D numpy array of shape (N, 2) where N is the number of given pairs :py:attr:`[time, set_f0]`.
+        The first column is the time in seconds, relative to the original signal (not the transformed one).
+        The second column is the :py:attr:`set_f0` fundamental frequency (as above).
+
+    :arg clipper_knee: Clipper knee amplitude [linear amplitude, def. None, common 0.66, `source <https://github.com/gillesdegottex/phaseshift/blob/main/phaseshift/sigproc/clipper.h>`_].
+        This is to prevent the signal to clip at 1.0 when saving it in a file and create audio glitches.
+        The knee amplitude is the point where the clipper starts to act.
+        This will prevent the signal to go above ±1.0 in amplitude.
+        The lower the value, the less glitches but the more the signal will be distorted.
+        Set it to ``None`` to disable it.
+
+    .. note::
+        The following arguments below are used to optimize the processing's audio quality and speed.
+        It is not recommended to changed them unless you know what you are doing.
+
+        Using ``transform_timescaling`` and ``transform_pitchscaling`` will automatically do that for you depending on the task.
+
+    :arg eq: Equalisation [boolean, def. True].
+        This is to preserve the spectral balance of the output waveform compared to the input waveform.
+
+    :arg winlen_inner: Inner window length [#samples, def. 0.020*fs].
+        This is the window length used for the inner processing.
+        The bigger the value, the more stable the sound but the processing will be slower.
+
+    :arg timestep: Inner window length [#samples, def. 0.005*fs].
+        This is the time step from one frame to the next.
+        The smaller the value, the more stable the sound but the processing will be slower.
+
+    :arg f0_min: Minimum value for the fundamental frequency [Hz, def. 440/16=27.5].
+        This is to prevent the pitch to go too low and create audio glitches.
+
+    :arg f0_max: Maximum value for the fundamental frequency [Hz, def. 440*8=3520].
+        This is to prevent the pitch to go too high and create audio glitches.
+
+    :arg info: If set to ``True``, returns an extra dict with various information related to how the processing went [def. False]
+
+    :return:
+        - `ndarray[float32]` - The modified signal.
+            Shape will be the same as the input signal.
+            The type will always be `float32` since the whole processing runs on `float32` precision.
+
+        - `info[dict]` - Processing information [optional: only if argument :py:attr:`info=True`]
+
+    :Example:
+
+    .. code-block:: python
+
+        import pitchmeld
+        import soundfile
+        wav, fs = soundfile.read('path/to/audio.wav')
+        syn = pitchmeld.transform(wav, fs, psf=2.0)
+        soundfile.write('syn.wav', syn, fs)
