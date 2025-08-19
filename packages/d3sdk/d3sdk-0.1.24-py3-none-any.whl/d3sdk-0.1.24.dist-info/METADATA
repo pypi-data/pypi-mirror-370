@@ -1,0 +1,428 @@
+Metadata-Version: 2.1
+Name: d3sdk
+Version: 0.1.24
+Summary: 3DS平台业务层的数据查询SDK
+Home-page: UNKNOWN
+Author: K2data
+Author-email: admin@k2data.com.cn
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: k2magic
+Requires-Dist: psycopg2-binary==2.8.6
+
+# D3SDK
+D3SDK是3DS系统提供的数据开发包（以下简称SDK），用于简化Python里访问各类数据库的操作。
+
+## 一、安装
+
+### 1.1 安装SDK
+安装SDK最新版本：
+```
+pip install -U d3sdk
+```
+
+## 二、使用SDK
+
+### 1、查询报警组列表
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+from d3sdk.model.device_failure_record import DeviceFailureRecord
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url)
+result = db.getDeviceFailureRecords(
+                                 devices=['T0000000002'],
+                                #  earliestAlarmTimeBegin='2024-06-29 04:45:27',
+                                #  earliestAlarmTimeEnd='2024-06-29 19:45:27',
+                                #  latestAlarmTimeBegin='2024-06-29 04:45:27',
+                                #  latestAlarmTimeEnd='2024-06-29 19:45:27',
+                                #  alarmTimeBegin='2024-06-29 04:45:27',
+                                #  alarmTimeEnd='2024-06-29 19:45:27',
+                                 alarmTypes=['failure'],
+                                #  alarmCodes=[''],
+                                #  alarmLevels=[''],
+                                #  alarmStatus=[''],
+                                 description='电流',
+                                 desc=True,
+                                 diagnosticModuleTypeNames=['工况与环境'],
+                                 limit=2)
+for record in result:
+    print(f"classType: {type(record)}")
+    print(f"alarmGroupCode: {record.alarmGroupCode}")
+    print(f"deviceName: {record.deviceName}")
+    print(f"deviceCode: {record.deviceCode}")
+    print(f"alarmGroupName: {record.alarmGroupName}")
+    print(f"alarmCode: {record.alarmCode}")
+    print(f"alarmType: {record.alarmType}")
+    print(f"description: {record.description}")
+    print(f"earliestAlarmTime: {record.earliestAlarmTime}")
+    print(f"diagnosticModules: ")
+    for diagnosticModule in record.diagnosticModules:
+        print(f"  {diagnosticModule}")
+    print("-" * 100)
+```
+
+运行结果示例：
+```
+classType: <class 'd3sdk.model.device_failure_record.DeviceFailureRecord'>
+alarmGroupCode: AG0000114480
+deviceName: 岳阳1#机组
+deviceCode: T0000000002
+alarmGroupName: 三相电流不平衡度超过限值
+alarmCode: FM801908
+alarmType: failure
+description: 三相电流不平衡度超过限值
+earliestAlarmTime: 2024-06-30 13:37:20
+diagnosticModules: 
+  DiagnosticModule(diagnosticModuleCode=QLJ00006, diagnosticModuleName=工况与环境, diagnosticModuleTypeCode=QLJ00006, diagnosticModuleTypeName=工况与环境, typeOfDiagnosticModuleType=部件部套)
+----------------------------------------------------------------------------------------------------
+classType: <class 'd3sdk.model.device_failure_record.DeviceFailureRecord'>
+alarmGroupCode: AG0000114275
+deviceCode: T0000000002
+alarmGroupName: 三相电流不平衡度超过限值
+alarmCode: FM801908
+alarmType: failure
+description: 三相电流不平衡度超过限值
+earliestAlarmTime: 2024-06-30 13:26:14
+diagnosticModules: 
+  DiagnosticModule(diagnosticModuleCode=QLJ00006, diagnosticModuleName=工况与环境, diagnosticModuleTypeCode=QLJ00006, diagnosticModuleTypeName=工况与环境, typeOfDiagnosticModuleType=部件部套)
+----------------------------------------------------------------------------------------------------
+```
+
+### 2、根据报警组编号查询报警编码、类型及其原因和建议
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+from d3sdk.model.alarm_group_detail import AlarmGroupDetail
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=False)
+alarmDetails = db.getAlarmDetails(alarmGroupCode='AG0000121409')
+for alarmDetail in alarmDetails:
+    print(f"classType: {type(alarmDetail)}")
+    print(f"alarmCode: {alarmDetail.alarmCode}")
+    print(f"alarmType: {alarmDetail.alarmType}")
+    print(f"causes: ")
+    for cause in alarmDetail.causes:
+        print(f"  code: {cause.code}")
+        print(f"  displayName: {cause.displayName}")
+        print(f"  description: {cause.description}")
+        print(f"  suggestions: ")
+        for suggestion in cause.suggestions:
+            print(f"    {suggestion}")
+        print()
+    print("-" * 100)
+```
+
+运行结果示例：
+```
+classType: <class 'd3sdk.model.alarm_group_detail.AlarmDetail'>
+alarmCode: FM800412
+alarmType: failure
+causes: 
+  code: RS800001
+  displayName: 定子绕组温度持续动态超限原因
+  description: 定子冷却水异常；线棒内部堵塞或结垢。
+  suggestions: 
+    Suggestion(code='JY800001', displayName='定子绕组温度持续动态超限处理建议', description='检查定子冷却水流量、压力与温度等是否异常，检查机组三相负载是否平衡。')
+    Suggestion(code='JY800004', displayName='定子绕组温度超限报警处理建议', description='检查冷却水流量、压力与温度等是否正常，检查发电机是否过载，检查绝缘过热、局部放电装置数据是否正常，降负荷运行至报警信号解除，若温度继续升高，应尽快停机检查。')
+
+----------------------------------------------------------------------------------------------------
+```
+
+### 3、查询某个征兆的原因及其建议
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+from d3sdk.model.alarm_group_detail import AlarmGroupDetail
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=True)
+result = db.getSymptomCauses('SP800511')
+
+for cause in result:
+    print(f"classType: {type(cause)}")
+    print(f"code: {cause.code}")
+    print(f"displayName: {cause.displayName}")
+    print(f"description: {cause.description}")
+    print(f"suggestions: ")
+    for suggestion in cause.suggestions:
+        print(f"    {suggestion}")
+    print("-" * 100)
+```
+
+运行结果示例：
+```
+classType: <class 'd3sdk.model.alarm_group_detail.Cause'>
+code: RS800065
+displayName: 定子冷却水进水温度超上限原因
+description: 发电机定子冷却水进水温度偏大。
+suggestions: 
+    Suggestion(code='JY800065', displayName='定子冷却水进水温度超上限处理建议', description='检查定子冷却水系统，降低进水温度，并监控发电机定子线棒温度。')
+----------------------------------------------------------------------------------------------------
+classType: <class 'd3sdk.model.alarm_group_detail.Cause'>
+code: RS800067
+displayName: 定子冷却水进水压力超上限原因
+description: 发电机定子冷却水进水压力偏大。
+suggestions: 
+    Suggestion(code='JY800067', displayName='定子冷却水进水压力超上限处理建议', description='暂无。')
+----------------------------------------------------------------------------------------------------
+classType: <class 'd3sdk.model.alarm_group_detail.Cause'>
+code: RS800069
+displayName: 定子冷却水进水流量超上限原因
+description: 发电机定子冷却水进水流量偏大。
+suggestions: 
+    Suggestion(code='JY800069', displayName='定子冷却水进水流量超上限处理建议', description='暂无。')
+----------------------------------------------------------------------------------------------------
+```
+
+### 4、查询某个失效的原因及其建议
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+from d3sdk.model.alarm_group_detail import AlarmGroupDetail
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=True)
+result = db.getFailureCauses('FM800412')
+
+for cause in result:
+    print(f"classType: {type(cause)}")
+    print(f"code: {cause.code}")
+    print(f"displayName: {cause.displayName}")
+    print(f"description: {cause.description}")
+    print(f"suggestions: ")
+    for suggestion in cause.suggestions:
+        print(f"  {suggestion}")
+    print("-" * 100)  
+```
+
+运行结果示例：
+```
+classType: <class 'd3sdk.model.alarm_group_detail.Cause'>
+code: RS800001
+displayName: 定子绕组温度持续动态超限原因
+description: 定子冷却水异常；线棒内部堵塞或结垢。
+suggestions: 
+  Suggestion(code='JY800001', displayName='定子绕组温度持续动态超限处理建议', description='检查定子冷却水流量、压力与温度等是否异常，检查机组三相负载是否平衡。')
+  Suggestion(code='JY800004', displayName='定子绕组温度超限报警处理建议', description='检查冷却水流量、压力与温度等是否正常，检查发电机是否过载，检查绝缘过热、局部放电装置数据是否正常，降负荷运行至报警信号解除，若温度继续升高，应尽快停机检查。')
+----------------------------------------------------------------------------------------------------
+```
+
+### 5、查询机组的测点列表（通过机组找到数据分组的量测及其映射到的repo和repoColumn）
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+from d3sdk.model.alarm_group_detail import AlarmGroupDetail
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=True)
+result = db.getInstanceMeasurements(devices=['T0000000002'])
+for instanceMeasurement in result:
+    print(f"  {instanceMeasurement}")
+```
+
+运行结果示例：
+```
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB11CP101, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB11CP101)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB11CT301, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB11CT301)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB31CP101, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB31CP101)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB31CP102, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB31CP102)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB31CT301, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB31CT301)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB51CT301, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB51CT301)
+more ...
+```
+
+### 6、获取机组测诊断依据测点列表（业务对象-报警诊断依据配置的量测，及其映射到的repo和repoColumn）
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+from d3sdk.model.alarm_group_detail import AlarmGroupDetail
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=True)
+result = db.getInstanceMeasurementsFilter(device='T0000000002', alarms=['diagnosticModule800412'])
+for instanceMeasurement in result:
+    print(f"  {instanceMeasurement}")
+```
+
+运行结果示例：
+```
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB11CP101, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB11CP101)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB11CT301, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB11CT301)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB31CP101, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB31CP101)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB31CP102, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB31CP102)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB31CT301, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB31CT301)
+InstanceMeasurement(deviceCode=T0000000002, measurement=Steam.Turbine.10LAB51CT301, repoCode=YY_GN_unit1_thermo_raw, repoColumn=10LAB51CT301)
+more ...
+```
+
+### 7、查询机组征兆的信息（描述、关键字和诊断模块）
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=False)
+result = db.getDeviceSymptomInfo(device='T0000000002', symptomCode='SP800511')
+print(f"征兆信息: {result}")
+```
+
+运行结果示例：
+```
+征兆信息: {DeviceSymptom(code=SP800511, name=11号定子线棒出水温度运行值持续动态超限, description=11号定子线棒出水温度运行值持续动态超限, diagnosticModules=[DiagnosticModule(diagnosticModuleCode=QLJ00008, diagnosticModuleName=定子绕组温度, diagnosticModuleTypeCode=QLJ00008, diagnosticModuleTypeName=定子绕组温度, typeOfDiagnosticModuleType=部件部套)])}
+```
+
+### 8、查询机组失效的信息（描述、关键字和诊断模块）
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=False)
+result = db.getDeviceFailureInfo(device='T0000000002', failureCode='FM800412')
+print(f"失效信息: {result}")
+```
+
+运行结果示例：
+```
+失效信息: {DeviceFailure(code=FM800412, name=12号定子线棒层间温度运行值持续动态超限, description=12号定子线棒层间温度运行值持续动态超限, diagnosticModules=[DiagnosticModule(diagnosticModuleCode=QLJ00001, diagnosticModuleName=定子, diagnosticModuleTypeCode=QLJ00001, diagnosticModuleTypeName=定子, typeOfDiagnosticModuleType=部件部套), DiagnosticModule(diagnosticModuleCode=QLJ00008, diagnosticModuleName=定子绕组温度, diagnosticModuleTypeCode=QLJ00008, diagnosticModuleTypeName=定子绕组温度, typeOfDiagnosticModuleType=部件部套)])}
+```
+
+### 9、根据机组和征兆描述、关键字、部位等限制条件反查符合条件的征兆编码
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=False)
+result = db.getDeviceSymptoms(
+    device='T0000000002', 
+    symptomDescription='超限', 
+    diagnosticModuleName='定子绕组温度', 
+    keywords='温度'
+)
+print(f"符合条件的征兆: {result}")
+```
+
+运行结果示例：
+```
+符合条件的征兆: {dict_values([DeviceSymptom(code=SP800511, name=11号定子线棒出水温度运行值持续动态超限, description=11号定子线棒出水温度运行值持续动态超限, diagnosticModules=[DiagnosticModule(diagnosticModuleCode=QLJ00008, diagnosticModuleName=定子绕组温度, diagnosticModuleTypeCode=QLJ00008, diagnosticModuleTypeName=定子绕组温度, typeOfDiagnosticModuleType=部件部套)])])}
+```
+
+### 10、根据机组和失效描述、关键字、部位等限制条件反查符合条件的失效编码
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=False)
+result = db.getDeviceFailures(
+    device='T0000000002', 
+    failureDescription='超限', 
+    diagnosticModuleName='定子', 
+    keywords='温度'
+)
+print(f"符合条件的失效: {result}")
+```
+
+运行结果示例：
+```
+符合条件的失效: {dict_values([DeviceFailure(code=FM800412, name=12号定子线棒层间温度运行值持续动态超限, description=12号定子线棒层间温度运行值持续动态超限, diagnosticModules=[DiagnosticModule(diagnosticModuleCode=QLJ00001, diagnosticModuleName=定子, diagnosticModuleTypeCode=QLJ00001, diagnosticModuleTypeName=定子, typeOfDiagnosticModuleType=部件部套)])])}
+```
+
+### 11、根据设备、部位编码反查所关联的征兆、失效
+
+调用SDK代码示例：
+```
+from d3sdk.d3_dataframe_db import D3DataFrameDB
+
+k2a_host = '192.168.132.167'
+k2a_port = 443
+k2a_user = 'zhangsan'
+k2a_basic_token = '0c475ffd8960c17046b531e2xxx'
+
+k2a_url = f'k2assets+3ds://{k2a_user}:{k2a_basic_token}@{k2a_host}:{k2a_port}'
+db = D3DataFrameDB(k2a_url, debug=True)
+result = db.getDeviceSymptomsAndFailures(
+    device='T0000000002', 
+    diagnosticModuleName='定子绕组温度'
+)
+print(f"关联的征兆和失效: {result}")
+```
+
+运行结果示例：
+```
+关联的征兆和失效: {dict_values([AlarmType(code=FM801413, name=13号上层线棒异常过热, description=13号上层线棒异常过热, keywords=定子绕组温度，线棒空心线堵塞, type=failure)])}
+```
+
