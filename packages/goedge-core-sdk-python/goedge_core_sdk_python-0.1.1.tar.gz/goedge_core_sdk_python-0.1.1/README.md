@@ -1,0 +1,94 @@
+# GoEdge Core SDK Python Wrapper
+
+This project provides a Python wrapper for the GoEdge Core C SDK. It uses `ctypes` to interface with the C library, allowing Python applications to leverage the functionality of the GoEdge ecosystem.
+
+## Project Structure
+
+```
+goedge-core-sdk-python/
+├───.gitignore
+├───poetry.lock
+├───pyproject.toml
+├───README.md
+├───dist/                 # 打包分发文件
+├───example/              # 示例代码
+│   ├───example_function.py
+│   └───example.py
+└───src/                  # Python SDK 源码
+    └───goedge/
+        ├───__init__.py
+        ├───core.py
+        └───ge_storage.py
+```
+
+## Installation
+
+To use this wrapper, you first need to compile the C SDK into a shared library (e.g., `libge-core.so` and `libge-storage.so` on Linux). Then, you can install the Python package using Poetry:
+
+```bash
+poetry install
+```
+
+## Usage
+
+The following example demonstrates the basic flow of initializing the SDK, registering a device, reporting properties, and shutting down.
+
+```python
+# -*- coding: utf-8 -*-
+
+import sys
+import os
+import time
+from goedge.core import (
+    core_init, core_exit,
+    register_and_online_by_device_name, device_offline,
+    report_properties,
+    GeDeviceData, GeDeviceCallback,
+    GET_PROPERTIES_CALLBACK, SET_PROPERTIES_CALLBACK, CALL_SERVICE_CALLBACK, TRIGGER_COLLECT_CALLBACK,
+    GE_TYPE_INT
+)
+
+# 1. Define callback functions (implementation omitted for brevity)
+# def handle_get_properties(...): ...
+# def handle_set_properties(...): ...
+# def handle_call_service(...): ...
+# def handle_trigger_collect(...): ...
+
+if __name__ == "__main__":
+    # 2. Initialize the SDK
+    ret = core_init("NodeRED", 4, 7)
+    if ret != 0:
+        print(f"Failed to initialize SDK, error code: {ret}")
+        exit(1)
+
+    # 3. Create and fill the callback structure
+    device_callbacks = GeDeviceCallback(...) # Omitted for brevity
+
+    # 4. Register and bring the device online
+    product_key = "BSKjAAhUmor"
+    device_name = "BSKjAAhUmor"
+    dev_handle = register_and_online_by_device_name(product_key, device_name, device_callbacks)
+
+    if dev_handle < 0:
+        print(f"Failed to register device, error code: {dev_handle}")
+        core_exit()
+        exit(1)
+
+    try:
+        # 5. Loop to report properties
+        count = 0
+        while count < 20:
+            temp_property = GeDeviceData(
+                type=GE_TYPE_INT,
+                key=b"temperature",
+                value=str(20 + count % 10).encode(),
+                timestamp=int(time.time() * 1000)
+            )
+            report_properties(dev_handle, [temp_property])
+            time.sleep(2)
+            count += 1
+    finally:
+        # 6. Take the device offline and exit
+        device_offline(dev_handle)
+        core_exit()
+```
