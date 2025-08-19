@@ -1,0 +1,78 @@
+# WikiScraper
+
+WikiScraper is a professional Python library to scrape Wikipedia articles easily. It allows you to scrape a single page or all linked articles recursively, supporting both `.txt` and `.csv` outputs.
+
+## Features
+
+- Scrape a single Wikipedia page or all linked articles recursively.
+- Supports `.txt` and `.csv` output formats.
+- Optionally add titles to scraped content.
+- Logging options for file saves and all actions.
+- Append all scraped articles into a single file or save separately.
+- Handles multiple languages and errors gracefully.
+- Polite crawling with configurable delay between requests.
+
+## Installation
+
+```bash
+pip install wikiscraper-py
+```
+
+## Usage
+
+### Scrape a single page
+
+```python
+from wikiscraper import WikiScraper
+
+scraper = WikiScraper(file_type="txt", add_title=True)
+scraper.scrape_one("https://en.wikipedia.org/wiki/Python")
+```
+
+### Scrape all linked articles
+
+```python
+from wikiscraper import WikiScraper
+
+scraper = WikiScraper(file_type="txt", add_title=True, all_on_one_file=True, polite_time=2)
+scraper.scrape_all("https://en.wikipedia.org/wiki/Python")
+```
+
+### CSV Output Example
+
+```python
+from wikiscraper import WikiScraper
+
+scraper = WikiScraper(file_type="csv", add_title=True, all_on_one_file=True)
+scraper.scrape_all("https://en.wikipedia.org/wiki/Ethiopia")
+```
+
+- If `add_title=True` and output is CSV:
+  - The first column will contain the article title.
+  - The second column will contain the article text.
+
+## Parameters
+
+- `file_type`: `'txt'` or `'csv'`. Default is `'txt'`.
+- `add_title`: Add the article title at the top of the file or first CSV column. Default is `False`.
+- `log_saving`: Log only file saves. Default is `True`.
+- `log_all`: Log all actions including errors and skipped links. Default is `False`.
+- `polite_time`: Delay between requests in seconds. Default is `3`.
+- `all_on_one_file`: Append all articles into a single file when scraping multiple pages. Default is `True`.
+
+## Directory Structure
+
+Scraped files are saved in the `data/` folder created automatically in the working directory.
+
+- If `all_on_one_file=True`: all articles are appended to `data/wikipedia_all.txt` or `.csv`.
+- If `all_on_one_file=False`: each article is saved as a separate file with its title as filename.
+
+## Error Handling
+
+- Skips invalid Wikipedia URLs.
+- Logs network errors and pages without titles.
+- Automatically filters out non-article links (categories, special pages, user pages, etc.).
+
+## License
+
+MIT License
