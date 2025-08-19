@@ -1,0 +1,122 @@
+# mcrconpy
+
+Client to use the RCON protocol to execute commands on a Minecraft Java server.
+
+> [!IMPORTANT]
+> The RCON protocol transmits data in plain text, without encryption, so it is necessary to use an SSH tunnel or VPN if communication is carried out over the Internet.
+>
+> Python 3.9+.
+
+You can log the activity or commands executed by the user in JSONL file format, located at:
+
+* Linux: `/home/{user}/.local/state/mcrconpy/log` or `/home/{user}/.local/share/mcrconpy/log`.
+* macOS: `/Users/{user}/Library/Logs/mcrconpy`.
+* Windows: `C:\Users\{user}\AppData\Local\mcrconpy\logs`.
+
+
+To enable the RCON protocol on your server, you must modify the following lines in the **server.properties** file and open the designated port:
+
+```text
+enable-rcon=true
+rcon.password=<your password>
+rcon.port=<1-65535>
+broadcast-rcon-to-ops=false
+```
+
+
+# Installation
+
+```bash
+$ pip install mcrconpy
+```
+
+
+# CLI
+
+```text
+$ mcrconpy --help
+usage: mcrconpy [-h] -a ADDRESS [-p PORT] -P PASSWORD [-A]
+
+RCON protocol client for minecraft servers.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -a ADDRESS, --address ADDRESS
+                        Minecraft Server TCP address.
+  -p PORT, --port PORT  Minecraft Server RCON Port. Default is 25575.
+  -P PASSWORD, --password PASSWORD
+                        User password.
+  -A, --audit           Saves all commands executed by the user in a JSONL file. Default is disabled.
+
+Connect remotely to the server and perform administrative tasks.
+```
+
+
+# Usage
+
+* When using `with`, don't worry about closing the connection; it will close automatically and properly.
+
+```python
+from mcrconpy import RconPy
+
+
+with RconPy(
+    address="127.0.0.1",
+    port=25575,
+    password="test",
+    audit=False,
+) as rcon:
+    print(rcon)
+
+    rcon.connect()
+
+    rcon.login()
+
+    print("> is connected?", rcon.check_connection())
+    print("> is login?", rcon.is_login())
+
+    print(rcon.command(command="time query daytime"))
+    print(rcon.command(command="//time set night"))
+```
+
+* Manually open and close the connection to the server. *Remember to close the connection*.
+
+```python
+from mcrconpy import RconPy
+
+
+rcon = RconPy(
+              address="127.0.0.1",
+              port=25575,
+              password="test",
+              audit=False,
+          )
+
+print(rcon)
+
+rcon.connect()
+
+rcon.login()
+
+print("> is connected?", rcon.check_connection())
+print("> is login?", rcon.is_login())
+
+print(rcon.command(command="time query daytime"))
+print(rcon.command(command="//time set night"))
+
+rcon.disconnect()
+```
+
+
+# Methods
+
+| Methods | Description |
+|-|-|
+| `set_password` | Sets the user's password. |
+| `get_password` | Gets the user's password. |
+| `is_login` | Checks if the current user is logged in to the server. |
+| `connect` | Connects to the RCON server. |
+| `login` | Login the current user in to the server. |
+| `command` | Executes the given command. |
+| `check_connection` | Checks if the connection to the server is active. |
+| `disconnect` | Disconnects from the server. |
