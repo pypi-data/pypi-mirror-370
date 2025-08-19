@@ -1,0 +1,195 @@
+{% extends 'oscar/dashboard/layout.html' %}
+
+{% load currency_filters %}
+{% load sorting_tags %}
+{% load i18n %}
+
+{% block title %}
+    {% trans "Conditions" %} | {{ block.super }}
+{% endblock %}
+
+{% block breadcrumbs %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard:index' %}">{% trans "Dashboard" %}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{% trans "Conditions" %}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block header %}
+    <div class="page-header">
+        <p class="float-right">
+            <a id='condition-create-standard' href="{% url 'dashboard:condition-create' %}" class="btn btn-primary">
+                <i class="fas fa-plus-circle"></i> {% trans "Create new condition" %}
+            </a>
+            <a id='condition-create-compound' href="{% url 'dashboard:condition-create-compound' %}" class="btn btn-primary">
+                <i class="fas fa-plus-circle"></i> {% trans "Create new compound condition" %}
+            </a>
+        </p>
+        <h1>{% trans "Conditions" %}</h1>
+    </div>
+{% endblock header %}
+
+{% block dashboard_content %}
+    <div class="table-header">
+        <h3><i class="fas fa-search"></i> {% trans "Search" %}</h3>
+    </div>
+    <div class="card card-body bg-light">
+        <form action="." method="get" class="form-inline">
+            {% include 'oscar/dashboard/partials/form_fields_inline.html' with form=form %}
+            <button type="submit" class="btn btn-primary" data-loading-text="{% trans 'Searching...' %}">{% trans "Search" %}</button>
+        </form>
+    </div>
+
+    <form action="." method="post" class="order_table">
+        {% csrf_token %}
+        <table class="table table-striped table-bordered">
+            <caption>
+                <i class="fas fa-gift"></i>{{ queryset_description }}
+                {% if is_filtered %}
+                    <a href="{% url 'dashboard:condition-list' %}" >{% trans "Reset" %}</a>
+                {% endif %}
+            </caption>
+            {% if conditions %}
+                <tr>
+                    <th>{% trans 'Name' %}</th>
+                    <th>{% trans 'Range' %}</th>
+                    <th>{% trans 'Type' %}</th>
+                    <th>{% trans 'Value' %}</th>
+                    <th>{% trans 'Used by Offers' %}</th>
+                    <th>{% trans 'Used by Vouchers' %}</th>
+                    <th>{% trans 'Used by Conditions' %}</th>
+                    <th></th>
+                </tr>
+                {% for condition in conditions %}
+                    <tr>
+                        <td><a href="{% url 'dashboard:condition-update' pk=condition.pk %}">{{ condition.name }}</a></td>
+                        <td>{{ condition.range.name|default:"-" }}</td>
+                        <td>{{ condition.type_name|default:"-" }}</td>
+                        <td>{{ condition.value|default:"-" }}</td>
+                        <td>
+                            <div class="offers-container" data-condition-pk="{{ condition.pk }}">
+                                <ul class="non_voucher_offers-list">
+                                    {% for offer in condition.initial_offers.items %}
+                                        <li><a href="{% url 'dashboard:offer-detail' pk=offer.pk %}">{{ offer.name }}</a></li>
+                                    {% endfor %}
+                                </ul>
+                                {% if condition.initial_offers.has_next %}
+                                    <button class="btn btn-primary btn-sm load-more-btn ml-4"
+                                            data-type="non_voucher_offers"
+                                            data-page="2">
+                                        {% trans "Load More" %}
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="vouchers-container" data-condition-pk="{{ condition.pk }}">
+                                <ul class="vouchers-list">
+                                    {% for voucher in condition.initial_vouchers.items %}
+                                        <li><a href="{% url 'dashboard:voucher-stats' pk=voucher.pk %}">{{ voucher.name }}</a></li>
+                                    {% endfor %}
+                                </ul>
+                                {% if condition.initial_vouchers.has_next %}
+                                    <button class="btn btn-primary btn-sm load-more-btn ml-4"
+                                            data-type="vouchers"
+                                            data-page="2">
+                                        {% trans "Load More" %}
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <ul>
+                                {% for condition in condition.parent_conditions.all %}
+                                    <li><a href="{% url 'dashboard:condition-update' pk=condition.pk %}">{{ condition.name }}</li>
+                                {% endfor %}
+                            </ul>
+                        </td>
+                        <td>
+                            <div class="btn-toolbar">
+                                <div class="dropdown">
+                                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        {% trans "Actions" %}
+                                    </button>
+                                    <div class="dropdown-menu dropdown-menu-right" aria-labelledby="dropdownMenuButton">
+                                        <a class="dropdown-item" href="{% url 'dashboard:condition-update' pk=condition.pk %}">{% trans "Edit" %}</a>
+                                        <a class="dropdown-item" href="{% url 'dashboard:condition-delete' pk=condition.pk %}">{% trans "Delete" %}</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+
+            {% else %}
+                <tr><td>{% trans "No conditions found." %}</td></tr>
+            {% endif %}
+        </table>
+        {% include "oscar/dashboard/partials/pagination.html" %}
+    </form>
+{% endblock dashboard_content %}
+
+{% block extrascripts %}
+    {{ block.super }}
+
+    <script type="text/javascript">
+        document.addEventListener("DOMContentLoaded", () => {
+            const setLoadingState = (button, isLoading) => {
+                button.disabled = isLoading;
+                button.innerHTML = isLoading ?
+                    '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {% trans "Loading..." %}' :
+                    `{% trans "Load More" %}`;
+            }
+            // Handle click events for all load more buttons
+            document.querySelectorAll(".load-more-btn").forEach(button => {
+                button.addEventListener("click", async function () {
+                    const container = this.closest("div");
+                    const conditionPk = container.dataset.conditionPk;
+                    const type = this.dataset.type;
+                    const page = this.dataset.page;
+                    const list = container.querySelector(`.${type}-list`);
+                    try {
+                        setLoadingState(this, true);
+                        const response = await fetch(
+                            `?condition_pk=${conditionPk}&type=${type}&page=${page}`,
+                            {
+                                headers: {
+                                    "X-Requested-With": "XMLHttpRequest"
+                                }
+                            }
+                        );
+                        if (!response.ok) {
+                            throw new Error(`Failed to load more offers: ${response.status} ${response.statusText}`);
+                        }
+                        const data = await response.json();
+                        // Add new items to the list
+                        data.items.forEach(item => {
+                            const li = document.createElement("li");
+                            const a = document.createElement("a");
+                            // Django requires a valid integer for the URL resolver inside templates,
+                            // so we provide a placeholder PK to replace it dynamically with item.pk
+                            a.href = type === "vouchers"
+                                ? `{% url "dashboard:voucher-stats" pk=999999 %}`.replace("999999", item.pk)
+                                : `{% url "dashboard:offer-detail" pk=999999 %}`.replace("999999", item.pk)
+                            a.textContent = item.name;
+                            li.appendChild(a);
+                            list.appendChild(li);
+                        });
+                        // Update the page number or remove button if no more pages
+                        if (data.has_next) {
+                            this.dataset.page = (parseInt(page) + 1).toString();
+                            setLoadingState(this, false);
+                        } else {
+                            this.remove();
+                        }
+                    } catch (err) {
+                        console.error("Error while loading more items:", err);
+                        setLoadingState(this, false);
+                    }
+                });
+            });
+        });
+    </script>
+{% endblock %}
