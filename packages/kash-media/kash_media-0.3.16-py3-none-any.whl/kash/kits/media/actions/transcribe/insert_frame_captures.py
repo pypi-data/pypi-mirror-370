@@ -1,0 +1,146 @@
+from pathlib import Path
+
+from chopdiff.divs import parse_divs
+from chopdiff.docs import search_tokens
+from chopdiff.html import TimestampExtractor, html_img, md_para
+from sidematter_format import Sidematter
+from strif import Insertion, insert_multiple
+
+from kash.config.logger import get_logger
+from kash.exec import kash_action, kash_precondition
+from kash.exec.preconditions import has_simple_text_body, has_timestamps
+from kash.kits.media.video.image_similarity import filter_similar_frames
+from kash.kits.media.video.video_frames import capture_frames
+from kash.model import Format, Item, ItemType, Param
+from kash.utils.common.format_utils import fmt_loc
+from kash.utils.errors import ContentError, InvalidInput
+from kash.utils.file_utils.file_formats_model import MediaType
+from kash.web_content.file_cache_utils import cache_resource
+from kash.workspaces import current_ws
+from kash.workspaces.source_items import find_upstream_resource
+
+log = get_logger(__name__)
+
+
+FRAME_CAPTURE = "frame-capture"
+"""Class name for a frame capture from a video."""
+
+
+@kash_precondition
+def has_frame_captures(item: Item) -> bool:
+    return bool(item.body and item.body.find(f'<img class="{FRAME_CAPTURE}">') != -1)
+
+
+SIM_THRESHOLD = 0.5
+
+
+@kash_action(
+    precondition=has_simple_text_body & has_timestamps & ~has_frame_captures,
+    params=(
+        Param(
+            "threshold",
+            "The similarity threshold for filtering consecutive frames.",
+            type=float,
+            default_value=SIM_THRESHOLD,
+        ),
+    ),
+)
+def insert_frame_captures(item: Item, threshold: float = SIM_THRESHOLD) -> Item:
+    """
+    Look for timestamped video links and insert frame captures after each one.
+    """
+    if not item.body:
+        raise InvalidInput("Item has no body")
+
+    # Create output item and get the assets directory for the frame captures.
+    output_item = item.derived_copy(type=ItemType.doc, format=Format.md_html)
+    ws = current_ws()
+    target_path = ws.assign_store_path(output_item)
+    abs_assets_dir = Sidematter(target_path).assets_dir
+
+    # Find the original video resource.
+    orig_resource = find_upstream_resource(item)
+    paths = cache_resource(orig_resource)
+    if MediaType.video not in paths:
+        raise InvalidInput(f"Item has no video: {item}")
+    video_path = paths[MediaType.video]
+
+    # Extract all timestamps.
+    extractor = TimestampExtractor(item.body)
+    timestamp_matches = list(extractor.extract_all())
+
+    log.message(
+        f"Found {len(timestamp_matches)} timestamps in the document, {parse_divs(item.body).size_summary()}."
+    )
+
+    # Extract frame captures, and put them in the workspace's assets directory.
+    timestamps = [timestamp for timestamp, _index, _offset in timestamp_matches]
+    rel_frame_paths = capture_frames(
+        video_path, timestamps, abs_assets_dir, prefix=item.slug_name()
+    )
+    abs_frame_paths = [abs_assets_dir / frame_path for frame_path in rel_frame_paths]
+
+    log.message("Writing frame captures to assets dir: %s", fmt_loc(abs_assets_dir))
+
+    # Filter out similar consecutive frames.
+    unique_indices = filter_similar_frames(abs_frame_paths, threshold)
+    unique_frame_paths = [rel_frame_paths[i] for i in unique_indices]
+    unique_matches = [timestamp_matches[i] for i in unique_indices]
+
+    log.message(
+        f"Filtered out {len(rel_frame_paths) - len(unique_frame_paths)}/{len(rel_frame_paths)} similar frames."
+    )
+    log.message(
+        f"Extracted {len(unique_frame_paths)} unique frame captures to: {fmt_loc(abs_assets_dir)}"
+    )
+
+    # Create a set of indices that were kept.
+    kept_indices = set(unique_indices)
+
+    # Prepare insertions.
+    log.message(
+        "Inserting %s frame captures, have %s wordtoks",
+        len(unique_matches),
+        len(extractor.offsets),
+    )
+    insertions: list[Insertion] = []
+    for i, (timestamp, index, offset) in enumerate(timestamp_matches):
+        # Only process timestamps whose frames weren't filtered out
+        if i not in kept_indices:
+            continue
+
+        try:
+            insert_index = (
+                search_tokens(extractor.wordtoks)
+                .at(index)
+                .seek_forward(["</span>"])
+                .next()
+                .get_index()
+            )
+        except KeyError:
+            raise ContentError(
+                f"No matching tag close starting at {offset}: {extractor.wordtoks[offset:]}"
+            )
+
+        new_offset = extractor.offsets[insert_index]
+        frame_path = rel_frame_paths[i]
+        insertions.append(
+            (
+                new_offset,
+                md_para(
+                    html_img(
+                        # The image is relative to the Markdown file, prefixed with assets dir name.
+                        str(Path(abs_assets_dir.name) / frame_path),
+                        f"Frame at {timestamp} seconds",
+                        class_name=FRAME_CAPTURE,
+                    )
+                ),
+            )
+        )
+
+    # Insert img tags into the document.
+    output_text = insert_multiple(item.body, insertions)
+
+    output_item.body = output_text
+
+    return output_item
