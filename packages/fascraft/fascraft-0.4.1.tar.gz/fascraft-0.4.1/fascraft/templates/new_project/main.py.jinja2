@@ -1,0 +1,53 @@
+"""Main FastAPI application for {{ project_name }}."""
+
+from fastapi import FastAPI
+
+try:
+    from config.settings import get_settings
+    from config.middleware import setup_middleware
+except ImportError as e:
+    print(f"Configuration error: {e}")
+    print("Please install required dependencies: pip install -r requirements.txt")
+    raise
+
+# Get application settings
+settings = get_settings()
+
+# Create FastAPI application
+app = FastAPI(
+    title=settings.app_name,
+    description="A FastAPI project generated with FasCraft",
+    version=settings.app_version,
+    debug=settings.debug
+)
+
+# Setup middleware
+try:
+    setup_middleware(app)
+except Exception as e:
+    print(f"Warning: Middleware setup failed: {e}")
+    print("Application will run without custom middleware")
+
+# Import base router
+from routers import base_router
+
+# Include base router (all module routers are included here)
+app.include_router(base_router)
+
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {"message": f"Hello from {settings.app_name}!"}
+
+
+# Health check is now handled by base router at /api/v1/health
+
+
+# Database setup note:
+# After creating models, run 'alembic init alembic' to initialize migrations
+# Then configure alembic/env.py to import your models and use your database URL
+# See README.md for detailed setup instructions
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
