@@ -1,0 +1,120 @@
+-- ==============================================================================
+--
+-- ERT CONFIGURATION FILE:
+-- REEK RESERVOIR MODEL - FMU tutorial version
+--
+-- Documentation:
+-- References:
+-- ERT technical description: https://sdp.statoil.no/wikidocs/GBS/ERT/
+-- FMU wiki portal: https://wiki.statoil.no/wiki/index.php/FMU_portal_home
+--
+-- ==============================================================================
+
+
+-----------------------------------------------------
+-- SECTION: Internal variables 
+-----------------------------------------------------
+
+DEFINE  <USER>			$USER
+DEFINE  <SCRATCH>         	/scratch/fmu
+DEFINE  <CASE_DIR>         	3_r002_reek
+DEFINE  <ECLIPSE_NAME>     	3_R002_REEK
+DEFINE  <RMS_NAME>       	reek.rms10.1.1
+DEFINE  <RMSVERSION>            10.1.1
+DEFINE  <RMS_WF_NAME1>    	Well_modelling_prediction
+DEFINE  <RESTARTDIR>            iter-3 
+DATA_KW <RESTART_CASE>          ../../../<RESTARTDIR>/eclipse/model/<ECLIPSE_NAME>-<IENS>
+DATA_KW <RESTART_REPORT>        37
+
+
+-----------------------------------------------------
+-- SECTION: Eclipse, runpath and storage settings 
+-----------------------------------------------------
+
+DATA_FILE               ../../eclipse/model/REEK_PRED_OP6.DATA		                -- Location of the template eclipse data file
+ECLBASE                 eclipse/model/<ECLIPSE_NAME>-%d 		                -- Name used for the eclipse simulations under runpath (%d will be replaced with the realization number) 
+RUNPATH		        <SCRATCH>/<USER>/<CASE_DIR>/realization-%d/pred_op6/            -- Runpath from where all realizations are run
+ENSPATH		        ../output/storage/<CASE_DIR>			                -- Path for internal ERT data	
+PLOT_SETTINGS PATH      ../output/plot/<CASEDIR>        		                -- Storage of plots
+LOG_FILE                ../output/log/<CASE_DIR>_pred_op6.log			        -- Ert log file
+UPDATE_LOG_PATH         ../output/update_log/<CASE_DIR>/<ERTCASE>	                -- Storage of update log (list of active and inactive data points)
+RUNPATH_FILE	        ../output/run_path_file/.ert-runpath-list_<CASE_DIR>_pred_op6   -- Resulting list of runpaths for the simulations
+
+
+-----------------------------------------------------
+-- SECTION: LSF settings, AHM configuration etc.
+-----------------------------------------------------
+
+NUM_REALIZATIONS	100				-- Set number of realizations to run
+MAX_RUNTIME 		1800				-- Set the maximum allowed run time (in seconds)
+MIN_REALIZATIONS 	1   		     	       	-- The minimum number of realizations that must have succeeded for the simulation to be regarded as a success
+
+QUEUE_SYSTEM 		LSF 				-- Use the LSF cluster to run simulations
+LSF_SERVER 		$ERT_LSF_SERVER 		-- Which server in the cluster to run
+LSF_QUEUE 	 	mr  				-- Which LSF queue to use (mr - Multi Realization)
+
+QUEUE_OPTION 		LSF MAX_RUNNING 100		-- Choke the number of simultaneous run
+MAX_SUBMIT 		1				-- How many times should the queue system retry a simulation. Default = 2 (use 1 when debugging)
+
+UMASK 			0		   		-- Make simulations readable to others (chmod o+rw)
+
+
+-----------------------------------------------------
+-- SECTION: Forward Models
+-----------------------------------------------------
+
+-- 1
+-- Make symbolic link to Eclipse restart
+FORWARD_MODEL MAKE_SYMLINK(<TARGET>=../../<RESTARTDIR>/eclipse/include, <LINKNAME>=eclipse/include)
+ 
+FORWARD_MODEL MAKE_SYMLINK(<TARGET>=../../../<RESTARTDIR>/<ECLBASE>.EGRID, <LINKNAME>=<RUNPATH>/eclipse/model/ECLIPSE.EGRID)
+FORWARD_MODEL MAKE_SYMLINK(<TARGET>=../../../<RESTARTDIR>/<ECLBASE>.INIT,  <LINKNAME>=<RUNPATH>/eclipse/model/ECLIPSE.INIT)
+FORWARD_MODEL MAKE_SYMLINK(<TARGET>=../../../<RESTARTDIR>/<ECLBASE>.UNRST, <LINKNAME>=<RUNPATH>/eclipse/model/ECLIPSE.UNRST)
+
+-- 2
+-- Create/copy RMS directories and files
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/model)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/input/well_modelling/events)
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../../rms/input/well_modelling/events/reek_prediction.rmsevents, <TO>=<RUNPATH>/rms/input/well_modelling/events/reek_prediction.rmsevents)
+
+-- 3
+-- Run RMS
+FORWARD_MODEL RMS_BATCH(<IENS>=<IENS>, <RMS_VERSION>=<RMSVERSION>, <RMS_PROJECT>=<CONFIG_PATH>/../../rms/model/<RMS_NAME>, <RMS_WORKFLOW>=<RMS_WF_NAME1>, <RMS_TARGET_FILE>=RMS_TARGET.INC)
+
+-- 4
+-- Run Eclipse
+--FORWARD_MODEL INSERT_NOSIM
+FORWARD_MODEL ECLIPSE100_2014.2
+
+
+----------------------------------------------------
+-- SECTION: Plotting 
+-----------------------------------------------------
+
+-- All Eclipse summary vectors can be added
+SUMMARY FOPR	     -- Field Oil Production Rate
+SUMMARY FWPR         -- Field Water Production Rate
+SUMMARY FGPR         -- Field Gas Production Rate
+SUMMARY FOPT         -- Field Oil Production Total
+SUMMARY FWPT         -- Field Water Production Total
+SUMMARY FGPT         -- Field Gas Production Toral
+SUMMARY FWCT         -- Field WCT
+SUMMARY FGOR         -- Field GOR
+SUMMARY FWIR         -- Field Water Injcetion Rate
+SUMMARY FWIT         -- Field Water Injection Total
+SUMMARY FPR          -- Field PRessure
+SUMMARY FOIP         -- Field Oil In Place
+SUMMARY ROIP:*       -- Region Oil In Place
+SUMMARY WOPR*:OP*    -- Well Oil Production Rate
+SUMMARY WWPR*:OP*    -- Well Water Production Rate
+SUMMARY WGPR*:OP*    -- Well Gas Production Rate
+SUMMARY WOPT*:OP*    -- Well Oil Production Total
+SUMMARY WWPT*:OP*    -- Well Water Production Total
+SUMMARY WGPT*:OP*    -- Well Gas Production Toral
+SUMMARY WWCT*:OP*    -- Well WCT
+SUMMARY WGOR*:OP*    -- Well GOR
+SUMMARY WWIR*:WI*    -- Well Water Injcetion Rate
+SUMMARY WWIT*:WI*    -- Well Water Injection Total
+SUMMARY WBHP:*       -- Well BHP
+
+

@@ -1,0 +1,360 @@
+-- ==============================================================================
+--
+-- ERT CONFIGURATION FILE:
+-- REEK RESERVOIR MODEL - FMU tutorial version
+--
+-- Documentation:
+-- References:
+-- ERT technical description: https://sdp.statoil.no/wikidocs/GBS/ERT/
+-- FMU wiki portal: https://wiki.statoil.no/wiki/index.php/FMU_portal_home
+--
+-- ==============================================================================
+
+
+-----------------------------------------------------
+-- SECTION: Internal variables 
+-----------------------------------------------------
+
+DEFINE  <USER>			$USER
+DEFINE  <SCRATCH>         	/scratch/fmu
+DEFINE  <CASE_DIR>         	6_r002_reek
+DEFINE  <ECLIPSE_NAME>     	6_R002_REEK
+DEFINE  <RMS_NAME>       	reek.rms10.1.1
+DEFINE  <RMSVERSION>            10.1.1
+DEFINE  <RMS_WF_NAME1>    	MAIN
+DEFINE  <RMS_WF_NAME2>    	SIM2SEIS
+DEFINE  <SEED_FILE>      	random.seeds
+
+
+-----------------------------------------------------
+-- SECTION: Eclipse, runpath and storage settings 
+-----------------------------------------------------
+
+DATA_FILE               ../../eclipse/model/REEK.DATA			       -- Location of the template eclipse data file
+ECLBASE                 eclipse/model/<ECLIPSE_NAME>-%d 		       -- Name used for the eclipse simulations under runpath (%d will be replaced with the realization number) 
+RUNPATH		        <SCRATCH>/<USER>/<CASE_DIR>/realization-%d/iter-%d/    -- Runpath from where all realizations are run
+ENSPATH		        ../output/storage/<CASE_DIR>			       -- Path for internal ERT data	
+PLOT_SETTINGS PATH      ../output/plot/<CASEDIR>        		       -- Storage of plots
+LOG_FILE                ../output/log/<CASE_DIR>.log			       -- Ert log file
+UPDATE_LOG_PATH         ../output/update_log/<CASE_DIR> 	        -- Storage of update log (list of active and inactive data points)
+RUNPATH_FILE	        ../output/run_path_file/.ert-runpath-list_<CASE_DIR>   -- Resulting list of runpaths for the simulations
+
+REFCASE     	        ../input/refcase/model/REEK_REF  		       -- Neccessary for AHM: used for plotting and reading historical production 
+HISTORY_SOURCE 	        REFCASE_SIMULATED				       -- Choosing from where the observations for the history matching should be given (REFCASE_HISTORY if WCONHIST & WCONINJH in REFCASE should be used)
+GRID	                ../input/refcase/model/APS.EGRID   	               -- Neccessary for AHM using field parameters: ERT needs to know the grid details
+
+
+-----------------------------------------------------
+-- SECTION: LSF settings, AHM configuration etc.
+-----------------------------------------------------
+
+NUM_REALIZATIONS	100				-- Set number of realizations to run
+MAX_RUNTIME 		3600				-- Set the maximum allowed run time (in seconds)
+MIN_REALIZATIONS 	1   		     	       	-- The minimum number of realizations that must have succeeded for the simulation to be regarded as a success
+
+QUEUE_SYSTEM 		LSF 				-- Use the LSF cluster to run simulations
+LSF_SERVER 		$ERT_LSF_SERVER 		-- Which server in the cluster to run
+LSF_QUEUE 	 	mr  				-- Which LSF queue to use (mr - Multi Realization)
+
+QUEUE_OPTION 		LSF MAX_RUNNING 100		-- Choke the number of simultaneous run
+MAX_SUBMIT 		1				-- How many times should the queue system retry a simulation. Default = 2 (use 1 when debugging)
+
+UMASK 			0		   		-- Make simulations readable to others (chmod o+rw)
+
+
+-----------------------------------------------------
+-- SECTION: Install jobs and workflows needed
+-----------------------------------------------------	
+
+-- Install jobs used in main workflow
+
+INSTALL_JOB RELPERM			../bin/jobs/RELPERM		     -- Generate LET rel perm curves
+INSTALL_JOB ECLIPSEVOL                  ../bin/jobs/ECLIPSEVOL               -- Extract FIELD and FIPNUM STOOIP from PRT file at initial time step
+INSTALL_JOB ECLIPSERESVOL               ../bin/jobs/ECLIPSERESVOL            -- Extract FIELD and FIPNUM HCPV from PRT file at initial time step
+INSTALL_JOB GRID3D_HC_THICKNESS         ../bin/jobs/GRID3D_HC_THICKNESS      -- Calculate thickness map from eclipse output
+INSTALL_JOB GRID3D_AVERAGE_MAP          ../bin/jobs/GRID3D_AVERAGE_MAP       -- Calculate avg map from eclipse output
+INSTALL_JOB ECL_DIFF_CALC               ../bin/jobs/ECL_DIFF_CALC            -- Calculate diff of eclipse paramter over timesteps
+INSTALL_JOB ECLGRID2ROFF                ../bin/jobs/ECLGRID2ROFF             -- Create roff file of eclipse egrid
+INSTALL_JOB ECLINIT2ROFF                ../bin/jobs/ECLINIT2ROFF             -- Create roff file of an eclipse init parameter
+INSTALL_JOB ECLRST2ROFF                 ../bin/jobs/ECLRST2ROFF              -- Create roff file of an eclipse restart parameter
+
+
+-- Install workflows
+
+-- Create Spotfire input file
+-- Exported to ert/output/results/<CASE_DIR>/spotfire/<CASE_DIR>.csv
+LOAD_WORKFLOW               ../bin/workflows/QC_csvexport
+
+
+-- Export misfit from AHM
+-- Exported to ert/output/results/<CASE_DIR>/misfit/<ERTCASE>
+DEFINE <OUTPUTDIR_MISFIT>   ../output/results/<CASE_DIR>/misfit
+LOAD_WORKFLOW_JOB           ../bin/jobs/WF_EXPORT_MISFIT_WELL
+LOAD_WORKFLOW               ../bin/workflows/QC_export_misfit_well
+
+
+-- Common settings for local workflows
+DEFINE <ITERDIR>            iter-3
+DEFINE <FIRSTREAL>          0
+DEFINE <LASTREAL>           100
+
+-- Create table of RMS volumes for all realisations (note: <RMSVOLFILE> is relative to <RUNPATH>) 
+-- Exported to <OUTPUTDIR_RMSVOL>
+DEFINE <RMSVOLFILE>         share/results/volumes/geogrid_vol_oil_1.txt
+DEFINE <CONFIG_RMSVOL>      ../input/config/wf_config_geovol.txt
+DEFINE <OUTPUTDIR_RMSVOL>   ../output/results/<CASE_DIR>/volumes
+LOAD_WORKFLOW_JOB           ../bin/jobs/WF_GET_RMS_VOLUMES2TABLE
+LOAD_WORKFLOW               ../bin/workflows/QC_rmsvolume
+
+-- Create table of eclipse volumes for all realisations (note: <ECLVOLFILE> is relative to <RUNPATH>)
+-- Exported to <OUTPUTDIR_ECLVOL>
+DEFINE <ECLVOLFILE>         share/results/volumes/eclgrid_vol.txt
+DEFINE <CONFIG_ECLVOL>      ../input/config/wf_config_eclipse.txt
+DEFINE <OUTPUTDIR_ECLVOL>   ../output/results/<CASE_DIR>/volumes
+LOAD_WORKFLOW_JOB           ../bin/jobs/WF_GET_RMS_VOLUMES2TABLE
+LOAD_WORKFLOW               ../bin/workflows/QC_eclipsevolume
+
+-- Create table of eclipse simulation profiles for all realisations 
+-- Exported to ert/output/results/<CASE_DIR>/profiles
+DEFINE <CONFIG_PROFILE>    ../input/config/wf_config_profiles.txt
+LOAD_WORKFLOW_JOB          ../bin/jobs/WF_GET_PROFILES_ECL
+LOAD_WORKFLOW              ../bin/workflows/QC_profiles
+
+-- Create table with difference between two tables (table1 - table2)
+-- Exported to ert/output/results/<CASE_DIR>/profiles
+-- Alternative operation: add 
+-- The job/workflow can also be extended to include multipliers for the tables: <FAC1> and <FAC2> 
+DEFINE <TABLE1>            CumOil_FOPT_yearly_<CASE_DIR>.txt
+DEFINE <TABLE2>            CumOil_FOPT_yearly_<CASE_DIR>_2.txt
+DEFINE <OPERATION>         sub 
+DEFINE <DIFFOUTPUT>        <OPERATION>_<TABLE1>_<TABLE2>
+LOAD_WORKFLOW_JOB          ../bin/jobs/WF_COMBINE_DATA
+LOAD_WORKFLOW              ../bin/workflows/QC_combine
+
+-- Create statistics for tables
+-- Exported to <STATDIR>  
+DEFINE <STATDIR>           <OUTPUTDIR_RMSVOL>
+DEFINE <STATINPUT>         Stoiip_<CASE_DIR>_geo.txt
+DEFINE <STATOUTPUT>        statistics_<STATINPUT>
+LOAD_WORKFLOW_JOB          ../bin/jobs/WF_GET_STATISTICS
+LOAD_WORKFLOW              ../bin/workflows/QC_statistics
+
+
+------------------------------------------------------------------------
+-- SECTION: Uncertainty parameters 
+--          Use either design matrix with DESIGN2PARAMS and DESIGN_KW
+--          or draw from ERT distributions with GEN_KW (Only option for AHM)
+-------------------------------------------------------------------------
+
+------ -----------------------------------------------------------------------------------------------------------------------------------------------------
+------ ert identifier       template file                                       result file                      parameter distribution
+------ -----------------------------------------------------------------------------------------------------------------------------------------------------
+GEN_KW RMSGLOBPARAMS        ../input/templates/global_variables.tmpl            global_variables.ipl            ../input/distributions/global_variables.dist
+GEN_KW MULTFLT              ../input/templates/multflt.tmpl                     reek.multflt                    ../input/distributions/multflt.dist
+GEN_KW INTERPOLATE_RELPERM  ../input/templates/relperm_config.tmpl		relperm_config.txt		../input/distributions/relperm.dist
+GEN_KW MULTZ                ../input/templates/multz.tmpl                      	reek.multz                      ../input/distributions/multz.dist
+------ -----------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- Use ert/updated surfaces if they exist 
+-- Ert surfaces are generated for the second iteration/posterior (i.e. after prior is finished)
+-- Make sure to delete the storage if you for some reason have to rerun (otherwise the prior will also get an ert updated surface) 
+SURFACE TOP_REEK    OUTPUT_FILE:ert_TopUpperReek.irap    INIT_FILES:rms/output/cohiba/surfaces/TopUpperReek.irap    BASE_SURFACE:../../rms/output/cohiba/surfaces/TopUpperReek.irap    FORWARD_INIT:True
+SURFACE MID_REEK    OUTPUT_FILE:ert_TopMidReek.irap      INIT_FILES:rms/output/cohiba/surfaces/TopMidReek.irap      BASE_SURFACE:../../rms/output/cohiba/surfaces/TopMidReek.irap      FORWARD_INIT:True
+SURFACE LOW_REEK    OUTPUT_FILE:ert_TopLowerReek.irap    INIT_FILES:rms/output/cohiba/surfaces/TopLowerReek.irap    BASE_SURFACE:../../rms/output/cohiba/surfaces/TopLowerReek.irap    FORWARD_INIT:True
+SURFACE BASE_REEK   OUTPUT_FILE:ert_BaseLowerReek.irap   INIT_FILES:rms/output/cohiba/surfaces/BaseLowerReek.irap   BASE_SURFACE:../../rms/output/cohiba/surfaces/BaseLowerReek.irap   FORWARD_INIT:True
+
+-- If FIELD parameters are used, CAREFULL_COPY must also be activated
+FIELD G1   PARAMETER   ./g1_field.grdecl   INIT_FILES:./rms/output/aps/g1.grdecl   MIN:-5.5   MAX:5.5 	FORWARD_INIT:True
+FIELD G2   PARAMETER   ./g2_field.grdecl   INIT_FILES:./rms/output/aps/g2.grdecl   MIN:-5.5   MAX:5.5 	FORWARD_INIT:True
+
+
+-----------------------------------------------------
+-- SECTION: Forward Models
+-----------------------------------------------------
+
+-- 1
+-- Create/copy RMS directories and files
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/model)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/bin, <TO>=<RUNPATH>/rms)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/ipl, <TO>=<RUNPATH>/rms)
+
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/input/global_variables)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/input/config,         <TO>=<RUNPATH>/rms/input)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/input/well_modelling, <TO>=<RUNPATH>/rms/input)
+
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/aps)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/cohiba/surfaces)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/cohiba/logfiles)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/pem)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/regions/data/grid)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/regions/result)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/zone)
+
+-- 2
+-- Create/copy Sim2Seis directories and files
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis/input)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis/input/pem)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis/input/4d_attribute_maps/horizons_depth)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis/output)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis/output/pem)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis/output/seismic_forward)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=<RUNPATH>/sim2seis/output/4d_attribute_maps)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../sim2seis/model,                 <TO>=<RUNPATH>/sim2seis/)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../sim2seis/bin,                   <TO>=<RUNPATH>/sim2seis/)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../sim2seis/input/seismic_forward, <TO>=<RUNPATH>/sim2seis/input)
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../../sim2seis/output/seismic_forward/similarity_KL_ave.sgy, <TO>=<RUNPATH>/sim2seis/output/seismic_forward/similarity_KL_ave.sgy)
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../../sim2seis_truth/output/seismic_forward/syntseis_20000101_seismic_depth_stack.segy, <TO>=<RUNPATH>/sim2seis_truth/output//seismic/forward/syntseis_seismic_2000010_depth_stack.segy)
+
+
+
+
+-- 3
+-- Create/copy Eclipse directories and files
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/grid)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/props)
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../../eclipse/include/props/reek.endpoints, <TO>=<RUNPATH>/eclipse/include/props/reek.endpoints)
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../../eclipse/include/props/reek.pvt,       <TO>=<RUNPATH>/eclipse/include/props/reek.pvt)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/regions)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/solution)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../eclipse/include/summary, <TO>=<RUNPATH>/eclipse/include)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/schedule)
+
+-- 4 
+-- Create Coviz directories
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/maps)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/grids)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/polygons)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/volumes)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/images)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../share/results/observations/maps, <TO>=<RUNPATH>/share/results/observations/maps)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../share/results/observations/grids, <TO>=<RUNPATH>/share/results/observations/grids)
+
+-- 5
+-- Move GEN_KW or DESIGN_KW generated files to correct directories
+FORWARD_MODEL MOVE_FILE(<FROM>=global_variables.ipl,  <TO>=rms/input/global_variables/global_variables.ipl)
+FORWARD_MODEL MOVE_FILE(<FROM>=reek.multflt,          <TO>=eclipse/include/grid/reek.multflt)
+FORWARD_MODEL MOVE_FILE(<FROM>=relperm_config.txt,    <TO>=eclipse/include/props/relperm_config.txt)
+FORWARD_MODEL MOVE_FILE(<FROM>=reek.multz,            <TO>=eclipse/include/grid/reek.multz)
+
+-- 6
+-- Run RMS
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../input/distributions/<SEED_FILE>,  <TO>=rms/model/random.seeds) -- Multi seed file, ensure traceable seed in RMS 
+FORWARD_MODEL RMS_BATCH(<IENS>=<IENS>, <RMS_VERSION>=<RMSVERSION>, <RMS_PROJECT>=<CONFIG_PATH>/../../rms/model/<RMS_NAME>, <RMS_WORKFLOW>=<RMS_WF_NAME1>, <RMS_TARGET_FILE>=RMS_TARGET.INC)
+
+-- Copy fields that will be updated by ERT
+FORWARD_MODEL CAREFULL_COPY(<SRC_FILE>=./rms/output/aps/g1.grdecl,  <TARGET_FILE>=./g1_field.grdecl)
+FORWARD_MODEL CAREFULL_COPY(<SRC_FILE>=./rms/output/aps/g2.grdecl,  <TARGET_FILE>=./g2_field.grdecl)
+
+-- 7
+-- Generate relperm and capillary pressure curves
+FORWARD_MODEL RELPERM(<SHEET>=<CONFIG_PATH>/../input/config/scalreek.xlsx,<CONFIG>=<RUNPATH>/eclipse/include/props/relperm_config.txt, <TARGET_FILE>=RELPERM.OK) 
+
+-- 8
+-- Run Eclipse
+--FORWARD_MODEL INSERT_NOSIM
+FORWARD_MODEL ECLIPSE100_2014.2
+
+-- 9
+-- Post Eclipse
+
+-- Extract volume information from eclipse prt file at initial timestep
+FORWARD_MODEL ECLIPSEVOL(   <PRTFILE_NAME>=<RUNPATH>/<ECLBASE>.PRT,  <OUTPUT_NAME>=<RUNPATH>/share/results/volumes/eclgrid_vol.txt)
+FORWARD_MODEL ECLIPSERESVOL(<PRTFILE_NAME>=<RUNPATH>/<ECLBASE>.PRT,  <OUTPUT_NAME>=<RUNPATH>/share/results/volumes/eclgrid_resvol.txt)
+-- Create net oil column thickness maps from Eclipse
+FORWARD_MODEL GRID3D_HC_THICKNESS(<CONFIG_HCMAP>=<CONFIG_PATH>/../input/config/hc_thickness.yaml, <ECLIPSE>=<ECLBASE>)
+-- Create average parameter maps from Eclipse
+FORWARD_MODEL GRID3D_AVERAGE_MAP(<CONFIG_AVGMAP>=<CONFIG_PATH>/../input/config/average_map.yaml, <ECLIPSE>=<ECLBASE>)
+-- Create roff file of eclipse egrid
+FORWARD_MODEL ECLGRID2ROFF(<INPUTNAME>=<ECLBASE> , <OUTPUTNAME>=share/results/grids/eclgrid)
+-- Create roff file of eclipse init parameter
+FORWARD_MODEL ECLINIT2ROFF(<INPUTNAME>=<ECLBASE> , <OUTPUTNAME>=share/results/grids/eclgrid, <PARAMETER>=PORO:PERMX:PERMZ)
+-- Create roff file of eclipse restart parameter
+FORWARD_MODEL ECLRST2ROFF(<INPUTNAME>=<ECLBASE> ,  <OUTPUTNAME>=share/results/grids/eclgrid, <PARAMETER>=SWAT:SGAS:PRESSURE,  <DATE>=20000101:20010601:20030101)
+-- Create pressure difference and store as roff parameter
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=PRESSURE,  <DATE1>=20010601,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--pressure--20010601_20000101.roff",   <OUTPUTPARAMTERNAME>=PRESSURE_20010601_20000101)
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=PRESSURE,  <DATE1>=20030101,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--pressure--20030101_20000101.roff",   <OUTPUTPARAMTERNAME>=PRESSURE_20030101_20000101)
+-- Create saturation difference and store as roff parameter																				              
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=SOIL,  <DATE1>=20010601,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--soil--20010601_20000101.roff",   <OUTPUTPARAMTERNAME>=SOIL_20010601_20000101)
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=SOIL,  <DATE1>=20030101,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--soil--20030101_20000101.roff",   <OUTPUTPARAMTERNAME>=SOIL_20030101_20000101)
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=SWAT,  <DATE1>=20010601,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--swat--20010601_20000101.roff",   <OUTPUTPARAMTERNAME>=SWAT_20010601_20000101)
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=SWAT,  <DATE1>=20030101,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--swat--20030101_20000101.roff",   <OUTPUTPARAMTERNAME>=SWAT_20030101_20000101)
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=SGAS,  <DATE1>=20010601,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--sgas--20010601_20000101.roff",   <OUTPUTPARAMTERNAME>=SGAS_20010601_20000101)
+FORWARD_MODEL ECL_DIFF_CALC(<ECLIPSE>=<ECLBASE>,  <PROP>=SGAS,  <DATE1>=20030101,  <DATE2>=20000101,  <OUTPUTFILENAME>="share/results/grids/eclgrid--sgas--20030101_20000101.roff",   <OUTPUTPARAMTERNAME>=SGAS_20030101_20000101)
+
+FORWARD_MODEL MAKE_SYMLINK(<TARGET>=<RUNPATH>/<ECLBASE>.EGRID, <LINKNAME>=<RUNPATH>/sim2seis/input/pem/ECLIPSE.EGRID)
+FORWARD_MODEL MAKE_SYMLINK(<TARGET>=<RUNPATH>/<ECLBASE>.INIT,  <LINKNAME>=<RUNPATH>/sim2seis/input/pem/ECLIPSE.INIT)
+FORWARD_MODEL MAKE_SYMLINK(<TARGET>=<RUNPATH>/<ECLBASE>.UNRST, <LINKNAME>=<RUNPATH>/sim2seis/input/pem/ECLIPSE.UNRST)
+
+FORWARD_MODEL RMS_BATCH(<IENS>=<IENS>, <RMS_VERSION>=<RMSVERSION>, <RMS_PROJECT>=<CONFIG_PATH>/../../rms/model/<RMS_NAME>, <RMS_WORKFLOW>=<RMS_WF_NAME2>, <RMS_TARGET_FILE>=RMS_TARGET2.INC)
+
+
+-- Delete the synthetic seismic files after the attribute maps have been calculated
+FORWARD_MODEL DELETE_DIRECTORY(<DIRECTORY>=sim2seis/output/seismic_forward/)
+
+
+-- 10
+-- Run RFT (create file with simulated rft pressure)
+FORWARD_MODEL GENDATA_RFT(<PATH_TO_TRAJECTORY_FILES>=<CONFIG_PATH>/../input/observations/rft/, <WELL_AND_TIME_FILE>=<CONFIG_PATH>/../input/observations/rft/well_date_rft.txt, <ZONEMAP>=<CONFIG_PATH>/../input/observations/rft/layer_zone_table.txt)
+
+-- Report step: use 1 for first rft, 2 for second, etc
+-- Result file: created by FORWARD_MODEL GENDATA_RFT, %d will be replaced with report step number (make sure the report step number set in GEN_DATA and <WELL_AND_TIME_FILE> matches). 
+--        ert id           input format         report step     Result file name
+GEN_DATA  OP_1_SIM	   INPUT_FORMAT:ASCII   REPORT_STEPS:1  RESULT_FILE:RFT_OP_1_%d      
+GEN_DATA  OP_4_SIM	   INPUT_FORMAT:ASCII   REPORT_STEPS:1  RESULT_FILE:RFT_OP_4_%d    
+GEN_DATA  OP_5_SIM	   INPUT_FORMAT:ASCII   REPORT_STEPS:1  RESULT_FILE:RFT_OP_5_%d   
+GEN_DATA  WI_2_SIM	   INPUT_FORMAT:ASCII   REPORT_STEPS:1  RESULT_FILE:RFT_WI_2_%d      
+
+-- Creating GEN_DATA of seismic time-difference for usage in AHM:
+GEN_DATA SUMDTDIFF RESULT_FILE:rms/output/pem/TS_2003_2000_sim_%d.txt INPUT_FORMAT:ASCII REPORT_STEPS:37
+
+
+
+-- 11
+-- Delete directories and files
+--FORWARD_MODEL DELETE_DIRECTORY(<DIRECTORY>=rms/output/aps)
+--FORWARD_MODEL DELETE_FILE(<FILES>=<RUNPATH>/<ECLBASE>.UNRST)
+--FORWARD_MODEL DELETE_FILE(<FILES>=<RUNPATH>/<ECLBASE>.EGRID)
+--FORWARD_MODEL DELETE_FILE(<FILES>=<RUNPATH>/<ECLBASE>.INIT)
+--FORWARD_MODEL DELETE_FILE(<FILES>=<RUNPATH>/<ECLBASE>.PRT)
+
+
+-----------------------------------------------------
+-- SECTION: Observations
+-----------------------------------------------------
+
+OBS_CONFIG  ../input/observations/observations_rates_rft_seismic_30.txt
+
+
+----------------------------------------------------
+-- SECTION: Plotting 
+-----------------------------------------------------
+
+-- All Eclipse summary vectors can be added
+SUMMARY FOPR	     -- Field Oil Production Rate
+SUMMARY FWPR         -- Field Water Production Rate
+SUMMARY FGPR         -- Field Gas Production Rate
+SUMMARY FOPT         -- Field Oil Production Total
+SUMMARY FWPT         -- Field Water Production Total
+SUMMARY FGPT         -- Field Gas Production Toral
+SUMMARY FWCT         -- Field WCT
+SUMMARY FGOR         -- Field GOR
+SUMMARY FWIR         -- Field Water Injcetion Rate
+SUMMARY FWIT         -- Field Water Injection Total
+SUMMARY FPR          -- Field PRessure
+SUMMARY FOIP         -- Field Oil In Place
+SUMMARY ROIP:*       -- Region Oil In Place
+SUMMARY WOPR*:OP*    -- Well Oil Production Rate
+SUMMARY WWPR*:OP*    -- Well Water Production Rate
+SUMMARY WGPR*:OP*    -- Well Gas Production Rate
+SUMMARY WOPT*:OP*    -- Well Oil Production Total
+SUMMARY WWPT*:OP*    -- Well Water Production Total
+SUMMARY WGPT*:OP*    -- Well Gas Production Toral
+SUMMARY WWCT*:OP*    -- Well WCT
+SUMMARY WGOR*:OP*    -- Well GOR
+SUMMARY WWIR*:WI*    -- Well Water Injcetion Rate
+SUMMARY WWIT*:WI*    -- Well Water Injection Total
+SUMMARY WBHP:*       -- Well BHP
+
+
+

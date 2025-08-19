@@ -1,0 +1,195 @@
+-- ==============================================================================
+--
+-- ERT CONFIGURATION FILE:
+-- REEK RESERVOIR MODEL - FMU tutorial version
+--
+-- Documentation:
+-- References:
+-- ERT technical description: https://sdp.statoil.no/wikidocs/GBS/ERT/
+-- FMU wiki portal: https://wiki.statoil.no/wiki/index.php/FMU_portal_home
+--
+-- ==============================================================================
+
+
+-----------------------------------------------------
+-- SECTION: Internal variables 
+-----------------------------------------------------
+
+DEFINE  <USER>			$USER
+DEFINE  <SCRATCH>         	/scratch/fmu
+DEFINE  <CASE_DIR>         	2_r002_reek
+DEFINE  <ECLIPSE_NAME>     	2_R002_REEK
+DEFINE  <RMS_NAME>       	reek.rms10.1.1
+DEFINE  <RMSVERSION>            10.1.1
+DEFINE  <RMS_WF_NAME1>    	MAIN
+--DEFINE  <SEED_FILE>      	random.seeds
+DEFINE  <DESIGN_MATRIX>         ../input/distributions/design_matrix.xlsx
+DEFINE  <DESIGN_SHEET>          DesignMatrix
+
+
+-----------------------------------------------------
+-- SECTION: Eclipse, runpath and storage settings 
+-----------------------------------------------------
+
+DATA_FILE               ../../eclipse/model/REEK.DATA			       -- Location of the template eclipse data file
+ECLBASE                 eclipse/model/<ECLIPSE_NAME>-%d 		       -- Name used for the eclipse simulations under runpath (%d will be replaced with the realization number) 
+RUNPATH		        <SCRATCH>/<USER>/<CASE_DIR>/realization-%d/iter-%d/    -- Runpath from where all realizations are run
+ENSPATH		        ../output/storage/<CASE_DIR>			       -- Path for internal ERT data	
+PLOT_SETTINGS PATH      ../output/plot/<CASEDIR>        		       -- Storage of plots
+LOG_FILE                ../output/log/<CASE_DIR>.log			       -- Ert log file
+UPDATE_LOG_PATH         ../output/update_log/<CASE_DIR>			       -- Storage of update log (list of active and inactive data points)
+RUNPATH_FILE	        ../output/run_path_file/.ert-runpath-list_<CASE_DIR>   -- Resulting list of runpaths for the simulations
+
+REFCASE     	        ../input/refcase/model/REEK_REF  		       -- Neccessary for AHM: used for plotting and reading historical production 
+HISTORY_SOURCE 	        REFCASE_SIMULATED				       -- Choosing from where the observations for the history matching should be given (REFCASE_HISTORY if WCONHIST & WCONINJH in REFCASE should be used)
+
+
+-----------------------------------------------------
+-- SECTION: LSF settings, AHM configuration etc.
+-----------------------------------------------------
+
+NUM_REALIZATIONS	5				-- Set number of realizations to run
+MAX_RUNTIME 		1800				-- Set the maximum allowed run time (in seconds)
+MIN_REALIZATIONS 	1   		     	       	-- The minimum number of realizations that must have succeeded for the simulation to be regarded as a success
+
+QUEUE_SYSTEM 		LSF 				-- Use the LSF cluster to run simulations
+LSF_SERVER 		$ERT_LSF_SERVER 		-- Which server in the cluster to run
+LSF_QUEUE 	 	mr  				-- Which LSF queue to use (mr - Multi Realization)
+
+QUEUE_OPTION 		LSF MAX_RUNNING 50		-- Choke the number of simultaneous run
+MAX_SUBMIT 		1				-- How many times should the queue system retry a simulation. Default = 2 (use 1 when debugging)
+
+UMASK 			0		   		-- Make simulations readable to others (chmod o+rw)
+
+
+-----------------------------------------------------
+-- SECTION: Install jobs and workflows needed
+-----------------------------------------------------	
+
+-- Install jobs used in main workflow
+
+INSTALL_JOB RELPERM			../bin/jobs/RELPERM		     -- Generate LET rel perm curves
+
+
+------------------------------------------------------------------------
+-- SECTION: Uncertainty parameters 
+--          Use either design matrix with DESIGN2PARAMS and DESIGN_KW
+--          or draw from ERT distributions with GEN_KW (Only option for AHM)
+-------------------------------------------------------------------------
+
+FORWARD_MODEL DESIGN2PARAMS(<xls_filename>=<CONFIG_PATH>/<DESIGN_MATRIX>, <designsheet>=<DESIGN_SHEET>, <defaultssheet>=DefaultValues) 
+
+------ ---------------------------------------------------------------------------------------------------------------------------------------
+------                   template file                                                           result file                  
+------ ---------------------------------------------------------------------------------------------------------------------------------------
+FORWARD_MODEL DESIGN_KW(<template_file>=<CONFIG_PATH>/../input/templates/global_variables.tmpl,  <result_file>=<RUNPATH>/global_variables.ipl)
+FORWARD_MODEL DESIGN_KW(<template_file>=<CONFIG_PATH>/../input/templates/multflt.tmpl,           <result_file>=<RUNPATH>/reek.multflt)
+FORWARD_MODEL DESIGN_KW(<template_file>=<CONFIG_PATH>/../input/templates/multz.tmpl,             <result_file>=<RUNPATH>/reek.multz)
+FORWARD_MODEL DESIGN_KW(<template_file>=<CONFIG_PATH>/../input/templates/relperm_config.tmpl,             <result_file>=<RUNPATH>/relperm_config.txt)
+
+------ ---------------------------------------------------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------
+-- SECTION: Forward Models
+-----------------------------------------------------
+
+-- 1
+-- Create/copy RMS directories and files
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/model)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/bin, <TO>=<RUNPATH>/rms)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/ipl, <TO>=<RUNPATH>/rms)
+
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/input/global_variables)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/input/config,         <TO>=<RUNPATH>/rms/input)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../rms/input/well_modelling, <TO>=<RUNPATH>/rms/input)
+
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/aps)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/cohiba/surfaces)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/cohiba/logfiles)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/pem)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/regions/data/grid)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/regions/result)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=rms/output/zone)
+
+-- 2
+-- Create/copy Sim2Seis directories and files
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=sim2seis/model)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=sim2seis/input)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=sim2seis/input/pem)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=sim2seis/output)
+
+-- 3
+-- Create/copy Eclipse directories and files
+
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/grid)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/props)
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../../eclipse/include/props/reek.endpoints, <TO>=<RUNPATH>/eclipse/include/props/reek.endpoints)
+FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../../eclipse/include/props/reek.pvt,       <TO>=<RUNPATH>/eclipse/include/props/reek.pvt)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/regions)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/solution)
+FORWARD_MODEL COPY_DIRECTORY(<FROM>=<CONFIG_PATH>/../../eclipse/include/summary, <TO>=<RUNPATH>/eclipse/include)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=eclipse/include/schedule)
+
+-- 4 
+-- Create Coviz directories
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/maps)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/grids)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/polygons)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/volumes)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/images)
+FORWARD_MODEL MAKE_DIRECTORY(<DIRECTORY>=share/results/observations)
+
+-- 5
+-- Move GEN_KW or DESIGN_KW generated files to correct directories
+FORWARD_MODEL MOVE_FILE(<FROM>=global_variables.ipl,  <TO>=rms/input/global_variables/global_variables.ipl)
+FORWARD_MODEL MOVE_FILE(<FROM>=reek.multflt,          <TO>=eclipse/include/grid/reek.multflt)
+FORWARD_MODEL MOVE_FILE(<FROM>=reek.multz,            <TO>=eclipse/include/grid/reek.multz)
+FORWARD_MODEL MOVE_FILE(<FROM>=relperm_config.txt,    <TO>=eclipse/include/props/relperm_config.txt)
+
+-- 6
+-- Run RMS
+FORWARD_MODEL DESIGN_KW(<template_file>=<CONFIG_PATH>/../input/templates/seed.tmpl, <result_file>=<RUNPATH>/rms/model/RMS_SEED) -- Single seed file from design matrix, ensure traceable seed in RMS
+--FORWARD_MODEL COPY_FILE(<FROM>=<CONFIG_PATH>/../input/distributions/<SEED_FILE>,  <TO>=rms/model/random.seeds)                -- Multi seed file, ensure traceable seed in RMS
+FORWARD_MODEL RMS_BATCH(<IENS>=<IENS>, <RMS_VERSION>=<RMSVERSION>, <RMS_PROJECT>=<CONFIG_PATH>/../../rms/model/<RMS_NAME>, <RMS_WORKFLOW>=<RMS_WF_NAME1>, <RMS_TARGET_FILE>=RMS_TARGET.INC)
+
+-- 7
+-- Generate relperm and capillary pressure curves
+FORWARD_MODEL RELPERM(<SHEET>=<CONFIG_PATH>/../input/config/scalreek.xlsx,<CONFIG>=<RUNPATH>/eclipse/include/props/relperm_config.txt, <TARGET_FILE>=RELPERM.OK) 
+
+-- 8
+-- Run Eclipse
+--FORWARD_MODEL INSERT_NOSIM
+FORWARD_MODEL ECLIPSE100_2014.2
+
+				              
+----------------------------------------------------
+-- SECTION: Plotting 
+-----------------------------------------------------
+
+-- All Eclipse summary vectors can be added
+SUMMARY FOPR	     -- Field Oil Production Rate
+SUMMARY FWPR         -- Field Water Production Rate
+SUMMARY FGPR         -- Field Gas Production Rate
+SUMMARY FOPT         -- Field Oil Production Total
+SUMMARY FWPT         -- Field Water Production Total
+SUMMARY FGPT         -- Field Gas Production Toral
+SUMMARY FWCT         -- Field WCT
+SUMMARY FGOR         -- Field GOR
+SUMMARY FWIR         -- Field Water Injcetion Rate
+SUMMARY FWIT         -- Field Water Injection Total
+SUMMARY FPR          -- Field PRessure
+SUMMARY FOIP         -- Field Oil In Place
+SUMMARY ROIP:*       -- Region Oil In Place
+SUMMARY WOPR*:OP*    -- Well Oil Production Rate
+SUMMARY WWPR*:OP*    -- Well Water Production Rate
+SUMMARY WGPR*:OP*    -- Well Gas Production Rate
+SUMMARY WOPT*:OP*    -- Well Oil Production Total
+SUMMARY WWPT*:OP*    -- Well Water Production Total
+SUMMARY WGPT*:OP*    -- Well Gas Production Toral
+SUMMARY WWCT*:OP*    -- Well WCT
+SUMMARY WGOR*:OP*    -- Well GOR
+SUMMARY WWIR*:WI*    -- Well Water Injcetion Rate
+SUMMARY WWIT*:WI*    -- Well Water Injection Total
+SUMMARY WBHP:*       -- Well BHP
+

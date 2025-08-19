@@ -1,0 +1,92 @@
+name: fmu-config
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  release:
+    types:
+      - published
+  schedule:
+    # Run nightly to check that tests are working with latest dependencies
+    - cron: "0 0 * * *"
+
+permissions: {}
+
+jobs:
+  fmu-config:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    permissions:
+      contents: write  # Docs requires write
+      pull-requests: write
+    steps:
+      - name: Checkout commit locally
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install requirements
+        run: |
+          pip install ".[dev]"
+
+      - name: List all installed packages
+        run: pip freeze
+
+      - name: Ruff check
+        if: ${{ always() }}
+        run: ruff check .
+
+      - name: Ruff format check
+        if: ${{ always() }}
+        run: ruff format . --check
+
+      - name: Check typing with mypy
+        if: ${{ always() }}
+        run: mypy src
+
+      - name: Run tests
+        if: ${{ always() }}
+        run: pytest tests
+
+      - name: Syntax check documentation
+        if: ${{ always() }}
+        run: rstcheck -r docs
+
+      - name: Build documentation
+        if: ${{ always() }}
+        run: sphinx-build -b html docs build/docs/html
+
+      - name: Update GitHub pages
+        if: github.repository_owner == 'equinor' && github.ref == 'refs/heads/main' && matrix.python-version == '3.11'
+        run: |
+          cp -R ./build/docs/html ../html
+
+          git config --local user.email "fmu-config-github-action"
+          git config --local user.name "fmu-config-github-action"
+          git fetch origin gh-pages
+          git checkout --track origin/gh-pages
+          git clean -f -f -d -x  # Double -f is intentional
+          git rm -r * --ignore-unmatch
+
+          cp -R ../html/* .
+          touch .nojekyll  # If not, github pages ignores _* directories.
+          git add .
+
+          if git diff-index --quiet HEAD; then
+            echo "No changes in documentation. Skip documentation deploy."
+          else
+            git commit -m "Update Github Pages"
+            git push "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+          fi
