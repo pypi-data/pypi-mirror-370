@@ -1,0 +1,67 @@
+Variable	Process
+
+# Convert these variables into a set of binary columns, one
+# column per unique value. The metaproc fields are used to
+# generate useful descriptions for each column.
+6150,6155,20003,20199	binariseCategorical(acrossVisits=True, acrossInstances=True, metaproc='codingdesc')
+20001,20002,20004,40011,40012	binariseCategorical(acrossVisits=True, acrossInstances=True, metaproc='hierarchycodedesc')
+40001,40002,40006,40013,41200,41201,41210,41256,41258,41272,41273	binariseCategorical(acrossVisits=True, acrossInstances=True, metaproc='hierarchycodedesc')
+
+# ICD9/10 diagnoses are binarised, but instead of having
+# binary 1/0 values, each column contains the date of
+# diagnosis, or '0' indicating no diagnosis. After this
+# step, the date columns 41280/41281 will be removed
+# from the data set.
+41270,41271	binariseCategorical(acrossVisits=True, acrossInstances=True, metaproc='hierarchycodedesc', fillval=0, take=[41280,41281])
+
+# Other vars to be binariesd
+23165,29000,29001	binariseCategorical
+
+# Sparsity check - for most data fields, columns will be
+# dropped if they do not meet these criteria:
+#
+#  - have at least 51 non-na values
+#  - have a stddev >1e-6
+#
+# Categorical columns will be dropped if one category
+# comprises 99% of the data.
+#
+# We exclude a subset of categories containing data fields
+# of secondary/auxillary interest, which we always want
+# present in the output.
+all_except,6150,6155,20001,20002,20003,20004,20199,40001,40002,40006,40011,40012,40013,41200,41201,41202,41203,41204,41205,41210,41256,41258,41270,41271,41272,41273,cat1,cat31,cat60,cat70,cat97,cat98,cat99	removeIfSparse(minpres=51, maxcat=0.99, minstd=1e-6, abscat=False)
+
+# Binarised vars are subjected to a slightly adjusted sparsity
+# check - we drop columns which don't have at least 10 diagnoses
+# (or which have less than 10 non-diagnoses). Note that this
+# does not include main ICD9/10 columns (411270, 41271), which
+# are tested separately below.
+6150,6155,20001,20002,20003,20004,20199,40001,40002,40006,40011,40012,40013,41200,41201,41210,41256,41258,41272,41273	removeIfSparse(mincat=10)
+
+# At this point, the main ICD vars will contain either
+# a date, or nan (fillval=0, used above, is only applied at
+# export), so a minpres test will suffice.
+41270,41271	removeIfSparse(minpres=10)
+
+# Drop columns which are correlated with other columns (the one
+# with more missing values is dropped). If processing
+# unknown/uncategorised data fields, do not remove columns that
+# are redundant w.r.t. those unknowns/uncategorised.
+#
+# We exclude ICD9/10 primary/secondary diagnosis columns - they
+# will be ingested in the createDiagnosisColumn step below.
+#
+# We also exclude a subset of categories containing data fields
+# of secondary/auxillary interest, which we always want
+# present in the output.
+all_except,41202,41203,41204,41205,cat1,cat31,cat60,cat70,cat97,cat98,cat99	removeIfRedundant(0.99, 0.2, skipUnknowns=True)
+
+# Create binary columns for ICD9/ICD10 diagnoses,
+# denoting each diagnosis as being either primary or
+# secondary. After this step, the primary/secondary
+# diagnosis data fields (41202, 41203, 41204, 41205)
+# will be removed from the data set, and replaced with
+# binary columns denoting each diagnosis as either
+# primary or secondary.
+41270	createDiagnosisColumns(41202, 41204, binarised=True)
+41271	createDiagnosisColumns(41203, 41205, binarised=True)
