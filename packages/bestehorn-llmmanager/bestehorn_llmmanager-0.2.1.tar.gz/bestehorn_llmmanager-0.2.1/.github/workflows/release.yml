@@ -1,0 +1,217 @@
+name: Release to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Required for setuptools-scm to access git history and tags
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[dev]
+    
+    - name: Run tests
+      run: |
+        pytest test/bestehorn_llmmanager/ -v --cov=bestehorn_llmmanager --cov-report=xml --ignore=test/integration/
+    
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.xml
+        fail_ci_if_error: false
+        verbose: true
+
+  build-and-publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for PyPI Trusted Publishing
+      id-token: write
+      # Required for creating GitHub releases
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Required for setuptools-scm to access git history and tags
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade build twine pkginfo setuptools-scm
+    
+    - name: Verify setuptools-scm before build
+      run: |
+        echo "=== setuptools-scm Diagnostics ==="
+        echo "--- Git repository info ---"
+        git status
+        git log --oneline -5
+        git tag --list | tail -10
+        
+        echo "--- setuptools-scm version detection ---"
+        python -c "
+        try:
+            from setuptools_scm import get_version
+            version = get_version()
+            print(f'✅ setuptools-scm SUCCESS: {version}')
+        except Exception as e:
+            print(f'❌ setuptools-scm FAILED: {e}')
+            import traceback
+            traceback.print_exc()
+        "
+    
+    - name: Build package with diagnostics
+      run: |
+        echo "=== Build Process Diagnostics ==="
+        echo "Building package..."
+        python -m build --verbose
+        echo "=== Build completed ==="
+    
+    - name: Inspect built package metadata
+      run: |
+        echo "=== Package Metadata Investigation ==="
+        echo "--- Contents of dist/ directory ---"
+        ls -la dist/
+        
+        echo "--- Wheel file contents ---"
+        python -c "
+        import os
+        import zipfile
+        import glob
+        
+        wheel_files = glob.glob('dist/*.whl')
+        if wheel_files:
+            wheel_file = wheel_files[0]
+            print(f'Inspecting wheel: {wheel_file}')
+            with zipfile.ZipFile(wheel_file, 'r') as zf:
+                print('Wheel contents:')
+                for name in sorted(zf.namelist()):
+                    print(f'  {name}')
+                
+                # Look for metadata files
+                metadata_files = [n for n in zf.namelist() if 'METADATA' in n or 'metadata' in n.lower()]
+                print(f'Metadata files found: {metadata_files}')
+                
+                for meta_file in metadata_files:
+                    print(f'--- Contents of {meta_file} ---')
+                    try:
+                        content = zf.read(meta_file).decode('utf-8')
+                        print(content[:1000])  # First 1000 chars
+                        if len(content) > 1000:
+                            print('...(truncated)')
+                    except Exception as e:
+                        print(f'Error reading {meta_file}: {e}')
+        else:
+            print('No wheel files found!')
+        "
+        
+        echo "--- Testing pkginfo on built wheel ---"
+        python -c "
+        import pkginfo
+        import glob
+        
+        wheel_files = glob.glob('dist/*.whl')
+        if wheel_files:
+            wheel_file = wheel_files[0]
+            print(f'Testing pkginfo on: {wheel_file}')
+            try:
+                info = pkginfo.get_metadata(wheel_file)
+                if info:
+                    print(f'pkginfo SUCCESS - Name: {info.name}, Version: {info.version}')
+                    print(f'Metadata version: {info.metadata_version}')
+                else:
+                    print('pkginfo returned None - this is the problem!')
+            except Exception as e:
+                print(f'pkginfo ERROR: {e}')
+                import traceback
+                traceback.print_exc()
+        "
+    
+    - name: Check package
+      run: |
+        echo "=== Final Package Check ==="
+        twine check dist/* || echo "Twine check failed as expected"
+        ls -la dist/
+    
+    - name: Check if version is clean release (no dev/local identifiers)
+      id: version-check
+      run: |
+        echo "=== Version Analysis ==="
+        # Get the version from setuptools-scm
+        VERSION=$(python -c "from setuptools_scm import get_version; print(get_version())")
+        echo "Generated version: $VERSION"
+        
+        # Check if version contains dev or local identifiers
+        if [[ "$VERSION" == *"dev"* ]] || [[ "$VERSION" == *"+"* ]]; then
+          echo "❌ Development version detected: $VERSION"
+          echo "This suggests the workflow is running on a commit after the tag, not on the tag itself."
+          echo "is_release_version=false" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        else
+          echo "✅ Clean release version: $VERSION"
+          echo "is_release_version=true" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Publish to Test PyPI
+      if: steps.version-check.outputs.is_release_version == 'true'
+      uses: pypa/gh-action-pypi-publish@v1.12.2
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        skip-existing: true
+        attestations: false
+        verbose: true
+    
+    - name: Skip Test PyPI (Development Version)
+      if: steps.version-check.outputs.is_release_version == 'false'
+      run: |
+        echo "⚠️ Skipping Test PyPI publication for development version: ${{ steps.version-check.outputs.version }}"
+        echo "This is likely because the workflow is running on a commit after the tag."
+        echo "To publish a release, ensure the workflow runs exactly on the tagged commit."
+    
+    - name: Publish to PyPI
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && steps.version-check.outputs.is_release_version == 'true'
+      uses: pypa/gh-action-pypi-publish@v1.12.2
+      with:
+        attestations: false
+        verbose: true
+    
+    - name: Skip PyPI (Development Version)
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && steps.version-check.outputs.is_release_version == 'false'
+      run: |
+        echo "⚠️ Skipping PyPI publication for development version: ${{ steps.version-check.outputs.version }}"
+        echo "This suggests a problem with git tag detection or the workflow trigger."
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
