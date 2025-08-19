@@ -1,0 +1,162 @@
+[build-system]
+requires = ["hatchling >= 1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yak-server"
+description = "Football bet rest server"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [{name = "Guillaume Le Pape", email = "gui.lepape25@gmail.com"}]
+keywords = ["postgresql", "api", "rest"]
+classifiers = [
+    "Operating System :: Unix",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Framework :: Pydantic",
+    "Framework :: Pydantic :: 2",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Database",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = [
+    "PyJWT ==2.10.1",
+    "psycopg[binary] >=3.2.9",
+    "argon2-cffi ==25.1.0",
+    "fastapi ==0.116.1",
+    "click >=8.1.8",
+    "SQLAlchemy ==2.0.41",
+    "pendulum ==3.1.0",
+    "pydantic-settings ==2.10.1",
+]
+version = "0.57.0"
+
+[project.urls]
+Homepage = "https://github.com/yak-toto/yak-server"
+Repository = "https://github.com/yak-toto/yak-server"
+
+[project.optional-dependencies]
+db_migration = ["alembic ==1.16.4"]
+sync = ["beautifulsoup4[lxml] ==4.13.4", "httpx ==0.28.1"]
+server = ["uvicorn>=0.34.0"]
+
+[project.scripts]
+yak = "yak_server.cli:app"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pre-commit>=4.0.1",
+    "pytest>=8.4.0",
+    "pytest-cov>=6.0.0",
+    "pytest-env>=1.1.5",
+    "uvicorn[standard]>=0.34.0",
+    "yappi>=1.6.10",
+]
+type-checking = [
+    "hatchling>=1.27.0",
+    "lxml-stubs>=0.5.1",
+    "mypy>=1.17.0",
+    "types-beautifulsoup4>=4.12.0.20241020",
+]
+
+[tool.hatch.version]
+path = "yak_server/__init__.py"
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "scripts/build_hooks.py"
+
+[tool.uv]
+required-version = ">=0.7.1"
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+omit = ["yak_server/database/migrations/*", "scripts/build_hooks.py"]
+exclude_lines = ["if TYPE_CHECKING:", "pragma: no cover"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+fix = true
+preview = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    # docstring
+    "D",
+    # shadow builtins
+    "A002",
+    # f-string logging
+    "G004",
+    # copyright
+    "CPY001",
+    # from __future__ import annotations
+    "FA100",
+    # formatter compatiblity
+    "COM812",
+    "ISC001",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.ruff.lint.per-file-ignores]
+"yak_server/cli/*" = ["T20"]
+"yak_server/database/migrations/*" = ["ANN001", "ANN201"]
+"yak_server/helpers/errors.py" = ["S105"]
+"tests/*" = ["S101", "PLR0914", "PLR2004"]
+"testing/*" = ["S101"]
+"scripts/*" = ["T201"]
+
+[tool.ruff.lint.pylint]
+max-args = 6
+max-returns = 7
+
+[tool.mypy]
+strict = true
+pretty = true
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+exclude = '''(?x)(
+    ^yak_server/database/migrations/.*?\.py$|
+    ^yak_server/cli/database/sync.py$
+)'''
+
+[tool.pytest.ini_options]
+log_file = "yak_test.log"
+# log_file_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_file_level = "INFO"
+env = ["POSTGRES_DB=test"]
+
+[tool.importlinter]
+root_package = "yak_server"
+
+[[tool.importlinter.contracts]]
+name = "yak_server.database should not import other yak_server modules"
+type = "independence"
+modules = ["yak_server.database"]
+
+[[tool.importlinter.contracts]]
+name = "yak_server.helpers should not import yak_server.{v1,cli}"
+type = "forbidden"
+source_modules = ["yak_server.helpers"]
+forbidden_modules = ["yak_server.v1", "yak_server.cli"]
+
+[[tool.importlinter.contracts]]
+name = "yak_server.v1.helpers should not import yak_server.v1.models and yak_server.v1.routers"
+type = "forbidden"
+source_modules = ["yak_server.v1.helpers"]
+forbidden_modules = ["yak_server.v1.models", "yak_server.v1.routers"]

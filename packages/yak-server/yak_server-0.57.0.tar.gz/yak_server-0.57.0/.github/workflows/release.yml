@@ -1,0 +1,64 @@
+name: 🆙 Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-type:
+        type: choice
+        description: Release type
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # <-- Required for publishing to PyPI
+      contents: write # <-- Enables push
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Create commits
+        id: create-commits
+        run: |
+          git config user.name 'yak-toto'
+          git config user.email 'yaktoto648@gmail.com'
+          uv version --bump ${{ github.event.inputs.release-type }}
+          export NEW_VERSION=$(uv version --short)
+          uv lock
+          git add pyproject.toml uv.lock
+          git commit -m "Release "$NEW_VERSION
+          git tag -a $NEW_VERSION HEAD -m \"$NEW_VERSION\"
+          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Push
+        uses: ad-m/github-push-action@master
+        with:
+          tags: true
+
+      - name: Checkout code
+        run: git checkout ${{ steps.create-commits.outputs.new-version }}
+
+      - name: Build distribution
+        run: uv build
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@v1.12.4
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "dist/*"
+          generateReleaseNotes: true
+          tag: ${{ steps.create-commits.outputs.new-version }}

@@ -1,0 +1,124 @@
+Metadata-Version: 2.4
+Name: yak-server
+Version: 0.57.0
+Summary: Football bet rest server
+Project-URL: Homepage, https://github.com/yak-toto/yak-server
+Project-URL: Repository, https://github.com/yak-toto/yak-server
+Author-email: Guillaume Le Pape <gui.lepape25@gmail.com>
+License-Expression: MIT
+License-File: LICENSE
+Keywords: api,postgresql,rest
+Classifier: Environment :: Web Environment
+Classifier: Framework :: FastAPI
+Classifier: Framework :: Pydantic
+Classifier: Framework :: Pydantic :: 2
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Database
+Classifier: Topic :: Database :: Database Engines/Servers
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: WWW/HTTP :: HTTP Servers
+Requires-Python: >=3.9
+Requires-Dist: argon2-cffi==25.1.0
+Requires-Dist: click>=8.1.8
+Requires-Dist: fastapi==0.116.1
+Requires-Dist: pendulum==3.1.0
+Requires-Dist: psycopg[binary]>=3.2.9
+Requires-Dist: pydantic-settings==2.10.1
+Requires-Dist: pyjwt==2.10.1
+Requires-Dist: sqlalchemy==2.0.41
+Provides-Extra: db-migration
+Requires-Dist: alembic==1.16.4; extra == 'db-migration'
+Provides-Extra: server
+Requires-Dist: uvicorn>=0.34.0; extra == 'server'
+Provides-Extra: sync
+Requires-Dist: beautifulsoup4[lxml]==4.13.4; extra == 'sync'
+Requires-Dist: httpx==0.28.1; extra == 'sync'
+Description-Content-Type: text/markdown
+
+# Yak-toto
+
+[![PyPI](https://img.shields.io/pypi/v/yak-server?label=stable)](https://pypi.org/project/yak-server/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/yak-server)](https://pypi.org/project/yak-server/)
+[![codecov](https://codecov.io/gh/yak-toto/yak-server/branch/main/graph/badge.svg?token=EZZK5SY5BL)](https://codecov.io/gh/yak-toto/yak-server)
+[![🔐 CodeQL](https://github.com/yak-toto/yak-server/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/yak-toto/yak-server/actions/workflows/codeql-analysis.yml)
+[![Testing](https://github.com/yak-toto/yak-server/actions/workflows/test.yml/badge.svg)](https://github.com/yak-toto/yak-server/actions/workflows/test.yml)
+
+## Requisites
+
+- Ubuntu 22.04
+- Postgres 17.2
+
+## How to build the project
+
+### Database
+
+To setup a database, run `yak env init`. This will ask you to fill different configuration in order build env file.
+Once done, you can run a docker script to start postgres database (at `scripts/postgresrun.sh`)
+
+### Backend
+
+Run your project in a Python env is highly recommend. You can use venv python module using the following command:
+
+```bash
+uv venv
+. .venv/bin/activate
+```
+
+Fetch all packages using uv with the following command:
+
+```bash
+uv pip install -e .
+```
+
+Before starting the backend, add `JWT_SECRET_KEY` and `JWT_EXPIRATION_TIME` in `.env` same as the Postgres user name and password. As
+login system is using JSON Web Token, a secret key is required and an expiration time (in seconds). To generate one, you can use the python built-in `secrets` module.
+
+```py
+>>> import secrets
+>>> secrets.token_hex(16)
+'9292f79e10ed7ed03ffad66d196217c4'
+```
+
+```text
+JWT_SECRET_KEY=9292f79e10ed7ed03ffad66d196217c4
+JWT_EXPIRATION_TIME=1800
+```
+
+Also, automatic backup can be done through `yak_server/cli/backup_database` script. It can be run using `yak db backup`.
+
+Finally, fastapi needs some configuration to start. Last thing, for development environment, debug needs to be activated with a additional environment variable:
+
+```text
+DEBUG=1
+```
+
+And then start backend with:
+
+```bash
+uvicorn --reload yak_server:create_app --factory
+```
+
+### Data initialization
+
+To run local testing, you can use the script `create_database.py`, `initialize_database.py` and `create_admin.py` located in `yak_server/cli` folder. To select, set `COMPETITION` environment variable in `.env`. It will read data from `yak_server/data/{COMPETITION}/`.
+
+### Testing
+
+Yak-server is using `pytest` to run tests.
+
+## Profiling
+
+You can run the application with profiler attached. To do so, please run the following command
+
+```bash
+uvicorn --reload scripts.profiling:create_app --factory
+```
