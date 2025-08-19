@@ -1,0 +1,261 @@
+{% extends 'portal/base.html' %}
+{% load static %}
+{% load app_tags %}
+
+{% block subNav %}
+    {% include "portal/partials/teacher_non_dashboard_subnav.html" %}
+{% endblock subNav %}
+
+{% block scripts %}
+    {{ block.super }}
+    <script type="text/javascript" src="{% static 'portal/js/levelControl.js' %}"></script>
+    <script>
+        // Uncheck the checkboxes that correspond to the already-locked levels
+        $(document).ready(function(){
+            const lockedLevelsIds = {{ locked_levels }};
+            const lockedWorksheetIds = {{ locked_worksheet_ids }};
+
+            lockedLevelsIds.forEach(function(lockedLevelId) {
+                const selector = `[value="level:${lockedLevelId}"]`;
+                $(selector).click();
+            })
+            lockedWorksheetIds.forEach(function(lockedWorksheetId) {
+                const selector = `[value="worksheet:${lockedWorksheetId}"]`;
+                $(selector).click();
+            })
+        })
+    </script>
+{% endblock scripts %}
+
+{% block content %}
+<div id="teach_edit_class_page"></div>
+
+<div class="background container">
+    <section>
+        <h4>Additional settings for class {{ class.name }} ({{ class.access_code }})</h4>
+    </section>
+    <p>
+        <a id="return_to_class_button" href="{% url 'view_class' class.access_code %}" class="button--menu button--menu--enabled">&lt; Back to Edit Class</a>
+    </p>
+    <p>You may change the name of the class, or change permissions to allow external requests from independent
+        students to join this class. You may also transfer the class to another teacher, or change permissions to
+        allow pupils to see their classmates' progress.</p>
+</div>
+<div class="background background--primary">
+    <div class="container">
+        <form method="post" class="pb-3">
+            {% csrf_token %}
+
+            {{ form.non_field_errors }}
+
+            <h5>Class details</h5>
+
+            <div class="row form--row">
+                <div class="form--row__input col-sm-6 col-md-6">
+                    <div class="input--icon">
+                        {{ form.name }}
+                        <span class="iconify" data-icon="mdi:account-multiple"></span>
+                    </div>
+                    <small>{{ form.name.help_text }}</small>
+                    {{ form.name.errors }}
+                </div>
+                <div class="form--row__input col-sm-12 col-md-6">
+                    <div class="form__checkbox">
+                        <div class="form__checkbox-input">
+                            {{ form.classmate_progress }}
+                        </div>
+                        <label for="id_{{ form.classmate_progress.html_name }}" class="font-weight-normal">{{ form.classmate_progress.label }}</label>
+                    </div>
+                    {{ form.classmate_progress.errors }}
+                </div>
+            </div>
+
+            <div class="background">
+                <h5>External requests setting</h5>
+                <p>You can set up permissions for this class allowing students to send requests asking to join your class
+                    from outside of your school or club.</p>
+                <p class="background"><strong>{{ external_requests_message }}</strong></p>
+                <div class="row form--row">
+                    <div class="form--row__input col-md-6">
+                        <label for="id_{{ form.external_requests.html_name }}" class="font-weight-normal">{{ form.external_requests.label }}</label>
+                        {{ form.external_requests }}
+                        <small>{{ form.external_requests.help_text }}</small>
+                        {{ form.external_requests.errors }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <a id="cancel_button" class="button button--secondary button--secondary--dark" href="{% url 'view_class' class.access_code %}">Cancel</a>
+                <button id="update_button" type="submit" class="button button--primary" name="class_edit_submit">Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="background container">
+    <h5>Levels access settings</h5>
+    <p>You may control access to levels here by selecting what you wish to display to the students.</p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        {{ level_control_form.non_field_errors }}
+
+        <div id="episodes">
+            <div class="panel-intro d-flex align-items-center justify-content-between">
+                <h6>Rapid Router levels</h6>
+                <label class="pr-5 mb-0 mr-5">
+                    <input type="checkbox" id="select-all-blockly-levels">
+                </label>
+            </div>
+            {% for episode in blockly_episodes %}
+                {% with episode.id|stringformat:"s" as episode_id %}
+                    {% with "episode"|add:episode_id as episode_index %}
+                        <div class="panel">
+                            <div class="panel-header bg--{{ episode.difficulty }}" id="episode-{{episode.id}}">
+                                <div class="d-flex align-items-center justify-content-end" data-toggle="collapse"
+                                    data-target="#collapse-{{episode.id}}" aria-expanded="false"
+                                    aria-controls="collapse-{{episode.id}}" data-parent="#episodes">
+                                    <p class="episode-title flex-grow-1">{{episode.name}}</p>
+                                    <span>Levels {{episode.first_level}}-{{episode.last_level}}</span>
+                                    <div class="episode_range_text collapsed d-flex align-items-center justify-content-end"
+                                        data-toggle="collapse" data-target="#collapse-{{episode.id}}"
+                                        aria-expanded="false" aria-controls="collapse-{{episode.id}}" data-parent="#episodes">
+                                        <label class="mb-0" for="select-all-episode-levels">
+                                            <input type="checkbox" value="{{ episode_index }}" id="select-all-blockly-levels-{{ episode.id }}">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="collapse-{{episode.id}}" aria-labelledby="episode-{{episode.id}}" class="collapse">
+                                <div class="panel-body d-flex justify-content-between">
+                                    <div class="d-flex flex-grow-1 flex-column justify-content-between">
+                                        {% for level in episode.levels %}
+                                            <p>{{level.name}}: {{level.title.strip | safe}}</p>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="form__checkbox flex-column justify-content-between p-0">
+                                        {% for input in level_control_form|get_dict_item:episode_index %}
+                                            <div class="form__checkbox-input p-0">
+                                                {{ input }}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endwith %}
+                {% endwith %}
+            {% endfor %}
+            <div class="panel-intro d-flex align-items-center justify-content-between">
+                <h6>Python Den levels</h6>
+                <label class="pr-5 mb-0 mr-5">
+                    <input type="checkbox" id="select-all-python-levels">
+                </label>
+            </div>
+            {% for episode in python_episodes %}
+                {% with episode.id|stringformat:"s" as episode_id %}
+                    {% with "episode"|add:episode_id as episode_index %}
+                        <div class="panel">
+                            <div class="panel-header bg--{{ episode.difficulty }}" id="episode-{{episode.id}}">
+                                <div class="d-flex align-items-center justify-content-end" data-toggle="collapse"
+                                    data-target="#collapse-{{episode.id}}" aria-expanded="false"
+                                    aria-controls="collapse-{{episode.id}}" data-parent="#episodes">
+                                    <p class="episode-title flex-grow-1">{{episode.name}}</p>
+                                    {% if episode.levels %}
+                                        {% if episode.first_level > 1009 %}
+                                            <span>Levels {{episode.first_level|stringformat:"i"|slice:"2:4"}}-{{episode.last_level|stringformat:"i"|slice:"2:4"}}</span>
+                                        {% else %}
+                                            {% if episode.last_level > 1009 %}
+                                                <span>Levels {{episode.first_level|stringformat:"i"|slice:"3:4"}}-{{episode.last_level|stringformat:"i"|slice:"2:4"}}</span>
+                                            {% else %}
+                                                <span>Levels {{episode.first_level|stringformat:"i"|slice:"3:4"}}-{{episode.last_level|stringformat:"i"|slice:"3:4"}}</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endif %}
+                                    <div class="episode_range_text collapsed d-flex align-items-center justify-content-end"
+                                        data-toggle="collapse" data-target="#collapse-{{episode.id}}"
+                                        aria-expanded="false" aria-controls="collapse-{{episode.id}}" data-parent="#episodes">
+                                        <label class="mb-0" for="select-all-episode-levels">
+                                            <input type="checkbox" value="{{ episode_index }}" id="select-all-python-levels-{{ episode.id }}">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="collapse-{{episode.id}}" aria-labelledby="episode-{{episode.id}}" class="collapse">
+                                <div class="panel-body d-flex justify-content-between">
+                                    <div class="d-flex flex-grow-1 flex-column justify-content-between">
+                                        {% for level in episode.levels %}
+                                            {% for worksheet in episode.worksheets %}
+                                                {% if worksheet.before_level == level.id %}
+                                                    <p>{{episode.name}}{% if episode.worksheets|length > 1 %} pt. {{ worksheet.index }}{% endif %}</p>
+                                                {% endif %}
+                                            {% endfor %}
+                                            {% if level.name < 1010 %}
+                                                <p>{{level.name|stringformat:"i"|slice:"3:4"}}: {{level.title.strip | safe}}</p>
+                                            {% else %}
+                                                <p>{{level.name|stringformat:"i"|slice:"2:4"}}: {{level.title.strip | safe}}</p>
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% for worksheet in episode.worksheets %}
+                                            {% if not worksheet.before_level %}
+                                                <p>{{episode.name}}{% if episode.worksheets|length > 1 %} pt. {{ worksheet.index }}{% endif %}</p>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                    <div class="form__checkbox flex-column justify-content-between p-0">
+                                        {% for input in level_control_form|get_dict_item:episode_index %}
+                                        <div class="form__checkbox-input p-0">
+                                            {{ input }}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endwith %}
+                {% endwith %}
+            {% endfor %}
+        </div>
+
+        <div class="button-group">
+            <button id="lock_levels_button" class="button button--primary" type="submit" name="level_control_submit">
+                Save level settings</button>
+        </div>
+    </form>
+</div>
+
+<div class="background background--primary">
+    <div class="container">
+        <h5>Transfer class to another teacher</h5>
+        <p>Select a new teacher from your school or club to take over the above class from the list below.</p>
+
+        <p class="text-danger">
+            <strong>
+                Warning: The class will move immediately to the new teacher. Should you wish to undo this action,
+                please contact that teacher.
+            </strong>
+        </p>
+
+        <form method="post" class="pb-0">
+            {% csrf_token %}
+
+            {{ class_move_form.non_field_errors }}
+
+            <div class="row form--row">
+                <div class="form--row__input col-md-6">
+                    <label for="id_{{ class_move_form.new_teacher.html_name }}" class="font-weight-normal"><strong>{{ class_move_form.new_teacher.label }}</strong></label>
+                    {{ class_move_form.new_teacher }}
+                    <small>{{ class_move_form.new_teacher.help_text }}</small>
+                    {{ class_move_form.new_teacher.errors }}
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="move_button" class="button button--primary" type="submit" name="class_move_submit">Transfer class</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
