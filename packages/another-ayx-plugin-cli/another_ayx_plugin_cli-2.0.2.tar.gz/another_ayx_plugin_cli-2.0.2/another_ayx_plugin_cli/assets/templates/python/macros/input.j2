@@ -1,0 +1,53 @@
+{% macro init() %}
+        self.provider = provider
+        self.config_value = 0.42
+        self.provider.io.info("Plugin initialized.")
+{% endmacro %}
+
+{% macro on_record_batch() %}
+        pass
+{% endmacro %}
+
+{% macro on_incoming_connection_complete() %}
+        pass
+{% endmacro %}
+
+{% macro on_complete(plugin_class) %}
+        import pandas as pd
+        import pyarrow as pa
+
+        df = pd.DataFrame(
+            {
+                "x": [1, 2, 3],
+                "y": ["hello", "world", "from another-ayx-python-sdk!"],
+                "z": [self.config_value, self.config_value, self.config_value],
+            }
+        )
+
+        packet = pa.Table.from_pandas(df)
+
+        self.provider.write_to_anchor("Output", packet)
+        self.provider.io.info("{{plugin_class}} tool done.")
+{% endmacro %}
+
+{% macro helper_methods() %}
+{% endmacro %}
+
+{% macro on_record_batch_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == [
+        "ERROR:<class 'NotImplementedError'>: Input tools don't receive batches."
+    ]
+{% endmacro %}
+
+{% macro on_incoming_connection_closed_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == [
+        "ERROR:<class 'NotImplementedError'>: Input tools don't receive batches."
+    ]
+{% endmacro %}
+
+{% macro on_complete_test(snake_case_plugin_name, plugin_class) %}
+    assert {{snake_case_plugin_name}}.data_streams["Output"] == [output_record_batch]
+    assert {{snake_case_plugin_name}}.io_stream == ["INFO:{{plugin_class}} tool done."]
+{% endmacro %}

@@ -1,0 +1,60 @@
+{% macro init() %}
+        self.provider = provider
+        self.provider.io.info("Plugin initialized.")
+        try:
+            self.conn_to_output = self.get_conn_map()
+        except Exception as e:
+            self.provider.io.error(f"Failed to set conn map {repr(e)}")
+{% endmacro %}
+
+{% macro on_record_batch() %}
+        try:
+            out_anchor = self.conn_to_output[anchor.connection]
+            self.provider.write_to_anchor(out_anchor, table)
+        except Exception as e:
+            self.provider.io.warn(
+                f"Failed to write batch to output anchor. \n{repr(e)}"
+            )
+{% endmacro %}
+
+{% macro on_incoming_connection_complete() %}
+        self.provider.io.info(
+            f"Received complete update from {anchor.name}:{anchor.connection}."
+        )
+{% endmacro %}
+
+{% macro on_complete(plugin_class) %}
+        self.provider.io.info("AyxSdkMultiConnectionsMultiOutputAnchor tool done.")
+{% endmacro %}
+
+{% macro helper_methods() %}
+    def get_conn_map(self):
+        """Map the connections of Input anchor to Output anchors."""
+        connections = self.provider.incoming_anchors["Input"].keys()
+        conn_to_output = {}
+        for name in connections:
+            conn_num = int(name.strip("#"))
+            if conn_num >= 5:
+                # Add any additional input to the last existing anchor.
+                conn_to_output[name] = f"Output5"
+            else:
+                conn_to_output[name] = f"Output{conn_num}"
+        return conn_to_output
+{% endmacro %}
+
+{% macro on_record_batch_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams["Output1"] == [expected_output_record_batch]
+    assert {{snake_case_plugin_name}}.io_stream == []
+{% endmacro %}
+
+{% macro on_incoming_connection_closed_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == [
+        f"INFO:Received complete update from {anchor.name}:{anchor.connection}."
+    ]
+{% endmacro %}
+
+{% macro on_complete_test(snake_case_plugin_name, plugin_class) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == ["INFO:{{plugin_class}} tool done."]
+{% endmacro %}

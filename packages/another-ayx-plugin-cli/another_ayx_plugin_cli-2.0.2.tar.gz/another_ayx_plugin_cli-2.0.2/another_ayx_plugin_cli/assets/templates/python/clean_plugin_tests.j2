@@ -1,0 +1,221 @@
+{% import 'macros/input.j2' as input %}
+{% import 'macros/multi_conn.j2' as multi_conn %}
+{% import 'macros/multi_output.j2' as multi_output %}
+{% import 'macros/multi_input.j2'as multi_input %}
+{% import 'macros/optional.j2' as optional %}
+{% import 'macros/output.j2' as output %}
+{% import 'macros/passthrough.j2' as passthrough %}
+from another_ayx_python_sdk.core import Anchor
+from another_ayx_python_sdk.core.testing import BatchTuple, SdkToolTestService
+
+from backend.{{package_name}} import {{plugin_class}}
+
+import pyarrow as pa
+from pyarrow import RecordBatch
+
+import pytest
+
+
+TEST_SCHEMA = pa.schema([
+    ('col1', pa.int64()),
+    ('col2', pa.float64())
+])
+
+
+@pytest.fixture
+def small_batches():
+    input_data = [
+        [1, 2, 3],
+        [0.1, 0.2, 0.3]
+    ]
+    output_data = input_data
+    return BatchTuple(
+        input_data=RecordBatch.from_arrays(input_data, schema=TEST_SCHEMA),
+        expected_output_data=RecordBatch.from_arrays(output_data, schema=TEST_SCHEMA)
+    )
+
+
+@pytest.fixture()
+def medium_batches():
+    repeat = 200
+    input_data = [
+        [1, 2, 3] * repeat,
+        [0.1, 0.2, 0.3] * repeat
+    ]
+    output_data = input_data
+    return BatchTuple(
+        input_data=RecordBatch.from_arrays(input_data, schema=TEST_SCHEMA),
+        expected_output_data=RecordBatch.from_arrays(output_data, schema=TEST_SCHEMA)
+    )
+
+
+@pytest.fixture()
+def large_batches():
+    repeat = 20000
+    input_data = [
+        [1, 2, 3] * repeat,
+        [0.1, 0.2, 0.3] * repeat
+    ]
+    output_data = input_data
+    return BatchTuple(
+        input_data=RecordBatch.from_arrays(input_data, schema=TEST_SCHEMA),
+        expected_output_data=RecordBatch.from_arrays(output_data, schema=TEST_SCHEMA)
+    )
+
+
+@pytest.fixture
+def {{snake_case_plugin_name}}():
+    """
+    This fixture is where you instantiate and configure your plugin's testing service.
+    Please edit input_ and output_anchor_config to reflect your tool's anchor configuration.
+
+    Note: The config_mock parameter is meant to represent the output from the UI window.
+    Currently, it only takes in an XML string, wrapped in <Configuration> tags.
+    """
+    return SdkToolTestService(
+        plugin_class={{plugin_class}},
+        config_mock="<Configuration/>",
+        input_anchor_config={
+        {% for key,value in input_anchors.items() %}    "{{key}}": {{value}},
+        {% endfor -%}
+            },
+        output_anchor_config={
+        {% for key,value in output_anchors.items() %}   "{{key}}": {{value}},
+        {% endfor -%}
+            }
+    )
+
+
+def test_init({{snake_case_plugin_name}}):
+    """
+    This function is where you should test your plugin's constructor (ie, {{plugin_class}}.__init__())
+    Use {{snake_case_plugin_name}}.plugin to reference the created plugin.
+
+    You can also test the plugin's attributes by referencing them and checking them against expected values.
+    """
+    assert {{snake_case_plugin_name}}.plugin is not None
+
+
+@pytest.mark.parametrize("record_batch_set", ["small_batches", "medium_batches", "large_batches"])
+@pytest.mark.parametrize("anchor", [
+{% for key in input_anchors.keys() %}     Anchor("{{key}}", "{{loop.index}}"),
+{% endfor -%}
+])
+def test_on_record_batch({{snake_case_plugin_name}}, anchor, record_batch_set, request):
+    """
+    This function is where you should test your plugin's on_record_batch method.
+    Use {{snake_case_plugin_name}}.run_on_record_batch to run the specified record batch
+    through the specified input anchor.
+
+    {% if num_input_anchors == 0 -%}Note: Since this is a tool with no input anchors, on_record_batch should not be called in Designer.
+    Pytest will automatically skip this test.
+    {% endif -%}
+
+    Once the method has run, you can compare the output data against expected values,
+    by accessing the corresponding data from {{snake_case_plugin_name}}.data_streams.
+    Use the output anchor name as the dictionary key.
+    If no data was written, {{snake_case_plugin_name}}.data_streams will be an empty dictionary.
+
+    You can also compare IO calls made to designer through {{snake_case_plugin_name}}.io_stream.
+    The message type (INFO, WARN, ERROR) will be prepended to the message's text with a colon.
+    If no provider.io methods were called, {{snake_case_plugin_name}}.io_stream will be an empty list.
+    """
+    input_record_batch, expected_output_record_batch = request.getfixturevalue(record_batch_set)
+    {{snake_case_plugin_name}}.run_on_record_batch(input_record_batch, anchor)
+    {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+    {{ passthrough.on_record_batch_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+    {{ multi_conn.on_record_batch_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+    {{ multi_input.on_record_batch_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+    {{ multi_output.on_record_batch_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 0 -%}
+    {{ input.on_record_batch_test(snake_case_plugin_name) }}
+    {% elif num_output_anchors == 0 -%}
+    {{ output.on_record_batch_test(snake_case_plugin_name) }}
+    {% else %}
+    {{ optional.on_record_batch_test(snake_case_plugin_name) }}
+    {% endif %}
+
+@pytest.mark.parametrize("anchor", [
+{% for key in input_anchors.keys() %}     Anchor("{{key}}", "{{loop.index}}"),
+{% endfor -%}
+])
+def test_on_incoming_connection_complete({{snake_case_plugin_name}}, anchor):
+    """
+    This function is where you should test your plugin's on_incoming_connection_complete method.
+    Use {{snake_case_plugin_name}}.run_on_incoming_connection_complete against the specified input anchors.
+
+    {% if num_input_anchors == 0 %}Note: Since this is a tool with no input anchors, on_incoming_connection_complete should not be called in Designer.
+    Pytest will automatically skip this test.
+    {% endif -%}
+
+    Once the method has run, you can compare the output data against expected values,
+    by accessing the corresponding data from {{snake_case_plugin_name}}.data_streams.
+    Use the output anchor name as the dictionary key.
+    If no data was written, {{snake_case_plugin_name}}.data_streams will be an empty dictionary.
+
+    You can also compare IO calls made to designer through {{snake_case_plugin_name}}.io_stream.
+    The message type (INFO, WARN, ERROR) will be prepended to the message's text with a colon.
+    If no provider.io methods were called, {{snake_case_plugin_name}}.io_stream will be an empty list.
+    """
+    {{snake_case_plugin_name}}.run_on_incoming_connection_complete(anchor)
+    {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+    {{ passthrough.on_incoming_connection_closed_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+    {{ multi_conn.on_incoming_connection_closed_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+    {{ multi_input.on_incoming_connection_closed_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+    {{ multi_output.on_incoming_connection_closed_test(snake_case_plugin_name) }}
+    {% elif num_input_anchors == 0 -%}
+    {{ input.on_incoming_connection_closed_test(snake_case_plugin_name) }}
+    {% elif num_output_anchors == 0 -%}
+    {{ output.on_incoming_connection_closed_test(snake_case_plugin_name) }}
+    {% else %}
+    {{ optional.on_incoming_connection_closed_test(snake_case_plugin_name) }}
+    {% endif %}
+
+{% if num_input_anchors == 0 -%}
+@pytest.fixture()
+def output_record_batch():
+    return RecordBatch.from_arrays([
+        [1, 2, 3],
+        ["hello", "world", "from another-ayx-python-sdk!"],
+        [0.42, 0.42, 0.42],
+    ], names=("x", "y", "z"))
+
+
+def test_on_complete({{snake_case_plugin_name}}, output_record_batch):
+{% else -%}
+def test_on_complete({{snake_case_plugin_name}}):
+{% endif %}    """
+    This function is where you should test your plugin's on_complete method.
+    Use {{snake_case_plugin_name}}.run_on_complete to run the plugin's on_complete method.
+
+    Once the method has run, you can compare the output data against expected values,
+    by accessing the corresponding data from {{snake_case_plugin_name}}.data_streams.
+    Use the output anchor name as the dictionary key.
+    If no data was written, {{snake_case_plugin_name}}.data_streams will be an empty dictionary.
+
+    You can also compare IO calls made to designer through {{snake_case_plugin_name}}.io_stream.
+    The message type (INFO, WARN, ERROR) will be prepended to the message's text with a colon.
+    If no provider.io methods were called, {{snake_case_plugin_name}}.io_stream will be an empty list.
+    """
+    {{snake_case_plugin_name}}.run_on_complete()
+    {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+    {{ passthrough.on_complete_test(snake_case_plugin_name, plugin_class) }}
+    {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+    {{ multi_conn.on_complete_test(snake_case_plugin_name, plugin_class) }}
+    {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+    {{ multi_input.on_complete_test(snake_case_plugin_name, plugin_class) }}
+    {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+    {{ multi_output.on_complete_test(snake_case_plugin_name, plugin_class) }}
+    {% elif num_input_anchors == 0 -%}
+    {{ input.on_complete_test(snake_case_plugin_name, plugin_class) }}
+    {% elif num_output_anchors == 0 -%}
+    {{ output.on_complete_test(snake_case_plugin_name, plugin_class) }}
+    {% else %}
+    {{ optional.on_complete_test(snake_case_plugin_name, plugin_class) }}
+    {% endif %}

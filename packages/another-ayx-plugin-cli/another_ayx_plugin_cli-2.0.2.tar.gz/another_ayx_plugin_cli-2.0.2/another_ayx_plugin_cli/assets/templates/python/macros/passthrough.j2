@@ -1,0 +1,39 @@
+{% macro init(plugin_class) %}
+        self.name = "{{plugin_class}}"
+        self.provider = provider
+        self.provider.io.info(f"{self.name} tool started")
+{% endmacro %}
+
+{% macro on_record_batch() %}
+        self.provider.write_to_anchor("Output", batch)
+{% endmacro %}
+
+{% macro on_incoming_connection_complete() %}
+        self.provider.io.info(
+            f"Received complete update from {anchor.name}:{anchor.connection}."
+        )
+{% endmacro %}
+
+{% macro on_complete(plugin_class) %}
+        self.provider.io.info(f"{self.name} tool done.")
+{% endmacro %}
+
+{% macro helper_methods() %}
+{% endmacro %}
+
+{% macro on_record_batch_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams["Output"] == [expected_output_record_batch]
+    assert {{snake_case_plugin_name}}.io_stream == []
+{% endmacro %}
+
+{% macro on_incoming_connection_closed_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == [
+        f"INFO:Received complete update from {anchor.name}:{anchor.connection}."
+    ]
+{% endmacro %}
+
+{% macro on_complete_test(snake_case_plugin_name, plugin_class) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == ["INFO:{{plugin_class}} tool done."]
+{% endmacro %}

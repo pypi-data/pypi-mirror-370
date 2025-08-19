@@ -1,0 +1,54 @@
+{% macro init(plugin_class) %}
+        self.provider = provider
+        self.config_value = 0.42
+        self.output_anchor = self.provider.outgoing_anchors["Output"]
+        self.input_anchor = self.provider.incoming_anchors["Input"]
+        self.provider.io.info("Plugin initialized.")
+{% endmacro %}
+
+{% macro on_record_batch() %}
+        try:
+            self.provider.write_to_anchor("Output", batch)
+        except Exception as e:
+            self.provider.io.warn(
+                f"Error Occured while writing to anchor {anchor.name} \n {repr(e)}"
+            )
+{% endmacro %}
+
+{% macro on_incoming_connection_complete() %}
+        self.provider.io.info(
+            f"Received complete update from {anchor.name}:{anchor.connection}."
+        )
+{% endmacro %}
+
+{% macro on_complete(plugin_class) %}
+        if len(self.input_anchor.keys()) == 0:
+            import pandas as pd
+
+            df = pd.DataFrame({"OptionalField": [self.config_value]})
+            batch_to_send = pa.RecordBatch.from_pandas(df=df, preserve_index=False)
+            self.provider.write_to_anchor("Output", batch_to_send)
+
+        self.provider.io.info("{{plugin_class}} tool done.")
+{% endmacro %}
+
+{% macro helper_methods() %}
+{% endmacro %}
+
+
+{% macro on_record_batch_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams["Output"] == [expected_output_record_batch]
+    assert {{snake_case_plugin_name}}.io_stream == []
+{% endmacro %}
+
+{% macro on_incoming_connection_closed_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == [
+        f"INFO:Received complete update from {anchor.name}:{anchor.connection}."
+    ]
+{% endmacro %}
+
+{% macro on_complete_test(snake_case_plugin_name, plugin_class) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == ["INFO:{{plugin_class}} tool done."]
+{% endmacro %}
