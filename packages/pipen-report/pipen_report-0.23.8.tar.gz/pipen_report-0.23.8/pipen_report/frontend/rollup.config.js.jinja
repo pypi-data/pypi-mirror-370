@@ -1,0 +1,111 @@
+import svelte from 'rollup-plugin-svelte';
+import commonjs from '@rollup/plugin-commonjs';
+import resolve from '@rollup/plugin-node-resolve';
+import alias from '@rollup/plugin-alias';
+import terser from '@rollup/plugin-terser';
+import css from 'rollup-plugin-css-only';
+import json from '@rollup/plugin-json';
+import data from './src/data.json' assert { type: 'json' };
+import { optimizeImports, optimizeCss } from "carbon-preprocess-svelte";
+
+const commonConfig = (cssfile = 'index.css') => ({
+	preserveSymlinks: true,  // for extlibs
+	plugins: [
+		svelte({
+			preprocess: [optimizeImports()],
+			compilerOptions: { dev: false },
+			onwarn: (warning, handler) => {
+				// carbon-components-svelte 0.37.5
+				// svelte 3.58.0
+				if (warning.code.startsWith("a11y-")) return;
+				handler(warning);
+			}
+		}),
+		optimizeCss(),
+		alias({
+			entries: [
+				{ find: '$components', replacement: '../../components' },
+				{ find: '$component', replacement: '../../components' },
+				{ find: '$layouts', replacement: '../../layouts' },
+				{ find: '$layout', replacement: '../../layouts' },
+				{ find: '$libs', replacement: '../../components' },
+				{ find: '$lib', replacement: '../../components' },
+				{%- if extlibs %}
+				{ find: '$extlibs', replacement: '../../extlibs/{{extlibs.split("/")[-1]}}' },
+				{% endif -%}
+				{ find: '$ccs', replacement: 'carbon-components-svelte' },
+			]
+		}),
+
+		// we'll extract any component CSS out into
+		// a separate file - better for performance
+		css({ output: cssfile }),
+		resolve({ browser: true, dedupe: ['svelte'] }),
+		commonjs(),
+		terser(),
+		json()
+	],
+	onwarn: (warning, handler) => {
+		if (warning.code === "EMPTY_BUNDLE") return;
+		handler(warning);
+	},
+	watch: { clearScreen: false }
+});
+
+// Output configuration
+const outputConfig = {
+	sourcemap: false,
+	format: 'system',
+	manualChunks: function(id) {
+		if (id.includes('node_modules/')) {
+			const lib = id.match(/node_modules\/([^/]+)/)[1];
+			return `vendor/${lib}`;
+		}
+	}
+}
+
+// Generate config for a single proc
+const procConfig = (proc) => {
+	let out = [];
+	const npages = proc.npages || 1;
+	for (let i = 0; i < npages; i++) {
+		// const prefix = group ? `${group}-` : '';
+		const suffix = i > 0 ? `-${i}` : '';
+		out.push({
+			input: `src/pages/${proc.name}${suffix}/index.js`,
+			output: {
+				dir: `public/pages/`,
+				// avoid named-registration modules for systemjs, which is erroring
+				name: null,
+				entryFileNames: `${proc.name}${suffix}.js`,
+				...outputConfig
+			},
+			...commonConfig(`${proc.name}${suffix}.css`)
+		});
+	}
+	return out;
+}
+
+export default cliArgs => {
+	const proc = cliArgs.configProc;
+
+	if (proc === "_index") {
+		return procConfig({name: "_index"});
+	}
+
+	const [entryName, procName] = proc.split("/");
+
+	for (const entry of data.entries) {
+		if (entry.name === entryName) {
+			if (procName) {
+				for (const proc of entry.procs) {
+					if (proc.name === procName) {
+						return procConfig(proc);
+					}
+				}
+			} else {
+				return procConfig(entry);
+			}
+		}
+	}
+};
