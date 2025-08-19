@@ -1,0 +1,69 @@
+name: Bare Test with Rosetta Container Node
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [created]
+  workflow_dispatch:
+
+env:
+  GITHUB_CONTAINER_ROSETTA_TEST: "YES" # Github Actions: run python against container node
+  GITHUB_ROSETTA_TEST: "YES" # skip some integration tests
+
+jobs:
+  RosettaTests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Setup Dependency on Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential gnupg2 git
+          sudo bash scripts/upgrade_git.sh
+
+      - name: Verify Docker Version and Pull Rosetta Image
+        run: |
+          docker --version
+          docker pull --platform=linux/amd64 rosettacommons/rosetta:mpi
+
+      - name: Setup RosettaPy on ${{ matrix.os }}
+        run: |
+          pip install '.[test]' -U
+
+      - name: Run test cases
+        run: |
+          pytest tests/ -n 4 -m 'integration'
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
