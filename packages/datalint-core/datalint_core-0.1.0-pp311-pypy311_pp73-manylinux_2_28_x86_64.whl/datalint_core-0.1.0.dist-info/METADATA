@@ -1,0 +1,111 @@
+Metadata-Version: 2.4
+Name: datalint-core
+Version: 0.1.0
+Classifier: Programming Language :: Rust
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+License-File: LICENSE
+License: Apache-2.0
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown; charset=UTF-8; variant=GFM
+
+# Datalint Core
+
+Rust-powered backend for dataset inspection and quality control, following best practices from projects like pydantic-core.
+
+## Project Structure
+
+Following pydantic-core's patterns, we maintain a clean separation between:
+- Core Rust logic (`src/cache.rs`, etc.)
+- Error handling (`src/errors.rs`)
+- Python bindings (`src/lib.rs`)
+
+```
+datalint-core/
+├── src/
+│   ├── cache.rs        # Core cache/database logic
+│   ├── errors.rs       # Error types and handling
+│   └── lib.rs          # Python module bindings
+├── python/
+│   └── datalint_core/  # Python package
+│       └── __init__.py # Python API exports
+└── test_cache.py       # Test script
+```
+
+## Best Practices Applied
+
+### 1. **Error Handling**
+- Custom `DatalintError` enum for Rust-side errors
+- Automatic conversion to Python exceptions via `From` trait
+- Type alias `DatalintResult<T>` for cleaner function signatures
+
+### 2. **Module Organization**
+- Core logic separated from Python bindings
+- Clean module structure with clear responsibilities
+- Minimal Python binding layer
+
+### 3. **Python Module**
+- Version information exposed via `__version__`
+- Clean `#[pymodule]` definition
+- Consistent naming (`_datalint_core` internal, `datalint_core` public)
+
+### 4. **Build Configuration**
+- Minimal dependencies (`pyo3` for bindings, `rusqlite` for database)
+- Proper feature flags for extension module
+- SQLite bundled for portability (no system dependencies)
+
+## Building
+
+```bash
+# Development build
+maturin develop
+
+# Production build
+maturin build --release
+
+# Run tests
+python test_cache.py
+```
+
+## Current API
+
+### `create_cache(cache_path: str) -> str`
+Creates an SQLite database at the specified path with a basic metadata table structure:
+
+```sql
+CREATE TABLE dataset_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    value TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+The database is configured with:
+- WAL mode for better concurrency
+- Normal synchronous mode for balanced performance
+
+## Test Coverage
+
+The test suite verifies:
+- ✅ Database creation with proper table structure
+- ✅ Nested directory creation
+- ✅ Idempotent operations (can run multiple times safely)
+- ✅ Table structure validation
+
+## Future Development
+
+Following pydantic-core's incremental approach:
+1. ✅ Start with minimal viable functionality (basic database)
+2. 🔄 Add dataset-specific tables incrementally
+3. 🔄 Add indexing and caching logic
+4. 🔄 Optimize performance-critical paths
+
+## Development Guidelines
+
+1. **Type Safety**: Use Rust's type system to prevent errors at compile time
+2. **Error Messages**: Provide clear, actionable error messages
+3. **Documentation**: Document all public APIs with examples
+4. **Testing**: Test both Rust and Python interfaces
+5. **Performance**: Profile and optimize hot paths
+
