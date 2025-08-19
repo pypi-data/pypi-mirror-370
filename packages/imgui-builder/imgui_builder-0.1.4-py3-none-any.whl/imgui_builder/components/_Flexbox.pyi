@@ -1,0 +1,6 @@
+from typing import Literal
+
+class Flexbox:
+    elements_size: tuple[float, float]
+    def __init__(self, mode: Literal['auto'], elements_count: int) -> None: ...
+    def __call__(self, parent_layout: str, parent_layout_size: tuple[float, float]): ...
