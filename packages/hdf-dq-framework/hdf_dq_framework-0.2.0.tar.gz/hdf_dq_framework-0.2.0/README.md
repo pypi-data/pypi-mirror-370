@@ -1,0 +1,284 @@
+# DQ Framework
+
+A powerful Data Quality Framework for PySpark DataFrames using Great Expectations validation rules.
+
+## Overview
+
+The DQ Framework provides a simple and efficient way to filter DataFrames based on data quality rules. It separates qualified data from bad data, allowing you to handle data quality issues systematically in your data pipelines.
+
+### Key Features
+
+- **Easy Integration**: Simple API that works with existing PySpark workflows
+- **Great Expectations**: Leverages the power of Great Expectations for data validation
+- **Flexible Rules**: Support for JSON string, dictionary, or list-based rule configuration
+- **Dual Output**: Returns both qualified and bad rows as separate DataFrames
+- **Detailed Validation**: Optional validation details for debugging and monitoring
+
+## Installation
+
+### Prerequisites
+
+Install Poetry if you haven't already:
+
+```bash
+# Install Poetry (if not already installed)
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Or using pip
+pip install poetry
+```
+
+#### Version
+
+```
+git add .
+git commit -m "Add awesome new feature"
+
+# Create a new release tag
+git tag v0.2.0
+git push --tags
+
+# Build automatically uses the tag version
+poetry build
+#### Option 4: Build and Install Distribution
+```
+
+```bash
+# Build the package
+poetry build
+
+# This creates:
+# - dist/dq_framework-0.1.0.tar.gz (source distribution)
+# - dist/dq_framework-0.1.0-py3-none-any.whl (wheel)
+
+# Install the built wheel
+pip install dist/dq_framework-0.1.0-py3-none-any.whl
+```
+
+#### Option 5: Install from Source
+
+```bash
+# Install directly from the source directory
+pip install /Users/nchungkham/Workspace/hdf-data-pipeline/spark_etl_framework/dq_framework
+```
+
+## Quick Start
+
+```python
+from pyspark.sql import SparkSession
+from dq_framework import DQFramework
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("DQ_Example").getOrCreate()
+
+# Create sample data
+data = [
+    (1, "John", 25, "john@email.com"),
+    (2, "Jane", -5, "invalid-email"),  # Bad data: negative age, invalid email
+    (3, "Bob", 30, "bob@email.com"),
+    (4, None, 35, "alice@email.com"),  # Bad data: null name
+]
+columns = ["id", "name", "age", "email"]
+df = spark.createDataFrame(data, columns)
+
+# Define quality rules
+quality_rules = [
+    {
+        "expectation_type": "expect_column_values_to_not_be_null",
+        "kwargs": {"column": "name"}
+    },
+    {
+        "expectation_type": "expect_column_values_to_be_between",
+        "kwargs": {"column": "age", "min_value": 0, "max_value": 120}
+    },
+    {
+        "expectation_type": "expect_column_values_to_match_regex",
+        "kwargs": {"column": "email", "regex": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"}
+    }
+]
+
+# Initialize DQ Framework
+dq = DQFramework()
+
+# Filter data
+qualified_df, bad_df = dq.filter_dataframe(
+    dataframe=df,
+    quality_rules=quality_rules,
+    include_validation_details=True
+)
+
+# Show results
+print("Qualified Data:")
+qualified_df.show()
+
+print("Bad Data:")
+bad_df.show()
+```
+
+## Poetry Commands Reference
+
+### Development Workflow
+
+```bash
+# Install dependencies
+poetry install
+
+# Add a new dependency
+poetry add package-name
+
+# Add a development dependency
+poetry add --group dev package-name
+
+# Update dependencies
+poetry update
+
+# Show current dependencies
+poetry show
+
+# Show dependency tree
+poetry show --tree
+
+# Activate virtual environment
+poetry shell
+
+# Run commands in the poetry environment
+poetry run python script.py
+poetry run pytest
+poetry run black .
+poetry run mypy .
+```
+
+### Building and Publishing
+
+```bash
+# Build the package
+poetry build
+
+# Check the package before publishing
+poetry check
+
+# Publish to PyPI (requires configuration)
+poetry publish
+
+# Publish to a private repository
+poetry publish --repository my-repo
+```
+
+### Virtual Environment Management
+
+```bash
+# Show virtual environment info
+poetry env info
+
+# Show path to virtual environment
+poetry env info --path
+
+# Remove virtual environment
+poetry env remove python
+
+# Use specific Python version
+poetry env use python3.9
+```
+
+## API Reference
+
+### DQFramework
+
+The main class for data quality processing.
+
+#### Methods
+
+- **`filter_dataframe(dataframe, quality_rules, columns=None, include_validation_details=False)`**
+  - Filters a DataFrame based on quality rules
+  - Returns tuple of (qualified_df, bad_df)
+
+### RuleProcessor
+
+Handles the processing of Great Expectations rules.
+
+### DQConfigExamples
+
+Provides example configurations for common data quality scenarios.
+
+## Configuration Examples
+
+The framework includes extensive configuration examples in `DQConfigExamples`. See the [detailed documentation](readme.md) for more information.
+
+## Dependencies
+
+### Core Dependencies
+
+- **PySpark** ^3.0.0: For DataFrame operations
+- **Great Expectations** ^0.15.0: For validation logic
+- **typing-extensions** ^4.0.0: For enhanced type hints
+
+### Optional Dependencies
+
+- **pandas** ^1.3.0: For DataFrame interoperability (install with `--extras enhanced`)
+- **numpy** ^1.20.0: For numerical operations (install with `--extras enhanced`)
+
+### Development Dependencies
+
+- **pytest** ^6.0.0: Testing framework
+- **pytest-cov** ^2.0.0: Coverage reporting
+- **black** ^21.0.0: Code formatting
+- **flake8** ^3.8.0: Linting
+- **mypy** ^0.900: Type checking
+- **pre-commit** ^2.15.0: Git hooks
+
+## Development
+
+### Setup Development Environment
+
+```bash
+# Install with development dependencies
+poetry install --with dev
+
+# Set up pre-commit hooks
+poetry run pre-commit install
+
+# Run tests
+poetry run pytest
+
+# Run tests with coverage
+poetry run pytest --cov=dq_framework
+
+# Code formatting
+poetry run black .
+
+# Type checking
+poetry run mypy .
+
+# Linting
+poetry run flake8 .
+```
+
+### Package Structure
+
+```
+dq_framework/
+├── __init__.py              # Package initialization
+├── dq_framework.py          # Main DQFramework class
+├── rule_processor.py        # Rule processing logic
+├── config_examples.py       # Configuration examples
+├── requirements.txt         # Legacy requirements (for reference)
+├── readme.md               # Detailed technical documentation
+├── pyproject.toml          # Poetry configuration
+└── README.md              # This file
+```
+
+## Contributing
+
+1. Follow PEP 8 style guidelines (use `poetry run black .`)
+2. Add type hints to all functions (check with `poetry run mypy .`)
+3. Include docstrings for all public methods
+4. Add tests for new functionality (`poetry run pytest`)
+5. Update documentation as needed
+
+## License
+
+[Add your license information here]
+
+## Support
+
+For questions and support, please [create an issue](https://github.com/your-org/hdf-data-pipeline/issues) in the repository.
