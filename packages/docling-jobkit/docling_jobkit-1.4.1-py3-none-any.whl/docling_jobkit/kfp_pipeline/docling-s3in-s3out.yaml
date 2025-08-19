@@ -1,0 +1,341 @@
+# PIPELINE DEFINITION
+# Name: inputs-s3in-s3out
+# Inputs:
+#    batch_size: int [Default: 20.0]
+#    convertion_options: dict [Default: {'force_ocr': False, 'do_code_enrichment': False, 'do_formula_enrichment': False, 'do_picture_classification': False, 'to_formats': ['md', 'json', 'html', 'text', 'doctags'], 'return_as_file': False, 'include_images': True, 'abort_on_error': False, 'ocr_lang': [], 'do_picture_description': False, 'ocr_engine': 'easyocr', 'table_mode': 'accurate', 'images_scale': 2.0, 'image_export_mode': 'placeholder', 'generate_picture_images': False, 'do_ocr': True, 'from_formats': ['docx', 'pptx', 'html', 'image', 'pdf', 'asciidoc', 'md', 'xlsx', 'xml_uspto', 'xml_jats', 'json_docling'], 'pdf_backend': 'dlparse_v2', 'do_table_structure': True}]
+#    source: dict [Default: {'endpoint': 's3.eu-de.cloud-object-storage.appdomain.cloud', 'access_key': '123454321', 'verify_ssl': True, 'key_prefix': 'my-docs', 'bucket': 'source-bucket', 'secret_key': 'secretsecret'}]
+#    target: dict [Default: {'endpoint': 's3.eu-de.cloud-object-storage.appdomain.cloud', 'access_key': '123454321', 'verify_ssl': True, 'key_prefix': 'my-docs', 'bucket': 'target-bucket', 'secret_key': 'secretsecret'}]
+components:
+  comp-compute-batches:
+    executorLabel: exec-compute-batches
+    inputDefinitions:
+      parameters:
+        batch_size:
+          defaultValue: 10.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+        source:
+          parameterType: STRUCT
+        target:
+          parameterType: STRUCT
+    outputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        batch_indices:
+          parameterType: LIST
+  comp-convert-payload:
+    executorLabel: exec-convert-payload
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        batch_index:
+          parameterType: NUMBER_INTEGER
+        options:
+          parameterType: STRUCT
+        source:
+          parameterType: STRUCT
+        target:
+          parameterType: STRUCT
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: LIST
+  comp-for-loop-1:
+    dag:
+      tasks:
+        convert-payload:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-convert-payload
+          inputs:
+            artifacts:
+              dataset:
+                componentInputArtifact: pipelinechannel--compute-batches-dataset
+            parameters:
+              batch_index:
+                componentInputParameter: pipelinechannel--compute-batches-batch_indices-loop-item
+              options:
+                componentInputParameter: pipelinechannel--convertion_options
+              source:
+                componentInputParameter: pipelinechannel--source
+              target:
+                componentInputParameter: pipelinechannel--target
+          taskInfo:
+            name: convert-payload
+    inputDefinitions:
+      artifacts:
+        pipelinechannel--compute-batches-dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        pipelinechannel--compute-batches-batch_indices:
+          parameterType: LIST
+        pipelinechannel--compute-batches-batch_indices-loop-item:
+          parameterType: NUMBER_INTEGER
+        pipelinechannel--convertion_options:
+          parameterType: STRUCT
+        pipelinechannel--source:
+          parameterType: STRUCT
+        pipelinechannel--target:
+          parameterType: STRUCT
+deploymentSpec:
+  executors:
+    exec-compute-batches:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - compute_batches
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pydantic' 'boto3~=1.35.36'\
+          \ 'git+https://github.com/docling-project/docling-jobkit@27bad5b9159bd0fcb7c84be940416c6738c03b86'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef compute_batches(\n    source: dict,\n    target: dict,\n    dataset:\
+          \ Output[Dataset],\n    batch_size: int = 10,\n) -> NamedTuple(\"outputs\"\
+          , [(\"batch_indices\", List[int])]):  # type: ignore[valid-type]\n    import\
+          \ json\n    from typing import NamedTuple\n\n    from docling_jobkit.connectors.s3_helper\
+          \ import (\n        check_target_has_source_converted,\n        generate_batch_keys,\n\
+          \        get_s3_connection,\n        get_source_files,\n    )\n    from\
+          \ docling_jobkit.model.s3_inputs import S3Coordinates\n\n    # validate\
+          \ inputs\n    s3_coords_source = S3Coordinates.model_validate(source)\n\
+          \    s3_target_coords = S3Coordinates.model_validate(target)\n\n    s3_source_client,\
+          \ s3_source_resource = get_s3_connection(s3_coords_source)\n    source_objects_list\
+          \ = get_source_files(\n        s3_source_client, s3_source_resource, s3_coords_source\n\
+          \    )\n    filtered_source_keys = check_target_has_source_converted(\n\
+          \        s3_target_coords, source_objects_list, s3_coords_source.key_prefix\n\
+          \    )\n    batch_keys = generate_batch_keys(\n        filtered_source_keys,\n\
+          \        batch_size=batch_size,\n    )\n\n    with open(dataset.path, \"\
+          w\") as out_batches:\n        json.dump(batch_keys, out_batches)\n\n   \
+          \ batch_indices = list(range(len(batch_keys)))\n    outputs = NamedTuple(\"\
+          outputs\", [(\"batch_indices\", List[int])])\n    return outputs(batch_indices)\n\
+          \n"
+        image: python:3.11
+    exec-convert-payload:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - convert_payload
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.8.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'docling==2.28.0'\
+          \ 'git+https://github.com/docling-project/docling-jobkit@27bad5b9159bd0fcb7c84be940416c6738c03b86'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef convert_payload(\n    options: dict,\n    source: dict,\n   \
+          \ target: dict,\n    batch_index: int,\n    # source_keys: List[str],\n\
+          \    dataset: Input[Dataset],\n) -> list:\n    import json\n    import logging\n\
+          \    import os\n    from typing import Optional\n    from pathlib import\
+          \ Path\n\n    from docling.backend.docling_parse_backend import DoclingParseDocumentBackend\n\
+          \    from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend\n\
+          \    from docling.backend.docling_parse_v4_backend import DoclingParseV4DocumentBackend\n\
+          \    from docling.backend.pdf_backend import PdfDocumentBackend\n    from\
+          \ docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend\n   \
+          \ from docling.datamodel.pipeline_options import (\n        OcrOptions,\n\
+          \        PdfBackend,\n        PdfPipelineOptions,\n        TableFormerMode,\n\
+          \    )\n    from docling.models.factories import get_ocr_factory\n\n   \
+          \ from docling_jobkit.connectors.s3_helper import DoclingConvert\n    from\
+          \ docling_jobkit.model.convert import ConvertDocumentsOptions\n    from\
+          \ docling_jobkit.model.s3_inputs import S3Coordinates\n\n    logging.basicConfig(level=logging.INFO)\n\
+          \n    # set expected path to pre-loaded models\n    os.environ[\"DOCLING_ARTIFACTS_PATH\"\
+          ] = \"/opt/app-root/src/.cache/docling/models\"\n    # easyocr_path = Path(\"\
+          /opt/app-root/src/.cache/docling/models/EasyOcr\")\n    # os.environ[\"\
+          MODULE_PATH\"] = str(easyocr_path)\n    # os.environ[\"EASYOCR_MODULE_PATH\"\
+          ] = str(easyocr_path)\n\n    # validate inputs\n    source_s3_coords = S3Coordinates.model_validate(source)\n\
+          \    target_s3_coords = S3Coordinates.model_validate(target)\n\n    convert_options\
+          \ = ConvertDocumentsOptions.model_validate(options)\n\n    backend: Optional[type[PdfDocumentBackend]]\
+          \ = None\n    if convert_options.pdf_backend:\n        if convert_options.pdf_backend\
+          \ == PdfBackend.DLPARSE_V1:\n            backend = DoclingParseDocumentBackend\n\
+          \        elif convert_options.pdf_backend == PdfBackend.DLPARSE_V2:\n  \
+          \          backend = DoclingParseV2DocumentBackend\n        elif convert_options.pdf_backend\
+          \ == PdfBackend.DLPARSE_V4:\n            backend = DoclingParseV4DocumentBackend\n\
+          \        elif convert_options.pdf_backend == PdfBackend.PYPDFIUM2:\n   \
+          \         backend = PyPdfiumDocumentBackend\n        else:\n           \
+          \ raise RuntimeError(\n                f\"Unexpected PDF backend type {convert_options.pdf_backend}\"\
+          \n            )\n\n    pipeline_options = PdfPipelineOptions()\n    pipeline_options.do_ocr\
+          \ = convert_options.do_ocr\n    ocr_factory = get_ocr_factory()\n\n    pipeline_options.ocr_options\
+          \ = cast(\n        OcrOptions, ocr_factory.create_options(kind=convert_options.ocr_engine)\n\
+          \    )\n\n    pipeline_options.do_table_structure = convert_options.do_table_structure\n\
+          \    pipeline_options.table_structure_options.mode = TableFormerMode(\n\
+          \        convert_options.table_mode\n    )\n    pipeline_options.generate_page_images\
+          \ = convert_options.include_images\n    pipeline_options.do_code_enrichment\
+          \ = convert_options.do_code_enrichment\n    pipeline_options.do_formula_enrichment\
+          \ = convert_options.do_formula_enrichment\n    pipeline_options.do_picture_classification\
+          \ = (\n        convert_options.do_picture_classification\n    )\n    pipeline_options.do_picture_description\
+          \ = convert_options.do_picture_description\n    pipeline_options.generate_picture_images\
+          \ = convert_options.generate_picture_images\n\n    # pipeline_options.accelerator_options\
+          \ = AcceleratorOptions(\n    #     num_threads=2, device=AcceleratorDevice.CUDA\n\
+          \    # )\n\n    converter = DoclingConvert(\n        source_s3_coords=source_s3_coords,\n\
+          \        target_s3_coords=target_s3_coords,\n        pipeline_options=pipeline_options,\n\
+          \        allowed_formats=convert_options.from_formats,\n        to_formats=convert_options.to_formats,\n\
+          \        backend=backend,\n    )\n\n    with open(dataset.path) as f:\n\
+          \        batches = json.load(f)\n    source_keys = batches[batch_index]\n\
+          \n    results = []\n    for item in converter.convert_documents(source_keys):\n\
+          \        results.append(item)\n        logging.info(\"Convertion result:\
+          \ {}\".format(item))\n\n    return results\n\n"
+        image: quay.io/docling-project/docling-serve:jobkit-base-0.0.19
+        resources:
+          cpuLimit: 1.0
+          cpuRequest: 0.2
+          memoryLimit: 7.0
+          memoryRequest: 1.0
+pipelineInfo:
+  name: inputs-s3in-s3out
+root:
+  dag:
+    tasks:
+      compute-batches:
+        cachingOptions: {}
+        componentRef:
+          name: comp-compute-batches
+        inputs:
+          parameters:
+            batch_size:
+              componentInputParameter: batch_size
+            source:
+              componentInputParameter: source
+            target:
+              componentInputParameter: target
+        taskInfo:
+          name: compute-batches
+      for-loop-1:
+        componentRef:
+          name: comp-for-loop-1
+        dependentTasks:
+        - compute-batches
+        inputs:
+          artifacts:
+            pipelinechannel--compute-batches-dataset:
+              taskOutputArtifact:
+                outputArtifactKey: dataset
+                producerTask: compute-batches
+          parameters:
+            pipelinechannel--compute-batches-batch_indices:
+              taskOutputParameter:
+                outputParameterKey: batch_indices
+                producerTask: compute-batches
+            pipelinechannel--convertion_options:
+              componentInputParameter: convertion_options
+            pipelinechannel--source:
+              componentInputParameter: source
+            pipelinechannel--target:
+              componentInputParameter: target
+        iteratorPolicy:
+          parallelismLimit: 3
+        parameterIterator:
+          itemInput: pipelinechannel--compute-batches-batch_indices-loop-item
+          items:
+            inputParameter: pipelinechannel--compute-batches-batch_indices
+        taskInfo:
+          name: for-loop-1
+  inputDefinitions:
+    parameters:
+      batch_size:
+        defaultValue: 20.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      convertion_options:
+        defaultValue:
+          abort_on_error: false
+          do_code_enrichment: false
+          do_formula_enrichment: false
+          do_ocr: true
+          do_picture_classification: false
+          do_picture_description: false
+          do_table_structure: true
+          force_ocr: false
+          from_formats:
+          - docx
+          - pptx
+          - html
+          - image
+          - pdf
+          - asciidoc
+          - md
+          - xlsx
+          - xml_uspto
+          - xml_jats
+          - json_docling
+          generate_picture_images: false
+          image_export_mode: placeholder
+          images_scale: 2.0
+          include_images: true
+          ocr_engine: easyocr
+          ocr_lang: []
+          pdf_backend: dlparse_v2
+          return_as_file: false
+          table_mode: accurate
+          to_formats:
+          - md
+          - json
+          - html
+          - text
+          - doctags
+        isOptional: true
+        parameterType: STRUCT
+      source:
+        defaultValue:
+          access_key: '123454321'
+          bucket: source-bucket
+          endpoint: s3.eu-de.cloud-object-storage.appdomain.cloud
+          key_prefix: my-docs
+          secret_key: secretsecret
+          verify_ssl: true
+        isOptional: true
+        parameterType: STRUCT
+      target:
+        defaultValue:
+          access_key: '123454321'
+          bucket: target-bucket
+          endpoint: s3.eu-de.cloud-object-storage.appdomain.cloud
+          key_prefix: my-docs
+          secret_key: secretsecret
+          verify_ssl: true
+        isOptional: true
+        parameterType: STRUCT
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.8.0
