@@ -1,0 +1,32 @@
+        {{ op.description | trim | indent(8) }}
+        {% set query_params = op.params_in('query') %}
+        {% if query_params | length > 0 %}
+
+        Query parameters:
+        {% for param in query_params %}
+         - `{{ param.name }}` _({{ get_type_hint(param.type) }})_: {{ param.description | trim | indent(11) }}
+        {% endfor %}
+        {% endif %}
+
+        {% if op.extensions.input_parameters %}
+        {% for param in op.extensions.input_parameters.parameters %}
+        :param {{ param.name | snake_case }}: {{ param.description | trim | indent(11) }}
+        {% endfor %}
+        {% elif (not ignore_path_params and op.params_in('path')) or op.request_schemas %}
+        {% if not ignore_path_params %}
+        {% for param in op.params_in('path') %}
+        :param {{ param.name | snake_case }}: {{ param.description | trim | indent(11) }}
+        {% if param.type %}
+        :type {{ param.name | snake_case }}: {{ get_type_hint(param.type) }}
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+        {%- if op.request_schemas %}
+        :param req: Request payload.
+        :type req: {{ get_type_hint(*op.request_schemas, include_primitive_type=True) }}
+        {% endif %}
+        {% endif %}
+        :return: The API response to the request.
+        {% if op.response_schemas | length > 0 %}
+        :rtype: {{ get_type_hint(*op.response_schemas) }}
+        {% endif %}
