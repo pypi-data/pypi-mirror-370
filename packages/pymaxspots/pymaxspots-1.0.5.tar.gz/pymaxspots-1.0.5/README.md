@@ -1,0 +1,139 @@
+![](https://code.usgs.gov/gmegsc/pymaxspots/-/raw/HEAD/img/pymaxspots_header.png)
+
+## Computing and connecting horizontal gradient maxima in potential-field geophysics
+
+Authors: Collin Cronkite-Ratcliff and Noah D. Athens
+
+U.S. Geological Survey Software Release Version 1.0
+
+## How to cite
+
+To cite this software release, please use:
+
+Cronkite-Ratcliff, C., and Athens, N.D., 2025, pymaxspots: Computing and connecting horizontal gradient maxima in potential-field geophysics, U.S. Geological Survey software release, v1.0, <https://doi.org/10.5066/P13FSKEM>.
+
+## Summary
+
+"Max spots" or "maxspots" refers to the locations of the local maxima of the horizontal gradient of potential fields such as gravity or magnetic anomalies.  Because maxspots mark locations of abrupt change in the anomalies, they can be used to identify the edges of subsurface features with significant contrasts in density and/or magnetization, such as faults, intrusions, or lithologic contacts. 
+
+**pymaxspots** is a Python package that finds the maxspots, given a raster image of the horizontal gradient magnitude (HGM) of potential field anomalies.  It also can connect the maxspots into continuous line features and return the resulting line features as a list of interconnected points.
+
+## Background
+
+The concept of using maxspots for subsurface edge detection was originally applied to gravity anomaly data (Cordell, 1979) and subsequently the pseudogravity transform of the magnetic anomaly (Cordell and Grauch, 1985).  Blakely and Simpson (1986) developed an algorithm for automatically identifying the maxspots from gridded datasets of potential field anomalies.  Using simple inequality comparisons, the method of Blakely and Simpson (1986) could identify which grid cells corresponded to local maxima.
+
+Phillips and others (2007) developed a new method for identifying maxspots in gridded datasets; by applying the method of Hansen and deRidder (2006) of fitting a 2D parabolic surface over a 3x3 window, this method can more precisely identify the location of the source, without being confined to the grid coordinates.  In addition, Phillips and others (2007) also developed an algorithm that converts the maxspots points into lines, which can be used to identify faults, contacts, or other mappable geologic features associated with the gradient.
+
+The maxspots identification method described by Phillips and others (2007) was implemented in a software tool by Phillips (2007) for use with Geosoft's Oasis Montaj software.
+
+The software package in this repository, **pymaxspots**, implements the methods described by Phillips and others (2007) for use with the Python programming language, which is widely used in the geophysics community.  Unlike the software previously published by Phillips (2007), **pymaxspots** does not depend on any proprietary software, enabling researchers to integrate it into open-source workflows.
+
+## Getting started
+
+### How to install
+
+It is highly recommended to install **pymaxspots** within a virtual environment, so that the dependencies do not conflict with any other packages you may be using.
+
+When you are ready to install **pymaxspots** within your virtual environment, clone the repository and navigate into the to repository directory.
+
+**pymaxspots** can be installed using pip:
+
+```
+pip install pymaxspots
+```
+
+This will install the package and its dependencies.
+
+Alternatively, **pymaxspots** can be installed using conda:
+
+```
+conda install -c conda-forge pymaxspots
+```
+
+Running the examples requires additional dependencies.  To install these dependencies with pip, use
+
+```
+pip install pymaxspots[test]
+```
+
+These additional dependencies can be installed using conda:
+
+```
+conda install -c conda-forge pymaxspots geopandas matplotlib rasterio
+```
+
+### How to uninstall
+
+To uninstall **pymaxspots** using pip:
+
+```
+pip uninstall pymaxspots
+```
+
+To uninstall **pymaxspots** using conda:
+
+```
+conda remove pymaxspots
+```
+
+### How to use the code
+
+Start importing the **pymaxspots** library:
+
+```python
+import pymaxspots
+```
+
+The **pymaxspots** module contains the following functions.  Click on the links to view documentation for each function.
+
+| Function    | Description |
+| ----------- | ----------- |
+| [`horizontal_gradient_magnitude`](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/docs/horizontal_gradient_magnitude.md)(grid, dx, dy) | Calculates the horizontal gradient magnitude of a potential field grid |
+| [`maxspots`](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/docs/maxspots.md)(hgm, ulx, uly, dx, dy) | Finds the max spots of the horizontal gradient magnitude grid |
+| [`maxspots_lineations`](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/docs/maxspots_lineations.md)(x, y, azimuth_tol=35, min_line_segments=3, dist_tol=None, order="none") | Connects max spots points into lines |
+| [`mean_nearest_neighbor_distance`](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/docs/mean_nearest_neighbor_distance.md)(x, y) | Mean distance between nearest neighbor pairs with coordinates x, y |
+
+### Examples
+
+The following examples show how to use the **pymaxspots** package using aeromagnetic data collected in northeastern Oregon (Earney and others, 2022).
+
+[Calculating the horizontal gradient magnitude](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/examples/01_horizontal_gradient_magnitude.md)
+
+[Calculating max spots from the horizontal gradient magnitude](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/examples/02_maxspots.md)
+
+[Connecting max spots points into lines](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/examples/03_maxspots_lineations.md)
+
+### Notebooks
+
+A Jupyter notebook [umatilla_aeromag.ipynb](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/notebooks/umatilla_aeromag.ipynb) provides examples of how to use the **pymaxspots** package on the Umatilla dataset.
+
+--------
+
+### Disclaimer
+
+**See the current
+[DISCLAIMER](https://code.usgs.gov/gmegsc/pymaxspots/-/blob/HEAD/DISCLAIMER.md)**.
+
+### Nonendorsement of commercial products and services
+
+Any use of trade, firm, or product names is for descriptive purposes only and does not imply endorsement by the U.S. Government.
+
+## References
+
+Athens, N.D., 2018, Maxspots Curvature; software available at <https://github.com/nathens/maxspots_curvature>.
+
+Blakely, R.J., 1995, Potential Theory in Gravity and Magnetic Applications, Cambridge University Press, <https://doi.org/10.1017/CBO9780511549816>.
+
+Blakely, R.J., and Simpson, R.W., 1986, Approximating edges of source bodies from magnetic or gravity anomalies, Geophysics, 51, 1494-1498, <https://doi.org/10.1190/1.1442197>.
+
+Cordell, L., 1979, Gravimetric expression of graben faulting in Santa Fe Country and the Espanola Basin, New Mexico, in Ingersoll, R.V., Ed., Guidebook to Santa Fe Country, 30th Field Conference, New Mexico Geological Society, 59-64.
+
+Cordell, L., and Grauch, V.J.S., 1985, Mapping basement magnetization zones from aeromagnetic data in the San Juan Basin, New Mexico, in Hinze, W.J., Ed., The utility of regional gravity and magnetic anomaly maps, Society of Exploration Geophysics, 181-197, <https://doi.org/10.1190/1.0931830346.ch16>.
+
+Earney, T.E., Glen, J.M., Peacock, J.R., DeAngelo, J., Dean, B.J., Zielinski, L.A., Bouligand, C., Siler, D.L., and Schermerhorn, W.D., 2022, Geophysical characterization of geothermal resources on the Umatilla Indian Reservation in northeast Oregon: U.S. Geological Survey data release, <https://doi.org/10.5066/P9908RVH>.
+
+Hansen, R.O., and deRidder, E., 2006, Linear feature analysis for aeromagnetic data, Geophysics, 71, L61-L67, <https://doi.org/10.1190/1.2357831>.
+
+Phillips, J.D., 2007, Geosoft eXecutables (GX’s) developed by the U.S. Geological Survey, version 2.0, with notes on GX development from Fortran code: U.S. Geological Survey Open-File Report 2007-1355, <https://doi.org/10.3133/ofr20071355>.
+
+Phillips, J.D., Hansen, R.O., and Blakely, R.J., 2007, The use of curvature in potential-field interpretation, Exploration Geophysics, 38, 111-119, <https://doi.org/10.1071/EG07014>.
