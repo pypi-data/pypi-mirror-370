@@ -1,0 +1,807 @@
+Metadata-Version: 2.4
+Name: finalsa-traceability
+Version: 1.0.1
+Summary: Thread-safe distributed tracing and correlation ID management for Python microservices
+Project-URL: Homepage, https://github.com/finalsa/finalsa-traceability
+Project-URL: Documentation, https://github.com/finalsa/finalsa-traceability#readme
+Project-URL: Repository, https://github.com/finalsa/finalsa-traceability.git
+Project-URL: Issues, https://github.com/finalsa/finalsa-traceability/issues
+Project-URL: Changelog, https://github.com/finalsa/finalsa-traceability/blob/main/CHANGELOG.md
+Author-email: Luis Jimenez <luis@finalsa.com>
+License: MIT License
+        
+        Copyright (c) 2021 Luis Diego Jiménez Delgado
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+License-File: LICENSE.md
+Keywords: async,context-management,correlation-id,distributed-tracing,finalsa,microservices,observability,thread-safe,traceability
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Distributed Computing
+Classifier: Topic :: System :: Monitoring
+Classifier: Typing :: Typed
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+
+# Finalsa Traceability
+
+A comprehensive Python library for managing distributed tracing and correlation IDs across microservices and distributed systems. **Now with full W3C Trace Context compliance** for seamless interoperability with OpenTelemetry, Jaeger, Zipkin, and other W3C-compliant tracing tools.
+
+## Features
+
+- **🌍 W3C Trace Context Compliant**: Full support for `traceparent` and `tracestate` headers
+- **🔗 Interoperable**: Works seamlessly with OpenTelemetry, Jaeger, Zipkin, and other W3C-compliant tools
+- **🔒 Thread-Safe Context Management**: Uses Python's `contextvars` for proper isolation
+- **🆔 Automatic ID Generation**: Creates W3C-compliant trace IDs, span IDs, and correlation IDs
+- **🚀 Correlation ID Hop Tracking**: Automatically extends correlation IDs as requests flow through services
+- **📡 HTTP Integration**: Both W3C standard and traditional header constants
+- **⚡ Async Support**: Full support for async/await operations
+- **🔧 Backward Compatible**: Existing code continues to work unchanged
+- **📝 Type Hints**: Complete type annotations for better development experience
+- **✅ 100% Test Coverage**: Comprehensive test suite with 82+ tests ensuring reliability
+
+## Installation
+
+```bash
+# Using uv (recommended)
+uv add finalsa-traceability
+
+# Using pip
+pip install finalsa-traceability
+
+# For development with examples
+uv sync --group examples --group test
+```
+
+## Quick Start
+
+### Basic Usage
+
+```python
+from finalsa.traceability import set_context, get_context
+
+# Set traceability context for your service
+set_context(
+    correlation_id="user-request-123",
+    service_name="auth-service"
+)
+
+# Get current context
+context = get_context()
+print(context["correlation_id"])  # "user-request-123-XXXXX"
+print(context["trace_id"])        # Auto-generated W3C trace ID (32 hex chars)
+print(context["span_id"])         # Auto-generated W3C span ID (16 hex chars)
+```
+
+## W3C Trace Context Support
+
+This library is **fully compliant** with the [W3C Trace Context specification](https://www.w3.org/TR/trace-context/), enabling seamless interoperability with modern distributed tracing systems.
+
+### W3C Headers
+
+```python
+from finalsa.traceability import (
+    set_context_from_w3c_headers,
+    get_w3c_headers,
+    HTTP_HEADER_TRACEPARENT,
+    HTTP_HEADER_TRACESTATE
+)
+
+# Process incoming W3C headers
+def handle_w3c_request(request):
+    # Extract W3C Trace Context headers
+    traceparent = request.headers.get(HTTP_HEADER_TRACEPARENT)
+    tracestate = request.headers.get(HTTP_HEADER_TRACESTATE)
+    
+    # Set context from W3C headers
+    set_context_from_w3c_headers(
+        traceparent=traceparent,
+        tracestate=tracestate,
+        service_name="my-service"
+    )
+    
+    # Your business logic
+    result = process_request(request)
+    
+    # Generate W3C headers for outgoing response
+    w3c_headers = get_w3c_headers()
+    response.headers[HTTP_HEADER_TRACEPARENT] = w3c_headers['traceparent']
+    response.headers[HTTP_HEADER_TRACESTATE] = w3c_headers['tracestate']
+    
+    return response
+```
+
+### W3C + Traditional Header Support
+
+The library supports **both W3C and traditional headers simultaneously** for maximum compatibility:
+
+```python
+from finalsa.traceability import (
+    set_context_from_w3c_headers,
+    get_w3c_headers,
+    get_context,
+    HTTP_HEADER_TRACEPARENT,
+    HTTP_HEADER_TRACESTATE,
+    HTTP_HEADER_CORRELATION_ID,
+    HTTP_HEADER_TRACE_ID,
+    HTTP_HEADER_SPAN_ID
+)
+
+def handle_request_with_both_headers(request):
+    # Try W3C headers first
+    traceparent = request.headers.get(HTTP_HEADER_TRACEPARENT)
+    tracestate = request.headers.get(HTTP_HEADER_TRACESTATE)
+    
+    if traceparent:
+        # Use W3C Trace Context
+        set_context_from_w3c_headers(
+            traceparent=traceparent,
+            tracestate=tracestate,
+            service_name="my-service"
+        )
+    else:
+        # Fallback to traditional headers
+        headers = {
+            'correlation_id': request.headers.get(HTTP_HEADER_CORRELATION_ID),
+            'trace_id': request.headers.get(HTTP_HEADER_TRACE_ID),
+            'span_id': request.headers.get(HTTP_HEADER_SPAN_ID)
+        }
+        set_context_from_dict(headers, service_name="my-service")
+    
+    # Process request
+    result = process_request(request)
+    
+    # Send BOTH W3C and traditional headers for maximum compatibility
+    context = get_context()
+    w3c_headers = get_w3c_headers()
+    
+    # W3C headers
+    response.headers[HTTP_HEADER_TRACEPARENT] = w3c_headers['traceparent']
+    response.headers[HTTP_HEADER_TRACESTATE] = w3c_headers['tracestate']
+    
+    # Traditional headers
+    response.headers[HTTP_HEADER_CORRELATION_ID] = context['correlation_id']
+    response.headers[HTTP_HEADER_TRACE_ID] = context['trace_id']
+    response.headers[HTTP_HEADER_SPAN_ID] = context['span_id']
+    
+    return response
+```
+
+### Correlation ID + W3C Integration
+
+Your **correlation IDs remain a core feature** and are seamlessly integrated with W3C Trace Context. They flow through the W3C `tracestate` header while maintaining their hop-tracking functionality:
+
+```python
+# Service A
+set_context(correlation_id="user-request-123", service_name="service-a")
+w3c_headers = get_w3c_headers()
+print(w3c_headers['tracestate'])  # "finalsa=user-request-123-A1B2C"
+
+# Service B receives the W3C headers
+set_context_from_w3c_headers(
+    traceparent=w3c_headers['traceparent'],
+    tracestate=w3c_headers['tracestate'],
+    service_name="service-b"
+)
+
+context = get_context()
+print(context['correlation_id'])  # "user-request-123-A1B2C-X9Y8Z" (hop added!)
+```
+
+### W3C Compliance Features
+
+- ✅ **traceparent format**: `00-{32-hex-trace-id}-{16-hex-span-id}-{2-hex-flags}`
+- ✅ **tracestate format**: `key1=value1,key2=value2` with proper validation
+- ✅ **Key validation**: Lowercase start, allowed characters `[a-z0-9_-*/]`
+- ✅ **Value validation**: No commas/equals, printable ASCII, max 256 chars
+- ✅ **Length limits**: Max 32 key-value pairs, 512 total characters
+- ✅ **Error handling**: Invalid entries silently filtered per W3C spec
+- ✅ **Interoperability**: Works with OpenTelemetry, Jaeger, Zipkin, etc.
+```
+
+### HTTP Service Integration
+
+```python
+from finalsa.traceability import (
+    set_context_from_dict, 
+    get_context,
+    HTTP_HEADER_CORRELATION_ID,
+    HTTP_HEADER_TRACE_ID,
+    HTTP_HEADER_SPAN_ID
+)
+
+# Extract traceability from incoming HTTP request
+def handle_request(request):
+    headers = {
+        'correlation_id': request.headers.get(HTTP_HEADER_CORRELATION_ID),
+        'trace_id': request.headers.get(HTTP_HEADER_TRACE_ID),
+        'span_id': request.headers.get(HTTP_HEADER_SPAN_ID)
+    }
+    
+    # Set context for this service
+    set_context_from_dict(headers, service_name="api-gateway")
+    
+    # Your business logic here
+    result = process_request(request)
+    
+    # Add traceability to outgoing response
+    context = get_context()
+    response.headers[HTTP_HEADER_CORRELATION_ID] = context["correlation_id"]
+    response.headers[HTTP_HEADER_TRACE_ID] = context["trace_id"]
+    response.headers[HTTP_HEADER_SPAN_ID] = context["span_id"]
+    
+    return response
+```
+
+### Flask Integration
+
+```python
+from flask import Flask, request, g
+from finalsa.traceability import set_context_from_dict, get_context
+
+app = Flask(__name__)
+
+@app.before_request
+def before_request():
+    # Extract traceability from request headers
+    headers = {
+        'correlation_id': request.headers.get('X-Correlation-ID'),
+        'trace_id': request.headers.get('X-Trace-ID'), 
+        'span_id': request.headers.get('X-Span-ID')
+    }
+    set_context_from_dict(headers, service_name="my-flask-app")
+
+@app.after_request  
+def after_request(response):
+    # Add traceability to response headers
+    context = get_context()
+    response.headers['X-Correlation-ID'] = context["correlation_id"]
+    response.headers['X-Trace-ID'] = context["trace_id"]
+    response.headers['X-Span-ID'] = context["span_id"]
+    return response
+
+@app.route('/api/users')
+def get_users():
+    # Context is automatically available
+    context = get_context()
+    print(f"Processing request with correlation_id: {context['correlation_id']}")
+    return {"users": []}
+```
+
+### FastAPI Integration
+
+```python
+from fastapi import FastAPI, Request, Response
+from finalsa.traceability import set_context_from_dict, get_context
+
+app = FastAPI()
+
+@app.middleware("http")
+async def traceability_middleware(request: Request, call_next):
+    # Extract traceability from request headers
+    headers = {
+        'correlation_id': request.headers.get('x-correlation-id'),
+        'trace_id': request.headers.get('x-trace-id'),
+        'span_id': request.headers.get('x-span-id')
+    }
+    set_context_from_dict(headers, service_name="my-fastapi-app")
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Add traceability to response headers
+    context = get_context()
+    response.headers['x-correlation-id'] = context["correlation_id"]
+    response.headers['x-trace-id'] = context["trace_id"]
+    response.headers['x-span-id'] = context["span_id"]
+    
+    return response
+
+@app.get("/api/users")
+async def get_users():
+    context = get_context()
+    print(f"Processing request with correlation_id: {context['correlation_id']}")
+    return {"users": []}
+```
+
+### Message Queue Integration
+
+```python
+from finalsa.traceability import set_context_from_dict, get_context
+
+# Publishing messages
+def publish_message(message_data):
+    context = get_context()
+    
+    # Add traceability to message properties
+    message_properties = {
+        'correlation_id': context["correlation_id"],
+        'trace_id': context["trace_id"],
+        'span_id': context["span_id"]
+    }
+    
+    publish_to_queue(message_data, properties=message_properties)
+
+# Consuming messages  
+def handle_message(message):
+    # Extract traceability from message properties
+    headers = {
+        'correlation_id': message.properties.get('correlation_id'),
+        'trace_id': message.properties.get('trace_id'),
+        'span_id': message.properties.get('span_id')
+    }
+    
+    set_context_from_dict(
+        headers, 
+        service_name="order-processor",
+        queue_name="orders",
+        message_id=message.id
+    )
+    
+    # Process message with traceability context
+    process_order(message.data)
+```
+
+## API Reference
+
+### Context Management
+
+#### `set_context(correlation_id=None, trace_id=None, span_id=None, service_name=None, **kwargs)`
+
+Set multiple traceability IDs and custom variables in one call.
+
+**Parameters:**
+- `correlation_id` (str, optional): Correlation ID to extend with hop
+- `trace_id` (str, optional): Trace ID to set (generates UUID if None)
+- `span_id` (str, optional): Span ID to set (generates UUID if None)  
+- `service_name` (str, optional): Service name for correlation ID generation
+- `**kwargs`: Additional custom variables to store
+
+#### `set_context_from_dict(context, service_name=None, **kwargs)`
+
+Set traceability context from a dictionary (e.g., HTTP headers).
+
+**Parameters:**
+- `context` (dict): Dictionary with 'correlation_id', 'trace_id', 'span_id' keys
+- `service_name` (str, optional): Service name for new correlation ID generation
+- `**kwargs`: Additional custom variables to store
+
+#### `get_context() -> Dict`
+
+Get the complete current traceability context.
+
+**Returns:** Dictionary containing correlation_id, trace_id, span_id, and custom variables.
+
+### Individual Setters/Getters
+
+#### `set_correlation_id(value=None, service_name=None)`
+#### `set_trace_id(value=None)`
+#### `set_span_id(value=None)`
+#### `get_correlation_id() -> Optional[str]`
+#### `get_trace_id() -> Optional[str]`
+#### `get_span_id() -> Optional[str]`
+
+### ID Generation Functions
+
+#### `default_correlation_id(service_name=None) -> str`
+
+Generate correlation ID in format "service_name-XXXXX".
+
+#### `default_trace_id() -> str`
+
+Generate W3C-compliant trace ID (32 lowercase hex characters).
+
+#### `default_span_id() -> str`
+
+Generate W3C-compliant span ID (16 lowercase hex characters).
+
+#### `add_hop_to_correlation(correlation_id) -> str`
+
+Add a hop to existing correlation ID.
+
+#### `id_generator(size=5, chars=string.ascii_uppercase + string.digits) -> str`
+
+Generate random alphanumeric ID.
+
+### W3C Trace Context Functions
+
+#### `set_context_from_w3c_headers(traceparent=None, tracestate=None, service_name=None, vendor_key="finalsa", **kwargs)`
+
+Set traceability context from W3C Trace Context headers.
+
+**Parameters:**
+- `traceparent` (str, optional): W3C traceparent header value
+- `tracestate` (str, optional): W3C tracestate header value  
+- `service_name` (str, optional): Service name for new correlation ID generation
+- `vendor_key` (str): Key to look for correlation ID in tracestate (default: "finalsa")
+- `**kwargs`: Additional custom variables to store
+
+#### `get_w3c_headers(vendor_key="finalsa") -> Dict[str, str]`
+
+Get both W3C headers (traceparent and tracestate) from current context.
+
+**Returns:** Dictionary with 'traceparent' and 'tracestate' keys.
+
+#### `get_w3c_traceparent() -> str`
+
+Generate W3C traceparent header value from current context.
+
+**Returns:** traceparent header in format "00-{trace_id}-{span_id}-01"
+
+#### `get_w3c_tracestate(vendor_key=None) -> str`
+
+Generate W3C tracestate header value from current context.
+
+**Parameters:**
+- `vendor_key` (str, optional): Vendor key to include correlation_id in tracestate
+
+**Returns:** tracestate header in format "key1=value1,key2=value2"
+
+#### `generate_traceparent(trace_id=None, parent_id=None, trace_flags="01") -> str`
+
+Generate a W3C Trace Context compliant traceparent header value.
+
+#### `parse_traceparent(traceparent) -> dict`
+
+Parse a W3C Trace Context traceparent header value.
+
+#### `generate_tracestate(vendor_data) -> str`
+
+Generate a W3C Trace Context compliant tracestate header value.
+
+#### `parse_tracestate(tracestate) -> dict`
+
+Parse a W3C Trace Context tracestate header value.
+
+### Constants
+
+#### HTTP Headers
+
+**W3C Trace Context Headers:**
+- `HTTP_HEADER_TRACEPARENT` = "traceparent"
+- `HTTP_HEADER_TRACESTATE` = "tracestate"
+
+**Traditional Headers (fully supported):**
+- `HTTP_HEADER_CORRELATION_ID` = "X-Correlation-ID" 
+- `HTTP_HEADER_TRACE_ID` = "X-Trace-ID"
+- `HTTP_HEADER_SPAN_ID` = "X-Span-ID"
+- `HTTP_AUTHORIZATION_HEADER` = "Authorization"
+
+#### Async Context Keys
+- `ASYNC_CONTEXT_CORRELATION_ID` = "correlation_id"
+- `ASYNC_CONTEXT_TRACE_ID` = "trace_id"
+- `ASYNC_CONTEXT_SPAN_ID` = "span_id"
+- `ASYNC_CONTEXT_TOPIC` = "topic"
+- `ASYNC_CONTEXT_SUBTOPIC` = "subtopic"
+- `ASYNC_CONTEXT_AUTHORIZATION` = "auth"
+
+## Advanced Usage
+
+### Custom Variables
+
+```python
+from finalsa.traceability import set_context, get_context
+
+# Store custom variables with traceability context
+set_context(
+    correlation_id="request-123",
+    service_name="user-service",
+    user_id="user-456",
+    operation="login",
+    ip_address="192.168.1.1"
+)
+
+context = get_context()
+print(context["user_id"])      # "user-456"
+print(context["operation"])    # "login"
+print(context["ip_address"])   # "192.168.1.1"
+```
+
+### Thread Safety
+
+The library uses Python's `contextvars` which ensures proper isolation between threads and async tasks:
+
+```python
+import threading
+from finalsa.traceability import set_context, get_context
+
+def worker_thread(thread_id):
+    # Each thread has its own context
+    set_context(
+        correlation_id=f"thread-{thread_id}",
+        service_name="worker-service"
+    )
+    
+    context = get_context()
+    print(f"Thread {thread_id}: {context['correlation_id']}")
+
+# Create multiple threads
+threads = []
+for i in range(5):
+    thread = threading.Thread(target=worker_thread, args=(i,))
+    threads.append(thread)
+    thread.start()
+
+for thread in threads:
+    thread.join()
+```
+
+### Async/Await Support
+
+```python
+import asyncio
+from finalsa.traceability import set_context, get_context
+
+async def async_task(task_id):
+    # Each async task has its own context
+    set_context(
+        correlation_id=f"task-{task_id}",
+        service_name="async-service"
+    )
+    
+    await asyncio.sleep(0.1)  # Simulate async work
+    
+    context = get_context()
+    print(f"Task {task_id}: {context['correlation_id']}")
+
+async def main():
+    # Run multiple async tasks
+    tasks = [async_task(i) for i in range(5)]
+    await asyncio.gather(*tasks)
+
+asyncio.run(main())
+```
+
+## Best Practices
+
+### 1. Service Naming
+Use consistent service names across your application:
+
+```python
+SERVICE_NAME = "auth-service"
+set_context(service_name=SERVICE_NAME)
+```
+
+### 2. HTTP Header Propagation
+Always propagate traceability headers between services:
+
+```python
+import requests
+from finalsa.traceability import get_context, HTTP_HEADER_CORRELATION_ID
+
+def call_downstream_service():
+    context = get_context()
+    headers = {
+        HTTP_HEADER_CORRELATION_ID: context["correlation_id"],
+        "X-Trace-ID": context["trace_id"],
+        "X-Span-ID": context["span_id"]
+    }
+    
+    response = requests.get("http://downstream-service/api", headers=headers)
+    return response
+```
+
+### 3. Error Handling
+Include traceability in error logs:
+
+```python
+import logging
+from finalsa.traceability import get_context
+
+def handle_error(error):
+    context = get_context()
+    logging.error(
+        f"Error occurred - "
+        f"correlation_id: {context.get('correlation_id')}, "
+        f"trace_id: {context.get('trace_id')}, "
+        f"error: {error}"
+    )
+```
+
+### 4. Database Operations
+Include traceability in database logs:
+
+```python
+from finalsa.traceability import get_context
+
+def execute_query(sql, params):
+    context = get_context()
+    
+    # Log query with traceability
+    logging.info(
+        f"Executing query - "
+        f"correlation_id: {context.get('correlation_id')}, "
+        f"sql: {sql}"
+    )
+    
+    # Execute query
+    return database.execute(sql, params)
+```
+
+### 5. W3C Trace Context Best Practices
+
+**Prioritize W3C Headers:**
+```python
+def handle_request(request):
+    # Try W3C headers first for maximum interoperability
+    traceparent = request.headers.get('traceparent')
+    if traceparent:
+        set_context_from_w3c_headers(
+            traceparent=traceparent,
+            tracestate=request.headers.get('tracestate'),
+            service_name="my-service"
+        )
+    else:
+        # Fallback to traditional headers
+        set_context_from_dict({
+            'correlation_id': request.headers.get('X-Correlation-ID'),
+            'trace_id': request.headers.get('X-Trace-ID'),
+            'span_id': request.headers.get('X-Span-ID')
+        }, service_name="my-service")
+```
+
+**Send Both Header Types:**
+```python
+def send_to_downstream(data):
+    # Get both W3C and traditional headers for maximum compatibility
+    context = get_context()
+    w3c_headers = get_w3c_headers()
+    
+    headers = {
+        # W3C headers (for interoperability)
+        'traceparent': w3c_headers['traceparent'],
+        'tracestate': w3c_headers['tracestate'],
+        
+        # Traditional headers (core correlation tracking)
+        'X-Correlation-ID': context['correlation_id'],
+        'X-Trace-ID': context['trace_id'],
+        'X-Span-ID': context['span_id']
+    }
+    
+    requests.post('http://downstream/api', json=data, headers=headers)
+```
+
+**Vendor-Specific Data in Tracestate:**
+```python
+# Include your service-specific data in tracestate
+set_context(
+    correlation_id="user-request-123",
+    w3c_vendor_data={
+        'service-version': '1.2.3',
+        'deployment': 'production',
+        'region': 'us-east-1'
+    }
+)
+
+# This data will be preserved in W3C tracestate header
+w3c_headers = get_w3c_headers()
+print(w3c_headers['tracestate'])  
+# "finalsa=user-request-123,service-version=1.2.3,deployment=production,region=us-east-1"
+```
+
+## Examples
+
+The `examples/` directory contains comprehensive examples demonstrating different use cases:
+
+### Basic Usage
+- **`examples/basic_usage.py`** - Simple usage patterns and basic context operations
+
+### W3C Trace Context
+- **`examples/w3c_trace_context_demo.py`** - Complete W3C Trace Context demonstration with traceparent/tracestate headers, correlation ID preservation, and interoperability examples
+
+### Web Framework Integration
+- **`examples/fastapi_integration.py`** - Complete FastAPI application with W3C Trace Context support, middleware, dependency injection, async patterns, and error handling
+
+### Concurrency & Thread Safety
+- **`examples/thread_safety_demo.py`** - Thread and async safety demonstrations
+
+### Running Examples
+
+Using uv (recommended):
+```bash
+# Install example dependencies
+uv sync --group examples
+
+# Basic usage example
+uv run python examples/basic_usage.py
+
+# W3C Trace Context demo
+uv run python examples/w3c_trace_context_demo.py
+
+# FastAPI example with W3C support
+uv run python examples/fastapi_integration.py
+# Or use the convenience script
+./run_fastapi_example.sh
+
+# Thread safety demo
+uv run python examples/thread_safety_demo.py
+```
+
+Using pip:
+```bash
+# Install example dependencies
+pip install -r examples/requirements.txt
+
+# Run examples
+python examples/basic_usage.py
+python examples/w3c_trace_context_demo.py
+python examples/fastapi_integration.py
+python examples/thread_safety_demo.py
+```
+
+See `examples/README.md` for detailed usage instructions and API patterns.
+
+## Development
+
+### Requirements
+- Python 3.9+ (uses only standard library for core functionality)
+- Optional dependencies for examples and testing (see `pyproject.toml`)
+
+### Running Tests
+
+```bash
+# Install development dependencies
+uv add --dev pytest coverage
+
+# Run tests
+uv run pytest
+
+# Run tests with coverage
+uv run coverage run -m pytest
+uv run coverage report --show-missing
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality  
+4. Ensure all tests pass
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Changelog
+
+### v0.2.0 (Latest)
+- 🌍 **W3C Trace Context Compliance**: Full support for `traceparent` and `tracestate` headers
+- 🔗 **Interoperability**: Works with OpenTelemetry, Jaeger, Zipkin, and other W3C-compliant tools
+- 🆔 **W3C-Compliant IDs**: Trace IDs (32 hex chars) and Span IDs (16 hex chars) follow W3C format
+- 📡 **Dual Header Support**: Both W3C standard and traditional X-* headers supported simultaneously
+- 🚀 **Correlation ID Preservation**: Your correlation IDs flow seamlessly in W3C `tracestate` header
+- ✅ **Enhanced Test Suite**: 82+ tests including comprehensive W3C compliance testing
+- 🔧 **Backward Compatible**: All existing code continues to work unchanged
+- 📖 **W3C Demo**: New `w3c_trace_context_demo.py` example demonstrating full W3C compliance
+
+### v0.1.1
+- Initial release
+- Basic traceability context management
+- HTTP header constants
+- Thread-safe operation using contextvars
+- Comprehensive test suite with 100% coverage
