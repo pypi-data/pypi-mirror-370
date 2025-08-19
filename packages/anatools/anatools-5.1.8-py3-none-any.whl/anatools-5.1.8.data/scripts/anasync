@@ -1,0 +1,276 @@
+#!python
+# Copyright 2019-2022 DADoES, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License in the root directory in the "LICENSE" file or at:
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import anatools
+import argparse
+import base64
+import docker
+import io
+import json
+import os
+import shutil
+import sys
+import tarfile
+from anatools.lib.print import print_color
+from anatools.lib.mount import mount_loop, unmount_data
+
+localpath = '/ana/data/services/'
+
+
+def cleanup_symlinks(created_symlinks):
+    for servicepath, linkpath in created_symlinks:
+        if os.path.islink(linkpath): os.unlink(linkpath)
+        shutil.rmtree(servicepath)
+        os.remove(linkpath)
+
+parser = argparse.ArgumentParser(
+    description="""
+Sync services for a workspace from the Rendered.ai Platform.
+    sync data for a workspace       anasync --workspace workspaceId
+    sync data and edit service      anasync --edit serviceId1,servicId2
+""",
+    formatter_class=argparse.RawDescriptionHelpFormatter
+)
+parser.add_argument('--workspace', type=str, required=False, help='The workspaceId to sync.')
+parser.add_argument('--email', type=str, default=None)
+parser.add_argument('--password', type=str, default=None)
+parser.add_argument('--environment', type=str, default=None)
+parser.add_argument('--endpoint', type=str, default=None)
+parser.add_argument('--local', action='store_true')
+parser.add_argument('--verbose', action='store_true')
+parser.add_argument('--version', action='store_true')
+parser.add_argument('--edit', type=str, default=None)
+parser.add_argument('--editall', action='store_true')
+parser.add_argument('--force', action='store_true')
+parser.add_argument('--mountexec', type=str, default='goofys')
+parser.add_argument('--killall', action='store_true')
+parser.add_argument('--novolumes', action='store_true')
+args = parser.parse_args()
+if args.version: print(f'anasync {anatools.__version__}'); sys.exit(1)
+if args.verbose: verbose = 'debug'
+else: verbose = False
+interactive = False
+if args.email and args.password is None: interactive = True
+
+if args.workspace is None: args.workspace = os.environ.get("RENDEREDAI_WORKSPACE_ID")
+if args.workspace is None: raise Exception("--workspace parameter is required")
+
+if args.edit is None or args.editall: editservices = []
+else: editservices = [serviceId.strip() for serviceId in args.edit.replace('[', '').replace(']', '').split(',')]
+
+mountfile = os.path.join(os.path.expanduser('~'), '.renderedai', '.mounts.json')
+if args.killall:
+    if os.path.exists(mountfile):
+        with open(mountfile, 'r') as f: mounts = json.load(f)
+        unmount_data(mounts['volumes'].keys(), mounts['workspaces'].keys())
+    sys.exit(0)
+
+created_symlinks = []
+try:
+    client = anatools.client(
+        email=args.email,
+        password=args.password,
+        environment=args.environment,
+        endpoint=args.endpoint,
+        local=args.local,
+        interactive=interactive,
+        verbose=verbose)
+
+    workspace = client.get_workspaces(workspaceId=args.workspace)
+    if not workspace: print_color(f'Workspace {args.workspace} not found', 'error'); sys.exit(1)
+    workspace = workspace[0]
+    uniqueworkspaces = {} # don't mount workspace for now - {workspace['workspaceId']: workspace}
+
+    # Get all necessary data in fewer calls
+    credentials = client.get_workspace_service_credentials(workspaceId=workspace['workspaceId'])
+    workspacevolumes = client.get_volumes(workspaceId=workspace['workspaceId'])
+    uniquevolumes = {v['volumeId']: v for v in workspacevolumes}
+
+    # Setup Docker client and credentials
+    try:
+        dockerclient = docker.from_env()
+        encodedpass = credentials['ecrPassword']
+        if not encodedpass:
+            raise Exception('Failed to retrieve ECR password from Rendered.ai platform.')
+        decodedpass = base64.b64decode(encodedpass.encode('ascii')).decode('ascii').split(':')[-1]
+        auth_config = {'username': 'AWS', 'password': decodedpass}
+    except Exception as e:
+        raise Exception(f'Failed to setup Docker: {e}')
+
+    # Process each service in a single loop
+    os.makedirs(localpath, exist_ok=True)
+    services = client.get_services(workspaceId=workspace['workspaceId'])
+    if services == False: print_color('Failed to fetch services for workspace.', color='error')
+    serviceIds = [service['serviceId'] for service in services]
+    for serviceId in editservices:
+        if serviceId not in serviceIds: print_color(f'ServiceId {serviceId} not found in workspace.', color='error')
+    for service in services:
+        localname = service['name']
+        if len([s['name'] for s in services if s['name'] == service['name']]) > 1:
+            localname = f"{service['name']}-{service['serviceId'][:8]}"
+        linkpath = os.path.join(localpath, localname)
+        servicepath = os.path.join(os.path.expanduser('~'), '.renderedai', 'services', service['serviceId'])
+        os.makedirs(servicepath, exist_ok=True)
+
+        # 1. Remove old images
+        for image in dockerclient.images.list():
+            if image.tags and any('anasync' in tag and service['serviceId'] in tag for tag in image.tags):
+                dockerclient.images.remove(image.id, force=True)
+
+        # 2. Fetch Docker images and mount service data
+        print(f"Fetching service {service['name']}...", end='', flush=True)
+        found = False
+        service_images = dockerclient.images.list(name=f"anasync-{service['name']}-{service['serviceId']}")
+        for image in service_images:
+            if f"anasync-{service['name']}-{service['serviceId']}:{imagedata['tag']}" not in image.tags:
+                try: dockerclient.images.remove(image=image.id, force=True)
+                except: pass
+            else: found = True
+        if not found:
+            try:
+                imagedata = [c for c in credentials['services'] if c['serviceId'] == service['serviceId']][0]
+                dockerclient.images.pull(imagedata['image'], tag=imagedata['tag'], auth_config=auth_config)
+                image = dockerclient.images.get(f"{imagedata['image']}:{imagedata['tag']}")
+                image.tag(f"anasync-{service['name']}-{service['serviceId']}", tag=imagedata['tag'])
+                dockerclient.images.remove(f"{imagedata['image']}:{imagedata['tag']}")
+            except Exception as e:  print_color(f'Failed to pull image for service {service["name"]}: {e}', 'error'); print(credentials['services']); raise(e)
+        if service['serviceId'] in editservices or args.editall:
+            # 0. Remove symlink if it exists
+            if os.path.islink(linkpath):
+                if args.force:
+                    os.unlink(linkpath)
+                else:
+                    print(f'Symlink at {linkpath} already exists.')
+                    resp = input('Do you want to remove it and continue? (y/n): ')
+                    while resp.lower() not in ['yes', 'y', 'no', 'n']: resp = input('Invalid input, enter either "y" or "n": ')
+                    if resp.lower() in ['no', 'n']: continue
+                    os.unlink(linkpath)
+
+            if os.path.exists(servicepath):
+                if not args.force:
+                    print(f'\nAll files at {linkpath} will be replaced.')
+                    resp = input('Do you want to continue? (y/n): ')
+                    while resp.lower() not in ['yes', 'y', 'no', 'n']: resp = input('Invalid input, enter either "y" or "n": ')
+                    if resp.lower() in ['no', 'n']: continue
+                shutil.rmtree(servicepath)
+            os.makedirs(servicepath, exist_ok=True)
+            container = None
+            try:
+                try:
+                    existing_container = dockerclient.containers.get(f"ana-clone-{service['serviceId']}")
+                    if args.force:
+                        existing_container.remove(force=True)
+                    else:
+                        print_color(f"Container ana-clone-{service['serviceId']} already exists.", 'warning')
+                        continue # Or ask user to remove
+                except docker.errors.NotFound:
+                    pass # Container doesn't exist, which is fine
+                container = dockerclient.containers.create(image=f"anasync-{service['name']}-{service['serviceId']}:{imagedata['tag']}", name=f"ana-clone-{service['serviceId']}")
+                stream, _ = container.get_archive('/ana/')
+                file_like = io.BytesIO(b''.join(stream))
+                with tarfile.open(fileobj=file_like) as tar:
+                    for member in tar.getmembers():
+                        member_path = member.name
+                        parts = member_path.split('/', 1)
+                        if len(parts) > 1: member.name = parts[1]
+                        else: continue
+                        tar.extract(member, path=servicepath)
+                if service['serviceId'] not in imagedata['image']:
+                    with open(os.path.join(servicepath, 'service.yaml'), 'r') as file:
+                        content = file.read()
+                    content = content.replace(imagedata['image'].split('/')[-1], service['serviceId'])
+                    content = content.replace("name: hello", f"name: {service['name']}")
+                    content = content.replace("description: A simple hello service.", f"description: {service['description']}")
+                    contest = content.replace("instance: t3.xlarge", f"instance: {service['instance']}")
+                    with open(os.path.join(servicepath, 'service.yaml'), 'w') as file:
+                        file.write(content)
+            except Exception as e:
+                print(e)
+                print_color(f"Failed to clone contents of {service['name']} service ({service['serviceId']})", color='error')
+            finally:
+                if container:
+                    try:
+                        container.remove()
+                    except Exception as e:
+                        print(f"Failed to remove container: {e}")
+
+        # 3. Configure .env file
+        service_envs = []
+        if 'schema' in service and service['schema']:
+            try:
+                schema = json.loads(service['schema'])
+                if schema:
+                    for key in schema.keys():
+                        if 'env' in schema[key]: service_envs.extend(schema[key]['env'].keys())
+            except (json.JSONDecodeError, AttributeError) as e: print_color(f"Warning: Could not parse schema for service {service.get('name', 'N/A')}: {e}", 'warning')
+        if service_envs:
+            try:
+                envfile = os.path.join(servicepath, '.env')
+                envs = []
+                if os.path.exists(envfile):
+                    with open(envfile, 'r') as f: envs = [l.split('=')[0] for l in f.readlines()]
+                with open(envfile, 'a+') as f:
+                    for env in service_envs:
+                        if env not in envs: f.write(f'{env}=""\n')
+            except Exception as e: print_color(f"Error creating .env file for service {service['name']}: {e}", 'error')
+
+
+        # 4. Configure symlink if not created
+        if not os.path.exists(linkpath):
+            os.symlink(servicepath, linkpath)
+            created_symlinks.append([servicepath, linkpath])
+
+
+        # 5. Get unique volumes for each service
+        if not args.novolumes:
+            for volumeId in service.get('volumes', []):
+                if volumeId not in uniquevolumes:
+                    volumes = client.get_volumes(volumeId=volumeId)
+                    if volumes: uniquevolumes[volumeId] = volumes[0]
+
+        print("done.", flush=True)
+
+
+    # 4. Mount all workspaces and volumes
+    if not args.novolumes:
+        unmounts = {'workspaces': [], 'volumes': []}
+        if os.path.exists(mountfile):
+            with open(mountfile, 'r') as f: mounts = json.load(f)
+            for mountId in mounts['workspaces'].keys():
+                if mountId not in uniqueworkspaces.keys(): unmounts['workspaces'].extend([mountId])
+                elif mounts['workspaces'][mountId]['status'] == 'mounted': del uniqueworkspaces[mountId]
+            for mountId in mounts['volumes'].keys():
+                if mountId not in uniquevolumes.keys(): unmounts['volumes'].extend([mountId])
+                elif mounts['volumes'][mountId]['status'] == 'mounted': del uniquevolumes[mountId]
+        if unmounts['workspaces'] or unmounts['volumes']:
+            unmount_data(unmounts['volumes'], unmounts['workspaces'])
+        mount_loop(client, uniqueworkspaces, uniquevolumes, '/ana/data/', args.mountexec, True, args.verbose)
+
+    dockerclient.images.prune(filters={'dangling': True})
+
+except KeyboardInterrupt:
+    print_color('\nSync cancelled by user.', 'error')
+
+except Exception as e:
+    print_color(f'An error occurred: {e}', 'error')
+    raise e
+
+finally:
+    if created_symlinks:
+        #print_color('Cleaning up created symlinks...', 'brand', end='')
+        try: pass
+            #cleanup_symlinks(created_symlinks)
+            #print_color('complete.', 'brand')
+        except Exception as cleanup_error:
+            print_color(f'An error occurred during cleanup: {cleanup_error}', 'error')
