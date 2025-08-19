@@ -1,0 +1,126 @@
+Metadata-Version: 2.3
+Name: hdf-dq-framework
+Version: 0.3.0
+Summary: HDF Data Quality Framework for PySpark DataFrames using Great Expectations
+Home-page: https://github.com/your-org/hdf-data-pipeline
+License: MIT
+Keywords: data-quality,pyspark,great-expectations,dataframe,validation
+Author: HDF Data Pipeline Team nengkhoiba.chungkham@iqvia.com
+Requires-Python: >=3.8,<4.0
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Database
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Provides-Extra: enhanced
+Requires-Dist: great-expectations (>=0.15.0,<0.16.0)
+Requires-Dist: numpy (>=1.20.0,<2.0.0) ; extra == "enhanced"
+Requires-Dist: pandas (>=1.3.0,<2.0.0) ; extra == "enhanced"
+Requires-Dist: pyspark (>=3.0.0,<4.0.0)
+Requires-Dist: typing-extensions (>=4.0.0,<5.0.0)
+Project-URL: Documentation, https://github.com/your-org/hdf-data-pipeline
+Project-URL: Repository, https://github.com/your-org/hdf-data-pipeline
+Description-Content-Type: text/markdown
+
+# HDF DQ Framework
+
+A powerful Data Quality Framework for PySpark DataFrames using Great Expectations validation rules, designed for the HDF Data Pipeline ecosystem.
+
+## Overview
+
+The DQ Framework provides a simple and efficient way to filter DataFrames based on data quality rules. It separates qualified data from bad data, allowing you to handle data quality issues systematically in your data pipelines.
+
+### Key Features
+
+- **Easy Integration**: Simple API that works with existing PySpark workflows
+- **Great Expectations**: Leverages the power of Great Expectations for data validation
+- **Flexible Rules**: Support for JSON string, dictionary, or list-based rule configuration
+- **Dual Output**: Returns both qualified and bad rows as separate DataFrames
+- **Detailed Validation**: Optional validation details for debugging and monitoring
+
+## Quick Start
+
+```python
+from pyspark.sql import SparkSession
+from dq_framework import DQFramework
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("DQ_Example").getOrCreate()
+
+# Create sample data
+data = [
+    (1, "John", 25, "john@email.com"),
+    (2, "Jane", -5, "invalid-email"),  # Bad data: negative age, invalid email
+    (3, "Bob", 30, "bob@email.com"),
+    (4, None, 35, "alice@email.com"),  # Bad data: null name
+]
+columns = ["id", "name", "age", "email"]
+df = spark.createDataFrame(data, columns)
+
+# Define quality rules
+quality_rules = [
+    {
+        "expectation_type": "expect_column_values_to_not_be_null",
+        "kwargs": {"column": "name"}
+    },
+    {
+        "expectation_type": "expect_column_values_to_be_between",
+        "kwargs": {"column": "age", "min_value": 0, "max_value": 120}
+    },
+    {
+        "expectation_type": "expect_column_values_to_match_regex",
+        "kwargs": {"column": "email", "regex": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"}
+    }
+]
+
+# Initialize DQ Framework
+dq = DQFramework()
+
+# Filter data
+qualified_df, bad_df = dq.filter_dataframe(
+    dataframe=df,
+    quality_rules=quality_rules,
+    include_validation_details=True
+)
+
+# Show results
+print("Qualified Data:")
+qualified_df.show()
+
+print("Bad Data:")
+bad_df.show()
+```
+
+## API Reference
+
+### DQFramework
+
+The main class for data quality processing.
+
+#### Methods
+
+- **`filter_dataframe(dataframe, quality_rules, columns=None, include_validation_details=False)`**
+  - Filters a DataFrame based on quality rules
+  - Returns tuple of (qualified_df, bad_df)
+
+### RuleProcessor
+
+Handles the processing of Great Expectations rules.
+
+## Dependencies
+
+### Core Dependencies
+
+- **PySpark** ^3.0.0: For DataFrame operations
+- **Great Expectations** ^0.15.0: For validation logic
+- **typing-extensions** ^4.0.0: For enhanced type hints
+
