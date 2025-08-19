@@ -1,0 +1,224 @@
+[project]
+name = "Things3-MCP-server"
+version = "2.0.3"
+description = "MCP server for Things 3 with read/write support for tasks, projects, areas and tags."
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT License"}
+authors = [
+    {name = "Ross Shannon", email = "4503044+rossshannon@users.noreply.github.com"},
+    {name = "Yaroslav Krempovych", email = "51231325+excelsior@users.noreply.github.com"},
+    {name = "Harald Lindstrøm", email = "hald@users.noreply.github.com"}
+]
+keywords = ["mcp", "anthropic", "claude", "things3", "things", "task-management", "productivity", "fastmcp", "macos", "apple"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Operating System :: MacOS"
+]
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.2.0",
+    "things-py>=0.0.15",
+]
+
+[project.scripts]
+Things3-MCP-server = "things_mcp.fast_server:run_things_mcp_server"
+
+[project.urls]
+"Homepage" = "https://github.com/rossshannon/things-fastmcp"
+"Bug Tracker" = "https://github.com/rossshannon/things-fastmcp/issues"
+"Documentation" = "https://github.com/rossshannon/things-fastmcp#readme"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/things_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/things_mcp",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    "things_fast_server.py"
+]
+
+
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-html>=4.1.1",
+    "ruff>=0.12.3",
+    "build>=0.10.0",
+    "twine>=4.0.0",
+    "mypy>=1.17.0",
+    "bandit[toml]>=1.8.6",
+    "safety>=3.6.0",
+    "pre-commit>=4.2.0",
+]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "pytest --cov=things_mcp --cov-report=term-missing --cov-report=html {args:tests}"
+lint = "ruff check ."
+lint-fix = "ruff check --fix ."
+format = "ruff format ."
+format-check = "ruff format --check ."
+type-check = "mypy src/"
+security = "bandit -r src/"
+deps-check = "safety check"
+all-checks = ["lint", "format-check", "type-check", "test-cov"]
+build = "python -m build"
+publish = "twine upload dist/*"
+clean = "rm -rf dist build *.egg-info .coverage htmlcov .pytest_cache .mypy_cache .ruff_cache"
+
+# Enhanced Ruff Configuration
+[tool.ruff]
+target-version = "py312"
+line-length = 216
+extend-include = ["*.pyi"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "S",   # flake8-bandit
+    "T20", # flake8-print
+    "Q",   # flake8-quotes
+    "D",   # pydocstyle
+]
+ignore = [
+    "S101", # assert used - fine in tests
+    "T201", # print statements - sometimes needed for debugging
+    "S110", # try-except-pass - reasonable for optional operations
+    "S324", # hashlib MD5 - not used for security
+    "S603", # subprocess usage - needed for AppleScript
+    "S607", # partial executable path - osascript is system tool
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"  # Use Google style
+ignore-decorators = ["pytest.fixture"]  # Don't require docstrings for pytest fixtures
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "S101",  # Allow asserts in tests
+    "T201",  # Allow prints in tests
+    "S311",  # Allow random in tests
+    "ANN001",  # Allow missing argument type annotations in tests
+    "ANN201",  # Allow missing return type annotations in tests
+    "ANN202",  # Allow missing return type annotations for private functions in tests
+    "ANN204",  # Allow missing return type annotations for special methods in tests
+    "D100",  # Allow missing module docstrings in tests
+    "D101",  # Allow missing class docstrings in tests
+    "D102",  # Allow missing method docstrings in tests
+    "D103",  # Allow missing function docstrings in tests
+    "D104",  # Allow missing package docstrings in tests
+    "D107",  # Allow missing __init__ docstrings in tests
+    "D200",  # Allow one-line docstrings in tests
+    "D205",  # Allow missing blank line between summary and description in tests
+    "D400",  # Allow first line without period in tests
+    "D401",  # Allow non-imperative mood in docstrings in tests
+    "D415",  # Allow first line without period in tests
+    "PLR2004",  # Allow magic numbers in tests
+    "PTH118",  # Allow os.path.join in tests
+    "PTH120",  # Allow os.path.dirname in tests
+]
+"src/things_mcp/applescript_bridge.py" = ["Q000", "Q001", "Q002", "Q003", "W291", "E501"]  # AppleScript has different quote/string requirements
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+exclude = [
+    "**/applescript_bridge.py",  # Exclude from formatting due to AppleScript requirements
+]
+
+# MyPy Configuration
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = false        # Relaxed: Allow Any returns
+warn_unused_configs = true
+disallow_untyped_defs = false  # Relaxed: Allow untyped function definitions
+disallow_incomplete_defs = false # Relaxed: Allow incomplete type definitions
+check_untyped_defs = true
+disallow_untyped_decorators = false # Relaxed: Allow untyped decorators
+no_implicit_optional = false   # Relaxed: Allow implicit Optional (fixes many issues)
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+disable_error_code = [
+    "import-untyped",    # Ignore missing stubs for external libraries
+    "attr-defined",      # Ignore decorator attribute issues
+    "assignment",        # Ignore type assignment mismatches
+    "return-value",      # Ignore return type mismatches
+    "var-annotated",     # Ignore variable annotation requirements
+    "arg-type"           # Ignore argument type mismatches
+]
+exclude = [
+    "things\\.py$",  # Exclude external things.py (not our code)
+]
+explicit_package_bases = true  # Use explicit package bases to avoid import conflicts
+ignore_missing_imports = true  # Ignore missing stubs for external libraries
+
+# Coverage Configuration
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+# Bandit Security Configuration
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = [
+    "B101",  # Skip assert_used test
+    "B404",  # Skip subprocess import check for AppleScript
+    "B603",  # Skip subprocess shell check for AppleScript
+    "B607",  # Skip subprocess path check for AppleScript
+]
+per_file_ignores = [
+    "src/things_mcp/applescript_bridge.py:B404,B603,B607",  # Required for AppleScript
+    "src/things_mcp/formatters.py:B110",  # Ignore missing project/area info
+]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8.6",
+    "build>=1.2.2.post1",
+    "hatchling>=1.27.0",
+    "mypy>=1.17.0",
+    "pre-commit>=4.2.0",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-html>=4.1.1",
+    "ruff>=0.12.3",
+    "safety>=3.6.0",
+    "twine>=6.1.0",
+]
