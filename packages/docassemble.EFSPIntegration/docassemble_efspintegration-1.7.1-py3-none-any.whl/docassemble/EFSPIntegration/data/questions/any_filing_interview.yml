@@ -1,0 +1,895 @@
+---
+modules:
+  - .efm_client
+---
+imports:
+  - functools
+---
+include:
+  - efiling_integration.yml
+  - toga_payments.yml
+  - docassemble.AssemblyLine:al_package.yml
+  - case_search.yml
+---
+code: |
+  user_wants_efile = True # This interview is always for e-filing
+---
+objects:
+  - case_search: EFCaseSearch.using(court_id=court_id)
+  - lower_court_case: DAObject
+---
+code: |
+  efile_case_category_filters = []
+---
+code: |
+  efile_case_category_default = None
+---
+code: |
+  efile_case_category_exclude = None
+---
+code: |
+  efile_case_type_filters = []
+---
+code: |
+  efile_case_type_default = None
+---
+code: |
+  efile_case_type_exclude = None
+---
+mandatory: True
+code: |
+  welcome
+  tyler_login
+  trial_court
+  can_check_efile
+  if not is_initial_filing and not case_search.case_was_found and not case_search.can_file_non_indexed_case:
+    failed_case_search
+
+  if is_nonindexed_filing:
+      docket_number = case_search.non_indexed_docket_number
+  if needs_all_info:
+    if not case_category_options:
+      go_back_screen
+    efile_case_category = case_category_map.get(user_chosen_case_category,{}).get('code')
+    if not case_type_options:
+      go_back_screen
+    efile_case_type = user_chosen_case_type
+    if case_subtype_options:
+      efile_case_subtype = case_subtype_map.get(user_chosen_case_subtype, {}).get('code')
+    tyler_filing_attorney
+    user_role
+    user_started_case
+  else:
+    if case_search.case_was_found:
+      target_case = case_search
+      load_existing_case_defaults
+      previous_case_id = case_search.found_case.tracking_id
+      user_started_case
+      add_existing_users
+      show_existing_users
+
+  users.gather(complete_attribute='complete')
+  other_parties.gather()
+  existing_parties_new_atts.gather(complete_attribute='attorney_ids')
+  attorney_ids
+  party_to_attorneys
+  filer_type
+  if not needs_all_info:
+    target_case = case_search
+  all_case_parties
+  if needs_all_info or showifdef('users[0].is_form_filler', False):
+    lead_contact = users[0]
+  else:
+    lead_contact.name.first
+  
+  if needs_all_info:
+    if any_missing_party_types(party_type_map, users, other_parties):
+      party_review_screen
+    contacts_to_attach.gathered = True
+  else:
+    contacts_to_attach.gather()
+
+  lead_doc.optional_services_defaults = []
+  lead_doc.optional_services_filters = []
+  lead_doc.completed
+  append_lead_doc
+  al_court_bundle.auto_gather=True
+  al_court_bundle.gather()
+
+  service_contacts.gather()
+  cross_references.gather()
+  al_court_bundle.as_pdf()
+
+  if needs_all_info:
+    lead_contact.email
+
+  if (case_category_map.get(efile_case_category) or {}).get('ecfcasetype') == 'AppellateCase':
+    lower_court_case
+    lower_court_case.docket_number
+    lower_court_case.judge
+    lower_court_case.title
+    trial_court.name
+  
+  if full_court_info.get('allowreturndate'):
+    return_date
+    show_allowed_return_date
+
+  if is_initial_filing and len(users) == 1:
+    explain_user_paying
+
+  tyler_payment_id
+
+  if can_check_efile:
+    if needs_all_info:
+      lead_contact.email
+    #TODO(qs): if not a waiver account...
+    all_required_screens_shown
+    ready_to_efile
+    review_fees
+
+  efile
+  summary_page
+---
+code: |
+  lead_doc.optional_services_defaults = []
+  lead_doc.optional_services_filters = []
+  lead_doc.document_type_default = None
+  lead_doc.document_type_filters = []
+---
+code: |
+  proxy_conn = ProxyConnection(credentials_code_block='tyler_login', default_jurisdiction=jurisdiction_id)
+---
+features:
+  question back button: True
+  navigation back button: False
+---
+objects:
+  - lead_contact: ALIndividual
+---
+objects:
+  - users: ALPeopleList.using(complete_attribute='complete')
+  - other_parties: ALPeopleList.using(complete_attribute='complete') # NOTE that there can be filing types with no opposing party, such as adoption
+---
+objects:
+  - existing_parties_new_atts: DAList.using(object_type=DAObject)
+---
+objects:
+  - lead_doc: ALExhibitDocument.using(title="Lead Filing Doc", filename="lead_filing_doc", include_table_of_contents=False, include_exhibit_cover_pages=False)
+---
+code: |
+  al_court_bundle.clear()
+  al_court_bundle.append(lead_doc)
+  
+  append_lead_doc = True
+---
+generic object: ALDocument
+code: |
+  # Every filing type needs an associated document
+  x.exhibits.has_exhibits = True
+---
+generic object: ALDocument
+code: |
+  # You can only have exactly one exhibit per ALExhibitDocument
+  # for this filing interview
+  x.exhibits.has_exhibits = True
+  x.exhibits.ask_number = True
+  x.exhibits.target_number = 1
+---
+event: failed_case_search
+question: |
+  Could not find an existing case to file into
+subquestion: |
+  Please try again.
+buttons:
+  - restart
+---
+generic object: ALDocument
+id: any exhibits
+question: |
+  Please upload your documents
+subquestion: |
+  You will have a chance to upload multiple documents.
+  You can also add additional pages to this document.
+fields:
+  - Filing Type: x.filing_type
+    datatype: dropdown
+    code: |
+      sorted(filing_type_options, key=lambda option: option[1])
+  - label: |
+      Description
+      % if not filing_description_datafield.get('isrequired'):
+      (optional)
+      % endif
+    field: x.filing_description
+    datatype: text
+    required: |
+      filing_description_datafield.get('isrequired', False)
+  - Reference Number (optional): x.reference_number
+    datatype: text
+    required: False
+  - Document: x.exhibits[0].pages
+    datatype: files
+    maximum image size: 1024
+    image upload type: jpeg
+    accept: |
+      "image/png, image/jpeg, .doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,.pdf"
+  - Add a courtesy email: x.has_courtesy_copies
+    datatype: yesno
+  - Courtesy emails (one per line): x.courtesy_copies_raw
+    datatype: area
+    show if: x.has_courtesy_copies
+validation code: |
+  if sum(exhibit.size_in_bytes() for exhibit in x.exhibits[0].pages) > (15 * 1024 * 1024):
+    validation_error("Upload a file smaller than 15 MB.")
+  try:
+    pdf_concatenate(x.exhibits[0].pages)
+  except:
+    validation_error("Unable to convert this file. Please upload a new one.", field="x.exhibits[0].pages")
+  x.exhibits[0].pages.reset_gathered()  # docassemble sets this attribute but we want to force gathering additional pages
+
+  if x.has_courtesy_copies:
+    x.courtesy_copies = x.courtesy_copies_raw.splitlines()
+    for copy in x.courtesy_copies:
+      if not '@' in copy:
+        validation_error("Enter a valid email address.", field="x.courtesy_copies_raw")
+        break     
+---
+generic object: ALExhibitDocument
+code: |
+  x.exhibits[i].title = x.filing_description if x.filing_description else filing_type_map.get(x.filing_type,{}).get('name')
+---
+generic object: ALExhibitDocument
+code: |
+  x.filename = space_to_underscore(x.exhibits[0].title)
+---
+id: another exhibit
+question: |
+  You have ${ al_court_bundle.number_gathered() } document(s) so far. Do you have another document
+  you want to upload?
+#subquestion: |
+#  ${ collapse_template(x.in_progress_exhibits) }
+field: al_court_bundle.there_is_another
+buttons:
+  - Finished adding documents: False
+  - Add another document: True
+---
+generic object: ALExhibitList
+template: x.in_progress_exhibits
+subject: |
+  Preview your documents so far
+content: |
+  ${ x.rearrange_exhibits_table }
+---
+generic object: ALExhibitList
+table: x.rearrange_exhibits_table
+rows: x
+allow reordering: True
+delete buttons: True
+columns:
+  - ${ al_exhibit_title_label }: |
+      row_item.title
+  - ${ al_exhibit_preview_label }: |
+      row_item.pages.show(width="50%")
+  - ${ al_exhibit_total_pages_label }: |
+      row_item.pages.num_pages()
+edit:
+  - rearrange_pages
+---
+objects:
+  - contacts_to_attach: DAList.using(object_type=DAObject, complete_attribute='complete')
+  - service_contacts: DAList.using(object_type=DAObject, complete_attribute='complete')
+---
+generic object: ALExhibitDocument
+code: |
+  x.enabled = True
+---
+objects:
+  - al_court_bundle: ALDocumentBundle.using(filename="full_bundle.pdf", title="All forms to submit to the court", object_type=ALExhibitDocument, complete_attribute = 'completed', gathered=False, auto_gather=True, there_are_any=True)
+---
+code: |
+  if is_initial_filing:
+    al_form_type = 'starts_case'
+  else:
+    al_form_type = 'existing_case'
+---
+generic object: ALIndividual
+code: |
+  x.is_new = True
+---
+code: |
+  users[i].is_new = True
+---
+generic object: ALPeopleList
+table: x.review_type_table
+rows: x
+columns:
+  - Name: |
+      row_item.name.full()
+  - Type: |
+      party_type_map.get(row_item.party_type,{}).get('name')
+edit:
+  - party_type
+---
+sets:
+  - lead_contact.name.first
+question: |
+  Who should be contacted about this filing?
+fields:
+  - email: lead_contact.email
+    datatype: email
+  - code: |
+      lead_contact.name_fields()
+---
+id: review parties
+continue button field: party_review_screen
+question: |
+  Review parties
+subquestion: |
+  % if any_missing_party_types(party_type_map, users, other_parties):
+  ### Warning: you are missing a required party type!
+  
+  This case requires that you have at least one:
+  
+  % for p_type in party_type_map.values():
+  * ${ p_type.get('name') }
+  % endfor
+  
+  % endif
+  #### Parties on your side of the case
+  ${ users.review_type_table }
+  ${ users.add_action() }
+  
+  #### Other parties
+  ${ other_parties.review_type_table }
+  ${ other_parties.add_action() }
+---
+code: |
+  return_date_resp = proxy_conn.get_return_date(court_id, user_return_date.date(), al_court_bundle)
+  if return_date_resp.is_ok() and isinstance(return_date_resp.data, dict) and 'value' in return_date_resp.data:
+    return_date_obj = tyler_timestamp_to_datetime(return_date_resp.data.get('value'))
+    return_date = return_date_obj.date().isoformat()
+  else:
+    return_date_obj = None
+    return_date = ''
+---
+id: make a filing
+question: |
+  Make a Filing
+subquestion: |
+  Welcome! You can make any type of filing in an ${ jurisdiction_id.title() } court, to a pre-existing or new case, in this interview.
+continue button field: welcome
+---
+id: return date
+question: |
+  Closest available return date
+subquestion: |
+  % if return_date_resp.is_ok() and 'value' in return_date_resp.data:
+  The closest available return date is:
+  
+  ${ return_date_obj }
+  
+  You will have to contact the court to get a different return date.
+  
+  % else:
+  Something went wrong retrieving a return date
+  
+  ${ debug_display(return_date_resp) }
+  % endif
+continue button field: show_allowed_return_date
+---
+generic object: ALDocument
+code: |
+  contacts_to_attach.gather()
+  if not service_contacts:
+    x.filing_action = 'efile'
+---
+id: initial filing
+question: |
+  Are you filing into a new case or an existing one?
+field: filing_interview_initial_or_existing
+choices:
+  - I am starting a new case: initial_document
+  - I am adding a document to an existing case: existing_case
+---
+if: not full_court_info.get("initial")
+code: |
+  filing_interview_initial_or_existing = "existing_case"
+---
+if: not full_court_info.get("subsequent")
+code: |
+  filing_interview_initial_or_existing = "initial_document"
+---
+code: |
+  is_initial_filing = filing_interview_initial_or_existing == 'initial_document'
+---
+code: |
+  is_nonindexed_filing = not is_initial_filing and (not case_search.case_was_found and case_search.can_file_non_indexed_case)
+---
+code: |
+  needs_all_info = is_initial_filing or is_nonindexed_filing
+---
+code: |
+  selected_existing_case = case_search.found_case
+---
+code: |
+  if selected_existing_case:
+    if selected_existing_case.category:
+      efile_case_category = selected_existing_case.category
+    if selected_existing_case.case_type:
+      efile_case_type = selected_existing_case.case_type
+    # TODO(brycew): get party info from existing case to select filing parties 
+    existing_case_parties = None
+  load_existing_case_defaults = True
+---
+generic object: ALIndividual
+question: |
+  Adding Attorneys for ${ x }
+subquestion: |
+  What attorneys are you adding?
+fields:
+  - Attorneys: x.attorney_adding_opts
+    datatype: multiselect
+    required: False
+    code: |
+      tyler_filing_attorney_options
+---
+question: |
+  Are there any more attorneys you'd like to attach to existing contacts?
+fields:
+  - no label: existing_parties_new_atts.there_is_another
+    datatype: yesnoradio
+---
+id: any attorneys to existing parties
+question: |
+  Are there any attorneys you'd like to attach to existing contacts?
+fields:
+  - no label: existing_parties_new_atts.there_are_any
+    datatype: yesnoradio
+---
+code: |
+  if is_initial_filing:
+    existing_parties_new_atts.there_are_any = False
+---
+question: |
+  Add attorneys to existing users
+fields: 
+  - To party: existing_parties_new_atts[i].existing_party
+    datatype: select
+    code: |
+      [(part.tyler_id, str(part.name)) for part in case_search.found_case.participants if part.tyler_id not in [ext_part.existing_party for ext_part in existing_parties_new_atts if defined('ext_part.existing_party')]]
+  - Attorneys: existing_parties_new_atts[i].attorney_adding_opts
+    datatype: multiselect
+    code: |
+      tyler_filing_attorney_options
+---
+generic object: DAObject
+code: |
+  x.attorney_ids = x.attorney_adding_opts.true_values()
+---
+code: |
+  attorney_ids = functools.reduce(lambda new_list, exst: (exst.attorney_ids if hasattr(exst, 'attorney_ids') else []) + new_list, users, [])
+  for exst_user in existing_parties_new_atts:
+    attorney_ids.extend(exst_user.attorney_ids)
+  party_to_attorneys = {y.instanceName: y.attorney_ids for y in users if hasattr(y, 'attorney_ids')}
+  for y in existing_parties_new_atts:
+    party_to_attorneys[y.existing_party] = y.attorney_ids
+---
+id: location
+question: |
+  What court will you file this case in?
+fields:
+  - Court Location: trial_court
+    datatype: dropdown
+    code: |
+      trial_court_options
+---
+id: case subtype
+question: |
+  Case Subtype
+fields:
+  - Case Subtype: user_chosen_case_subtype
+    datatype: dropdown
+    code: |
+      sorted(case_subtype_options,key=lambda cat: cat[1])
+---
+id: filing attorney
+question: |
+  Filing Attorney
+subquestion: |
+  % if filing_attorney_required_datafield.get('isrequired'):
+  Only attorneys may file in this court
+  % else:
+  Leave the attorney field blank if you are filing this on your own
+  behalf.
+  % endif
+fields:
+  - Filing Attorney: tyler_filing_attorney
+    datatype: dropdown
+    code: |
+      tyler_filing_attorney_options
+    required: |
+      filing_attorney_required_datafield.get('isrequired')
+---
+generic object: ALDocument
+code: |
+  # If policy prohibits sending the filing description, don't ask the question
+  # TODO: how should the proxy handle this? '' is not the same as undefined
+  if filing_description_datafield.get('isvisible') == False: # Treat None as visible
+    x.filing_description = ''
+---
+id: is the user the plaintiff or defendant?
+question: |
+  Did you start this case, or are you responding to a case
+  that someone else started?
+subquestion: |
+  ${ collapse_template(plaintiff_defendant_help_template) }
+fields: 
+  - Your role in this case: user_ask_role
+    datatype: radio
+    choices:
+      - I started or I am starting a new case: plaintiff
+      - I am responding to a case someone else started: defendant
+---
+template: plaintiff_defendant_help_template
+subject: |
+  How do I know?
+content: |
+  If you are the first person to file a form in the case, you 
+  started the case. You are usually the "Plaintiff" or the "Petitioner."
+
+  If you are responding to a case or court papers someone else filed, you
+  are usually the "Defendant" or the "Respondent."
+---
+# code: |
+#   # TODO: is this something we can assume? someone might be filing
+#   # the first document in a case where they are a defendant, such
+#   # as a mental health petition for discharge.
+#   if filing_interview_initial_or_existing == 'initial_document':
+#     user_ask_role = 'plaintiff'
+---
+id: your name
+sets:
+    - users[0].name.first
+question:  |
+  What is your name?
+fields:
+  - code: |
+      users[0].name_fields(person_or_business='ALIndividual' if hasattr(users[0], 'is_form_filler') and users[0].is_form_filler else 'unknown', show_suffix=False)
+---
+sets:
+  - users[i].name.first
+  - users[i].name.last
+id: other users names
+question: |
+  What is the name of the ${ ordinal(i) } person who is part of the case with you?
+fields:
+  - code: |
+      users[i].name_fields(show_suffix=False)
+---
+sets:
+  - other_parties[i].name.first
+id: names of opposing parties
+question: |
+  Name of ${ ordinal(i) } person on the opposing side of this case
+fields:
+  - code: |
+      other_parties[i].name_fields(person_or_business='unsure', show_suffix=False)
+---
+id: name of ALIndividual
+sets:
+  - x.name.first
+  - x.name.last
+generic object: ALIndividual
+question: |
+  What is ${x.object_possessive('name')}?
+fields:
+  - code: |
+      x.name_fields(show_suffix=False)
+---
+comment: |
+  I removed language specific to defendant/plaintiff because
+  there are several case types where that concept doesn't make sense.
+  E.g., adoption has adoptive parent/child. But we can't special case
+  each situation.
+  
+  Tyler doesn't care about users/other_parties--we ony use users to determine
+  fee responsibility.
+id: is there an opposing party?
+question: |
+  % if is_initial_filing:
+  Is there an opposing party in this case?
+  % else:
+  Do you want to add more opposing parties to this case?
+  % endif
+subquestion: |
+  An **opposing party** is someone who is on the other side of a legal case.
+  
+  % if is_initial_filing:
+  % if user_started_case:
+  Answer yes if there is a person or organization you are suing or taking to court.
+  % else:
+  Answer yes if someone else has sued you or is bringing you to court.
+  % endif
+  % else:
+  The existing opposing parties include
+  % endif
+fields:
+  - no label: other_parties.there_are_any
+    datatype: yesnoradio
+---
+id: any other opposing parties
+question: |
+  Is there any other opposing party?
+fields:
+  - no label: other_parties.there_is_another  
+    datatype: yesnoradio
+---
+id: party type of x
+generic object: ALIndividual
+question: |
+  Party type of ${ x }?
+fields:
+  - Party Type: x.party_type
+    input type: radio
+    code: |
+      party_type_options if is_nonindexed_filing else party_type_new_options
+---
+code: |
+  if is_initial_filing or users[0].is_form_filler:
+    if showifdef('user_role') == 'plaintiff':
+      plaintiff = matching_tuple_option('plaintiff', party_type_options)
+      petitioner = matching_tuple_option('petitioner', party_type_options)
+      if plaintiff:
+        users[0].party_type = plaintiff
+      elif petitioner:
+        users[0].party_type = petitioner
+    else:
+      defendant = matching_tuple_option('defendant', party_type_options)
+      respond = matching_tuple_option('respondent', party_type_options)
+      if defendant:
+        users[0].party_type = defendant
+      elif respond:
+        users[0].party_type = respond
+---
+generic object: ALIndividual
+code: |
+  x.party_type_default = None
+  x.party_type_filters = ['plaintiff'] if showifdef('user_role') == 'plaintiff' else ['defendant']
+  x.party_type_exclude = None
+---
+id: party type of other parties
+question: |
+  Party type of ${ other_parties[i] }?
+fields:
+  - Party Type: other_parties[i].party_type
+    input type: radio
+    code: |
+      party_type_options if is_nonindexed_filing else party_type_new_options
+    default: ${ matching_tuple_option('defendant', party_type_options) if showifdef('user_role') == 'plaintiff' else matching_tuple_option('plaintiff', party_type_options) }
+---
+generic object: ALDocument
+id: reference number
+question: |
+  Reference number
+subquestion: |
+  Optional -- add a unique reference number to track this case in your own
+  filing system.
+fields:
+  - Reference Number (optional): x.reference_number
+    datatype: text
+    required: False
+---
+id: return date
+question: |
+  What would you like your Return Date to be?
+fields:
+  - Return Date: user_return_date
+    datatype: date
+    min: ${ today() }
+    default: ${ today() }
+---
+id: optional service type
+generic object: ALDocument
+question: |
+  ${ ordinal_number(i) } optional services for ${ x.title }
+fields:
+  - Optional Services: x.optional_services[i].code
+    datatype: dropdown
+    code: |
+      x.optional_service_options
+---
+---
+id: another cross reference
+question: |
+  Do you have any other types of cross references?
+fields:
+  - no label: cross_references.there_is_another
+    datatype: yesnoradio
+---
+id: optional service fee amount
+generic object: ALDocument
+question: |
+  Optional Service ${ i } fee amount?
+subquestion: |
+  ${ x.optional_service_map.get(x.optional_services[i].code).get('feeprompttext') }
+fields:
+  - Fee Amount: x.optional_services[i].fee_amount
+    datatype: currency
+---
+id: you are responsible for payment
+question: |
+  Payment of fees (if any)
+subquestion: |
+  Because you are the only filer in this case, we have selected you as the
+  user responsible for the fees.
+  
+  You will have a chance to review fees at the end of this form.
+continue button field: explain_user_paying  
+---
+id: lower case docket number
+question: Lower Court Case Information
+subquestion: |
+  Since you are filing an appellate case, we need some information about your lower court case.
+fields:
+  - What was the docket number?: lower_court_case.docket_number
+  - What was the Judge's name?: lower_court_case.judge
+  - What was the title of your case?: lower_court_case.title
+---
+code: |
+  service_contacts[i].contact_id
+  service_contacts[i].service_type
+  while not service_contacts[i].contact_id:
+    del service_contacts[i].contact_id
+    service_contacts[i].contact_id
+  service_contacts[i].complete = True
+---
+code: |
+  contacts_to_attach[i].contact_id
+  while not contacts_to_attach[i].contact_id:
+    del contacts_to_attach[i].contact_id
+    contacts_to_attach[i].contact_id
+  resp = proxy_conn.attach_service_contact(contacts_to_attach[i].contact_id, case_id=case_search.found_case.tracking_id)
+  log(f'attempted attaching {contacts_to_attach[i].contact_id}: {resp}')
+  del resp
+  contacts_to_attach[i].complete = True
+---
+id: attach service contact to case
+question: |
+  Attach a Service Contact
+subquestion: |
+  % if service_contact_options:
+  This will let you or other parties on the case serve filings to this contact.
+  We'll ask if you want to serve them in this filing later.
+  % else:
+  You need to [add a service contact using the admin interface](${ interview_url(i=user_info().package + ":admin_interview.yml", reset=1) }){:target="_blank"} to continue.
+  % endif
+fields:
+  - Contact Id: contacts_to_attach[i].contact_id
+    datatype: dropdown
+    code: |
+      service_contact_options
+---
+# TODO: hack, but should work? Not sure if works for pro se filers
+reconsider: service_contact_options
+id: service contact
+question: |
+  Serve a Service Contact
+subquestion: |
+  % if attached_service_contacts:
+  Select an existing contact below, or add a contact using the 
+  [Admin Interface](${ interview_url(i=user_info().package + ":admin_interview.yml", reset=1) }){:target="_blank"}
+  
+  If you add a new contact, refresh this screen to view the new contact.
+  % else:
+  You need to [add a service contact using the admin interface](${ interview_url(i=user_info().package + ":admin_interview.yml", reset=1) }){:target="_blank"} to continue.
+  % endif
+fields:
+  - Contact Id: service_contacts[i].contact_id
+    datatype: dropdown
+    code: |
+      attached_service_contacts
+  - Service Type: service_contacts[i].service_type
+    datatype: dropdown
+    code: |
+      attached_service_contacts and service_type_options
+  - Do you want to associate this service contact with a party?: service_contacts[i].attach_service_contact_to_party
+    datatype: yesnoradio
+    default: False
+    show if:
+      code: |
+        attached_service_contacts and (sum([u.is_new for u in users]) + sum([u.is_new for u in other_parties]) + sum([1 for pty in (case_search.found_case.participants if defined('case_search.found_case.participants') else [])])) > 0
+  - Which party is this contact for?: service_contacts[i].party_association
+    datatype: radio
+    required: False
+    show if: service_contacts[i].attach_service_contact_to_party
+    code: |
+      [{user.instanceName: str(user)} for user in users if user.is_new] + [{pty.instanceName: str(pty)} for pty in other_parties if pty.is_new] + [{part.tyler_id: str(part.name)} for part in (case_search.found_case.participants if defined('case_search.found_case.participants') else [])]
+continue button label: ${'Continue' if attached_service_contacts else 'Try again'}
+---
+id: existing service contacts
+question: |
+  Do you want to serve a service contact in this filing?
+fields:
+  - no label: service_contacts.there_are_any
+    datatype: yesnoradio
+---
+id: attach service contacts
+question: |
+  Do you want to attach a service contact to this case for others or yourself to serve?
+fields:
+  - no label: contacts_to_attach.there_are_any
+    datatype: yesnoradio
+---
+id: Any more existing service contacts
+question: |
+  Do you want to serve any more service contacts?
+fields:
+  - no label: service_contacts.there_is_another
+    datatype: yesnoradio
+---
+code: |
+  if not service_contact_options:
+    contacts_to_attach.there_are_any = False
+---
+id: any more attaching service contacts
+question: |
+  Do you want to attach any more service contacts to this case?
+fields:
+  - no label: contacts_to_attach.there_is_another
+    datatype: yesnoradio
+---
+id: your email
+question: |
+  Confirm your email address
+subquestion: |
+  You need to provide an email address to file this form.
+  We will use this address to update you on your filing status.
+fields:
+  - Email: users[0].email
+    datatype: email
+    default: ${ showifdef('my_username') }
+---
+id: your form is submitted
+event: summary_page
+question: |
+  % if efile_resp.is_ok():
+  Your form is submitted!
+  % else:
+  Something went wrong submitting your form.
+  % endif
+subquestion: |
+  You can still download a copy for your records.
+  
+  ${ al_court_bundle.download_list_html()}
+#subquestion: |
+#  % if ready_to_efile and not (defined('efile') and efile):
+#  Click the "E-File" button below te e-file your form at ${ trial_court }.
+#
+#  ${ action_button_html(url_ask([{'recompute': ['efile']}]), label='E-file', icon='file-export')}
+#  % endif
+---
+id: something went wrong
+event: go_back_screen
+question: |
+  Something went wrong
+subquestion: |
+  Your selections aren't working. :/  Please try again.
+---
+code: |
+  case_subtype_options, case_subtype_map = choices_and_map(proxy_conn.get_case_subtypes(court_id, efile_case_type).data)
+---
+code: |
+  tyler_filing_attorney_options, tyler_filing_attorney_map = choices_and_map(proxy_conn.get_attorney_list().data, 
+      display='{firstName} {middleName} {lastName}',
+      backing='attorneyID')
+---
+code: |
+  attached_service_contacts = []
+  if not needs_all_info:
+    resp_data = proxy_conn.get_service_information(court_id, case_search.found_case.tracking_id).data
+    attached_service_contacts = parse_service_contacts(resp_data)
+---
+generic object: DAObject
+code: |
+  x.filing_component_default = None
+  x.filing_component_filters = []
