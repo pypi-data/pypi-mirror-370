@@ -1,0 +1,128 @@
+Metadata-Version: 2.4
+Name: EscrowAICI
+Version: 0.1.8
+Summary: Expose Escrow AI workflows to CICD pipelines
+Home-page: https://github.com/BeekeeperAI/bk-escrowai-ci-sdk
+Author: Beekeeper AI
+Author-email: engineering@beekeeperai.com
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Requires-Dist: pyJWT
+Requires-Dist: requests
+Requires-Dist: azure-storage-blob>=12.22.0
+Requires-Dist: sseclient
+Requires-Dist: cryptography==44.0.1
+Requires-Dist: pyyaml
+Requires-Dist: gitpython
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+Copyright 2024 BeeKeeperAI(R)
+
+# EscrowAI Github SDK
+The github sdk is a cli tool that enables algorithm upload on escrow ai from github workflows
+
+## installation
+The sdk is available as a Pypi package and can be installed using
+> `pip install EscrowAICI`
+
+## Prerequisites and dependencies
+
+To use the sdk, generate a private public key pair using openssl
+```
+# generate a private key with the correct length
+openssl genrsa -out private-key.pem 3072
+
+# generate corresponding public key
+openssl rsa -in private-key.pem -pubout -out public-key.pem
+```
+
+setup your github repository secrets settings using
+* BEEKEEPER_PROJECT_ID
+* BEEKEEPER_ORGANIZATION_ID
+* PROJECT_PRIVATE_KEY: Private key generated in earlier step
+* CONTENT_ENCRYPTION_KEY
+
+## Usage
+
+### Basic stucture
+```
+$ escrowai -h
+usage: escrowai [-h] [--algorithm_type ALGORITHM_TYPE] [--key KEY] folder
+
+Encrypt files and package them into a zip archive.
+
+positional arguments:
+  folder                The folder path containing the files to encrypt
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --algorithm_type ALGORITHM_TYPE
+                        Algorithm type can be either validation or training
+  --key KEY             The encryption key (base64 encoded)
+```
+
+arguments 
+
+Here is a sample github workflow showing how to use the sdk
+
+```
+name: Encrypt and Upload on Push
+
+on:
+  push:
+    branches:
+      - testing
+
+jobs:
+  encrypt_and_upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install cryptography pyyaml azure-storage-blob auth0-python python-dateutil sseclient
+          pip install EscrowAICI
+
+      - name: Encrypt Files and Upload
+        env:
+          CONTENT_ENCRYPTION_KEY: ${{ secrets.SECRET_KEY_BASE64 }}
+          AZURE_STORAGE_URL: ${{ secrets.AZURE_STORAGE_URL }}
+          BEEKEEPER_PROJECT_ID: ${{ secrets.BEEKEEPER_PROJECT_ID }}
+          BEEKEEPER_ORGANIZATION_ID: ${{ secrets.BEEKEEPER_ORGANIZATION_ID }}
+          PROJECT_PRIVATE_KEY: ${{ secrets.PROJECT_PRIVATE_KEY }}
+        run: |
+          repo_name="${GITHUB_REPOSITORY##*/}"
+          folder_path="files/$repo_name"
+          zip_file="files/${repo_name}.zip"
+          mkdir -p $folder_path
+          # Assuming you need to copy or prepare files in this directory
+          rsync -av --exclude='.git' --exclude='files' . ${folder_path}
+          
+          escrowai ${folder_path}
+
+      - name: Clean up
+        run: |
+          rm -rf files/
+```
