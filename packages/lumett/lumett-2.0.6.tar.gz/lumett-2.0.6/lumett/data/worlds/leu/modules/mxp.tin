@@ -1,0 +1,81 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var mxp-description {Funzioni di MXP}
+#var mxp-help {
+Gestione protocollo MXP (MUD Extension Protocol):\n
+FUNZIONI PRINCIPALI:\n
+• @mxp_link{tipo;comando;testo} - crea link MXP\n
+CARATTERISTICHE:\n
+• Negoziazione automatica con server\n
+• Supporto per link clickabili\n
+• Gestione colori con codici hex\n
+• Pulizia automatica tag MXP\n
+EVENTI GESTITI:\n
+• IAC DO MXP - attivazione protocollo\n
+• PRESSED LINK MXP - click su link\n
+TAG SUPPORTATI:\n
+• <VERSION> - informazioni versione client\n
+• <SUPPORT> - funzionalità supportate\n
+• <COLOR #codice> - colori personalizzati\n
+• <SEND HREF> - link interattivi\n
+PULIZIA AUTOMATICA:\n
+• Rimozione tag di room (RExits, RDesc, etc.)\n
+• Conversione entità HTML (&lt;, &gt;)\n
+• Gestione tag PROMPT\n
+CONFIGURAZIONE:\n
+• Versione client: TinTin++ 2.02.04\n
+• Supporta: +SEND +COLOR\n
+• Compatibilità MXP 1.0\n
+NOTE:\n
+• Protocollo legacy per MUD più vecchi\n
+• Meno potente di GMCP/MSDP moderni\n
+• Principalmente per link e colori
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias mxp-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module mxp
+	} {
+		fail_module mxp
+	}
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Add basic MXP link and color handling;
+#nop -------------------------------------------------------------------------;
+
+#event {IAC DO MXP}
+{
+	#send {\xFF\xFB\x5B\}
+}
+
+#function {mxp_link}
+{
+	#line sub esc #var result {\e]68;1;%1;%2\a\e[4m%3\e[24m}
+}
+
+#act {~\e[1z<VERSION>} {#send {\e[4z<VERSION MXP=1.0 CLIENT=TINTIN++ VERSION=2.02.04>}}
+#act {~\e[1z<SUPPORT>} {#send {\e[4z<SUPPORTS +SEND +COLOR>}}
+
+#sub {~\e[4z<COLOR #%1>%2\e[4z</COLOR>} {<f%1>%2<900>}
+
+#sub {~\e[4z<SEND HREF="%1">%2\e[4z</SEND>} {@mxp_link{MXP;%1;%2}}
+
+#event {PRESSED LINK MXP MOUSE BUTTON ONE}
+{
+	#send {%4}
+}
+
+#sub {~\e[4z{<RExits>|</RExits>|<RDesc>|</RDesc>|<PROMPT>|</PROMPT>|<RName>|</RName>}} {}
+
+#sub {~\e[4z<RNum %d />} {}
+
+#sub {&lt;} {<}
+#sub {&gt;} {>}

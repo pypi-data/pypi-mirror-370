@@ -1,0 +1,222 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var bar_side-description {Funzioni della bar_side}
+#var bar_side-help {
+Gestione della barra laterale destra.\n
+La lista bar_side ha i dati della barra e le sue voci\n
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias bar_side-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module bar_side
+	} {
+		fail_module bar_side
+	}
+}
+
+#nop File di gestione della finestra delle comunicazioni e messaggi;
+
+
+#NOP -------------------------------------------------------------------------;
+#NOP Sidebar gui structure;
+#NOP -------------------------------------------------------------------------;
+
+#class sidebar_data read $savesdir/sidebar.txt;
+
+
+
+#FUNCTION {bar_side_square}
+{
+    #return $bar_side[toprow]+1 $bar_side[topcol]+1 $bar_side[botrow]-1 $bar_side[botcol]-1;
+}
+
+#FUNCTION {bar_side_border}
+{
+    #return $bar_side[toprow] $bar_side[topcol] $bar_side[botrow] $bar_side[botcol];
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Alias della finestra di comunicazione;
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {bar_side_scroll_up}
+{
+    #if {$bar_side[offset] < &bar_side[tab][%0][]}
+    {
+        #math bar_side[offset] $bar_side[offset] + 1;
+        bar_side_draw_data $bar_side[active]
+    };
+}
+
+#ALIAS {bar_side_scroll_down}
+{
+    #if {$bar_side[offset] > 1}
+    {
+        #math bar_side[offset] $bar_side[offset] - 1;
+        bar_side_draw_data $bar_side[active];
+    };
+}
+
+#ALIAS {bar_side_draw_data}
+{
+    #draw tile @bar_side_square{} $bar_side[tab][%1][-$bar_side[offset]-10..-$bar_side[offset]];
+}
+
+#ALIAS {bar_side_show %1 %2}
+{
+    #list bar_side[tab][%1] ins -1 {%2};
+    #if {{%1} === {$bar_side[active]}}
+    {
+        bar_side_draw_data %1;
+    };
+    #elseif {$bar_side[unread][%1] == 0}
+    {
+        #variable bar_side[unread][%1] 1;
+        bar_side_draw_tabs;
+    };
+}
+
+#ALIAS {bar_side_draw_tabs}
+{
+    #draw white rounded box @bar_side_border{};
+    #local short {};
+    #local index {};
+    #loop {1} {&bar_side[tab][]} {index}
+    {
+        #local tab *bar_side[tab][+$index];
+        #if {{$bar_side[active]} === {$tab}}
+        {
+            #format short <138>%.6s $tab;
+        };
+        #elseif {$bar_side[unread][$tab] == 1}
+        {
+            #format short <168>%.6s $tab;
+        };
+        #else
+        {
+            #format short <268>%.6s $tab;
+        };
+        #line ignore #showme {\e]68;2;TAB;bar_side_tab_click $tab\a\e[4;24m$short\e[24m} {$bar_side[toprow]} {$bar_side[topcol] - 5 + $index * 7}
+    };
+}
+
+#ALIAS {bar_side_tab_click}
+{
+    #variable bar_side[active] %0;
+    #variable bar_side[unread][%0] 0;
+    #variable bar_side[offset] 1;
+    bar_side_draw_tabs;
+    bar_side_draw_data %0;
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Bar general functions init and clean
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {bar_side_init}
+{  
+    #nop set options windows;
+    #var {bar_side[tab][xy]} {};    
+    sidebar_options;
+}
+
+#ALIAS {sidebar_clean}
+{
+    #var {bar_side[tab][grp]} {};  
+    #var {bar_side[tab][rip]} {}; 
+    #var {bar_side[tab][room]} {};
+    #var {bar_side[tab][eq]} {};     
+    #var {bar_side[tab][aff]} {};  
+    #var {bar_side[tab][xy]} {};      
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Bar options to resize
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {sidebar_options}
+{
+    bar_side_show xy ---Origine della finestra---;
+    #FORMAT opt1 {     TopY:[ %s ]   TopY:[ %s ]} {\e]68;2;EXEC;sidebar_plustopx\a\e[4;24m↓\e[24m} {\e]68;2;EXEC;sidebar_mintopx\a\e[4;24m↑\e[24m};          
+    bar_side_show xy $opt1;
+    bar_side_show xy ---Fine della finestra---;    
+    #FORMAT opt2 {     EndY:[ %s ]   EndY:[ %s ]} {\e]68;2;EXEC;sidebar_plusboty\a\e[4;24m↓\e[24m} {\e]68;2;EXEC;sidebar_minboty\a\e[4;24m↑\e[24m};          
+    bar_side_show xy $opt2; 
+}
+
+#ALIAS {sidebar_plustopx}
+{
+     #MATH {tmpopt} {$bar_side[toprow] + 1};
+     #variable bar_side[toprow] $tmpopt;
+     gui_ingame_resize;
+     #unvariable tmpopt
+}
+
+#ALIAS {sidebar_mintopx}
+{
+     #MATH {tmpopt} {$bar_side[toprow] - 1};
+     #variable bar_side[toprow] $tmpopt;
+     gui_ingame_resize;
+     #unvariable tmpopt
+}
+
+#ALIAS {sidebar_plusboty}
+{
+    #MATH {tmpopt} {$bar_side[botrow] + 1};
+    #variable bar_side[botrow] $tmpopt;
+    gui_ingame_resize;
+    #unvariable tmpopt
+}
+
+#ALIAS {sidebar_minboty}
+{
+    #MATH {tmpopt} {$bar_side[botrow] - 1};
+    #variable bar_side[botrow] $tmpopt;
+    gui_ingame_resize;
+    #unvariable tmpopt
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Bar group tab
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {sidebar_gmcpgroup}
+{
+    #foreach {$gmcp[char][group][]} {grpindex}
+    {
+        #nop FORMAT grpmember {$white %s $green H:%s $blue M:%s $yellow P:%s $white} {\e]68;2;EXEC;group\a\e[4m$grpindex[-2]\e[24m} $grpindex[+1] $grpindex[-6] $grpindex[-1];
+        #nop bar_side_show grp $grpmember;
+                      
+        #math {grphp_percent} {100 * $grpindex[hp] / $grpindex[maxhp]};
+        #math {grphpbar1}   {$grphp_percent / 10};
+        #math {grphpbar2}   {10 - $grphpbar1};
+        #math {grpmana_percent} {100 * $grpindex[mana] / $grpindex[maxmana]};
+        #math {grpmanabar1}   {$grpmana_percent / 10};
+        #math {grpmanabar2}   {10 - $grpmanabar1};
+        #math {grppow_percent} {100 * $grpindex[pow] / $grpindex[maxpow]};
+        #math {grppowbar1}   {$grppow_percent / 10};
+        #math {grppowbar2}   {10 - $grppowbar1};
+
+        #FORMAT grphpbar {<011>%+${grphpbar1}s<099><000>%+${grphpbar2}s<099>};
+        #FORMAT grpmanabar {<015>%+${grpmanabar1}s<099><000>%+${grpmanabar2}s<099>};
+        #FORMAT grppowbar {<012>%+${grppowbar1}s<099><000>%+${grppowbar2}s<099>};
+            
+        #if {&grpindex[isLeader]}
+        {  
+           #FORMAT grpprompt1 {👑 $white%s 🔥%s ✨%s 💥%s} $grpindex[name] $grphpbar $grpmanabar $grppowbar;
+        };
+        #else
+        {
+           #FORMAT grpprompt1 {🗡  $white%s 🔥%s ✨%s 💥%s} $grpindex[name] $grphpbar $grpmanabar $grppowbar;
+        }
+        bar_side_show grp $grpprompt1 \n
+    } 
+}
+

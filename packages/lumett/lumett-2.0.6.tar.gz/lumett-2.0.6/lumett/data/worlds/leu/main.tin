@@ -1,0 +1,146 @@
+#nop VSOF;
+#nop -------------------------------------------------------------------------;
+#nop File principale, carica e predisponi tutto;
+#nop -------------------------------------------------------------------------;
+
+
+#info system save
+
+#nop -- Importa le librerie         --;
+#format {homedir} {%s/%s} $info[SYSTEM][HOME] .lumett
+#format {mod} {%s/%s} $info[SYSTEM][HOME] .lumett/worlds/leu/modules
+#format {savesdir} {%s/%s} $info[SYSTEM][HOME] .lumett/worlds/leu/saves
+
+#format {libdir} {%s/%s} $info[SYSTEM][HOME] .lumett/lib
+#read $libdir/colors.tin
+#read $libdir/filesystem.tin
+#read $libdir/modloader.tin
+
+#class LEU open;
+
+#nop -- Load in the modules --;
+load_module functions
+load_module syslog
+load_module queues
+load_module events
+load_module help
+load_module counter
+load_module telnet
+load_module mxp
+load_module mslp
+load_module msdp
+load_module macro
+load_module map
+load_module bar_comm
+load_module bar_side
+load_module bar_bottom
+load_module gmcp
+load_module alias
+load_module gui_ingame
+load_module triggers
+
+#nop -------------------------------------------------------------------------;
+#nop Macro to add movment with kyepad;
+#nop -------------------------------------------------------------------------;
+
+#macro {\eOq} {d; #echo d}
+#macro {\eOr} {s; #echo s}
+#macro {\eOt} {w; #echo w}
+#macro {\eOu} {look; exits; info mob; info obj}
+#macro {\eOv} {e; #echo e}
+#macro {\eOw} {u; #echo u}
+#macro {\eOx} {n; #echo n}
+
+#nop -------------------------------------------------------------------------;
+#nop Session's Events;
+#nop -------------------------------------------------------------------------;
+
+#event {SCREEN LOCATION}
+{
+    #VARIABLE scrTopY {%2};
+    #VARIABLE scrTopX {%3}
+}
+
+#EVENT {SESSION CREATED}
+{
+    #line ignore #showme created
+}
+
+#EVENT {SESSION CONNECTED}
+{
+    #line ignore #showme connected;
+    init;
+    load_module lua_scripting
+}
+
+#EVENT {SESSION ACTIVATED}
+{
+    #line ignore #showme actived
+}
+
+#EVENT {SESSION DISCONNECTED}
+{
+    #variable last_room $gmcp[room][info][num]; 
+    commbar_clean;
+    sidebar_clean;
+    bottombar_clean;
+    #class gui_data write $info[SYSTEM][HOME]/.lumett/worlds/leu/gui.txt;
+    #class commbar_data write $savesdir/commbar.txt;
+    #class sidebar_data write $savesdir/sidebar.txt;
+    #class bottombar_data write $savesdir/bottombar.txt;    
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Varyous events;
+#nop -------------------------------------------------------------------------;
+
+#EVENT {SCREEN RESIZE}
+{
+    #SCREEN get rows {gui_ingame[rows]};
+    #SCREEN get cols {gui_ingame[cols]};
+    gui_ingame_resize;
+    gui_ingame_refresh;
+    #SCREEN refresh;
+    #BUFFER end
+}
+
+#EVENT {SCREEN ROTATE LANDSCAPE}
+{
+    gui_ingame_resize;
+    gui_ingame_refresh;
+}
+
+#EVENT {SCREEN ROTATE PORTRAIT}
+{ 
+    gui_ingame_resize;
+    gui_ingame_refresh;
+}
+
+#EVENT {RECEIVED ERROR}
+{
+    #echo <118>%h { TOKENIZER };
+    #info tokenizer -1;
+    #echo <118>%h
+}
+
+#alias {init}
+{
+    map_start;
+    gui_ingame_init;
+    #SCREEN raise {SCREEN RESIZE};
+    #SCREEN raise {SCREEN LOCATION};
+    #SCREEN raise {DESKTOP DIMENSIONS};
+    #SCREEN raise {SCREEN DIMENSIONS};
+    #SCREEN clear all;
+    gui_ingame_resize;
+    gui_ingame_refresh;
+}
+
+
+#class LEU close
+
+
+
+
+
+

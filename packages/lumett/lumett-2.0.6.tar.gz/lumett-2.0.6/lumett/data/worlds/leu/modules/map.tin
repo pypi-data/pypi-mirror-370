@@ -1,0 +1,153 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var map-description {Funzioni della Mappa}
+#var map-help {
+Sistema di mappa automatico integrato:\n
+FUNZIONI PRINCIPALI:\n
+• map_start - inizializza e carica la mappa\n
+• rsave - salva stanza corrente nella mappa\n
+• @search_nearest{var1;var2;[var3;var4]} - trova stanza più vicina\n
+CARATTERISTICHE:\n
+• Mappa salvata automaticamente in saves/map.txt\n
+• Integrazione con protocolli GMCP/MSDP\n
+• Navigazione tramite click del mouse\n
+• Costruzione automatica delle stanze\n
+EVENTI AUTOMATICI:\n
+• MAP SHORT-CLICKED - movimento rapido con click\n
+• MAP LONG-CLICKED - salva stanza corrente\n
+COME FUNZIONA:\n
+1. rsave crea stanze basate su dati GMCP room.info\n
+2. Collegamenti automatici tra stanze (nord, sud, etc.)\n
+3. Evita link tra aree troppo diverse (es. vnum 3001)\n
+4. Memorizza nome, area, terreno della stanza\n
+CONFIGURAZIONE:\n
+• flag nofollow off - segue automaticamente\n
+• flag static on - mappa statica\n
+• flag vtmap on - visualizzazione nel terminale\n
+• flag quiet off - mostra messaggi\n
+NOTE:\n
+• Richiede dati GMCP room.info per funzionare\n
+• Vedi '#help Map' per comandi TinTin++ completi\n
+• Click lungo sulla mappa per salvare posizione
+
+}
+#var map-register-delay 3
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias map-register {
+	#if {!@isloaded{functions}} {
+		#showme ERROR: functions module not loaded;
+		fail_module map;
+		#class map kill
+	}
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Inizializza la mappa;
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {map_start}
+{
+    #MAP create;  
+    #MAP flag nofollow off;
+    #MAP flag static on;
+    #MAP flag vtmap on;
+    #map flag quiet off;
+    #MAP read $savesdir/map.txt; 
+    #MAP goto $last_room; 
+}
+
+#EVENT {MAP SHORT-CLICKED MOUSE BUTTON ONE}
+{
+    #MAP run {%0} 0.25
+}
+
+#EVENT {MAP LONG-CLICKED MOUSE BUTTON ONE} 
+{
+    rsave
+}
+
+#FUNCTION {search_nearest} {
+    #LOCAL tmp {};
+    #IF { "%3" != "" && "%4" != "" } {
+        #ECHO {3: %3, 4: %4.};
+        #MAP LIST {VARIABLE} {tmp} {%1} {%2} {%3} {%4}
+    };
+    #ELSE {
+        #MAP LIST {VARIABLE} {tmp} {%1} {%2}
+    };
+
+    #LOCAL minval 0.000;
+    #FOREACH *tmp[] idx {
+        #IF { $tmp[$idx][distance] == -1.000 } {
+            #CONTINUE
+        };
+        #IF { $minval == 0.000 } {
+            #LOCAL minval {$tmp[$idx][distance]};
+            #LOCAL minidx $idx
+        };
+        #IF { $tmp[$idx][distance] < $minval } {
+            #LOCAL minval {$tmp[$idx][distance]};
+            #LOCAL minidx $idx
+        }
+    };
+
+    #IF { $minval > 1.000 } {
+        #RETURN $minidx
+    };
+    #ELSEIF { $minval == 1.000 } {
+        #RETURN 0
+    };
+    #ELSE {
+        #RETURN -1
+    }
+}
+
+#ALIAS {rsave}
+{
+    #if {$gmcp[room][info][num] == -1}
+    {
+        #return
+    };
+    #nop evitiamo si linkino aree troppo diverse;
+    #if {$gmcp[room][info][num] == 3001}
+    {
+        #return
+    };  
+    #map vnum $gmcp[room][info][num];
+    #map set ROOMNAME $gmcp[room][info][name];
+    #map set ROOMAREA $gmcp[room][info][zone];
+    #map set ROOMTERRIAN $gmcp[room][info][terrian];
+    #if {$gmcp[room][info][exits][north] > 0}
+    {
+        #map dig n $gmcp[room][info][exits][north];
+    };
+    #if {$gmcp[room][info][exits][east] > 0}
+    {
+        #map dig e $gmcp[room][info][exits][east];
+    };
+    #if {$gmcp[room][info][exits][south] > 0}
+    {
+        #map dig s $gmcp[room][info][exits][south];
+    };
+    #if {$gmcp[room][info][exits][west] > 0}
+    {
+        #map dig w $gmcp[room][info][exits][west];
+    };   
+    #if {$gmcp[room][info][exits][down] > 0}
+    {
+        #map dig d $gmcp[room][info][exits][down];
+    };
+    #if {$gmcp[room][info][exits][up] > 0}
+    {
+        #map dig u $gmcp[room][info][exits][up];
+    };
+    #MAP update;
+    #MAP write $savesdir/map.txt;
+}
+

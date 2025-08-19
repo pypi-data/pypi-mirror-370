@@ -1,0 +1,253 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var gui_ingame-description {Funzioni della gui_ingame}
+#var gui_ingame-help {
+Sistema di interfaccia grafica integrato:\n
+FUNZIONI PRINCIPALI:\n
+• gui_ingame_init - inizializza interfaccia completa\n
+• gui_ingame_resize - ridimensiona finestre\n
+• gui_ingame_refresh - aggiorna contenuti\n
+• gui_changer - cambia modalità interfaccia\n
+ELEMENTI GRAFICI:\n
+• title_bar - barra superiore con link di controllo\n
+• bar_bottom - barra inferiore con statistiche\n
+• bar_side - barra laterale destra (solo UI grande)\n
+• bar_comm - finestra comunicazioni\n
+• mappa - visualizzazione mappa integrata\n
+MODALITÀ INTERFACCIA:\n
+1. UI piccola (ui=1) - solo barra base\n
+2. UI media (ui=2) - barra + mappa\n
+3. UI grande (ui=3) - completa con sidebar\n
+FUNZIONI TITLE BAR:\n
+• Wizard - vai al wizard di configurazione\n
+• Sessione - gestisci sessioni\n
+• Gui - cambia modalità interfaccia\n
+• Leu Help/Lumett Help - sistemi di aiuto\n
+• Esci - termina sessione\n
+FUNZIONI AVANZATE:\n
+• Input line stile zMUD con repeat enter\n
+• Speedwalk con sintassi .direzione\n
+• History delle digitazioni\n
+• Salvataggio automatico configurazioni\n
+INTEGRAZIONE:\n
+• Collegamento automatico con protocolli\n
+• Aggiornamento real-time da MSDP/GMCP\n
+• Gestione eventi mouse e tastiera
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias gui_ingame-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module gui_ingame
+	} {
+		fail_module gui_ingame
+	}
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Ingame graphical structure;
+#NOP -------------------------------------------------------------------------;
+
+#class gui_data read $savesdir/gui.txt;
+
+
+#NOP -------------------------------------------------------------------------;
+#NOP Init the graphical interface;
+#NOP -------------------------------------------------------------------------;
+#ALIAS {gui_ingame_init}
+{
+    #nop variable set in msdp.tin and gmcp.tin;
+    #variable comm_protocol = "NONE";
+    map_start;
+    
+    bar_comm_init;
+    bar_side_init;
+    bar_bottom_init;
+      
+    #nop  refresh the gui;
+    gui_ingame_resize;
+    gui_ingame_refresh
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Resize the graphical interface;
+#NOP -------------------------------------------------------------------------;
+#ALIAS {gui_ingame_resize}
+{
+    #SCREEN get rows {gui_ingame[rows]};
+    #SCREEN get cols {gui_ingame[cols]};
+    #NOP if we have a single window;
+    #NOP large screen ui number 3;
+    #if {$gui_ingame[ui] == 3 }
+    {
+        #nop split and clear the screen;
+        #SPLIT {$gui_ingame[top]} {$gui_ingame[bot]} {$gui_ingame[left]} -100 1;
+        #SCREEN clear all;
+        #nop display and move the map;
+        #MATH {gui_ingame[right]} {$gui_ingame[cols] - 100};
+        #MAP flag vtmap on;
+        #MAP offset 18 {-$gui_ingame[right]+3} -10 -3;
+        #nop display the comunication and side bars;
+        bar_comm_draw_data $bar_comm[active];
+        #delay {0.5} {bar_comm_draw_tabs};
+        #DRAW white calign box {17} {-$gui_ingame[right]+2} -7 -1;
+        #MATH {bar_side[topcol]} {-$gui_ingame[right]+2};
+        bar_side_draw_data $bar_side[active];
+        #delay {0.5} {bar_side_draw_tabs}
+    };
+    #NOP mid screen ui number 2;
+    #elseif {$gui_ingame[ui] == 2}
+    {
+        #MAP flag vtmap on;
+        #SCREEN clear all;
+        #SPLIT 13 {$gui_ingame[bot]} 0 0 1;
+        #MAP offset 8 1 14 -1;
+        #VAR {bar_comm[botrow]} 7;
+        #delay {0.5} {bar_comm_draw_tabs}
+    };
+      #NOP small screen;
+      #elseif {$gui_ingame[ui] == 1}
+    {
+        #MAP flag vtmap off;
+        #SCREEN clear all; 
+        #SPLIT 1 5 0 0 1
+    }
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Update the gui;
+#NOP -------------------------------------------------------------------------;
+#ALIAS {gui_ingame_refresh}
+{
+    title_bar_draw;
+    #var {bar_bottom[tab][char]} {}; 
+    bottom_bar_draw;        
+    bar_bottom_draw_data $bar_bottom[active];
+    #delay {0.5} {bar_bottom_draw_tabs}
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Draw some clicable link in the title top bar;
+#nop -------------------------------------------------------------------------;
+#ALIAS {title_bar_draw}
+{
+    #line ignore #showme {\e]68;2;TAB;go_wizard\a\e[4;24mWizard\e[24m} {1} {1};
+    #line ignore #showme {\e]68;2;TAB;go_session\a\e[4;24mSessione\e[24m} {1} {10};
+    #line ignore #showme {\e]68;2;TAB;gui_changer\a\e[4;24mGui\e[24m} {1} {-38};
+    #line ignore #showme {\e]68;2;TAB;help aaa_servizio\a\e[4;24mLeu Help\e[24m} {1} {-28};
+    #line ignore #showme {\e]68;2;TAB;help help\a\e[4;24mLumett Help\e[24m} {1} {-18};
+    #line ignore #showme {\e]68;2;TAB;#end\a\e[4;24mEsci\e[24m} {1} {-5}
+}
+
+#ALIAS {go_wizard}
+{
+    #delay 0 #gui_wizard;
+    #screen clear all;
+    #BUFFER end;
+    #SCREEN focus
+}
+
+#ALIAS {go_session}
+{
+    #delay 0 #session +;
+    #screen clear all;
+    #BUFFER end;
+    #SCREEN focus 
+}
+
+#ALIAS {gui_changer}
+{
+    #MATH {gui_ingame[ui]} {$gui_ingame[ui] + 1};
+    #if {$gui_ingame[ui] > 3} {#var gui_ingame[ui] 1};
+    gui_ingame_resize;
+    gui_ingame_refresh;
+    #class gui_data write $savesdir/gui.txt;
+    #class sidebar_data write $savesdir/sidebar.txt;
+    #class commbar_data write $savesdir/commbar.txt;
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Inpuit line in zmud style;
+#NOP -------------------------------------------------------------------------;
+
+#CONFIG REPEAT_ENTER ON
+
+#VARIABLE last_input {}
+
+#EVENT {HISTORY UPDATE}
+{
+    #DELAY 0 #LINE ignore #SHOWME {<aaf><FFF><788>%0<088>} {-1};
+    #VARIABLE last_input {%0}
+}
+
+#EVENT {PROCESSED KEYPRESS}
+{
+	#if {{%1} != {10} && {$last_input} !== {}}
+	{
+		#VARIABLE last_input {};
+		#LINE ignore #SHOWME {} {-1};
+		#cursor end;
+		#history insert {}
+	};
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Execute speedwalks with .;
+#NOP -------------------------------------------------------------------------;
+
+#alias {.%0}
+{
+	#var cnt {};
+
+	#parse {%0} {char}
+	{
+		#if {"$char" >= "0" && "$char" <= "9"}
+		{
+			#var cnt $cnt$char
+		};
+		#elseif {"$cnt" == ""}
+		{
+			#send $char
+		};
+		#else
+		{
+			#$cnt #send $char;
+			#var cnt {}
+		};
+	}
+}
+
+#ALIAS {button_status %1}
+{
+    #DRAW white calign box -6 49 -4 59 {"%1"};
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Alias e Contatore di mob uccisi  ed esperienza;
+#NOP -------------------------------------------------------------------------;
+
+#list gains clear
+
+
+#ALIAS {rip}
+{
+    #showme {      Average Xp      Totale Xp     #   Death List, R.I.P.};
+    #showme {----------------------------------------------------------};
+    #unvariable {gains[final]};
+    #foreach {*gains[]} {deadmob}
+    {
+        #echo {  %+14g %+14g %+5g   %s}{$gains[$deadmob][mobexp] / $gains[$deadmob][mobcnt]} {$gains[$deadmob][mobexp]} {$gains[$deadmob][mobcnt]} {$deadmob};
+        #math gains[final][mobexp] $gains[final][mobexp] + $gains[$deadmob][mobexp];
+        #math gains[final][mobcnt] $gains[final][mobcnt] + $gains[$deadmob][mobcnt]
+    };
+    #showme {----------------------------------------------------------};
+    #math mobtmp {$gains[final][mobexp] / $gains[final][mobcnt]};
+    #echo {  %+14g %+14g %+5g} {$mobtmp} {$gains[final][mobexp]} {$gains[final][mobcnt]}
+}
+

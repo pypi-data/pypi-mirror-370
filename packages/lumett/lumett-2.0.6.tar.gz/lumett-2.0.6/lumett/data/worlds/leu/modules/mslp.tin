@@ -1,0 +1,94 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var mslp-description {Funzioni di MSLP}
+#var mslp-help {
+Gestione protocollo MSLP e link interattivi:\n
+FUNZIONI PRINCIPALI:\n
+• @link{tipo;comando;testo} - crea link colorato\n
+TIPI DI LINK SUPPORTATI:\n
+• SEND - invia comando direttamente\n
+• MENU - apre menu contestuale\n
+• EXEC - esegue comando client-side\n
+LINK AUTOMATICI PER LEU:\n
+• Fontana della Pace → drink fontana\n
+• Mercatore → list (mostra inventario)\n
+• Bacheca → exa bacheca\n
+• NPC trainer → menu gain/prac\n
+• Scriba → menu posta (check/receive/write)\n
+• Giuditta → menu rent/offer\n
+• Rubizzo (fornaio) → menu acquisti\n
+EVENTI GESTITI:\n
+• PRESSED LINK SEND - invia comando al MUD\n
+• PRESSED LINK MENU - apre menu grafico\n
+• PRESSED LINK EXEC - esegue comando locale\n
+• PRESSED LINK MENU_ITEM - selezione da menu\n
+FUNZIONALITÀ MENU:\n
+• Menu a scomparsa con opzioni multiple\n
+• Box grafico con bordi colorati\n
+• Selezione tramite click del mouse\n
+• Chiusura automatica dopo selezione\n
+IMPLEMENTAZIONE:\n
+• Usa substitute per trasformare testo in link\n
+• Pattern matching con regex\n
+• Link sicuri con codici MSLP\n
+• Integrazione con GUI del client
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias mslp-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module mslp
+	} {
+		fail_module mslp
+	}
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Implementazioni di Link attraverso il MSLP;
+#NOP -------------------------------------------------------------------------;
+
+#substitute {\bFontana della Pace\b} {\e]68;1;SEND;drink fontana\a\e[4m%0\e[24m}
+#substitute {\bcartello\b} {\e]68;1;SEND;exa cartello\a\e[4m%0\e[24m}
+#substitute {\bMercatore\b} {\e]68;1;SEND;list\a\e[4m%0\e[24m}
+#substitute {\bbacheca piena di avvisi\b} {\e]68;1;SEND;exa bacheca\a\e[4m%0\e[24m}
+#substitute {\bGiulietta\b} {\e]68;1;MENU;{rent}{rent}{offer}{offer}\a\e[4m%0\e[24m}
+#substitute {\bInizia ad Alma Civitas\b} {\e]68;1;SEND;i\a\e[4m%0\e[24m}
+#substitute {\bEsci da Lumen et Umbra\b} {\e]68;1;SEND;e\a\e[4m%0\e[24m}
+#substitute {\bAriel Silverblade\b} {\e]68;1;MENU;{Sali di livello}{gain}{Pratiche}{prac}\a\e[4m%0\e[24m}
+#substitute {\bPadus\b} {\e]68;1;MENU;{Sali di livello}{gain}{Pratiche}{prac}\a\e[4m%0\e[24m}
+#substitute {\bRuban\b} {\e]68;1;MENU;{Sali di livello}{gain}{Pratiche}{prac}\a\e[4m%0\e[24m}
+#substitute {\bEg Chen\b} {\e]68;1;MENU;{Sali di livello}{gain}{Pratiche}{prac}\a\e[4m%0\e[24m}
+#substitute {\bLo Scriba di Alma\b} {\e]68;1;MENU;{controlla posta}{check}{ritira posta}{receive}{scrivi posta}{write}\a\e[4m%0\e[24m}
+#substitute {\bRubizzo\b} {\e]68;1;MENU;{Guarda cosa offre}{list}{Compera una pagnotta}{buy pagn}{Compera uno sfiliatino}{buy sfila}{Compera un biscotto}{buy bisco}{Compera una pastarella}{buy pasta}\a\e[4m%0\e[24m}
+#substitute {[!] %1 %2 %*} {\e]68;1;MENU;{chiedi missione}{ask %1 missione}{termina missione}{mission end}\a\e[4m%0\e[24m}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Gestion eventi creati dai link.;
+#NOP -------------------------------------------------------------------------;
+
+#function link {#var result {\e]68;1;%1;%2\a\e[4m%3\e[24m}}
+
+#EVENT {PRESSED LINK MENU MOUSE BUTTON ONE}
+{
+        #local {link} {%4};
+
+        #foreach {*link[]} {key}
+        {
+                #line {substitute} {variables;functions}
+                {
+                        #var link[$key] {@link{MENU_ITEM;$link[$key];<faa>$key}}
+                }
+        };
+        #draw Azure scaled box  %0+1 %1 %0+1 %1+9 $link[%*]
+}
+#EVENT {PRESSED LINK MENU_ITEM MOUSE BUTTON ONE} {#showme {<ffa>%4};#buffer refresh}
+
+#EVENT {PRESSED LINK MOUSE BUTTON ONE} {#send {%4}}
+
+#EVENT {PRESSED SECURE LINK EXEC MOUSE BUTTON ONE} {%4}

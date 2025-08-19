@@ -1,0 +1,152 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var msdp-description {Abilita il Mud Server Data Protocol}
+#var msdp-help {
+Gestione del protocollo MSDP (Mud Server Data Protocol):\n
+CARATTERISTICHE:\n
+• Deve essere caricato PRIMA della connessione\n
+• Negoziazione automatica all'avvio\n
+• Richiesta automatica dei dati dal server\n
+• Dati memorizzati in variabili MSDP_*\n
+ALIAS PRINCIPALI:\n
+• msdp_report - richiede tutti i dati supportati\n
+• msdp_list <variabile> - lista valori di una variabile\n
+• msdp_send <variabile> - richiede una variabile specifica\n
+• msdp_ask_bottombar - richiede dati per la barra inferiore\n
+VARIABILI SUPPORTATE:\n
+• CHARACTER_NAME, HEALTH, HEALTH_MAX\n
+• MANA, MANA_MAX, MOVEMENT, MOVEMENT_MAX\n
+• MONEY, LEVEL, EXPERIENCE\n
+• OPPONENT_* (informazioni sul nemico)\n
+• SCREEN_* (informazioni schermo)\n
+• WORLD_TIME, ALIGNEMENT\n
+EVENTI AUTOMATICI:\n
+• IAC WILL MSDP - negoziazione iniziale\n
+• IAC SB MSDP - ricezione dati dal server\n
+• SCREEN_* - aggiornamento GUI automatico\n
+NOTE:\n
+• Impostato come comm_protocol principale\n
+• Disabilita altri protocolli quando attivo
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias msdp-register {
+	#if {@isloaded{functions}} {
+		register_module msdp
+	} {
+		#showme ERROR: functions module not loaded;
+		#class msdp kill
+	}
+}
+
+#VARIABLE {MSDP}
+{
+     {ARRAY_CLOSE} {\x06}
+     {ARRAY_OPEN} {\x05}
+     {TABLE_CLOSE} {\x04}
+     {TABLE_OPEN} {\x03}
+     {VAL} {\x02}
+     {VAR} {\x01}
+}
+
+#VARIABLE {MSDP_REPORTABLE_VARIABLES}
+{
+    {CHARACTER_NAME} {}
+    {HEALTH} {}
+    {HEALTH_MAX} {}
+    {MANA} {}
+    {MANA_MAX} {}
+    {MONEY} {}
+    {MOVEMENT} {}
+    {MOVEMENT_MAX} {}
+    {LEVEL} {}
+    {WORLD_TIME} {}
+    {OPPONENT_HEALTH} {}
+    {OPPONENT_HEALTH_MAX} {}
+    {OPPONENT_LEVEL} {}
+    {OPPONENT_NAME} {}
+    {EXPERIENCE} {}
+    {ALIGNEMENT} {}
+    {SCREEN_FOCUS} {}
+    {SCREEN_HEIGHT} {}
+    {SCREEN_LOCATION_HEIGHT} {}
+    {SCREEN_LOCATION_WIDTH} {}
+    {SCREEN_MINIMIZED} {}
+    {SCREEN_WIDTH} {}
+}
+
+#NOP -------------------------------------------------------------------------;
+#NOP Gestione degli Alias MSDP;
+#NOP -------------------------------------------------------------------------;
+
+#ALIAS {msdp_report}
+{
+     #NOP Ask the server to report all keys inside REPORTABLE_VARIABLES;
+     #VARIABLE result {$TELNET[IAC]$TELNET[SB]$TELNET[MSDP]$MSDP[VAR]REPORT};
+     #foreach {*REPORTABLE_VARIABLES[]} {tmp}
+     {
+          #VARIABLE result {$result$MSDP[VAL]$tmp}
+     };
+     #SEND {$result$TELNET[IAC]$TELNET[SE]\}
+}
+
+#ALIAS {msdp_list}
+{
+     #SEND {$TELNET[IAC]$TELNET[SB]$TELNET[MSDP]$MSDP[VAR]LIST$MSDP[VAL]%0$TELNET[IAC]$TELNET[SE]\}
+}
+
+#ALIAS {msdp_send}
+{
+     #SEND {$TELNET[IAC]$TELNET[SB]$TELNET[MSDP]$MSDP[VAR]SEND$MSDP[VAL]%0$TELNET[IAC]$TELNET[SE]\}
+}
+
+#ALIAS {msdp_ask_bottombar}
+{
+    msdp_send HEALTH;
+    msdp_send HEALTH_MAX;
+    msdp_send MANA;
+    msdp_send MANA_MAX;
+    msdp_send MOVEMENT;
+    msdp_send MOVEMENT_MAX;
+    msdp_send MONEY;
+    msdp_send LEVEL;
+    msdp_send EXPERIENCE
+}
+
+#nop -------------------------------------------------------------------------;
+#nop EVENTI VARI;
+#nop -------------------------------------------------------------------------;
+
+#EVENT {IAC WILL MSDP}
+{
+    #SEND {$TELNET[IAC]$TELNET[DO]$TELNET[MSDP]\};
+    #delay 1 msdp_report;
+    #class trigger_data kill;
+    #class trigger_data read $saves/triggerslive.txt;
+    #variable comm_protcol "MSDP"
+}
+
+#EVENT {IAC SB MSDP}
+{
+    #VARIABLE {MSDP_%0} {%1}
+}
+
+#EVENT {IAC SB MSDP SCREEN_WIDTH}
+{
+    gui_refresh;
+}
+
+#EVENT {IAC SB MSDP SCREEN_HEIGHT}
+{
+    gui_refresh
+}
+
+#EVENT {IAC SB MSDP AC}
+{
+    gui_refresh
+}
