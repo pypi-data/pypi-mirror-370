@@ -1,0 +1,229 @@
+#!/bin/bash -x
+
+# Print the version information
+${{SONARQUBE_PATH}}/sonar-scanner --version
+
+# Add language extensions
+file_extension_filters="-Dsonar.inclusions="
+if [[ "${{SOURCE_LANG}}" =~ "abap" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.abap,**/*.ab4,**/*.flow,**/*.asprog"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "apex" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.cls,**/*.trigger"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "cpp" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.c,**/*.h,**/*.cc,**/*.cpp,**/*.cxx,**/*.c++,**/*.hh,**/*.hpp,**/*.hxx,**/*.h++,**/*.ipp,**/*.m,**/*.C,**/*.H"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "csharp" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.cs"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "css" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.css,**/*.less,**/*.scss"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "flex" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.as"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "go" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.go"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "html" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.html,**/*.xhtml,**/*.cshtml,**/*.vbhtml,**/*.aspx,**/*.ascx,**/*.rhtml,**/*.erb,**/*.shtm,**/*.shtml,**/*.cmp,**/*.twig,**/*.jsp,**/*.jspf,**/*.jspx"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "java" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.java,**/*.jav"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "javascript" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.js,**/*.jsx,**/*.cjs,**/*.mjs,**/*.vue,**/*.ts,**/*.tsx,**/*.cts,**/*.mts"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "json" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.json"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "kotlin" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.kt"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "php" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.php,**/*.php3,**/*.php4,**/*.php5,**/*.phtml,**/*.inc"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "pli" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.pli"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "sql" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.sql,**/*.pks,**/*.pkb"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "python" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.py"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "py" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.py"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "rpg" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.rpg,**/*.rpgle,**/*.sqlrpgle,**/*.RPG,**/*.RPGLE,**/*.SQLRPGLE"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "ruby" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.rb"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "scala" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.scala"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "swift" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.swift"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "tsql" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.tsql"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "terraform" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.tf"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "vbnet" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.vb"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "visualbasic" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.bas,**/*.frm,**/*.cls,**/*.ctl,**/*.BAS,**/*.FRM,**/*.CLS,**/*.CTL"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "xml" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.xml,**/*.xsd,**/*.xsl"
+fi
+if [[ "${{SOURCE_LANG}}" =~ "yaml" ]]; then
+    file_extension_filters="$file_extension_filters,**/*.yaml,**/*.yml"
+fi
+
+# Set the required analysis flags
+required_flags="-X -D sonar.host.url=${{SONARQUBE_SERVER}} -D sonar.projectKey=${{SONARQUBE_PROJECT}} -D sonar.login=${{SONARQUBE_TOKEN}} -D sonar.working.directory=${{TOOL_ANALYSIS_DIR}}/scanner_output -D sonar.java.binaries=${{SOURCE_DIR}}"
+
+# Capture C/C++ code
+if [ -n "${{SONARQUBE_BUILD_CMD}}" ]; then
+    # Change to the build directory
+    cd ${{SONARQUBE_BUILD_DIR}}
+
+    # Clean any previous builds
+    ${{SONARQUBE_CLEAN_CMD}}
+
+    # Build the code using the SonarQube build wrapper
+    ${{SONARQUBE_WRAPPER_PATH}}/build-wrapper* --out-dir ${{TOOL_ANALYSIS_DIR}}/build_wrapper_output ${{SONARQUBE_BUILD_CMD}}
+
+    # Update the required flags
+    required_flags="$required_flags -D sonar.cfamily.build-wrapper-output=${{TOOL_ANALYSIS_DIR}}/build_wrapper_output -D sonar.cfamily.cache.enabled=false"
+fi
+
+# Add SARIF imports?
+if ${{SONARQUBE_IMPORT}}; then
+  sarif_reports=`find ${{TOOL_ANALYSIS_DIR}}/sarif_imports/* | sed -e 's/^/"/g' -e 's/$/"/g' | paste -sd "," - `
+  required_flags="$required_flags -D sonar.sarifReportPaths=$sarif_reports"
+fi
+
+# Change to the source root directory
+cd ${{SOURCE_DIR}}
+
+# Perform analysis
+${{SONARQUBE_PATH}}/sonar-scanner ${{SONARQUBE_SCANNER_FLAGS}} $file_extension_filters $required_flags
+
+# Wait for results to be finalized
+STATUS_URL=`tail -n 1 ${{TOOL_ANALYSIS_DIR}}/scanner_output/report-task.txt | cut -c11-`
+ANALYSIS_SUCCESS=false
+for i in {1..20}
+do
+    # Get the status
+    STATUS=`curl -u ${{SONARQUBE_TOKEN}}: $STATUS_URL`
+
+    # Check the contents
+    if [[ "$STATUS" == *"\"status\":\"SUCCESS\""* ]]; then
+       ANALYSIS_SUCCESS=true
+       break
+    else
+       sleep 30
+    fi
+done
+
+# Check if the analysis was successful
+if ! $ANALYSIS_SUCCESS
+then
+    exit 1
+fi
+
+# Retrieve the issues from the SonarQube server
+PAGE_SIZE=500
+# Get the first page
+RESULTS_FILE=${{TOOL_ANALYSIS_DIR}}/sonarqube_issues_1.json
+curl -u ${{SONARQUBE_TOKEN}}: "${{SONARQUBE_SERVER}}/api/issues/search?ps=$PAGE_SIZE&componentKeys=${{SONARQUBE_PROJECT}}&p=1&languages=${{SOURCE_LANG}}${{SONARQUBE_CURL_FLAGS}}" -o $RESULTS_FILE
+
+# Get the number of remaining pages
+TOTAL_RESULTS=$(grep -E '[0-9]+' -m 1 -o -a $RESULTS_FILE | sed -n 1p)
+TOTAL_PAGES=$(( ( TOTAL_RESULTS / PAGE_SIZE ) + ( TOTAL_RESULTS % PAGE_SIZE > 0 ) ))
+if (( TOTAL_PAGES > 20 )); then
+    TOTAL_PAGES=20
+fi
+
+# Get the rest of the issues
+for ((CURRENT_PAGE=2; CURRENT_PAGE <= TOTAL_PAGES; CURRENT_PAGE++));
+do
+    # Get the page
+    RESULTS_FILE=${{TOOL_ANALYSIS_DIR}}/sonarqube_issues_$CURRENT_PAGE.json
+    curl -u ${{SONARQUBE_TOKEN}}: "${{SONARQUBE_SERVER}}/api/issues/search?ps=500&componentKeys=${{SONARQUBE_PROJECT}}&languages=${{SOURCE_LANG}}&p=$CURRENT_PAGE&${{SONARQUBE_CURL_FLAGS}}" -o $RESULTS_FILE
+
+    # Check the file contents
+    if [ ! -s "$RESULTS_FILE" ]; then
+        exit 1
+    elif grep -q "Can return only the first 10000 results" $RESULTS_FILE; then
+        rm -f $RESULTS_FILE
+        break
+    fi
+done
+
+# Retrieve the hotspots from the SonarQube server
+# Get the first page
+RESULTS_FILE=${{TOOL_ANALYSIS_DIR}}/sonarqube_hotspots_1.json
+curl -u ${{SONARQUBE_TOKEN}}: "${{SONARQUBE_SERVER}}/api/hotspots/search?ps=$PAGE_SIZE&projectKey=${{SONARQUBE_PROJECT}}&p=1&${{SONARQUBE_CURL_FLAGS}}" -o $RESULTS_FILE
+
+# Get the number of remaining pages
+TOTAL_RESULTS=$(( $(grep -E '[0-9]+' -m 1 -o -a $RESULTS_FILE | sed -n 3p) ))
+TOTAL_PAGES=$(( ( TOTAL_RESULTS / PAGE_SIZE ) + ( TOTAL_RESULTS % PAGE_SIZE > 0 ) ))
+if (( TOTAL_PAGES > 20 )); then
+    TOTAL_PAGES=20
+fi
+
+# Get the rest of the hotspots
+for ((CURRENT_PAGE=2; CURRENT_PAGE <= TOTAL_PAGES; CURRENT_PAGE++));
+do
+    # Get the page
+    RESULTS_FILE=${{TOOL_ANALYSIS_DIR}}/sonarqube_hotspots_$CURRENT_PAGE.json
+    curl -u ${{SONARQUBE_TOKEN}}: "${{SONARQUBE_SERVER}}/api/hotspots/search?ps=$PAGE_SIZE&projectKey=${{SONARQUBE_PROJECT}}&p=$CURRENT_PAGE&${{SONARQUBE_CURL_FLAGS}}" -o $RESULTS_FILE
+
+    # Check the file contents
+    if [ ! -s "$RESULTS_FILE" ]; then
+        exit 1
+    elif grep -q "Can return only the first 10000 results" $RESULTS_FILE; then
+        rm -f $RESULTS_FILE
+        break
+    fi
+done
+
+# Get project metrics from the SonarQube server
+curl -u ${{SONARQUBE_TOKEN}}: "${{SONARQUBE_SERVER}}/api/measures/component_tree?component=${{SONARQUBE_PROJECT}}&ps=500&qualifiers=TRK&metricKeys=files,functions,lines,ncloc,comment_lines,complexity,cognitive_complexity,violations,vulnerabilities,security_hotspots,coverage,line_coverage,branch_coverage,sqale_index,duplicated_lines_density" -o "${{TOOL_ANALYSIS_DIR}}/sonarqube_metrics_project.json"
+
+# Retrieve the file metrics from the SonarQube server
+# Get the first page
+METRICS_FILE="${{TOOL_ANALYSIS_DIR}}/sonarqube_metrics_file_1.json"
+curl -u ${{SONARQUBE_TOKEN}}: "${{SONARQUBE_SERVER}}/api/measures/component_tree?component=${{SONARQUBE_PROJECT}}&ps=500&p=1&qualifiers=FIL&strategy=all&metricKeys=files,functions,lines,ncloc,comment_lines,complexity,cognitive_complexity,violations,vulnerabilities,security_hotspots,coverage,line_coverage,branch_coverage,sqale_index,duplicated_lines_density" -o $METRICS_FILE
+
+# Get the number of remaining pages
+TOTAL_RESULTS=$(( $(grep -E '[0-9]+' -m 1 -o -a $METRICS_FILE | sed -n 3p) ))
+TOTAL_PAGES=$(( ( TOTAL_RESULTS / PAGE_SIZE ) + ( TOTAL_RESULTS % PAGE_SIZE > 0 ) ))
+if (( TOTAL_PAGES > 20 )); then
+    TOTAL_PAGES=20
+fi
+
+# Get the rest of the metrics pages
+for ((CURRENT_PAGE=2; CURRENT_PAGE <= TOTAL_PAGES; CURRENT_PAGE++));
+do
+    # Get the page
+    METRICS_FILE="${{TOOL_ANALYSIS_DIR}}/sonarqube_metrics_file_$CURRENT_PAGE.json"
+    curl -u ${{SONARQUBE_TOKEN}}: "${{SONARQUBE_SERVER}}/api/measures/component_tree?component=${{SONARQUBE_PROJECT}}&ps=500&p=$CURRENT_PAGE&qualifiers=FIL&strategy=all&metricKeys=files,functions,lines,ncloc,comment_lines,complexity,cognitive_complexity,violations,vulnerabilities,security_hotspots,coverage,line_coverage,branch_coverage,sqale_index,duplicated_lines_density" -o $METRICS_FILE
+
+    # Check the file contents
+    if [ ! -s "$METRICS_FILE" ]; then
+        exit 1
+    elif grep -q "Can return only the first 10000 results" $METRICS_FILE; then
+        rm -f $METRICS_FILE
+        break
+    fi
+done
