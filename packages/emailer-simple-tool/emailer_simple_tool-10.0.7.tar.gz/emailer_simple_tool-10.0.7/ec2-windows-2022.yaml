@@ -1,0 +1,304 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Windows Server 2022 EC2 instance for emailer-simple-tool testing with RDP access (no key pair required)'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - m5.large
+      - m5.xlarge
+    Description: EC2 instance type (t3.medium recommended for GUI applications)
+  
+  AllowedCIDR:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR block allowed for RDP access (use your IP for security, e.g., 1.2.3.4/32)
+    AllowedPattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$
+    ConstraintDescription: Must be a valid CIDR notation (e.g., 192.168.1.0/24)
+
+  AdminPassword:
+    Type: String
+    Default: TempPass123!
+    Description: Administrator password for RDP access (change after first login)
+    MinLength: 8
+    MaxLength: 41
+    AllowedPattern: ^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$
+    NoEcho: true
+
+Mappings:
+  RegionMap:
+    eu-west-1:
+      # Windows Server 2022 Full English - latest AMI (2025.08.13)
+      WindowsAMI: ami-0a109132a5ba2d3f8
+    us-east-1:
+      # Windows Server 2022 Full English - latest AMI
+      WindowsAMI: ami-028dc1123403bd543
+    us-west-2:
+      # Windows Server 2022 Full English - latest AMI  
+      WindowsAMI: ami-0fcf52bcf5db7b003
+
+Resources:
+  # VPC for the Windows instance
+  WindowsVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: Windows-Testing-VPC
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Windows-Testing-IGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref WindowsVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public Subnet
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref WindowsVPC
+      CidrBlock: 10.1.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Windows-Testing-Public-Subnet
+
+  # Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref WindowsVPC
+      Tags:
+        - Key: Name
+          Value: Windows-Testing-Public-RT
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Group for RDP and HTTP/HTTPS
+  WindowsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Windows Server 2022 with RDP access
+      VpcId: !Ref WindowsVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref AllowedCIDR
+          Description: RDP access from specified CIDR
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP access for downloads
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS access for downloads
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: All outbound traffic
+      Tags:
+        - Key: Name
+          Value: Windows-Testing-SG
+
+  # IAM Role for EC2 with SSM access
+  WindowsInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Tags:
+        - Key: Name
+          Value: Windows-Testing-Role
+
+  WindowsInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref WindowsInstanceRole
+
+  # Windows Server 2022 EC2 Instance (no key pair required)
+  WindowsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', WindowsAMI]
+      InstanceType: !Ref InstanceType
+      # No KeyName parameter - using SSM instead
+      IamInstanceProfile: !Ref WindowsInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref WindowsSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 50
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          <powershell>
+          # Set timezone to UTC
+          Set-TimeZone -Id "UTC"
+          
+          # Set Administrator password
+          $Password = ConvertTo-SecureString "${AdminPassword}" -AsPlainText -Force
+          Set-LocalUser -Name "Administrator" -Password $Password
+          
+          # Enable RDP
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # Enable Network Level Authentication (more secure)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+          
+          # Install Chocolatey for easier software management
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          
+          # Install useful software
+          choco install -y googlechrome
+          choco install -y 7zip
+          choco install -y notepadplusplus
+          
+          # Install Python 3.12 (latest)
+          choco install -y python312
+          
+          # Refresh environment variables
+          refreshenv
+          
+          # Install SSM Agent (should be pre-installed but ensure it's running)
+          Restart-Service AmazonSSMAgent
+          
+          # Create desktop shortcuts
+          $WshShell = New-Object -comObject WScript.Shell
+          $Shortcut = $WshShell.CreateShortcut("$env:PUBLIC\Desktop\Command Prompt.lnk")
+          $Shortcut.TargetPath = "cmd.exe"
+          $Shortcut.Save()
+          
+          $Shortcut = $WshShell.CreateShortcut("$env:PUBLIC\Desktop\PowerShell.lnk")
+          $Shortcut.TargetPath = "powershell.exe"
+          $Shortcut.Save()
+          
+          # Create a welcome file with connection info
+          $WelcomeText = @"
+          Welcome to Windows Server 2022 for emailer-simple-tool testing!
+          
+          Administrator Password: ${AdminPassword}
+          
+          To install emailer-simple-tool:
+          1. Open PowerShell as Administrator
+          2. Run: pip install emailer-simple-tool[gui]
+          3. Test: emailer-simple-tool gui
+          
+          PySide6 should work perfectly on this modern Windows environment!
+          "@
+          
+          $WelcomeText | Out-File -FilePath "$env:PUBLIC\Desktop\README.txt" -Encoding UTF8
+          
+          # Signal completion
+          Write-Host "Windows Server 2022 setup completed successfully!"
+          </powershell>
+      Tags:
+        - Key: Name
+          Value: Windows-Server-2022-Testing
+        - Key: Purpose
+          Value: emailer-simple-tool-testing
+        - Key: OS
+          Value: Windows-Server-2022
+
+Outputs:
+  InstanceId:
+    Description: Instance ID of the Windows Server 2022 EC2 instance
+    Value: !Ref WindowsInstance
+    Export:
+      Name: !Sub "${AWS::StackName}-InstanceId"
+
+  PublicIP:
+    Description: Public IP address of the Windows instance
+    Value: !GetAtt WindowsInstance.PublicIp
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicIP"
+
+  PublicDNS:
+    Description: Public DNS name of the Windows instance
+    Value: !GetAtt WindowsInstance.PublicDnsName
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicDNS"
+
+  RDPConnection:
+    Description: RDP connection information
+    Value: !Sub |
+      Server: ${WindowsInstance.PublicIp}:3389
+      Username: Administrator
+      Password: ${AdminPassword}
+      
+      Use Microsoft Remote Desktop from Mac App Store to connect.
+
+  SSMConnection:
+    Description: Alternative connection via AWS Systems Manager
+    Value: !Sub |
+      aws ssm start-session --target ${WindowsInstance} --region ${AWS::Region}
+      
+      This provides command-line access without RDP.
+
+  AdminPassword:
+    Description: Administrator password for RDP access
+    Value: !Ref AdminPassword
+
+  EstimatedMonthlyCost:
+    Description: Estimated monthly cost (if running 24/7)
+    Value: !Sub |
+      Instance (${InstanceType}): ~$25-45/month
+      EBS (50GB gp3): ~$4/month
+      Data Transfer: ~$1-5/month
+      Total: ~$30-54/month (REMEMBER TO STOP WHEN NOT USING!)
+
+  CostOptimizationTips:
+    Description: How to minimize costs
+    Value: |
+      1. STOP the instance when not using: aws ec2 stop-instances --instance-ids <instance-id>
+      2. START when needed: aws ec2 start-instances --instance-ids <instance-id>
+      3. Use CloudWatch to set up automatic stop schedules
+      4. Consider using Spot instances for even lower costs

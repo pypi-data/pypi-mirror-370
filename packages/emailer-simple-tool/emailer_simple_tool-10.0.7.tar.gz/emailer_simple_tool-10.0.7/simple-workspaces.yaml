@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Simplest AWS WorkSpaces setup for testing - Windows 10 desktop with minimal Simple AD'
+
+Parameters:
+  UserName:
+    Type: String
+    Default: 'testuser'
+    Description: 'Username for the WorkSpace'
+    AllowedPattern: '^[a-zA-Z0-9._-]+$'
+
+Resources:
+  # Minimal VPC setup
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: 'Simple-WorkSpaces-VPC'
+
+  # Internet Gateway
+  IGW:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  # Two subnets (required for Simple AD)
+  Subnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.1.0/24'
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.2.0/24'
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  # Route table
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  Route:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref IGW
+
+  Subnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet1
+      RouteTableId: !Ref RouteTable
+
+  Subnet2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet2
+      RouteTableId: !Ref RouteTable
+
+  # Simple AD (minimum requirement for WorkSpaces)
+  SimpleAD:
+    Type: AWS::DirectoryService::SimpleAD
+    Properties:
+      Name: 'test.local'
+      Password: 'TempPass123!'
+      Size: 'Small'
+      VpcSettings:
+        VpcId: !Ref VPC
+        SubnetIds:
+          - !Ref Subnet1
+          - !Ref Subnet2
+
+Outputs:
+  DirectoryId:
+    Description: 'Simple AD Directory ID'
+    Value: !Ref SimpleAD
+
+  DirectoryAlias:
+    Description: 'Directory alias for WorkSpaces client'
+    Value: !GetAtt SimpleAD.Alias
+
+  SubnetIds:
+    Description: 'Subnet IDs for WorkSpaces'
+    Value: !Sub '${Subnet1},${Subnet2}'
+
+  UserName:
+    Description: 'Username for WorkSpace'
+    Value: !Ref UserName
+
+  NextSteps:
+    Description: 'Commands to complete setup'
+    Value: !Sub |
+      Run these commands after stack creation:
+      
+      # 1. Register directory with WorkSpaces
+      aws workspaces register-workspace-directory \
+        --directory-id ${SimpleAD} \
+        --subnet-ids ${Subnet1} ${Subnet2} \
+        --enable-internet-access \
+        --region ${AWS::Region}
+      
+      # 2. Create user
+      aws ds create-user \
+        --directory-id ${SimpleAD} \
+        --user-name ${UserName} \
+        --password "UserPass123!" \
+        --given-name "Test" \
+        --surname "User" \
+        --region ${AWS::Region}
+      
+      # 3. Create WorkSpace (cheapest Windows bundle)
+      aws workspaces create-workspaces \
+        --workspaces 'DirectoryId=${SimpleAD},UserName=${UserName},BundleId=wsb-bh8rsxt14,WorkspaceProperties={RunningMode=AUTO_STOP,RunningModeAutoStopTimeoutInMinutes=60,RootVolumeSizeGib=80,UserVolumeSizeGib=10,ComputeTypeName=VALUE}' \
+        --region ${AWS::Region}
+      
+      # Connection info:
+      # Registration Code: ${SimpleAD.Alias}
+      # Username: ${UserName}
+      # Password: UserPass123!
