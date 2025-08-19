@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{{ title }}</title>
+    <meta charset="utf-8"/>
+    <link rel="shortcut icon" href="{{ dir_depth }}favicon.png">
+    <link href="{{ dir_depth }}external/bootstrap.min.css" rel="stylesheet"></link>
+
+    <script src="{{ dir_depth }}external/jquery-3.5.1.min.js"></script>
+    <script src="{{ dir_depth }}external/popper.min.js"></script>
+    <script src="{{ dir_depth }}external/bootstrap.min.js"></script>
+
+    <!-- fancy tables with search and sorting -->
+    <link href="{{ dir_depth }}external/dataTables.bootstrap.min.css" rel="stylesheet"></link>
+    <script src="{{ dir_depth }}external/jquery.dataTables.min.js" language="javascript"></script>
+    <script src="{{ dir_depth}}external/dataTables.bootstrap.min.js" language="javascript"></script>
+    <style>
+    .remove-table-hover tr:hover{
+       background-color: unset !important;
+    }
+    @link-color:       @brand-primary;
+    @link-hover-color: darken(@link-color, 15%);
+
+    a {
+        color: @link-color;
+        text-decoration: none;
+
+        &:hover {
+            color: @link-hover-color;
+            text-decoration: underline;
+        }
+    }
+
+    .status-passed {
+        display: inline;
+        color: green;
+    }
+    .status-failed {
+        display: inline;
+        color: red;
+    }
+    .status-errored {
+        display: inline;
+        color: red;
+    }
+    .status-skipped {
+        display: inline;
+        color: blue;
+    }
+    .status-untested {
+        display: inline;
+        color: gray;
+    }
+
+    /* Section heading styles */
+    h2[style*="display: contents;"] {
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #333;
+        border-bottom: 1px solid #ccc;
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+
+    h3[style*="display: contents;"] {
+        font-size: 1.3em;
+        font-weight: bold;
+        color: #444;
+        margin-top: 8px;
+        margin-bottom: 8px;
+    }
+
+    h4[style*="display: contents;"] {
+        font-size: 1.1em;
+        font-weight: bold;
+        color: #555;
+        margin-top: 6px;
+        margin-bottom: 6px;
+    }
+
+    h5[style*="display: contents;"] {
+        font-size: 1em;
+        font-style: italic;
+        font-weight: bold;
+        color: #666;
+        margin-top: 4px;
+        margin-bottom: 4px;
+    }
+    </style>
+    <script>
+        function setupReportTables(defaultOrder, columns) {
+            $(document).ready(function () {
+                const urlParams = new URLSearchParams(window.location.search)
+                var order = defaultOrder;
+
+                if (urlParams.get('tableOrder')) {
+                    const parts = urlParams.get('tableOrder').split(':');
+                    order = [[parseInt(parts[0]), parts[1]]];
+                }
+
+                $('.datatable').each(function(){
+                    const table = $(this).DataTable({
+                        info: false,
+                        paging: false,
+                        order: order,
+                        columns: columns,
+                    });
+
+                    if (urlParams.get('search')) {
+                        const input = urlParams.get('search');
+                        table.search(input).draw();
+                    }
+
+                    // catch the various sorting changes and put it int he current URL
+                    $(this).on('order.dt', function() {
+                        const params = new URLSearchParams(window.location.search)
+                        var currentOrder = table.order();
+                        params.set('tableOrder', currentOrder[0][0] + ':' + currentOrder[0][1]);
+
+                        var url = window.location.pathname + '?' + params.toString() + window.location.hash;
+                        history.pushState(null, "", url);
+                    });
+
+                    // catch the search filtering and append that to the URl aswell
+                    $(this).on('search.dt', function() {
+                        const params = new URLSearchParams(window.location.search)
+                        const search = table.search();
+                        params.set('search', search);
+
+                        var url = window.location.pathname + '?' + params.toString() + window.location.hash;
+                        history.pushState(null, "", url);
+                    });
+                });
+            });
+        };
+    </script>
+  </head>
+  <body>
+    <div class="container">
+        {% block nav %}{% endblock %}
+        {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>
