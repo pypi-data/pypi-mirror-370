@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>PyNinja - System Monitor</title>
+    <meta property="og:type" content="SystemMonitor">
+    <meta name="keywords" content="Python, Monitor, fastapi, JavaScript, HTML, CSS">
+    <meta name="author" content="Vignesh Rao">
+    <!-- Favicon.ico and Apple Touch Icon -->
+    <link property="og:image" rel="icon" href="https://thevickypedia.github.io/open-source/images/logo/pyninja.ico">
+    <link property="og:image" rel="apple-touch-icon"
+          href="https://thevickypedia.github.io/open-source/images/logo/pyninja.png">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- CSS and JS for night mode -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+    <script type="text/javascript" src="https://thevickypedia.github.io/open-source/nightmode/night.js" defer></script>
+    <link rel="stylesheet" type="text/css" href="https://thevickypedia.github.io/open-source/nightmode/night.css">
+    <!-- Font Awesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/font-awesome.min.css">
+    <!--suppress CssUnusedSymbol -->
+    <style id="main-css">
+        body {
+            font-family: Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Simplify CSS for all the 'stats' */
+        .pyudisk-stats {
+            height: 100%;
+            margin: 2%;
+            overflow-x: visible;
+            display: none; /* Hide the container initially */
+            align-items: center;
+            justify-content: center;
+            flex-direction: column; /* Ensure vertical alignment */
+        }
+
+        .pyudisk-stats h3 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .cert-stats {
+            height: 100%;
+            margin: 2%;
+            overflow-x: visible;
+            display: none; /* Hide the container initially */
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .cert-stats h3 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .docker-stats {
+            height: 100%;
+            margin: 2%;
+            overflow-x: visible;
+            display: none; /* Hide the container initially */
+            align-items: center;
+            justify-content: center;
+            flex-direction: column; /* Ensure vertical alignment */
+        }
+
+        .docker-stats h3 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .service-stats {
+            height: 100%;
+            margin: 2%;
+            overflow-x: visible;
+            display: none; /* Hide the container initially */
+            align-items: center;
+            justify-content: center;
+            flex-direction: column; /* Ensure vertical alignment */
+        }
+
+        .service-stats h3 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .process-stats {
+            height: 100%;
+            margin: 2%;
+            overflow-x: visible;
+            display: none; /* Hide the container initially */
+            align-items: center;
+            justify-content: center;
+            flex-direction: column; /* Ensure vertical alignment */
+        }
+
+        .process-stats h3 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 80%;
+            border-collapse: collapse;
+            display: none; /* Hide the table initially */
+        }
+
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        .container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
+        }
+
+        .box {
+            border: 1px solid #ccc;
+            padding: 20px;
+            width: 30%;
+            text-align: center;
+            margin: 1%;
+        }
+
+        .progress {
+            width: 100%;
+            background-color: transparent;
+            border-radius: 5px;
+            overflow: hidden;
+            transition: background-color 0.5s ease;
+        }
+
+        .progress-bar {
+            height: 25px;
+            transition: width 0.5s ease, background-color 0.5s ease;
+            width: 0;
+        }
+
+        .progress-bar-green {
+            background-color: #4caf50;
+        }
+
+        .progress-bar-yellow {
+            background-color: #ffeb3b;
+        }
+
+        .progress-bar-orange {
+            background-color: #ff9800;
+        }
+
+        .progress-bar-red {
+            background-color: #f44336;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 200px;
+            width: 80%;
+            margin: 0 auto;
+            max-width: 100%;
+        }
+
+        canvas {
+            width: 100% !important;
+            height: inherit !important;
+            max-height: 100% !important;
+        }
+
+        .tooltip-button {
+            padding: 5px 5px;
+            font-size: 14px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .tooltip-button:hover {
+            background-color: #e0e0e0;
+        }
+
+        h1 {
+            width: 100%;
+            text-align: center;
+            align-content: center;
+        }
+
+        .docs {
+            position: absolute;
+            top: 7%;
+            right: 230px;
+            border: none;
+            padding: 10px 14px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .redoc {
+            position: absolute;
+            top: 7%;
+            right: 130px;
+            border: none;
+            padding: 10px 14px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .logout {
+            position: absolute;
+            top: 7%;
+            right: 30px;
+            border: none;
+            padding: 10px 14px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        footer {
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            align-content: center;
+            font-size: small;
+        }
+
+        .corner {
+            position: absolute;
+            top: 8%;
+            right: 2%;
+            font-size: 12px;
+        }
+
+        .graph-canvas {
+            max-width: 600px;
+        }
+    </style>
+    <style>
+        /* This container will only take up the space needed */
+        .center-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Keeps child elements centered horizontally */
+            text-align: left; /* Aligns text inside the container to the left */
+            margin: 0 auto; /* Centers the container horizontally */
+        }
+
+        .center-container details {
+            width: fit-content; /* Adapts to the content width */
+            max-width: 50%; /* Restricts the width to a maximum of 30% */
+            min-width: 25%; /* Restricts the width to a minimum of 25% */
+            text-align: left; /* Aligns text inside the details to the left */
+            margin: 0 auto; /* Ensures the details section stays centered */
+            box-sizing: border-box; /* Includes padding and borders in the width calculation */
+        }
+
+        .center-container summary {
+            text-align: center; /* Keeps the title aligned to the left */
+            cursor: pointer; /* Optional: Makes the summary text more interactive */
+        }
+
+        .collapsible-table {
+            display: table;
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .collapsible-table-row {
+            display: table-row;
+        }
+
+        .collapsible-table-cell {
+            display: table-cell;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+
+        .collapsible-table-cell {
+            font-weight: bold;
+        }
+
+        /* Ensures that the details are collapsed initially and expand on click
+        details[open] summary:before {
+        content: '-';
+        padding-right: 10px;
+        }
+        details summary:before {
+        content: '+';
+        padding-right: 10px;
+        }
+        */
+    </style>
+    <noscript>
+        <style>
+            body {
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+            }
+        </style>
+        <div style="position: fixed; text-align:center; height: 100%; width: 100%; background-color: #151515;">
+            <h2 style="margin-top:5%">This page requires JavaScript
+                to be enabled.
+                <br><br>
+                Please refer <a href="https://www.enable-javascript.com/">enable-javascript</a> for how to.
+            </h2>
+            <form>
+                <button type="submit" onClick="<meta httpEquiv='refresh' content='0'>">RETRY</button>
+            </form>
+        </div>
+    </noscript>
+</head>
+<body translate="no">
+<div class="toggler fa fa-moon-o"></div>
+<button class="docs" onclick="goDocs()"><i class="fa fa-book"></i> Docs</button>
+<button class="redoc" onclick="goReDoc()"><i class="fa fa-file"></i> ReDoc</button>
+<button class="logout" onclick="logOut()"><i class="fa fa-sign-out"></i> Logout</button>
+<h1>PyNinja - System Monitor</h1>
+<!-- Collapsible containers for system information categorically -->
+<div class="center-container">
+    <details>
+        <summary><strong>System Information</strong></summary>
+        <br>
+        <div class="collapsible-table">
+            {% for key, value in sys_info_basic.items() %}
+            <div class="collapsible-table-row">
+                <div class="collapsible-table-cell"><strong>{{ key }}</strong></div>
+                <div class="collapsible-table-cell">{{ value }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    <br>
+    <details>
+        <summary><strong>Network Information</strong></summary>
+        <br>
+        <div class="collapsible-table">
+            {% for key, value in sys_info_network.items() %}
+            <div class="collapsible-table-row">
+                <div class="collapsible-table-cell"><strong>{{ key }}</strong></div>
+                <div class="collapsible-table-cell">{{ value }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% if sys_info_disks %}
+    <br>
+    <details>
+        <summary><strong>Disk Information</strong></summary>
+        <br>
+        <div class="collapsible-table">
+            <!-- Header Row -->
+            <div class="collapsible-table-row">
+                {% if sys_info_disks|length > 0 %}
+                {% for key in sys_info_disks[0].keys() %}
+                <div class="collapsible-table-cell"><strong>{{ key }}</strong></div>
+                {% endfor %}
+                {% endif %}
+            </div>
+            <!-- Data Rows -->
+            {% for disk_info in sys_info_disks %}
+            <div class="collapsible-table-row">
+                {% for value in disk_info.values() %}
+                <div class="collapsible-table-cell">{{ value }}</div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+</div>
+<div class="container">
+    <!-- Box to display utilization per CPU -->
+    <div class="box">
+        <h3>CPU Usage</h3>
+        <div class="cpu-box" id="cpuUsageContainer">
+            <!-- CPU Usage will be dynamically added here -->
+        </div>
+    </div>
+    <!-- Box to display Memory, Swap (progress bars) and CPU load avg (2D graph) -->
+    <div class="box">
+        <h3>Memory Usage</h3>
+        <div class="progress">
+            <div id="memoryUsage" class="progress-bar"></div>
+        </div>
+        <p id="memoryUsageText">Memory: 0%</p>
+        {% if 'Swap' in sys_info_basic.keys() %}
+        <h3>Swap Usage</h3>
+        <div class="progress">
+            <div id="swapUsage" class="progress-bar"></div>
+        </div>
+        <p id="swapUsageText">Swap: 0%</p>
+        {% endif %}
+        <br><br>
+        <div class="graph">
+            <h3>CPU Load Averages</h3>
+            <canvas class="graph-canvas" id="loadChart" width="400" height="200"></canvas>
+        </div>
+    </div>
+    <!-- Box to display Memory, and Swap usage as Pie charts -->
+    <div class="box">
+        <h3>Memory Usage</h3>
+        <h5 id="memoryTotal"></h5>
+        <div class="chart-container">
+            <canvas id="memoryChart"></canvas>
+        </div>
+        {% if 'Swap' in sys_info_basic.keys() %}
+        <h3>Swap Usage</h3>
+        <h5 id="swapTotal"></h5>
+        <div class="chart-container">
+            <canvas id="swapChart"></canvas>
+        </div>
+        {% endif %}
+    </div>
+    <!-- Box to display Disks' usage as Pie charts -->
+    <div class="box">
+        <h3>Disk Usage</h3>
+        <div id="diskChartsContainer">
+            <!-- Charts will be dynamically appended here based on # of disks -->
+        </div>
+    </div>
+</div>
+<div id="docker-stats" class="docker-stats">
+    <h3>Docker Stats</h3>
+    <table id="dockerStatsTable">
+        <thead>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    <br>
+    <i id="docker_notes" style="font-size: small;"></i>
+</div>
+<div id="service-stats" class="service-stats">
+    <h3>Service Stats</h3>
+    <table id="serviceStatsTable">
+        <thead>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    <br>
+    <i id="service_notes" style="font-size: small;"></i>
+</div>
+<div id="process-stats" class="process-stats">
+    <h3>Process Stats</h3>
+    <table id="processStatsTable">
+        <thead>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    <br>
+    <i id="process_notes" style="font-size: small;"></i>
+</div>
+<div id="pyudisk-stats" class="pyudisk-stats">
+    <h3>PyUdisk Stats</h3>
+    <table id="pyudiskStatsTable">
+        <thead>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    <br>
+    <i id="pyudisk_notes" style="font-size: small;"></i>
+</div>
+<div id="cert-stats" class="cert-stats">
+    <h3>Certificate Stats</h3>
+    <table id="certStatsTable">
+        <thead>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    <br>
+    <i id="cert_notes" style="font-size: small;"></i>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const wsHost = window.location.host;
+        const ws = new WebSocket(`${wsProtocol}://${wsHost}/ws/system`);
+
+        ws.onopen = () => {
+            console.log('WebSocket connection established');
+        };
+        ws.onclose = () => {
+            console.log('WebSocket connection closed');
+            alert('WebSocket connection closed by the server!');
+            logOut();
+            return 0;
+        };
+
+        // Instantiate all charts' instances at the top-level
+        let memoryChartInstance = null;
+        let swapChartInstance = null;
+        let loadChartInstance = null;
+        let diskChartInstances = {};  // Disk chart should be an object since it is generated dynamically
+
+        ws.onmessage = function (event) {
+            let data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (error) {
+                console.warn('Error parsing JSON data:', error);
+                alert(event.data);
+                logOut();
+                return;
+            }
+
+            // Function to create the table head
+            function handleTable(dataJSON, tableId, tableCSS) {
+                // Show the service and the table
+                const statsService = document.getElementById(tableCSS);
+                statsService.style.display = "flex";
+
+                const tableHead = document.querySelector(`#${tableId} thead`);
+                if (tableHead.children.length === 0) {
+                    const col = document.createElement('tr');
+                    // Loop through the JSON data and create the table head
+                    for (const key in dataJSON[0]) {
+                        const th = document.createElement('th');
+                        th.innerText = key;
+                        col.appendChild(th);
+                    }
+                    tableHead.appendChild(col);
+                }
+                populateTable(dataJSON, tableId);
+            }
+
+            // Function to populate data into the table
+            function populateTable(data, tableId) {
+                const table = document.getElementById(tableId);
+                table.style.display = "table";
+
+                // Sort the JSON data by name (a and b are elements of data array being compared)
+                data.sort((a, b) => {
+                    if (a.hasOwnProperty("name") && b.hasOwnProperty("name")) {
+                        return a.name.localeCompare(b.name);
+                    }
+                    if (a.hasOwnProperty("Name") && b.hasOwnProperty("Name")) {
+                        return a.Name.localeCompare(b.Name);
+                    }
+                    return 0;
+                });
+
+                // Get reference to the table body
+                const tableBody = document.querySelector(`#${tableId} tbody`);
+                // Clear the existing table rows
+                tableBody.innerHTML = '';
+                // Loop through the JSON data and populate the table
+                data.forEach(elements => {
+                    const row = document.createElement('tr');
+                    for (const key in elements) {
+                        const td = document.createElement('td');
+                        td.innerText = elements[key];
+                        row.appendChild(td);
+                    }
+                    tableBody.appendChild(row);
+                });
+            }
+
+            const dockerStatsJSON = data.docker_stats;
+            // Check if dockerStatsJSON is valid
+            if (dockerStatsJSON && dockerStatsJSON.length > 0) {
+                handleTable(dockerStatsJSON, "dockerStatsTable", "docker-stats");
+                document.getElementById("docker_notes").textContent = "CPU and Memory usage reflect container resource limits.";
+            } else {
+                // Hide the container if no data is available
+                document.getElementById("docker-stats").style.display = "none";
+            }
+
+            const serviceStatsJSON = data.service_stats;
+            // Check if serviceStatsJSON is valid
+            if (serviceStatsJSON && serviceStatsJSON.length > 0) {
+                handleTable(serviceStatsJSON, "serviceStatsTable", "service-stats");
+                document.getElementById("service_notes").innerHTML = "One service can have multiple processes, but the usage metrics are isolated to process stats.";
+            } else {
+                // Hide the container if no data is available
+                document.getElementById("service-stats").style.display = "none";
+            }
+
+            const processStatsJSON = data.process_stats;
+            // Check if processStatsJSON is valid
+            if (processStatsJSON && processStatsJSON.length > 0) {
+                handleTable(processStatsJSON, "processStatsTable", "process-stats");
+                document.getElementById("process_notes").innerHTML = "Multiple processes can belong to a single service, but the usage metrics are not aggregated.";
+            } else {
+                // Hide the container if no data is available
+                document.getElementById("process-stats").style.display = "none";
+            }
+
+            const pyudiskStatsJSON = data.pyudisk_stats;
+            // Check if dockerStatsJSON is valid
+            if (pyudiskStatsJSON && pyudiskStatsJSON.length > 0) {
+                handleTable(pyudiskStatsJSON, "pyudiskStatsTable", "pyudisk-stats");
+                document.getElementById("pyudisk_notes").innerHTML = `PyUdisk last updated: ${data.pyudisk_updated}`
+            } else {
+                // Hide the container if no data is available
+                document.getElementById("pyudisk-stats").style.display = "none";
+            }
+
+            const certStatsJSON = data.certificates;
+            // Check if certStatsJSON is valid
+            if (certStatsJSON && certStatsJSON.length > 0) {
+                console.log('Certificate Stats:', certStatsJSON.length, 'certificates found.');
+                handleTable(certStatsJSON, "certStatsTable", "cert-stats");
+                document.getElementById("cert_notes").innerHTML = "Certificates are fetched using certbot. The expiry date is shown in UTC.";
+            } else {
+                // Hide the container if no data is available
+                document.getElementById("cert-stats").style.display = "none";
+            }
+
+            // Update CPU usage
+            const cpuUsage = data.cpu_usage;
+            const cpuContainer = document.getElementById('cpuUsageContainer');
+            cpuContainer.innerHTML = ''; // Clear previous content
+            cpuUsage.forEach((usage, index) => {
+                const cpuDiv = document.createElement('div');
+                cpuDiv.innerHTML = `
+                                <strong>CPU ${index + 1}:</strong> ${usage}%
+                                <div class="progress">
+                                    <div id="cpu${index}" class="progress-bar"></div>
+                                </div>
+                            `;
+                cpuContainer.appendChild(cpuDiv);
+                updateProgressBar(`cpu${index}`, usage);
+            });
+
+            // Memory Usage Progress Bar
+            const memoryInfo = data.memory_info;
+            const memoryUsage = (memoryInfo.used / memoryInfo.total) * 100;
+            document.getElementById('memoryUsage').style.width = memoryUsage.toFixed(2) + '%';
+            document.getElementById('memoryUsageText').innerText = `Memory: ${memoryUsage.toFixed(2)}%`;
+            updateProgressBar('memoryUsage', memoryUsage);
+
+            // Swap Usage Progress Bar
+            const swapInfo = data.swap_info;
+            if (swapInfo.used && swapInfo.total) {
+                const swapUsage = (swapInfo.used / swapInfo.total) * 100;
+                document.getElementById('swapUsage').style.width = swapUsage.toFixed(2) + '%';
+                document.getElementById('swapUsageText').innerText = `Swap: ${swapUsage.toFixed(2)}%`;
+                updateProgressBar('swapUsage', swapUsage);
+            }
+
+            // CPU Load Avg Graph
+            const loadAverages = data.load_averages;
+            if (loadChartInstance) {
+                loadChartInstance.data.datasets[0].data = [loadAverages["m1"], loadAverages["m5"], loadAverages["m15"]];
+                loadChartInstance.update();
+            } else {
+                const ctx = document.getElementById('loadChart').getContext('2d');
+                loadChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['1 minute', '5 minutes', '15 minutes'],
+                        datasets: [{
+                            label: 'Load Average',
+                            data: [loadAverages["m1"], loadAverages["m5"], loadAverages["m15"]],
+                            backgroundColor: [
+                                'rgba(75, 192, 192, 0.2)',
+                                'rgba(153, 102, 255, 0.2)',
+                                'rgba(255, 159, 64, 0.2)'
+                            ],
+                            borderColor: [
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            // Hide the legend
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Processes'
+                                },
+                                ticks: {
+                                    // Set integer step size
+                                    stepSize: 1,
+                                    callback: function (value) {
+                                        return Number.isInteger(value) ? value : '';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Function to create a pieChart instances for Memory, Swap and Disk utilization
+            function createChartInstance(pieChart, chartLabel, colors, chartData) {
+                return new Chart(pieChart, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Used', 'Free'],
+                        datasets: [{
+                            label: chartLabel,
+                            data: chartData,
+                            backgroundColor: colors
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function (tooltipItem) {
+                                        const value = tooltipItem.raw;
+                                        const formattedValue = formatBytes(value);
+                                        return `${tooltipItem.label}: ${formattedValue}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Memory Chart
+            document.getElementById("memoryTotal").innerText = `Total: ${formatBytes(memoryInfo.total)}`;
+            if (memoryChartInstance) {
+                memoryChartInstance.data.datasets[0].data = [memoryInfo.used, memoryInfo.total - memoryInfo.used];
+                memoryChartInstance.update();
+            } else {
+                const memoryChart = document.getElementById('memoryChart').getContext('2d');
+                memoryChartInstance = createChartInstance(
+                        memoryChart,
+                        'Memory Usage',
+                        ['#36A2EB', '#FFCE56'],
+                        [memoryInfo.used, memoryInfo.total - memoryInfo.used]
+                );
+            }
+
+            // Swap Chart
+            const swapChart = document.getElementById('swapChart');
+            if (swapChart) {
+                document.getElementById("swapTotal").innerText = `Total: ${formatBytes(swapInfo.total)}`;
+            }
+            if (swapChartInstance) {
+                swapChartInstance.data.datasets[0].data = [swapInfo.used, swapInfo.total - swapInfo.used];
+                swapChartInstance.update();
+            } else if (swapChart) {
+                // swapChart is an optional chart, so create context only when available
+                swapChartInstance = createChartInstance(
+                        swapChart.getContext('2d'),
+                        'Swap Usage',
+                        ['#FFCE56', '#E7E9ED'],
+                        [swapInfo.used, swapInfo.total - swapInfo.used]
+                );
+            }
+
+            // Disk Chart
+            const diskInfoList = data.disk_info;
+            const container = document.getElementById("diskChartsContainer");
+            // Iterate over the list of disk info
+            diskInfoList.forEach((diskInfo, index) => {
+                // Check if the chart already exists in the DOM
+                let chartBox = document.getElementById(`diskBox${index}`);
+                if (!chartBox) {
+                    // Create new chart container if it doesn't exist
+                    chartBox = document.createElement('div');
+                    chartBox.id = `diskBox${index}`;
+
+                    const diskLabel = document.createElement('h5');
+                    diskLabel.id = `diskLabel${index}`;
+                    chartBox.appendChild(diskLabel);
+
+                    const chartContainer = document.createElement('div');
+                    chartContainer.classList.add('chart-container');
+                    chartBox.appendChild(chartContainer);
+
+                    const canvas = document.createElement('canvas');
+                    canvas.id = `diskChart${index}`;
+                    chartContainer.appendChild(canvas);
+
+                    container.appendChild(chartBox);
+                }
+
+                // Update the label
+                const diskLabel = document.getElementById(`diskLabel${index}`);
+                diskLabel.innerText = `${diskInfo.name} (${diskInfo.id}) - ${formatBytes(diskInfo.total)}`;
+
+                // Create or update chart instance
+                if (diskChartInstances[index]) {
+                    // Update existing chart
+                    const chart = diskChartInstances[index];
+                    chart.data.datasets[0].data = [diskInfo.used, diskInfo.total - diskInfo.used];
+                    chart.update();
+                } else {
+                    // Create new chart instance
+                    const diskChart = document.getElementById(`diskChart${index}`).getContext('2d');
+                    diskChartInstances[index] = createChartInstance(
+                            diskChart,
+                            `Disk ${index + 1} Usage`,
+                            ['#63950d', '#ca7b00'],
+                            [diskInfo.used, diskInfo.total - diskInfo.used]
+                    );
+                }
+            });
+
+            // Remove old charts that are no longer in the data
+            Object.keys(diskChartInstances).forEach((key) => {
+                if (!diskInfoList[key]) {
+                    diskChartInstances[key].destroy();
+                    delete diskChartInstances[key];
+                    const oldBox = document.getElementById(`diskBox${key}`);
+                    if (oldBox) oldBox.remove();
+                }
+            });
+        };
+
+        function updateProgressBar(id, percentage) {
+            const bar = document.getElementById(id);
+            bar.style.width = percentage + '%';
+
+            // Remove old color classes
+            bar.classList.remove('progress-bar-green', 'progress-bar-yellow', 'progress-bar-orange', 'progress-bar-red');
+
+            // Add new color class based on percentage
+            if (percentage <= 50) {
+                bar.classList.add('progress-bar-green');
+            } else if (percentage <= 70) {
+                bar.classList.add('progress-bar-yellow');
+            } else if (percentage <= 90) {
+                bar.classList.add('progress-bar-orange');
+            } else {
+                bar.classList.add('progress-bar-red');
+            }
+        }
+
+        function formatBytes(bytes) {
+            const units = ['bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+            let unitIndex = 0;
+            while (bytes >= 1024 && unitIndex < units.length - 1) {
+                bytes /= 1024;
+                unitIndex++;
+            }
+            return bytes.toFixed(2) + ' ' + units[unitIndex];
+        }
+    });
+
+    function logOut() {
+        window.location.href = window.location.origin + "{{ logout }}";
+    }
+
+    function goDocs() {
+        window.location.href = window.location.origin + "/docs";
+    }
+
+    function goReDoc() {
+        window.location.href = window.location.origin + "/redoc";
+    }
+</script>
+<footer>
+    <div class="footer">
+        PyNinja - {{ version }}<br>
+        <a href="https://github.com/thevickypedia/PyNinja">https://github.com/thevickypedia/PyNinja</a>
+    </div>
+</footer>
+</body>
+</html>
