@@ -1,0 +1,150 @@
+"""
+Copyright (C) Cross The Road Electronics.  All rights reserved.
+License information can be found in CTRE_LICENSE.txt
+For support and suggestions contact support@ctr-electronics.com or file
+an issue tracker at https://github.com/CrossTheRoadElec/Phoenix-Releases
+"""
+
+from phoenix6.hardware.core.core_candle import CoreCANdle
+
+try:
+    import hal
+    from hal import SimDevice, simulation
+    from wpilib import RobotBase
+
+    from phoenix6 import utils
+    from phoenix6.canbus import CANBus
+    from phoenix6.phoenix_native import Native
+    from phoenix6.sim.device_type import DeviceType
+    from phoenix6.wpiutils.auto_feed_enable import AutoFeedEnable
+    from phoenix6.wpiutils.replay_auto_enable import ReplayAutoEnable
+
+    import ctypes
+
+    class CANdle(CoreCANdle):
+        """
+        Constructs a new CANdle object.
+
+        :param device_id: ID of the device, as configured in Phoenix Tuner.
+        :type device_id: int
+        :param canbus: The CAN bus this device is on.
+        :type canbus: CANBus, optional
+        """
+
+        __SIM_DEVICE_TYPE = DeviceType.P6_CANdleType
+
+        def __init__(self, device_id: int, canbus: CANBus = CANBus()):
+            CoreCANdle.__init__(self, device_id, canbus)
+
+            # The StatusSignal getters are copies so that calls
+            # to the WPI interface do not update any references
+
+            if RobotBase.isSimulation():
+                # run in both swsim and hwsim
+                AutoFeedEnable.get_instance().start()
+            if utils.is_replay():
+                ReplayAutoEnable.get_instance().start()
+
+            self.__sim_candle = SimDevice("CAN:CANdle (v6)", device_id)
+
+            self.__sim_periodic_before_callback: simulation.SimCB | None = None
+            self.__sim_value_changed_callbacks: list[simulation.SimValueCB] = []
+
+            if self.__sim_candle:
+                self.__sim_periodic_before_callback = simulation.registerSimPeriodicBeforeCallback(self.__on_periodic)
+
+                self.__sim_supply_voltage = self.__sim_candle.createDouble("supplyVoltage", SimDevice.Direction.kInput, 12.0)
+                self.__sim_five_v_rail = self.__sim_candle.createDouble("fiveVRail", SimDevice.Direction.kInput, 5.0)
+                self.__sim_output_current = self.__sim_candle.createDouble("outputCurrent", SimDevice.Direction.kInput, 0.0)
+                self.__sim_temperature = self.__sim_candle.createDouble("temperature", SimDevice.Direction.kInput, 25.0)
+
+                self.__sim_v_bat_modulation = self.__sim_candle.createDouble("vbatModulation", SimDevice.Direction.kOutput, 0)
+
+                self.__sim_value_changed_callbacks.append(simulation.registerSimValueChangedCallback(self.__sim_supply_voltage, self.__on_value_changed, True))
+                self.__sim_value_changed_callbacks.append(simulation.registerSimValueChangedCallback(self.__sim_five_v_rail, self.__on_value_changed, True))
+                self.__sim_value_changed_callbacks.append(simulation.registerSimValueChangedCallback(self.__sim_output_current, self.__on_value_changed, True))
+                self.__sim_value_changed_callbacks.append(simulation.registerSimValueChangedCallback(self.__sim_temperature, self.__on_value_changed, True))
+
+        def __enter__(self) -> 'CANdle':
+            return self
+
+        def __exit__(self, *_):
+            self.close()
+
+        def close(self):
+            if self.__sim_periodic_before_callback is not None:
+                self.__sim_periodic_before_callback.cancel()
+                self.__sim_periodic_before_callback = None
+
+            for callback in self.__sim_value_changed_callbacks:
+                callback.cancel()
+            self.__sim_value_changed_callbacks.clear()
+
+            AutoFeedEnable.get_instance().stop()
+            ReplayAutoEnable.get_instance().stop()
+
+        # ----- Callbacks for Sim -----
+        def __on_value_changed(self, name: str, handle: int, _: hal.SimValueDirection, value: hal.Value):
+            device_name = simulation.getSimDeviceName(simulation.getSimValueDeviceHandle(handle))
+            phys_type = device_name + ":" + name
+            Native.instance().c_ctre_phoenix6_platform_sim_set_physics_input(
+                self.__SIM_DEVICE_TYPE.value,
+                self.device_id,
+                ctypes.c_char_p(bytes(phys_type, 'utf-8')),
+                float(value.value),
+            )
+
+        def __on_periodic(self):
+            value = ctypes.c_double()
+            err: int = 0
+
+            err = Native.instance().c_ctre_phoenix6_platform_sim_get_physics_value(
+                self.__SIM_DEVICE_TYPE.value,
+                self.device_id,
+                ctypes.c_char_p(bytes("SupplyVoltage", 'utf-8')),
+                ctypes.byref(value),
+            )
+            if err == 0:
+                self.__sim_supply_voltage.set(value.value)
+
+            err = Native.instance().c_ctre_phoenix6_platform_sim_get_physics_value(
+                self.__SIM_DEVICE_TYPE.value,
+                self.device_id,
+                ctypes.c_char_p(bytes("FiveVRail", 'utf-8')),
+                ctypes.byref(value),
+            )
+            if err == 0:
+                self.__sim_five_v_rail.set(value.value)
+
+            err = Native.instance().c_ctre_phoenix6_platform_sim_get_physics_value(
+                self.__SIM_DEVICE_TYPE.value,
+                self.device_id,
+                ctypes.c_char_p(bytes("OutputCurrent", 'utf-8')),
+                ctypes.byref(value),
+            )
+            if err == 0:
+                self.__sim_output_current.set(value.value)
+
+            err = Native.instance().c_ctre_phoenix6_platform_sim_get_physics_value(
+                self.__SIM_DEVICE_TYPE.value,
+                self.device_id,
+                ctypes.c_char_p(bytes("Temperature", 'utf-8')),
+                ctypes.byref(value),
+            )
+            if err == 0:
+                self.__sim_temperature.set(value.value)
+
+            err = Native.instance().c_ctre_phoenix6_platform_sim_get_physics_value(
+                self.__SIM_DEVICE_TYPE.value,
+                self.device_id,
+                ctypes.c_char_p(bytes("VBatModulation", 'utf-8')),
+                ctypes.byref(value),
+            )
+            if err == 0:
+                self.__sim_v_bat_modulation.set(value.value)
+
+
+except ImportError:
+    class CANdle(CoreCANdle):
+        # Stub class to remove the "Core" string of CANdle
+        pass
