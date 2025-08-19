@@ -1,0 +1,199 @@
+Metadata-Version: 2.4
+Name: contextcounter
+Version: 0.1.3
+Summary: Universal context limits, token counting and tool callings for OpenAI, Anthropic, and Gemini.
+Author: Nemlig ADK
+License: MIT
+License-File: LICENSE
+Requires-Python: >=3.9
+Provides-Extra: anthropic
+Requires-Dist: anthropic>=0.34.0; extra == 'anthropic'
+Provides-Extra: openai
+Requires-Dist: openai>=1.40.0; extra == 'openai'
+Requires-Dist: tiktoken>=0.6.0; extra == 'openai'
+Provides-Extra: tokenizers
+Requires-Dist: tiktoken>=0.6.0; extra == 'tokenizers'
+Requires-Dist: transformers>=4.42.0; extra == 'tokenizers'
+Description-Content-Type: text/markdown
+
+# 📦 ContextCounter
+
+**ContextCounter** is a lightweight Python library for:
+
+- 🔍 **Fetching context window limits** across LLM providers (OpenAI, Anthropic, Gemini)  
+- 📊 **Counting tokens** in text or chat messages, with safe fallbacks  
+- ✅ **Checking if you’re about to exceed context**  
+
+It works out-of-the-box with no dependencies, and can optionally integrate with official SDKs for precise context sizes.
+
+---
+
+## 🚀 Installation
+
+```bash
+pip install contextcounter
+```
+
+Optional extras (for better accuracy):
+
+```bash
+pip install "contextcounter[openai]"       # precise OpenAI context limits
+pip install "contextcounter[anthropic]"    # precise Anthropic context limits
+pip install "contextcounter[tokenizers]"   # local tokenizers (tiktoken, transformers)
+```
+
+---
+
+## ⚡ Quickstart
+
+```python
+from contextcounter import ContextInspector
+
+# create inspector bound to a provider (openai, anthropic, google/vertex)
+ctx = ContextInspector(provider="openai")
+
+# fetch context window for a model
+limit = ctx.get_limit("gpt-4o")
+print("Context window:", limit)
+
+# count tokens in free text
+tokens = ctx.count_text("Hello world", model="gpt-4o")
+print("Tokens:", tokens)
+
+# count tokens in a chat-style message list
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Summarize this in 5 points."},
+]
+msg_tokens = ctx.count_messages(messages, model="gpt-4o")
+print("Message tokens:", msg_tokens)
+
+# check if it will exceed
+print("Will exceed?", ctx.will_exceed(msg_tokens, "gpt-4o", reserve=2048))
+```
+
+---
+
+## 📖 API Reference
+
+### `ContextInspector`
+
+```python
+from contextcounter import ContextInspector
+
+ctx = ContextInspector(provider="openai")
+```
+
+- **`provider`**: `"openai" | "anthropic" | "google" | "vertex" | None`  
+  - If given, you don’t need to repeat provider in every function.  
+- **`gemini_overrides`** *(dict, optional)*: override documented Gemini limits (default is `1_000_000` tokens).
+
+---
+
+### `ctx.get_limit(model: str) -> int | None`
+
+Returns the maximum context window for the given model.
+
+- For **OpenAI** models: will query live API if `openai` package is installed & authenticated.  
+- For **Anthropic**: will query live API if `anthropic` package is installed & authenticated.  
+- For **Gemini**: uses documented defaults (`1,000,000`) unless overridden.  
+- Fallback: internal static defaults.
+
+```python
+ctx = ContextInspector(provider="anthropic")
+print(ctx.get_limit("claude-3-7-sonnet"))  # 200000
+```
+
+---
+
+### `ctx.count_text(text: str, model: str | None = None) -> int`
+
+Returns the number of tokens in a plain text string.
+
+- Tries **tiktoken** if available (for OpenAI models).  
+- Falls back to **GPT-2 tokenizer** if `transformers` installed.  
+- Last resort: **heuristic** (≈1 token per ~3.7 characters).
+
+```python
+print(ctx.count_text("Hello world", model="gpt-4o"))  # → 5 (approx.)
+```
+
+---
+
+### `ctx.count_messages(messages: list, model: str | None = None) -> int`
+
+Returns the number of tokens in a chat-style message list.
+
+- Adds **structural overhead tokens** per message (default: 3 tokens, 6 for system role).  
+- Handles content as strings or lists (for multimodal formats).
+
+```python
+messages = [
+    {"role": "system", "content": "You are helpful."},
+    {"role": "user", "content": "Tell me a joke."}
+]
+print(ctx.count_messages(messages, model="gpt-4o"))  # → ~20
+```
+
+---
+
+### `ctx.will_exceed(tokens: int, model: str, reserve: int = 1024) -> bool | None`
+
+Checks whether a given token count plus a **reserve buffer** will exceed the model’s context window.
+
+- Returns `True` if it will exceed, `False` otherwise, `None` if limit unknown.
+
+```python
+tokens = ctx.count_messages(messages, model="gpt-4o")
+print(ctx.will_exceed(tokens, "gpt-4o", reserve=2048))
+```
+
+---
+
+### Standalone Functions
+
+If you don’t want to use the `ContextInspector` class, you can import the core functions:
+
+```python
+from contextcounter import get_context_limit, count_text, count_messages
+
+print(get_context_limit("gpt-4o", provider="openai"))
+print(count_text("Hello", model="gpt-4o", provider="openai"))
+```
+
+---
+
+## 🔧 Supported Models & Defaults
+
+| Provider   | Model Example           | Context Limit (tokens) |
+|------------|-------------------------|-------------------------|
+| OpenAI     | gpt-4o, gpt-4.1         | 128,000                |
+| OpenAI     | o3                      | 200,000                |
+| Anthropic  | claude-3-7-sonnet       | 200,000                |
+| Anthropic  | claude-3-5-sonnet/haiku | 200,000                |
+| Google     | gemini-1.5-pro/flash    | 1,000,000              |
+
+> Live API calls (OpenAI, Anthropic) will override these defaults if you have SDKs installed + credentials configured.
+
+---
+
+## 🧪 Testing
+
+```bash
+pytest tests/
+```
+
+---
+
+## 📌 Roadmap
+
+- ✅ Token counting across providers  
+- ✅ Context limit retrieval with fallbacks  
+- 🔜 Native Gemini token counting (when tokenizer becomes public)  
+- 🔜 More granular overhead estimation per provider  
+
+---
+
+## 📄 License
+
+MIT © Nemlig ADK
