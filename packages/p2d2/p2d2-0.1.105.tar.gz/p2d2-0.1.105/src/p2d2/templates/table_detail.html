@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Table: {{ table_name }}</title>
+    <style>
+    {% include 'database.css' %}
+    </style>
+
+    <!-- htmx -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <!-- Breadcrumbs -->
+    <div class="breadcrumbs">
+        <a href="/" class="breadcrumb-item">Dashboard</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-item active">{{ table_name }}</span>
+    </div>
+
+    <!-- Compact Header -->
+    <div class="table-header">
+        <h1>Table: {{ table_name }}</h1>
+        <p class="subtitle">{{ total_rows }} rows • {{ columns|length }} columns</p>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number">{{ total_rows }}</div>
+                <div class="stat-label">Total Rows</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">{{ columns|length }}</div>
+                <div class="stat-label">Columns</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="showing-count">0</div>
+                <div class="stat-label">Showing</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Controls -->
+    <div class="search-controls">
+        <input
+            type="search"
+            class="search-box"
+            placeholder="🔍 Search across all fields..."
+            name="search"
+            hx-get="/{{ table_name }}/search"
+            hx-trigger="keyup changed delay:500ms, search"
+            hx-target="#rows-container"
+            hx-include="select[name='column']"
+            hx-indicator="#search-indicator"
+        >
+
+        <select
+            name="column"
+            hx-get="/{{ table_name }}/search"
+            hx-trigger="change"
+            hx-target="#rows-container"
+            hx-include="input[name='search']"
+            hx-indicator="#search-indicator"
+        >
+            <option value="">All Columns</option>
+            {% for column in columns %}
+            <option value="{{ column }}">{{ column }}</option>
+            {% endfor %}
+        </select>
+
+        <div id="search-indicator" class="htmx-indicator">
+            <div class="loading-spinner"></div>
+        </div>
+
+        <button
+            class="btn success"
+            onclick="document.getElementById('addModal').style.display = 'block'"
+        >
+            ➕ Add Row
+        </button>
+
+        <button class="btn secondary" onclick="exportTable('{{ table_name }}')">
+            📥 Export
+        </button>
+    </div>
+
+    <!-- Row Cards Container -->
+    <div id="rows-container"
+         class="rows-grid"
+         hx-get="/{{ table_name }}/search"
+         hx-trigger="load">
+        <!-- Initial loading state -->
+        <div class="loading-container">
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+
+    <!-- Add Row Modal -->
+    <div id="addModal" class="modal">
+        <div class="modal-content">
+            <h3>Add New Row to {{ table_name }}</h3>
+            <div id="add-form">
+                {% for column in column_info %}
+                <div class="form-group">
+                    <label for="{{ column.name }}">{{ column.name }}</label>
+                    {% if column.type == 'checkbox' %}
+                        <input type="checkbox"
+                               id="{{ column.name }}"
+                               name="{{ column.name }}">
+                    {% elif column.type == 'number' %}
+                        <input type="number"
+                               id="{{ column.name }}"
+                               name="{{ column.name }}"
+                               step="any">
+                    {% elif column.type == 'datetime-local' %}
+                        <input type="datetime-local"
+                               id="{{ column.name }}"
+                               name="{{ column.name }}">
+                    {% else %}
+                        <input type="text"
+                               id="{{ column.name }}"
+                               name="{{ column.name }}">
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                <div class="form-group">
+                    <div style="display: flex; gap: 12px; justify-content: center;">
+                        <button type="button" class="btn success" onclick="submitAddForm('{{ table_name }}')">Add Row</button>
+                        <button type="button" class="btn secondary" onclick="closeModal('addModal')">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    {% include 'admin.js' %}
+    </script>
+</body>
+</html>
