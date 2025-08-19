@@ -1,0 +1,143 @@
+#! /usr/bin/env python
+"""Rectangle model's Geometry and Partition task definitions
+
+Requires the following ``SConscript(..., exports={})``
+
+* ``env`` - The SCons construction environment with the following required keys
+
+
+* ``simulation_variables`` - The dictionary of simulation variables with the following required keys
+
+  * ``'global_seed'`` - The rectangle model global seed size
+  * ``'displacement'`` - The rectangle model uniaxial displacement
+
+* ``workflow`` - list of targets in the main workflow
+* ``datacheck`` - list of targets in the datacheck workflow
+
+Returns the following variables
+
+* ``workflow`` - updated list of targets in the main workflow
+* ``datacheck`` - updated list of targets in the datacheck workflow
+
+Example usage:
+
+.. code-block::
+
+   import pathlib
+
+   env = waves.scons_extensions.WAVESEnvironment()
+   project_dir = pathlib.Path(Dir(".").abspath)
+
+   workflow = []
+   datacheck = []
+
+   nominal_workflow, nominal_datacheck = SConscript(
+       "rectangle_mesh_solverpep_solve_extract.scons",
+       exports={
+           "env": env,
+           "simulation_variables": simulation_variables,
+           "workflow": workflow,
+           "datacheck": datacheck
+       },
+       duplicate=False)
+
+   for set_name in [f"parmameter_set{number}" for number in range(4)]
+       parameters_workflow, parameter_datacheck = SConscript(
+           "rectangle_mesh_solverpep_solve_extract.scons",
+           variant_dir=set_name,
+           exports=["env", "simulation_variables", "workflow", "datacheck")
+           duplicate=False)
+"""
+import pathlib
+
+
+# Inherit the parent construction environment
+Import(["env", "simulation_variables", "workflow", "datacheck"])
+
+# Simulation variables
+build_directory = pathlib.Path(Dir(".").abspath)
+
+# Mesh
+workflow.extend(
+    env.AbaqusJournal(
+        target=["rectangle_mesh.inp", "rectangle_mesh.cae", "rectangle_mesh.jnl"],
+        source=["#/modsim_package/abaqus/rectangle_mesh.py", "rectangle_partition.cae"],
+        subcommand_options="--global-seed ${global_seed}",
+        **simulation_variables,
+    )
+)
+
+# SolverPrep
+copy_source_list = [
+    "#/modsim_package/abaqus/rectangle_compression.inp.in",
+    "#/modsim_package/abaqus/assembly.inp",
+    "#/modsim_package/abaqus/boundary.inp",
+    "#/modsim_package/abaqus/field_output.inp",
+    "#/modsim_package/abaqus/materials.inp",
+    "#/modsim_package/abaqus/parts.inp",
+    "#/modsim_package/abaqus/history_output.inp",
+]
+workflow.extend(
+    env.CopySubstfile(
+        copy_source_list,
+        substitution_dictionary=env.SubstitutionSyntax(simulation_variables),
+    )
+)
+
+# Abaqus Solve
+solve_source_list = [
+    "rectangle_compression.inp",
+    "assembly.inp",
+    "boundary.inp",
+    "field_output.inp",
+    "materials.inp",
+    "parts.inp",
+    "history_output.inp",
+    "rectangle_mesh.inp",
+]
+
+datacheck.extend(
+    env.AbaqusSolver(
+        target=[
+            "rectangle_compression_DATACHECK.odb",
+            "rectangle_compression_DATACHECK.dat",
+            "rectangle_compression_DATACHECK.msg",
+            "rectangle_compression_DATACHECK.com",
+            "rectangle_compression_DATACHECK.prt",
+            "rectangle_compression_DATACHECK.023",
+            "rectangle_compression_DATACHECK.mdl",
+            "rectangle_compression_DATACHECK.sim",
+            "rectangle_compression_DATACHECK.stt",
+        ],
+        source=solve_source_list,
+        job="rectangle_compression_DATACHECK",
+        program_options="-double both -datacheck",
+    )
+)
+
+workflow.extend(
+    env.AbaqusSolver(
+        target=[
+            "rectangle_compression.odb",
+            "rectangle_compression.dat",
+            "rectangle_compression.msg",
+            "rectangle_compression.com",
+            "rectangle_compression.prt",
+            "rectangle_compression.sta",
+        ],
+        source=solve_source_list,
+        job="rectangle_compression",
+        program_options="-double both",
+    )
+)
+
+# Extract Abaqus
+extract_source_list = ["rectangle_compression.odb"]
+workflow.extend(
+    env.AbaqusExtract(
+        target=["rectangle_compression.h5"],
+        source=extract_source_list,
+    )
+)
+
+Return(["workflow", "datacheck"])
