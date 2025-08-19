@@ -1,0 +1,26 @@
+#!/bin/sh
+#BSUB -J $$PROJECT_NAME$$
+#BSUB -o %J.out
+#BSUB -e %J.err
+#BSUB -W 120:00
+#BSUB -q BatchXL
+#BSUB -n 32
+#BSUB -R "span[hosts=1]"
+export OMP_NUM_THREADS=1
+
+if [ ! -f ./seq ];  then echo "01" > seq ; fi
+export seq=`cat seq`
+awk 'BEGIN{printf "%2.2d\n",ENVIRON["seq"]+1}' > seq
+
+# Check if -1.restart exists:
+if [ -f $$PROJECT_NAME$$-1.restart ]; then
+    INFILE=$$PROJECT_NAME$$-1.restart
+else 
+    INFILE=$$INPUT_FILE$$
+fi
+
+
+OUTFILE=local-${INFILE}.${seq}.out
+
+source /home/joha4087/programs/cp2k_easy/source_cp2k_gcc_openmpi_by_jonas
+mpirun -np 32 /home/joha4087/programs/cp2k_easy/cp2k-2025.1/exe/local/cp2k.popt $INFILE > $OUTFILE
