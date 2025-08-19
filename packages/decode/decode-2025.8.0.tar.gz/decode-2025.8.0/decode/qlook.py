@@ -1,0 +1,1474 @@
+__all__ = [
+    "auto",
+    "daisy",
+    "pswsc",
+    "raster",
+    "skydip",
+    "still",
+    "xscan",
+    "yscan",
+    "zscan",
+]
+
+
+# standard library
+import copy
+import tomli_w as toml
+from contextlib import contextmanager
+from logging import DEBUG, basicConfig, getLogger
+from pathlib import Path
+from typing import Any, Literal, Optional, Sequence, Union
+from warnings import catch_warnings, simplefilter
+from datetime import datetime
+
+
+# dependencies
+import numpy as np
+import xarray as xr
+import matplotlib.pyplot as plt
+from astropy.units import Quantity
+from fire import Fire
+from matplotlib.figure import Figure
+from scipy.optimize import curve_fit
+from . import assign, convert, load, make, plot, select, utils
+
+
+# constants
+ABBA_PHASES = {0, 1, 2, 3}
+DATA_FORMATS = "csv", "nc", "zarr", "zarr.zip"
+TEXT_FORMATS = ("toml",)
+DEFAULT_DATA_SCALING = None
+DEFAULT_DEBUG = False
+DEFAULT_FIGSIZE = 12, 4
+DEFAULT_FORMAT = "png"
+DEFAULT_FREQUENCY_UNITS = "GHz"
+DEFAULT_EXCL_MKID_IDS = None
+DEFAULT_INCL_MKID_IDS = None
+DEFAULT_MIN_FREQUENCY = None
+DEFAULT_MAX_FREQUENCY = None
+DEFAULT_ROLLING_TIME = 200
+DEFAULT_OUTDIR = Path()
+DEFAULT_OVERWRITE = False
+DEFAULT_SKYCOORD_GRID = "6 arcsec"
+DEFAULT_SKYCOORD_UNITS = "arcsec"
+SIGMA_OVER_MAD = 1.4826
+LOGGER = getLogger(__name__)
+
+
+@contextmanager
+def set_logger(debug: bool):
+    level = LOGGER.level
+
+    if debug:
+        LOGGER.setLevel(DEBUG)
+
+    try:
+        yield
+    finally:
+        LOGGER.setLevel(level)
+
+
+def auto(dems: Path, /, **options: Any) -> Path:
+    """Quick-look at an observation with auto-selected command.
+
+    The used command will be selected based on the observation name
+    stored as the ``observation`` attribute in an input DEMS file.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        **options: Options for the selected command.
+            See the command help for all available options.
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with xr.set_options(keep_attrs=True):
+        da = load.dems(dems, chunks=None)
+        obs: str = da.aste_obs_file
+
+        if "daisy" in obs:
+            return daisy(dems, **options)
+
+        if "pswsc" in obs:
+            return pswsc(dems, **options)
+
+        if "raster" in obs:
+            return raster(dems, **options)
+
+        if "skydip" in obs:
+            return skydip(dems, **options)
+
+        if "still" in obs:
+            return still(dems, **options)
+
+        if "xscan" in obs:
+            return xscan(dems, **options)
+
+        if "yscan" in obs:
+            return yscan(dems, **options)
+
+        if "zscan" in obs:
+            return zscan(dems, **options)
+
+        raise ValueError(
+            f"Could not infer the command to be used from {obs!r}: "
+            "Observation name must include one of the command names. "
+        )
+
+
+def daisy(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    rolling_time: int = DEFAULT_ROLLING_TIME,
+    source_radius: str = "60 arcsec",
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    skycoord_grid: str = DEFAULT_SKYCOORD_GRID,
+    skycoord_units: str = DEFAULT_SKYCOORD_UNITS,
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "daisy",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at a daisy scan observation.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        rolling_time: Moving window size.
+        source_radius: Radius of the on-source area.
+            Other areas are considered off-source in sky subtraction.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        skycoord_grid: Grid size of the sky coordinate axes.
+        skycoord_units: Units of the sky coordinate axes.
+        format: Output image format of quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    with xr.set_options(keep_attrs=True):
+        da = load.dems(
+            dems,
+            include_mkid_ids=include_mkid_ids,
+            exclude_mkid_ids=exclude_mkid_ids,
+            min_frequency=min_frequency,
+            max_frequency=max_frequency,
+            data_scaling=data_scaling,
+            skycoord_units=skycoord_units,
+            skycoord_frame="relative",
+            chunks=None,
+        )
+        da = da.sel(time=da.state != "GRAD")
+
+        ### Rolling
+        da_rolled = da.rolling(time=int(rolling_time), center=True).mean()
+        da = da - da_rolled
+
+        # fmt: off
+        is_source = (
+            (da.lon**2 + da.lat**2)
+            < Quantity(source_radius).to(skycoord_units).value ** 2
+        )
+        # fmt: on
+        da.coords["state"][is_source] = "SCAN@ON"
+        assign.scan(da, by="state", inplace=True)
+
+        # subtract temporal baseline
+        da_on = da.sel(time=da.state == "SCAN@ON")
+        da_off = da.sel(time=da.state != "SCAN@ON")
+        da_base = (
+            da_off.groupby("scan")
+            .map(mean_in_time)
+            .interp_like(
+                da_on,
+                method="linear",
+                kwargs={"fill_value": "extrapolate"},
+            )
+        )
+        t_atm = da_on.temperature
+        da_sub = t_atm * (da_on - da_base) / (t_atm - da_base)
+
+        # make continuum series
+        weight = get_chan_weight(da_off, method=chan_weight, pwv=pwv)
+        series = da_sub.weighted(weight.fillna(0)).mean("chan")
+
+        # make continuum map
+        cube = make.cube(
+            da_sub,
+            skycoord_grid=skycoord_grid,
+            skycoord_units=skycoord_units,
+        )
+        cont = cube.weighted(weight.fillna(0)).mean("chan")
+
+        ### GaussFit (cont)
+        try:
+            data = np.array(copy.deepcopy(cont).data)
+            data[np.isnan(data)] = 0.0
+            x, y = np.meshgrid(np.array(cube["lon"]), np.array(cube["lat"]))
+            initial_guess = (1, 0, 0, 1, 10, 0, 0)
+            bounds = (
+                [0, -np.inf, -np.inf, 1, 0, -np.pi, -np.inf],
+                [np.inf, np.inf, np.inf, np.inf, np.inf, 0, np.inf],
+            )
+            popt, pcov = curve_fit(
+                gaussian_2d, (x, y), data.ravel(), p0=initial_guess, bounds=bounds
+            )
+            perr = np.sqrt(np.diag(pcov))
+            data_fitted = gaussian_2d((x, y), *popt).reshape(x.shape)
+            chi2, reduced_chi2 = calc_chi2(
+                data, data_fitted, sigma=1.0, num_params=len(initial_guess)
+            )
+            fit_res_params_dict = make_fit_res_params_dict(
+                popt, perr, chi2, reduced_chi2
+            )
+            is_gaussfit_successful = True
+        except Exception as error:
+            LOGGER.warning(f"An error occurred on 2D Gaussian fitting: {error}")
+            is_gaussfit_successful = False
+
+        # save result
+        suffixes = f".{suffix}.{format}"
+        file = Path(outdir) / Path(dems).with_suffix(suffixes).name
+
+        if format in DATA_FORMATS:
+            return save_qlook(cont, file, overwrite=overwrite, **options)
+
+        if format in TEXT_FORMATS:
+            toml_string = make_pointing_toml_string(da, fit_res_params_dict, weight)
+            return save_qlook(toml_string, file, overwrite=overwrite, **options)
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+
+        ax = axes[0]  # type: ignore
+        plot.data(series, ax=ax)
+        ax.set_title(f"{Path(dems).name}\n({da.aste_obs_file})")
+
+        ax = axes[1]  # type: ignore
+        map_lim = max(abs(cube.lon).max(), abs(cube.lat).max())
+        max_pix = cont.where(cont == cont.max(), drop=True)
+
+        cont.plot(ax=ax)  # type: ignore
+        if is_gaussfit_successful:
+            ax.contour(
+                data_fitted,
+                extent=(x.min(), x.max(), y.min(), y.max()),
+                origin="lower",
+                levels=np.linspace(0, popt[0], 9) + popt[6],
+                colors="k",
+                linewidths=[0.75, 0.75, 0.75, 0.75, 1.50, 0.75, 0.75, 0.75, 0.75],
+                linestyles="-",
+            )
+            ax.set_title(
+                f"Peak = {fit_res_params_dict['peak']:+.2e} [{cont.units}], "
+                f"dAz = {fit_res_params_dict['offset_az']:+.2f} [{cont.lon.attrs['units']}], "
+                f"dEl = {fit_res_params_dict['offset_el']:+.2f} [{cont.lat.attrs['units']}],\n"
+                f"FWHM_maj = {fit_res_params_dict['hpbw_major']:+.2f} [{skycoord_units}], "
+                f"FWHM_min = {fit_res_params_dict['hpbw_minor']:+.2f} [{skycoord_units}], "
+                f"P.A. = {fit_res_params_dict['position_angle']:+.1f} [deg],\n"
+                f"min_frequency = {min_frequency}, "
+                f"max_frequency = {max_frequency}",
+                fontsize=10,
+            )
+        else:
+            ax.set_title(
+                f"Peak = {cont.max():.2e} [{cont.units}], "
+                f"dAz = {float(max_pix.lon):+.1f} [{cont.lon.attrs['units']}], "
+                f"dEl = {float(max_pix.lat):+.1f} [{cont.lat.attrs['units']}],\n"
+                f"min_frequency = {min_frequency}, "
+                f"max_frequency = {max_frequency}\n"
+                "(Gaussian fit failed: dAz and dEl are peak pixel based)",
+                fontsize=10,
+            )
+        ax.set_xlim(-map_lim, map_lim)
+        ax.set_ylim(-map_lim, map_lim)
+        ax.axes.set_aspect("equal", "datalim")
+
+        for ax in axes:  # type: ignore
+            ax.grid(True)
+
+        fig.tight_layout()
+        return save_qlook(fig, file, overwrite=overwrite, **options)
+
+
+def pswsc(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    frequency_units: str = DEFAULT_FREQUENCY_UNITS,
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "pswsc",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at a PSW observation with sky chopper.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        frequency_units: Units of the frequency axis.
+        format: Output data format of the quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    with xr.set_options(keep_attrs=True):
+        da = load.dems(
+            dems,
+            include_mkid_ids=include_mkid_ids,
+            exclude_mkid_ids=exclude_mkid_ids,
+            min_frequency=min_frequency,
+            max_frequency=max_frequency,
+            data_scaling=data_scaling,
+            frequency_units=frequency_units,
+            skycoord_frame="relative",
+            chunks=None,
+        )
+
+        da_despiked = despike(da)
+
+        # calculate ABBA cycles and phases
+        da_onoff = da_despiked.sel(time=da_despiked.state.isin(["ON", "OFF"]))
+        scan_onoff = utils.phaseof(da_onoff.state)
+        chop_per_scan = da_onoff.beam.groupby(scan_onoff).apply(utils.phaseof)
+        is_second_half = chop_per_scan.groupby(scan_onoff).apply(
+            lambda group: (group >= group.mean())
+        )
+        abba_cycle = (scan_onoff * 2 + is_second_half - 1) // 4
+        abba_phase = (scan_onoff * 2 + is_second_half - 1) % 4
+
+        # make spectrum
+        spec = (
+            da_onoff.assign_coords(abba_cycle=abba_cycle, abba_phase=abba_phase)
+            .groupby("abba_cycle")
+            .map(subtract_per_abba_cycle)
+            .mean("abba_cycle")
+        )
+
+        # save result
+        suffixes = f".{suffix}.{format}"
+        file = Path(outdir) / Path(dems).with_suffix(suffixes).name
+
+        if format in DATA_FORMATS:
+            return save_qlook(spec, file, overwrite=overwrite, **options)
+
+        fig, axes = plt.subplots(1, 2, figsize=DEFAULT_FIGSIZE)
+
+        ax = axes[0]  # type: ignore
+        plot.data(da_despiked.scan, ax=ax)
+
+        ax = axes[1]  # type: ignore
+        plot.data(spec, x="frequency", s=5, hue=None, ax=ax)
+        ax.set_ylim(get_robust_lim(spec))
+
+        for ax in axes:  # type: ignore
+            ax.set_title(f"{Path(dems).name}\n({da.aste_obs_file})")
+            ax.grid(True)
+
+        fig.tight_layout()
+        return save_qlook(fig, file, overwrite=overwrite, **options)
+
+
+def raster(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    skycoord_grid: str = DEFAULT_SKYCOORD_GRID,
+    skycoord_units: str = DEFAULT_SKYCOORD_UNITS,
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "raster",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at a raster scan observation.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        skycoord_grid: Grid size of the sky coordinate axes.
+        skycoord_units: Units of the sky coordinate axes.
+        format: Output image format of quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    with xr.set_options(keep_attrs=True):
+        da = load.dems(
+            dems,
+            include_mkid_ids=include_mkid_ids,
+            exclude_mkid_ids=exclude_mkid_ids,
+            min_frequency=min_frequency,
+            max_frequency=max_frequency,
+            data_scaling=data_scaling,
+            skycoord_units=skycoord_units,
+            skycoord_frame="relative",
+            chunks=None,
+        )
+
+        # subtract temporal baseline
+        da_on = da.sel(time=da.state == "SCAN")
+        da_off = da.sel(time=da.state != "SCAN")
+        da_base = (
+            da_off.groupby("scan")
+            .map(mean_in_time)
+            .interp_like(
+                da_on,
+                method="linear",
+                kwargs={"fill_value": "extrapolate"},
+            )
+        )
+        t_atm = da_on.temperature
+        da_sub = t_atm * (da_on - da_base) / (t_atm - da_base)
+
+        # make continuum series
+        weight = get_chan_weight(da_off, method=chan_weight, pwv=pwv)
+        series = da_sub.weighted(weight.fillna(0)).mean("chan")
+
+        # make continuum map
+        cube = make.cube(
+            da_sub,
+            skycoord_grid=skycoord_grid,
+            skycoord_units=skycoord_units,
+        )
+        cont = cube.weighted(weight.fillna(0)).mean("chan")
+
+        ### GaussFit (cont)
+        try:
+            data = np.array(copy.deepcopy(cont).data)
+            data[np.isnan(data)] = 0.0
+            x, y = np.meshgrid(np.array(cube["lon"]), np.array(cube["lat"]))
+            initial_guess = (1, 0, 0, 1, 10, 0, 0)
+            bounds = (
+                [0, -np.inf, -np.inf, 1, 0, -np.pi, -np.inf],
+                [np.inf, np.inf, np.inf, np.inf, np.inf, 0, np.inf],
+            )
+            popt, pcov = curve_fit(
+                gaussian_2d, (x, y), data.ravel(), p0=initial_guess, bounds=bounds
+            )
+            perr = np.sqrt(np.diag(pcov))
+            data_fitted = gaussian_2d((x, y), *popt).reshape(x.shape)
+            chi2, reduced_chi2 = calc_chi2(
+                data, data_fitted, sigma=1.0, num_params=len(initial_guess)
+            )
+            fit_res_params_dict = make_fit_res_params_dict(
+                popt, perr, chi2, reduced_chi2
+            )
+            is_gaussfit_successful = True
+        except Exception as error:
+            LOGGER.warning(f"An error occurred on 2D Gaussian fitting: {error}")
+            is_gaussfit_successful = False
+
+        # save result
+        suffixes = f".{suffix}.{format}"
+        file = Path(outdir) / Path(dems).with_suffix(suffixes).name
+
+        if format in DATA_FORMATS:
+            return save_qlook(cont, file, overwrite=overwrite, **options)
+
+        if format in TEXT_FORMATS:
+            toml_string = make_pointing_toml_string(da, fit_res_params_dict, weight)
+            return save_qlook(toml_string, file, overwrite=overwrite, **options)
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+
+        ax = axes[0]  # type: ignore
+        plot.data(series, ax=ax)
+        ax.set_title(f"{Path(dems).name}\n({da.aste_obs_file})")
+
+        ax = axes[1]  # type: ignore
+        map_lim = max(abs(cube.lon).max(), abs(cube.lat).max())
+        max_pix = cont.where(cont == cont.max(), drop=True)
+
+        cont.plot(ax=ax)  # type: ignore
+        if is_gaussfit_successful:
+            ax.contour(
+                data_fitted,
+                extent=(x.min(), x.max(), y.min(), y.max()),
+                origin="lower",
+                levels=np.linspace(0, popt[0], 9) + popt[6],
+                colors="k",
+                linewidths=[0.75, 0.75, 0.75, 0.75, 1.50, 0.75, 0.75, 0.75, 0.75],
+                linestyles="-",
+            )
+            ax.set_title(
+                f"Peak = {fit_res_params_dict['peak']:+.2e} [{cont.units}], "
+                f"dAz = {fit_res_params_dict['offset_az']:+.2f} [{cont.lon.attrs['units']}], "
+                f"dEl = {fit_res_params_dict['offset_el']:+.2f} [{cont.lat.attrs['units']}],\n"
+                f"FWHM_maj = {fit_res_params_dict['hpbw_major']:+.2f} [{skycoord_units}], "
+                f"FWHM_min = {fit_res_params_dict['hpbw_minor']:+.2f} [{skycoord_units}], "
+                f"P.A. = {fit_res_params_dict['position_angle']:+.1f} [deg],\n"
+                f"min_frequency = {min_frequency}, "
+                f"max_frequency = {max_frequency}",
+                fontsize=10,
+            )
+        else:
+            ax.set_title(
+                f"Peak = {cont.max():.2e} [{cont.units}], "
+                f"dAz = {float(max_pix.lon):+.1f} [{cont.lon.attrs['units']}], "
+                f"dEl = {float(max_pix.lat):+.1f} [{cont.lat.attrs['units']}],\n"
+                f"min_frequency = {min_frequency}, "
+                f"max_frequency = {max_frequency}\n"
+                "(Gaussian fit failed: dAz and dEl are peak pixel based)",
+                fontsize=10,
+            )
+        ax.set_xlim(-map_lim, map_lim)
+        ax.set_ylim(-map_lim, map_lim)
+        ax.axes.set_aspect("equal", "datalim")
+
+        for ax in axes:  # type: ignore
+            ax.grid(True)
+
+        fig.tight_layout()
+        return save_qlook(fig, file, overwrite=overwrite, **options)
+
+
+def skydip(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "skydip",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at a skydip observation.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        format: Output image format of quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    with xr.set_options(keep_attrs=True):
+        da = load.dems(
+            dems,
+            include_mkid_ids=include_mkid_ids,
+            exclude_mkid_ids=exclude_mkid_ids,
+            min_frequency=min_frequency,
+            max_frequency=max_frequency,
+            data_scaling=data_scaling,
+            skycoord_frame="relative",
+            chunks=None,
+        )
+
+        # add airmass as a coordinate
+        # fmt: off
+        airmass = (
+            xr.DataArray(1 / np.sin(convert.units(da.lat, "rad")))
+            .assign_attrs(
+                long_name="Airmass",
+                units="dimensionless",
+            )
+        )
+        da = da.assign_coords(airmass=airmass)
+        # fmt: on
+
+        # make continuum series
+        da_on = da.sel(time=da.state == "SCAN")
+        da_off = da.sel(time=da.state != "SCAN")
+        weight = get_chan_weight(da_off, method=chan_weight, pwv=pwv)
+        series = da_on.weighted(weight.fillna(0)).mean("chan")
+
+        # save result
+        suffixes = f".{suffix}.{format}"
+        file = Path(outdir) / Path(dems).with_suffix(suffixes).name
+
+        if format in DATA_FORMATS:
+            return save_qlook(series, file, overwrite=overwrite, **options)
+
+        fig, axes = plt.subplots(1, 2, figsize=DEFAULT_FIGSIZE)
+
+        ax = axes[0]  # type: ignore
+        plot.data(series, hue="secz", ax=ax)
+
+        ax = axes[1]  # type: ignore
+        plot.data(series, x="secz", ax=ax)
+
+        for ax in axes:  # type: ignore
+            ax.set_title(f"{Path(dems).name}\n({da.aste_obs_file})")
+            ax.grid(True)
+
+        fig.tight_layout()
+        return save_qlook(fig, file, overwrite=overwrite, **options)
+
+
+def still(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "still",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at a still observation.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        format: Output data format of the quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    with xr.set_options(keep_attrs=True):
+        da = load.dems(
+            dems,
+            include_mkid_ids=include_mkid_ids,
+            exclude_mkid_ids=exclude_mkid_ids,
+            min_frequency=min_frequency,
+            max_frequency=max_frequency,
+            data_scaling=data_scaling,
+            skycoord_frame="relative",
+            chunks=None,
+        )
+
+        # make continuum series
+        da_off = da.sel(time=~da.state.isin(["ON", "OFF"]))
+        weight = get_chan_weight(da_off, method=chan_weight, pwv=pwv)
+        series = da.weighted(weight.fillna(0)).mean("chan")
+
+        # save result
+        suffixes = f".{suffix}.{format}"
+        file = Path(outdir) / Path(dems).with_suffix(suffixes).name
+
+        if format in DATA_FORMATS:
+            return save_qlook(series, file, overwrite=overwrite, **options)
+
+        fig, axes = plt.subplots(1, 2, figsize=DEFAULT_FIGSIZE)
+
+        ax = axes[0]  # type: ignore
+        plot.state(da, add_colorbar=False, add_legend=False, ax=ax)
+
+        ax = axes[1]  # type: ignore
+        plot.data(series, add_colorbar=False, ax=ax)
+
+        for ax in axes:  # type: ignore
+            ax.set_title(f"{Path(dems).name}\n({da.aste_obs_file})")
+            ax.grid(True)
+
+        fig.tight_layout()
+        return save_qlook(fig, file, overwrite=overwrite, **options)
+
+
+def xscan(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "zscan",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at an observation of subref X-axis focus scan.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        format: Output image format of quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    return _scan(
+        dems,
+        "x",
+        # options for loading
+        include_mkid_ids=include_mkid_ids,
+        exclude_mkid_ids=exclude_mkid_ids,
+        min_frequency=min_frequency,
+        max_frequency=max_frequency,
+        data_scaling=data_scaling,
+        # options for analysis
+        chan_weight=chan_weight,
+        pwv=pwv,
+        # options for saving
+        format=format,
+        outdir=outdir,
+        overwrite=overwrite,
+        suffix=suffix,
+        **options,
+    )
+
+
+def yscan(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "zscan",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at an observation of subref Y-axis focus scan.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        format: Output image format of quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    return _scan(
+        dems,
+        "y",
+        # options for loading
+        include_mkid_ids=include_mkid_ids,
+        exclude_mkid_ids=exclude_mkid_ids,
+        min_frequency=min_frequency,
+        max_frequency=max_frequency,
+        data_scaling=data_scaling,
+        # options for analysis
+        chan_weight=chan_weight,
+        pwv=pwv,
+        # options for saving
+        format=format,
+        outdir=outdir,
+        overwrite=overwrite,
+        suffix=suffix,
+        **options,
+    )
+
+
+def zscan(
+    dems: Path,
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "zscan",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at an observation of subref Z-axis focus scan.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        format: Output image format of quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    return _scan(
+        dems,
+        "z",
+        # options for loading
+        include_mkid_ids=include_mkid_ids,
+        exclude_mkid_ids=exclude_mkid_ids,
+        min_frequency=min_frequency,
+        max_frequency=max_frequency,
+        data_scaling=data_scaling,
+        # options for analysis
+        chan_weight=chan_weight,
+        pwv=pwv,
+        # options for saving
+        debug=debug,
+        format=format,
+        outdir=outdir,
+        overwrite=overwrite,
+        suffix=suffix,
+        **options,
+    )
+
+
+def _scan(
+    dems: Path,
+    axis: Literal["x", "y", "z"],
+    /,
+    *,
+    # options for loading
+    include_mkid_ids: Optional[Sequence[int]] = DEFAULT_INCL_MKID_IDS,
+    exclude_mkid_ids: Optional[Sequence[int]] = DEFAULT_EXCL_MKID_IDS,
+    min_frequency: Optional[str] = DEFAULT_MIN_FREQUENCY,
+    max_frequency: Optional[str] = DEFAULT_MAX_FREQUENCY,
+    data_scaling: Optional[Literal["brightness", "df/f"]] = DEFAULT_DATA_SCALING,
+    # options for analysis
+    chan_weight: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "5.0",
+    # options for saving
+    format: str = DEFAULT_FORMAT,
+    outdir: Path = DEFAULT_OUTDIR,
+    overwrite: bool = DEFAULT_OVERWRITE,
+    suffix: str = "_scan",
+    # other options
+    debug: bool = DEFAULT_DEBUG,
+    **options: Any,
+) -> Path:
+    """Quick-look at an observation of subref axial/radial focus scan.
+
+    Args:
+        dems: Input DEMS file (netCDF or Zarr).
+        axis: Axis of the scan (either ``'x'``, ``'y'``, or ``'z'``).
+        include_mkid_ids: MKID IDs to be included in analysis.
+            Defaults to all MKID IDs.
+        exclude_mkid_ids: MKID IDs to be excluded in analysis.
+            Defaults to no MKID IDs.
+        min_frequency: Minimum frequency to be included in analysis.
+            Defaults to no minimum frequency bound.
+        max_frequency: Maximum frequency to be included in analysis.
+            Defaults to no maximum frequency bound.
+        data_scaling: Data scaling to be used in analysis.
+            Defaults to the data scaling of the input DEMS file.
+        chan_weight: Weighting method along the channel axis.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+        format: Output image format of quick-look result.
+        outdir: Output directory for the quick-look result.
+        overwrite: Whether to overwrite the output if it exists.
+        suffix: Suffix that precedes the file extension.
+        debug: Whether to print detailed logs for debugging.
+        **options: Other options for saving the output (e.g. dpi).
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    with set_logger(debug):
+        for key, val in locals().items():
+            LOGGER.debug(f"{key}: {val!r}")
+
+    with xr.set_options(keep_attrs=True):
+        da = load.dems(
+            dems,
+            include_mkid_ids=include_mkid_ids,
+            exclude_mkid_ids=exclude_mkid_ids,
+            min_frequency=min_frequency,
+            max_frequency=max_frequency,
+            data_scaling=data_scaling,
+            skycoord_frame="relative",
+            chunks=None,
+        )
+
+        # make continuum series
+        da_on = da.sel(time=da.state == "ON")
+        da_off = da.sel(time=da.state != "ON")
+        weight = get_chan_weight(da_off, method=chan_weight, pwv=pwv)
+        series = da_on.weighted(weight.fillna(0)).mean("chan")
+
+        # save result
+        suffixes = f".{suffix.replace('_', axis)}.{format}"
+        file = Path(outdir) / Path(dems).with_suffix(suffixes).name
+
+        if format in DATA_FORMATS:
+            return save_qlook(series, file, overwrite=overwrite, **options)
+
+        fig, axes = plt.subplots(1, 2, figsize=DEFAULT_FIGSIZE)
+
+        ax = axes[0]  # type: ignore
+        plot.data(series, hue=f"aste_subref_{axis}", ax=ax)
+
+        ax = axes[1]  # type: ignore
+        plot.data(series, x=f"aste_subref_{axis}", ax=ax)
+
+        for ax in axes:  # type: ignore
+            ax.set_title(f"{Path(dems).name}\n({da.aste_obs_file})")
+            ax.grid(True)
+
+        fig.tight_layout()
+        return save_qlook(fig, file, overwrite=overwrite, **options)
+
+
+def despike(dems: xr.DataArray, /) -> xr.DataArray:
+    is_spike = (
+        xr.zeros_like(dems.time, bool)
+        .reset_coords(drop=True)
+        .groupby(utils.phaseof(dems.beam))
+        .map(flag_spike)
+    )
+    return dems.where(~is_spike, drop=True)
+
+
+def flag_spike(index: xr.DataArray, /) -> xr.DataArray:
+    index[:1] = index[-1:] = True
+    return index
+
+
+def mean_in_time(dems: xr.DataArray) -> xr.DataArray:
+    """Similar to DataArray.mean but keeps middle time."""
+    middle = dems[len(dems) // 2 : len(dems) // 2 + 1]
+    return xr.zeros_like(middle) + dems.mean("time")
+
+
+def subtract_per_abba_cycle(dems: xr.DataArray, /) -> xr.DataArray:
+    """Subtract sky from source with atmospheric correction for each ABBA cycle.
+
+    Args:
+        dems: 2D DataArray (time x chan) of DEMS per ABBA cycle.
+
+    Returns:
+        1D DataArray (chan) of the mean spectrum after subtraction and correction.
+        If ABBA phases per cycle are incomplete, i.e., some phases are missing,
+        a spectrum filled with NaN will be returned instead.
+
+    """
+    if not set(np.unique(dems.abba_phase)) == ABBA_PHASES:
+        return dems.mean("time") * np.nan
+
+    return dems.groupby("abba_phase").map(subtract_per_abba_phase).mean("abba_phase")
+
+
+def subtract_per_abba_phase(dems: xr.DataArray, /) -> xr.DataArray:
+    """Subtract sky from source with atmospheric correction for each ABBA phase.
+
+    Args:
+        dems: 2D DataArray (time x chan) of DEMS per ABBA phase.
+
+    Returns:
+        1D DataArray (chan) of the mean spectrum after subtraction and correction.
+
+    Raises:
+        ValueError: Raised if ``dems.state`` is not ON-only nor OFF-only.
+
+    """
+    t_amb = 273.15
+
+    if len(states := np.unique(dems.state)) != 1:
+        raise ValueError("State must be unique.")
+
+    if states[0] == "ON":
+        src = dems.sel(time=dems.beam == "A").mean("time")
+        sky = dems.sel(time=dems.beam == "B").mean("time")
+    elif states[0] == "OFF":
+        src = dems.sel(time=dems.beam == "B").mean("time")
+        sky = dems.sel(time=dems.beam == "A").mean("time")
+    else:
+        raise ValueError("State must be either ON or OFF.")
+
+    return t_amb * (src - sky.data) / (t_amb - sky)
+
+
+def get_chan_weight(
+    dems: xr.DataArray,
+    /,
+    *,
+    method: Literal["uniform", "std", "std/tx"] = "std/tx",
+    pwv: Literal["0.5", "1.0", "2.0", "3.0", "4.0", "5.0"] = "3.0",
+) -> xr.DataArray:
+    """Calculate weight for the channel axis.
+
+    Args:
+        dems: Input DEMS DataArray to be considered.
+        method: Method for calculating the weight.
+            uniform: Uniform weight (i.e. no channel dependence).
+            std: Inverse square of temporal standard deviation of sky.
+            std/tx: Same as std but std is divided by the atmospheric
+            transmission calculated by the ATM model.
+        pwv: PWV in units of mm. Only used for the calculation of
+            the atmospheric transmission when chan_weight is std/tx.
+
+    Returns:
+        The weight DataArray for the channel axis.
+
+    """
+    if method == "uniform":
+        return xr.ones_like(dems.mean("time"))
+
+    if method == "std":
+        with catch_warnings():
+            simplefilter("ignore")
+            return dems.std("time") ** -2
+
+    if method == "std/tx":
+        tx = load.atm(type="eta").sel(pwv=float(pwv))
+        freq = convert.units(dems.d2_mkid_frequency, tx.freq)
+
+        with catch_warnings():
+            simplefilter("ignore")
+            return (dems.std("time") / tx.interp(freq=freq)) ** -2
+
+    raise ValueError("Method must be either uniform, std, or std/tx.")
+
+
+def get_robust_lim(da: xr.DataArray) -> tuple[float, float]:
+    """Calculate a robust limit for plotting."""
+    sigma = SIGMA_OVER_MAD * utils.mad(da)
+
+    return (
+        float(np.nanpercentile(da.data, 1) - sigma),
+        float(np.nanpercentile(da.data, 99) + sigma),
+    )
+
+
+def save_qlook(
+    qlook: Union[Figure, xr.DataArray, str],
+    file: Path,
+    /,
+    *,
+    overwrite: bool = False,
+    **options: Any,
+) -> Path:
+    """Save a quick look result to a file with given format.
+
+    Args:
+        qlook: Matplotlib figure or DataArray to be saved.
+        file: Path of the saved file.
+        overwrite: Whether to overwrite the file if it exists.
+
+    Keyword Args:
+        options: Other options to be used when saving the file.
+
+    Returns:
+        Absolute path of the saved file.
+
+    """
+    path = Path(file).expanduser().resolve()
+
+    if path.exists() and not overwrite:
+        raise FileExistsError(f"{path} already exists.")
+
+    if isinstance(qlook, Figure):
+        qlook.savefig(path, **options)
+        plt.close(qlook)
+        return path
+    elif isinstance(qlook, xr.DataArray):
+        if path.name.endswith(".csv"):
+            name = qlook.attrs["data_scaling"]
+            ds = qlook.to_dataset(name=name)
+            ds.to_pandas().to_csv(path, **options)
+            return path
+
+        if path.name.endswith(".nc"):
+            qlook.to_netcdf(path, **options)
+            return path
+
+        if path.name.endswith(".zarr"):
+            qlook.to_zarr(path, mode="w", **options)
+            return path
+
+        if path.name.endswith(".zarr.zip"):
+            qlook.to_zarr(path, mode="w", **options)
+            return path
+    elif isinstance(qlook, str):
+        if path.name.endswith(".toml"):
+            with open(path, "wt") as f:
+                f.write(qlook)
+            return path
+
+    raise ValueError("Extension of filename is not valid.")
+
+
+def gaussian_2d(xy, amp, x0, y0, sigma_x_over_y, sigma_y, theta, offset):
+    x, y = xy
+    x0 = float(x0)
+    y0 = float(y0)
+    sigma_x = sigma_y * sigma_x_over_y
+    a = (np.cos(theta) ** 2) / (2 * sigma_x**2) + (np.sin(theta) ** 2) / (
+        2 * sigma_y**2
+    )
+    b = -(np.sin(2 * theta)) / (4 * sigma_x**2) + (np.sin(2 * theta)) / (4 * sigma_y**2)
+    c = (np.sin(theta) ** 2) / (2 * sigma_x**2) + (np.cos(theta) ** 2) / (
+        2 * sigma_y**2
+    )
+    g = offset + amp * np.exp(
+        -(a * ((x - x0) ** 2) + 2 * b * (x - x0) * (y - y0) + c * ((y - y0) ** 2))
+    )
+    return g.ravel()
+
+
+def calc_chi2(data_obs, data_fit, sigma, num_params) -> tuple[float, float]:
+    """Calculate chi^2 and reduced chi^2 of a 2D Gaussian fitting."""
+    chi2 = np.sum(((data_obs - data_fit) / sigma) ** 2)
+    dof = len(data_obs) - num_params
+    reduced_chi2 = chi2 / dof
+    return chi2, reduced_chi2
+
+
+def make_fit_res_params_dict(popt, perr, chi2, reduced_chi2) -> dict[str, float]:
+    """Aggregate 2D Gaussian fitting results as a dictionary."""
+    res = {}
+    res["offset_az"] = popt[1]
+    res["offset_el"] = popt[2]
+    res["offset_az_error"] = perr[1]
+    res["offset_el_error"] = perr[2]
+    res["hpbw_major"] = popt[3] * popt[4] * 2.354820
+    res["hpbw_minor"] = popt[4] * 2.354820
+    res["hpbw_major_error"] = popt[3] * perr[4] * 2.354820
+    res["hpbw_minor_error"] = perr[4] * 2.354820
+    res["position_angle"] = -np.rad2deg(popt[5] + np.pi / 2.0)
+    res["position_angle_error"] = np.rad2deg(perr[5])
+    res["peak"] = popt[0]
+    res["peak_error"] = perr[0]
+    res["floor"] = popt[6]
+    res["floor_error"] = perr[6]
+    res["chi2"] = chi2
+    res["reduced_chi2"] = reduced_chi2
+    return res
+
+
+def make_pointing_toml_string(da, fit_res_params_dict, weight) -> str:
+    """
+    Args:
+        dems: Input DEMS Object
+        Dict: 2D Gaussian fitting results
+        DataArray: weight
+
+    Returns:
+        str
+    """
+    fit_result = {k: v.item() for k, v in fit_res_params_dict.items()}
+    freq_mean = np.sum(da.d2_mkid_frequency * weight) / np.sum(weight)
+    unit = da.units
+    if unit == "dimensionless":
+        unit = ""
+
+    result = {
+        "analyses": [
+            {
+                "ana_datetime": datetime.strptime(da.name, "%Y%m%d%H%M%S"),
+                "pwv": np.nan,
+                "pwv_error": np.nan,
+                "kid_infos": [
+                    {
+                        "unit": unit,
+                        "frequency": freq_mean.item(),
+                        "bandwidth": (
+                            da.d2_mkid_frequency.max() - da.d2_mkid_frequency.min()
+                        ).item(),
+                        "pointings": [fit_result],
+                        "coadd_kid_infos": [],
+                    }
+                ],
+            }
+        ]
+    }
+    for master_id, mkid_type, w in zip(
+        da.d2_mkid_id.values, da.d2_mkid_type.values, weight.values
+    ):
+        result["analyses"][0]["kid_infos"][0]["coadd_kid_infos"].append(
+            {
+                "master_id": master_id.item(),
+                "kid_type": mkid_type.item(),
+                "weight": w.item(),
+            }
+        )
+    return toml.dumps(result)
+
+
+def main() -> None:
+    """Entry point of the decode-qlook command."""
+
+    basicConfig(
+        datefmt="%Y-%m-%d %H:%M:%S",
+        format="[%(asctime)s %(name)s %(funcName)s %(levelname)s] %(message)s",
+    )
+
+    Fire(
+        {
+            "auto": auto,
+            "daisy": daisy,
+            "pswsc": pswsc,
+            "raster": raster,
+            "skydip": skydip,
+            "still": still,
+            "xscan": xscan,
+            "yscan": yscan,
+            "zscan": zscan,
+        }
+    )
