@@ -1,0 +1,240 @@
+name: Build and deploy docs
+
+on:
+  # Trigger the workflow on push
+  push:
+    # Selected branches
+    branches: [develop, master, docs, patch]
+    # Runs on creating a new tag starting with 'v', e.g. 'v1.0.3'
+    tags:
+      - 'v*'
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Allow only one concurrent workflow, skipping runs queued between the run
+# in-progress and latest queued. And cancel in-progress runs.
+concurrency:
+  group:
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Set the environment variables to be used in all jobs defined in this workflow
+  # Set the CI_BRANCH environment variable to be the branch name
+  # Set the NOTEBOOKS_DIR environment variable to be the directory containing the Jupyter notebooks
+  CI_BRANCH: ${{ github.head_ref || github.ref_name }}
+  NOTEBOOKS_DIR: tutorials
+
+jobs:
+  # Job 1: Build the static files for the documentation site
+  build-docs:
+    strategy:
+      matrix:
+        os: [macos-14] # Use macOS to switch to dark mode for Plotly charts
+        python-version: ['3.13']
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check-out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags. needed to get the latest release version
+
+      # Save the latest release version of easyscience/diffraction-lib to RELEASE_VERSION
+      # RELEASE_VERSION is used in the mkdocs.yml file to set release_version.
+      # The release_version is then needed to display the latest release version in the index.md file
+      - name: Set RELEASE_VERSION env variable (latest easydiffraction release)
+        run: |
+          git fetch --tags --force
+          echo "RELEASE_VERSION=$(git describe --tags --abbrev=0)" >> "$GITHUB_ENV"
+
+      # Without this step, GITHUB_REPOSITORY is not accessible from mkdocs.yml
+      - name: Set GITHUB_REPOSITORY env variable
+        run: echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY" >> "$GITHUB_ENV"
+
+      # Activate dark mode to create documentation with Plotly charts in dark mode
+      # Need a better solution to automatically switch the chart colour theme based on the mkdocs material switcher
+      # Something similar to mkdocs_plotly_plugin https://haoda-li.github.io/mkdocs-plotly-plugin/,
+      # but for generating documentation from notepads
+      #- name: Activate dark mode
+      #  run: |
+      #    brew install dark-mode
+      #    dark-mode status
+      #    dark-mode on
+      #    dark-mode status
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Upgrade package installer for Python
+        shell: bash
+        run: python -m pip install --upgrade pip
+
+      # Install EasyDiffraction Library to run Jupyter notebooks
+      # Install with the 'docs' and 'visualization' extras
+      - name: Install EasyDiffraction Library and its dependencies
+        run: python -m pip install .'[dev,docs,visualization]'
+
+      # Clone assets extra from:
+      # - easyscience/assets-docs
+      # - easyscience/assets-branding
+      - name: Clone easyscience/assets-docs and easyscience/assets-branding
+        run: |
+          cd ..
+          git clone https://github.com/easyscience/assets-docs.git
+          git clone https://github.com/easyscience/assets-branding.git
+
+      # Add the extra files from the easyscience/assets-docs repository
+      - name: Add files from easyscience/assets-docs files
+        run: |
+          cp -R ../assets-docs/docs/assets/ docs/assets/
+          cp -R ../assets-docs/includes/ includes/
+          cp -R ../assets-docs/overrides/ overrides/
+
+      # Add the extra files from the easyscience/assets-branding repository
+      - name: Add files from easyscience/assets-branding files
+        run: |
+          mkdir -p docs/assets/images/
+          cp ../assets-branding/easydiffraction/hero/dark.png docs/assets/images/hero_dark.png
+          cp ../assets-branding/easydiffraction/hero/light.png docs/assets/images/hero_light.png
+          cp ../assets-branding/easydiffraction/logos/dark.svg docs/assets/images/logo_dark.svg
+          cp ../assets-branding/easydiffraction/logos/light.svg docs/assets/images/logo_light.svg
+          cp ../assets-branding/easydiffraction/icons/color.png docs/assets/images/favicon.png
+          mkdir -p overrides/.icons/
+          cp ../assets-branding/easydiffraction/icons/bw.svg overrides/.icons/easydiffraction.svg
+          cp ../assets-branding/easyscience-org/icons/eso-icon_bw.svg overrides/.icons/easyscience.svg
+
+      # Convert python scripts in the notebooks directory to Jupyter notebooks
+      # Strip output from the notebooks, simpify cell ids and replace '# !pip' with '!pip'
+      # The notebooks are used to generate the documentation
+      - name:
+          Convert ${{ env.NOTEBOOKS_DIR }}/*.py to docs/${{env.NOTEBOOKS_DIR
+          }}/*.ipynb
+        run: |
+          cp -R ${{ env.NOTEBOOKS_DIR }}/data docs/${{ env.NOTEBOOKS_DIR }}/
+          jupytext ${{ env.NOTEBOOKS_DIR }}/*.py --from py:percent --to ipynb
+          nbstripout ${{ env.NOTEBOOKS_DIR }}/*.ipynb
+          python tools/prepare_notebooks.py ${{ env.NOTEBOOKS_DIR }}/
+          mv ${{ env.NOTEBOOKS_DIR }}/*.ipynb docs/${{ env.NOTEBOOKS_DIR }}/
+
+      # The following step is needed to avoid the following message during the build:
+      # "Matplotlib is building the font cache; this may take a moment"
+      - name: Pre-build site step
+        run: |
+          export PYTHONPATH="$(pwd)/src${PYTHONPATH:+:$PYTHONPATH}"
+          python -c "import easydiffraction"
+
+      # Create the mkdocs.yml configuration file
+      # The file is created by merging two files:
+      # - assets-docs/mkdocs.yml - the common configuration (theme, plugins, etc.)
+      # - docs/mkdocs.yml - the project-specific configuration (project name, TOC, etc.)
+      - name: Create mkdocs.yml file
+        run: python tools/create_mkdocs-yml.py
+
+      # Build the static files
+      # Input: docs/ directory containing the Markdown files
+      # Output: site/ directory containing the generated HTML files
+      - name: Build site with MkDocs
+        run: |
+          export JUPYTER_PLATFORM_DIRS=1
+          export PYTHONWARNINGS="ignore::RuntimeWarning"
+          export PYTHONPATH="$(pwd)/src${PYTHONPATH:+:$PYTHONPATH}"
+          mkdocs build
+
+      # Set up the Pages action to configure the static files to be deployed
+      # NOTE: The repository must have GitHub Pages enabled and configured to build using GitHub Actions
+      # This can be done via https://github.com/easyscience/diffraction-lib/settings/pages
+      # Select: Build and deploy - Source - GitHub Actions
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      # Upload the static files from the site/ directory to be used in the next job
+      # This artifact is named github-pages and is a single gzip archive containing a single tar file
+      # The artifact is then used in the next job by actions/deploy-pages to deploy the static files to GitHub Pages
+      # Unfortunately, the artifact is not available for download, so extra steps below are needed to do similar things
+      - name:
+          Upload built site as artifact for easyscience.github.io/${{
+          github.event.repository.name }} (all branches)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+      # Upload the static files from the site/ directory to be used in the next job
+      # This artifact is only uploaded on tagged releases (tags starting with 'v', e.g., v1.0.3)
+      # and is used to push content to gh_pages for custom domain deployment.
+      - name: Upload built site as artifact for gh_pages (tagged release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact # name of the artifact (without the extension zip)
+          path: site/
+          if-no-files-found: 'error'
+          compression-level: 0
+
+  # Job 2: Deploy the static files
+  deploy-docs:
+    needs: build-docs # previous job 'build-docs' need to be finished first
+
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      contents: read
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment, originates from an appropriate source
+
+    # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+    # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+    concurrency:
+      group: 'pages'
+      cancel-in-progress: false
+
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages # Artifact name
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # Deploy the static files created in the previous job to GitHub Pages
+      # To allow the deployment of the static files to GitHub Pages, no
+      # restrictions on the branch name need to be set for desired branches on
+      # https://github.com/easyscience/diffraction-lib/settings/environments
+      # Deployed pages are available at https://easyscience.github.io/diffraction-lib
+      - name:
+          Deploy to easyscience.github.io/${{ github.event.repository.name }}
+          (all branches)
+        uses: actions/deploy-pages@v4
+
+      # Download built site as artifact from a previous job for gh_pages (tagged release)
+      # This artifact is only downloaded on tagged releases (tags starting with 'v', e.g., v1.0.3)
+      # and is used to push content to gh_pages for custom domain deployment.
+      - name: Download built site from previous job (tagged release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/download-artifact@v4
+        with: # name or path are taken from the upload step of the previous job
+          name: artifact
+          path: site/ # directory to extract downloaded zipped artifacts
+
+      # Push the site files created in the previous job to the gh_pages branch
+      # This push happens only for tagged releases (tags starting with 'v'),
+      # which triggers deployment to the custom domain via webhook.
+      #
+      # To be able to push to the gh_pages branch, the personal GitHub API access
+      # token GH_API_PERSONAL_ACCSESS_TOKEN must be set for this repository via
+      # https://github.com/easyscience/diffraction-lib/settings/secrets/actions
+      # Then the gh_pages branch is used to deploy the site to the custom domain.
+      # Deploying is done with a webhook added via:
+      # https://github.com/easyscience/diffraction-lib/settings/hooks
+      - name:
+          Deploy to gh_pages branch to trigger deployment to custom domain
+          (tagged release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_API_PERSONAL_ACCSESS_TOKEN }}
+          REPO: self
+          BRANCH: gh_pages
+          FOLDER: site
