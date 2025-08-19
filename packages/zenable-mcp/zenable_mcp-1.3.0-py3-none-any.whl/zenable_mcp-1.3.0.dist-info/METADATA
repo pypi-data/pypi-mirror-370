@@ -1,0 +1,136 @@
+Metadata-Version: 2.4
+Name: zenable_mcp
+Version: 1.3.0
+Summary: MCP client for Zenable conformance checking
+Author-email: Zenable <Python@zenable.io>
+License: Proprietary
+Project-URL: Homepage, https://zenable.io
+Project-URL: Documentation, https://docs.zenable.io/
+Project-URL: Issues, https://zenable.io/feedback
+Keywords: mcp,claude,hooks,conformance,zenable,code-quality,security,compliance,policy-as-code,specifications,spec-driven-development
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: Other/Proprietary License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: click>=8.0.0
+Requires-Dist: fastmcp
+Requires-Dist: gitpython
+Requires-Dist: pydantic
+Requires-Dist: pyyaml
+Requires-Dist: requests
+Dynamic: license-file
+
+# Assess Existing Codebase with Zenable MCP
+
+Use Zenable's MCP (Model Context Protocol) server to analyze and assess your existing codebase for conformance with organizational policies and best practices. Quickly identify areas that need improvement and ensure consistency across your entire project.
+
+## Features
+
+- Real-time code validation against configurable policies
+- Automatic file detection from IDE hooks
+- Glob pattern support for checking multiple files (`**/*.py`)
+- Integration with MCP-compatible agentic IDEs
+- Command-line interface for standalone checking
+- Lightweight Python package with minimal dependencies
+
+## Installation
+
+> **Note**: This tool uses `uvx` for installation. If you don't have it installed, see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+
+```bash
+# Set API key
+export ZENABLE_API_KEY="your-api-key-here"
+
+# Install and run zenable-mcp against your python files
+uvx zenable-mcp check '**/*.py'
+```
+
+## Usage
+
+### Command Line
+
+Check files using glob patterns or automatic detection:
+
+```bash
+# Check a single file
+uvx zenable-mcp check example.py
+
+# Check all Python files recursively
+uvx zenable-mcp check '**/*.py'
+
+# Check multiple patterns
+uvx zenable-mcp check 'src/**/*.js' 'tests/**/*.js'
+
+# Exclude test files
+uvx zenable-mcp check '**/*.py' --exclude '**/test_*.py'
+
+# Specify a base directory for pattern matching
+uvx zenable-mcp check '**/*.py' --base-path ./src
+```
+
+### IDE Integrations
+
+When running from IDE hooks, `zenable-mcp check` automatically detects the most recently modified file in your git working tree. The detection is intelligent
+- if the IDE sets env vars to say which files were just edited (like Claude Code), we use it! If not, we:
+
+- Find all the modified files in the current git repo which haven't yet been commit
+- Select the most recently modified file by timestamp
+- Filter out any files using your zenable configuration exclusions and `.gitignore`
+
+This means hooks can simply run `zenable-mcp check` without specifying files. If other IDEs support deterministic hook-based script calling and you'd like
+support, [let us know](https://zenable.io/feedback)!
+
+#### Claude Code
+
+Setup automated hooks with our configuration tool:
+
+```bash
+# Install hook in project-specific .claude/settings.json
+uvx zenable-mcp install hook claude
+
+# Install hook globally in ~/.claude/settings.json
+uvx zenable-mcp install hook claude --global
+```
+
+When running as a hook, `uvx zenable-mcp check` automatically detects files that Claude recently edited. If other IDEs support deterministic hook-based script
+calling and you'd like support, [let us know](https://zenable.io/feedback)!
+
+## How It Works
+
+1. **File Analysis**: Submits code to Zenable's conformance engine
+2. **Policy Validation**: Checks against configured organizational policies
+3. **Result Reporting**: Returns validation results with specific issues and suggestions
+
+See our [MCP Server Documentation](https://docs.zenable.io/integrations/mcp) for more details.
+
+## API Reference
+
+### Commands
+
+- `check <patterns...>` - Validate files against conformance policies
+  - Supports glob patterns (e.g., `**/*.py`, `src/**/*.js`)
+  - Options:
+    - `--exclude`: Patterns to exclude from checking
+    - `--base-path`: Base directory for pattern matching
+    - `--verbose`: Show files being checked
+  - Returns: JSON response with validation results
+  - Exit codes: 0 (pass), 1 (fail), 2 (error)
+
+- `install hook claude` - Install Claude hooks for automatic conformance checking
+  - Configures `.claude/settings.json` to run checks on file edits
+  - Options:
+    - `--global`, `-g`: Install globally in `~/.claude/settings.json`
+  - Safe installation: adds to existing hooks without overwriting
+
+## Documentation
+
+- [MCP Server Documentation](https://docs.zenable.io/integrations/mcp)
+- [Configure custom requirements](https://www.zenable.app)
+- [Add automated PR reviews](https://docs.zenable.io/integrations/github)
