@@ -1,0 +1,177 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var bar_comm-description {Funzioni della barra delle Comunicazioni}
+#var bar_comm-help {
+Funzioni della finestra di comunicazione.\n
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias bar_comm-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module bar_comm
+	} {
+		fail_module bar_comm
+	}
+}
+
+#class commbar_data read $savesdir/commbar.txt;
+
+
+#ALIAS {debug_bar_coords}
+{
+    #line ignore #showme {<178>DEBUG bar_comm coordinates:<078>};
+    #line ignore #showme {<178>  toprow=%s botrow=%s topcol=%s botcol=%s<078>} $bar_comm[toprow] $bar_comm[botrow] $bar_comm[topcol] $bar_comm[botcol];
+    #line ignore #showme {<178>  screen rows=%s cols=%s<078>} $gui_ingame[rows] $gui_ingame[cols];
+    #line ignore #showme {<178>  mouse tracking: %s<078>} $TINTIN[MOUSE][TRACKING];
+};
+
+#ALIAS {bar_comm_scroll_up}
+{
+    #if {$bar_comm[offset] < &bar_comm[tab][%0][]}
+    {
+        #math bar_comm[offset] $bar_comm[offset] + 1;
+        bar_comm_draw_data $bar_comm[active]
+    };
+}
+
+
+#FUNCTION {bar_comm_square}
+{
+    #return $bar_comm[toprow]+1 $bar_comm[topcol]+1 $bar_comm[botrow]-1 $bar_comm[botcol]-1;
+}
+
+#FUNCTION {bar_comm_border}
+{
+    #return $bar_comm[toprow] $bar_comm[topcol] $bar_comm[botrow] $bar_comm[botcol];
+}
+
+#NOP -- Manda mslp link per il tab;
+#EVENT {PRESSED SECURE LINK TAB MOUSE BUTTON ONE} {%4}
+
+#nop -------------------------------------------------------------------------;
+#nop Alias della finestra di comunicazione;
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {bar_comm_scroll_down}
+{
+    #if {$bar_comm[offset] > 1}
+    {
+        #math bar_comm[offset] $bar_comm[offset] - 1;
+        bar_comm_draw_data $bar_comm[active];
+    };
+}
+
+#ALIAS {bar_comm_draw_data}
+{
+    #draw tile @bar_comm_square{} $bar_comm[tab][%1][-$bar_comm[offset]-10..-$bar_comm[offset]];
+}
+
+#ALIAS {bar_comm_show %1 %2}
+{
+    #list bar_comm[tab][%1] ins -1 {%2};
+    #if {{%1} === {$bar_comm[active]}}
+    {
+        bar_comm_draw_data %1;
+    };
+    #elseif {$bar_comm[unread][%1] == 0}
+    {
+        #variable bar_comm[unread][%1] 1;
+        bar_comm_draw_tabs;
+    };
+}
+
+#ALIAS {bar_comm_draw_tabs}
+{
+    #draw white rounded box @bar_comm_border{};
+    #local short {};
+    #local index {};
+    #loop {1} {&bar_comm[tab][]} {index}
+    {
+        #local tab *bar_comm[tab][+$index];
+        #if {{$bar_comm[active]} === {$tab}}
+        {
+            #format short <138>%.6s $tab;
+        };
+        #elseif {$bar_comm[unread][$tab] == 1}
+        {
+            #format short <168>%.6s $tab;
+        };
+        #else
+        {
+            #format short <268>%.6s $tab;
+        };
+        #line ignore #showme {\e]68;2;TAB;bar_comm_tab_click $tab\a\e[4;24m$short\e[24m} {$bar_comm[toprow]} {$bar_comm[topcol] - 5 + $index * 7}
+    };
+}
+
+#ALIAS {bar_comm_tab_click}
+{
+    #variable bar_comm[active] %0;
+    #variable bar_comm[unread][%0] 0;
+    #variable bar_comm[offset] 1;
+    bar_comm_draw_tabs;
+    bar_comm_draw_data %0;
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Bar general functions init and clean
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {bar_comm_init}
+{  
+    #nop set options windows;
+    #var {bar_comm[tab][xy]} {};    
+    commbar_options;
+}
+
+#ALIAS {commbar_clean}
+{
+    #var {bar_comm[tab][all]} {};
+    #var {bar_comm[tab][gld]} {};  
+    #var {bar_comm[tab][grp]} {}; 
+    #var {bar_comm[tab][msg]} {}; 
+    #var {bar_comm[tab][xy]} {};     
+}
+
+#ALIAS {commbar_options}
+{
+    bar_comm_show xy ---Fine della finestra---;    
+    #FORMAT opt2 {     EndY:[ %s ]   EndY:[ %s ]} {\e]68;2;EXEC;commbar_plusboty\a\e[4;24m↓\e[24m} {\e]68;2;EXEC;commbar_minboty\a\e[4;24m↑\e[24m};          
+    bar_comm_show xy $opt2; 
+}
+
+#ALIAS {commbar_plusboty}
+{
+    #MATH {tmpopt} {$gui_ingame[top] + 1};
+    #variable gui_ingame[top] $tmpopt;
+    #MATH {tmpopt} {$bar_comm[botrow] + 1};
+    #variable bar_comm[botrow] $tmpopt;
+    gui_ingame_resize;
+    #unvariable tmpopt
+}
+
+#ALIAS {commbar_minboty}
+{
+    #MATH {tmpopt} {$gui_ingame[top] - 1};
+    #variable gui_ingame[top] $tmpopt;
+    #MATH {tmpopt} {$bar_comm[botrow] - 1};
+    #variable bar_comm[botrow] $tmpopt;
+    gui_ingame_resize;
+    #unvariable tmpopt
+}
+
+#ALIAS {debug_bar_coords}
+{
+    #line ignore #showme {<178>DEBUG bar_comm coordinates:<078>};
+    #line ignore #showme {<178>  toprow=%s botrow=%s topcol=%s botcol=%s<078>} $bar_comm[toprow] $bar_comm[botrow] $bar_comm[topcol] $bar_comm[botcol];
+    #line ignore #showme {<178>  screen rows=%s cols=%s<078>} $gui_ingame[rows] $gui_ingame[cols];
+    #line ignore #showme {<178>  mouse tracking: %s<078>} $TINTIN[MOUSE][TRACKING];
+}
+
+

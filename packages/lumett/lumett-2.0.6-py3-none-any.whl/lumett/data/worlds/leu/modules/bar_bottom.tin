@@ -1,0 +1,224 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var bar_bottom-description {Funzioni della barra delle Comunicazioni}
+#var bar_bottom-help {
+Funzioni della finestra di comunicazione.\n
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias bar_bottom-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module bar_bottom
+	} {
+		fail_module bar_bottom
+	}
+}
+
+#class bottombar_data read $savesdir/bottombar.txt;
+
+#ALIAS {bar_bottom_scroll_up}
+{
+    #if {$bar_bottom[offset] < &bar_bottom[tab][%0][]}
+    {
+        #math bar_bottom[offset] $bar_bottom[offset] + 1;
+        bar_bottom_draw_data $bar_bottom[active]
+    };
+}
+
+
+#FUNCTION {bar_bottom_square}
+{
+    #return $bar_bottom[toprow]+1 $bar_bottom[topcol]+1 $bar_bottom[botrow]-1 $bar_bottom[botcol]-1;
+}
+
+#FUNCTION {bar_bottom_border}
+{
+    #return $bar_bottom[toprow] $bar_bottom[topcol] $bar_bottom[botrow] $bar_bottom[botcol];
+}
+
+#NOP -- Removed mouse-related event handling for simplicity;
+
+#nop -------------------------------------------------------------------------;
+#nop Alias della finestra di comunicazione;
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {bar_bottom_scroll_down}
+{
+    #if {$bar_bottom[offset] > 1}
+    {
+        #math bar_bottom[offset] $bar_bottom[offset] - 1;
+        bar_bottom_draw_data $bar_bottom[active];
+    };
+}
+
+#ALIAS {bar_bottom_draw_data}
+{
+    #draw tile @bar_bottom_square{} $bar_bottom[tab][%1][-$bar_bottom[offset]-10..-$bar_bottom[offset]];
+}
+
+#ALIAS {bar_bottom_show %1 %2}
+{
+    #list bar_bottom[tab][%1] ins -1 {%2};
+    #if {{%1} === {$bar_bottom[active]}}
+    {
+        bar_bottom_draw_data %1;
+    };
+    #elseif {$bar_bottom[unread][%1] == 0}
+    {
+        #variable bar_bottom[unread][%1] 1;
+        bar_bottom_draw_tabs;
+    };
+}
+
+#ALIAS {bar_bottom_draw_tabs}
+{
+    #draw white rounded box @bar_bottom_border{};
+    #local short {};
+    #local index {};
+    #loop {1} {&bar_bottom[tab][]} {index}
+    {
+        #local tab *bar_bottom[tab][+$index];
+        #if {{$bar_bottom[active]} === {$tab}}
+        {
+            #format short <138>%.6s $tab;
+        };
+        #elseif {$bar_bottom[unread][$tab] == 1}
+        {
+            #format short <168>%.6s $tab;
+        };
+        #else
+        {
+            #format short <268>%.6s $tab;
+        };
+        #line ignore #showme {\e]68;2;TAB;bar_bottom_tab_click $tab\a\e[4;24m$short\e[24m} {$bar_bottom[toprow]} {$bar_bottom[topcol] - 5 + $index * 7}
+    };
+}
+
+#ALIAS {bar_bottom_tab_click}
+{
+    #variable bar_bottom[active] %0;
+    #variable bar_bottom[unread][%0] 0;
+    #variable bar_bottom[offset] 1;
+    bar_bottom_draw_tabs;
+    bar_bottom_draw_data %0;
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Bar general functions init and clean
+#nop -------------------------------------------------------------------------;
+
+#ALIAS {bar_bottom_init}
+{
+    #nop load in the triggers;
+    load_alias_bottombar;
+    #nop create the move buttons;
+    bottom_bar_movment;
+}
+
+#ALIAS {bottombar_clean}
+{
+    #var {bar_bottom[tab][char]} {};
+    #var {bar_bottom[tab][mov]} {};  
+    #var {bar_bottom[tab][alias]} {}; 
+    #var {bar_bottom[tab][xy]} {};     
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Draw the bottom bar;
+#nop -------------------------------------------------------------------------;
+
+#nop Pre defined affect;
+#variable {affects_table} 
+{
+  {velocita` della luce} {VdL}
+  {{CD} Nuovo Dungeon} {CdD}
+  {{CD} Nuova Missione} {CdM}
+  {avvelena} {Avv}
+  {chiaroveggenza} {Chv} 
+  {colpo psichico} {CPs} 
+  {forza psichica} {FPs}
+  {individua il magico} {IMg}
+  {individua il male}  {IMa}
+  {individua invisibile} {IIn}
+  {levitazione} {Lev}
+  {nuotare (cooldown)} {Swi}
+  {percepisci vita} {PVi}
+  {primo soccorso} {PSo}
+  {santuario} {<178>Snc<078>}
+  {scarica di adrenalina} {Adr}
+  {scopri le trappole} {STr}
+  {mantello di fiamme} {<118>MdF<078>}
+  {scudo di fuoco} {<118>SdF<078>}
+  {scudo psichico} {SPs}
+  {lama incantata} {<148>LaI<078>}
+  {vera vista} {VVi}
+  {voto di vendetta} {VdV}
+  {voto di gloria} {VdG} 
+  {marchio del templare} {MdT}
+  {contro ogni previsione} {CoP} 
+  {In Combattimento} {Cmb}
+  {Panico!} {Pnc!}
+}
+
+#alias {bottom_bar_draw}
+{
+    #math {hp_percent} {100 * $gmcp[char][vitals][hp] / $gmcp[char][vitals][maxhp]};
+    #math {hpbar1}   {$hp_percent / 10};
+    #math {hpbar2}   {10 - $hpbar1};
+    #math {mana_percent} {100 * $gmcp[char][vitals][mana] / $gmcp[char][vitals][maxmana]};
+    #math {manabar1}   {$mana_percent / 10};
+    #math {manabar2}   {10 - $manabar1};
+    #math {pow_percent} {100 * $gmcp[char][vitals][pow] / $gmcp[char][vitals][maxpow]};
+    #math {powbar1}   {$pow_percent / 10};
+    #math {powbar2}   {10 - $powbar1};
+
+    #FORMAT hpbar {<011>%+${hpbar1}s<099><000>%+${hpbar2}s<099>};
+    #FORMAT manabar {<015>%+${manabar1}s<099><000>%+${manabar2}s<099>};
+    #FORMAT powbar {<012>%+${powbar1}s<099><000>%+${powbar2}s<099>};
+
+    #FORMAT prompt1 {🔥%s HP:[%+5s/%-5s]} $hpbar $gmcp[char][vitals][hp] $gmcp[char][vitals][maxhp];
+    #FORMAT prompt2 {✨%s MA:[%+5s/%-5s]} $manabar $gmcp[char][vitals][mana] $gmcp[char][vitals][maxmana];
+    #FORMAT prompt3 {💥%s PW:[%+5s/%-5s]} $powbar $gmcp[char][vitals][pow] $gmcp[char][vitals][maxpow];
+
+    #FORMAT prompt4 {%.5s} $gmcp[char][vitals][fighting][name];
+    #FORMAT prompt4b { opp_nm:[ %-5s ]} $prompt4;
+    
+    #if {$gmcp[char][vitals][fighting][hp] > 25}
+    {
+        #FORMAT prompt5 { opp_hp:[$green %-5s $white]} $gmcp[char][vitals][fighting][hp]
+    };
+    #elseif {$gmcp[char][vitals][fighting][hp] > 65}
+    {
+        #FORMAT prompt5 { opp_hp:[$yellow %-5s $white]} $gmcp[char][vitals][fighting][hp]
+    };   
+    #else 
+    {
+        #FORMAT prompt5 { opp_hp:[$red %-5s $white]} $gmcp[char][vitals][fighting][hp]
+    };
+
+    #FORMAT prompt6 { opp_lv:[ %-5s ]} $gmcp[char][vitals][fighting][level];
+    #FORMAT prompt7 { room_pos:[ %s ]} $gmcp[char][vitals][roomPos];
+    #FORMAT prompt8 { char_gld:[ %s ]} $gmcp[char][base][gold];  
+    #FORMAT prompt8 { char_gold:[ %s ]} $gmcp[char][base][gold];  
+
+    bar_bottom_show char $prompt1 $prompt4b $prompt7;
+    bar_bottom_show char $prompt2 $prompt5 $prompt8;
+    bar_bottom_show char $prompt3 $prompt6;
+}
+
+#alias {bottom_bar_movment}
+{
+    #VARIABLE bar_bottom[tab][mov] {};
+    #FORMAT tmpmovbttn1 {[%s]  [%s]  [%s] [%s] [%s] [%s]} {\e]68;2;EXEC;west\a\e[4mWEST\e[24m} {\e]68;2;EXEC;nord\a\e[4mNORD\e[24m} {\e]68;2;EXEC;east\a\e[4mEAST\e[24m} {\e]68;2;EXEC;south\a\e[4mSUD\e[24m} {\e]68;2;EXEC;up\a\e[4m UP \e[24m} {\e]68;2;EXEC;down\a\e[4mDOWN\e[24m};
+    bar_bottom_show mov $tmpmovbttn1;
+    #FORMAT tmpmovbttn2 {[%s]  [%s]  [%s] [%s] [%s] [%s]} {\e]68;2;EXEC;west\a\e[4mWEST\e[24m} {\e]68;2;EXEC;nord\a\e[4mNORD\e[24m} {\e]68;2;EXEC;east\a\e[4mEAST\e[24m} {\e]68;2;EXEC;south\a\e[4mSUD\e[24m} {\e]68;2;EXEC;up\a\e[4m UP \e[24m} {\e]68;2;EXEC;down\a\e[4mDOWN\e[24m};
+    bar_bottom_show mov $tmpmovbttn2;
+    #FORMAT tmpmovbttn3 {[%s]  [%s]  [%s] [%s] [%s] [%s]} {\e]68;2;EXEC;west\a\e[4mWEST\e[24m} {\e]68;2;EXEC;nord\a\e[4mNORD\e[24m} {\e]68;2;EXEC;east\a\e[4mEAST\e[24m} {\e]68;2;EXEC;south\a\e[4mSUD\e[24m} {\e]68;2;EXEC;up\a\e[4m UP \e[24m} {\e]68;2;EXEC;down\a\e[4mDOWN\e[24m};
+    bar_bottom_show mov $tmpmovbttn3;
+}

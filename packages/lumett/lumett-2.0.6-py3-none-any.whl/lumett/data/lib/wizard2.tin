@@ -1,0 +1,853 @@
+#NOP wizard2.tin - TinTin++ World Management Wizard using native #dialog implementation
+#NOP Advanced tabbed interface with mouse support for world management
+
+#CLASS WIZARD2 open;
+
+#NOP Configuration
+#var wizard2_worlds_file {./worlds/worlds.txt};
+#var wizard2_current_tab {worlds};
+#var wizard2_selected_world {};
+#var wizard2_worlds {};
+
+#NOP Initialize the wizard
+#ALIAS {wizard2_init}
+{
+    #showme {<acf>Initializing Wizard2 with native dialog support...};
+    
+    #nop Load worlds from file;
+    wizard2_load_worlds;
+    
+    #nop Initialize dialog system;
+    #dialog {destroy} {wizard2_main};
+    wizard2_create_main_dialog;
+    
+    #showme {<acf>Wizard2 initialized successfully!}
+}
+
+#NOP Load worlds from the worlds file
+#ALIAS {wizard2_load_worlds}
+{
+    #nop Initialize worlds variable;
+    #var wizard2_worlds {};
+    
+    #nop Check if worlds file exists;
+    #system {test -f "$wizard2_worlds_file"} {file_exists};
+    
+    #if {$file_exists == 0}
+    {
+        #showme {<acf>Loading worlds from $wizard2_worlds_file...};
+        
+        #nop Create temporary class to load worlds;
+        #class TEMP_WORLDS open;
+        #read $wizard2_worlds_file;
+        #class TEMP_WORLDS close;
+        
+        #nop Copy loaded worlds to our variable;
+        #if {&worldlist[] > 0}
+        {
+            #var wizard2_worlds $worldlist;
+            #showme {<acf>Loaded ${&wizard2_worlds[]} worlds.}
+        };
+        #else
+        {
+            #showme {<faa>No worlds found in $wizard2_worlds_file}
+        }
+    };
+    #else
+    {
+        #showme {<faa>Worlds file $wizard2_worlds_file not found. Creating empty world list.}
+    }
+}
+
+#NOP Save worlds to file
+#ALIAS {wizard2_save_worlds}
+{
+    #showme {<acf>Saving worlds to $wizard2_worlds_file...};
+    
+    #nop Update worldlist variable;
+    #var worldlist $wizard2_worlds;
+    
+    #nop Save to file using class system;
+    #class WORLDS_SAVE kill;
+    #class WORLDS_SAVE open;
+    #var worldlist $wizard2_worlds;
+    #class WORLDS_SAVE write $wizard2_worlds_file;
+    #class WORLDS_SAVE close;
+    
+    #showme {<acf>Worlds saved successfully!}
+}
+
+#NOP Create the main dialog window
+#ALIAS {wizard2_create_main_dialog}
+{
+    #dialog {create} {wizard2_main} {World Management Wizard} {80} {25};
+    
+    #nop Set dialog properties;
+    #dialog {set} {wizard2_main} {mouse} {on};
+    #dialog {set} {wizard2_main} {color} {<acf>};
+    
+    #nop Create tab buttons;
+    wizard2_create_tabs;
+    
+    #nop Create initial content for worlds tab;
+    wizard2_show_worlds_tab;
+    
+    #nop Show the dialog;
+    #dialog {show} {wizard2_main}
+}
+
+#NOP Create tab buttons
+#ALIAS {wizard2_create_tabs}
+{
+    #nop Tab buttons row;
+    #dialog {button} {wizard2_main} {worlds_tab} {2} {2} {15} {1} {<acf>[ Worlds ]<099>} {wizard2_switch_tab worlds};
+    #dialog {button} {wizard2_main} {create_tab} {2} {18} {15} {1} {<afc>[ Create ]<099>} {wizard2_switch_tab create};
+    #dialog {button} {wizard2_main} {settings_tab} {2} {34} {15} {1} {<aff>[ Settings ]<099>} {wizard2_switch_tab settings};
+    #dialog {button} {wizard2_main} {about_tab} {2} {50} {15} {1} {<aac>[ About ]<099>} {wizard2_switch_tab about};
+    
+    #nop Separator line;
+    #dialog {line} {wizard2_main} {tab_separator} {3} {1} {3} {78} {<ddd>};
+}
+
+#NOP Switch between tabs
+#ALIAS {wizard2_switch_tab}
+{
+    #var wizard2_current_tab {%1};
+    
+    #nop Clear previous tab content (preserve tabs and separator);
+    #dialog {clear} {wizard2_main} {4} {24};
+    
+    #nop Update tab button colors;
+    wizard2_update_tab_colors;
+    
+    #nop Show selected tab content;
+    #switch {$wizard2_current_tab}
+    {
+        #case {worlds}
+        {
+            wizard2_show_worlds_tab
+        };
+        #case {create}
+        {
+            wizard2_show_create_tab
+        };
+        #case {settings}
+        {
+            wizard2_show_settings_tab
+        };
+        #case {about}
+        {
+            wizard2_show_about_tab
+        }
+    }
+}
+
+#NOP Update tab button colors based on active tab
+#ALIAS {wizard2_update_tab_colors}
+{
+    #nop Reset all tab colors;
+    #dialog {button} {wizard2_main} {worlds_tab} {2} {2} {15} {1} {<aac>[ Worlds ]<099>} {wizard2_switch_tab worlds};
+    #dialog {button} {wizard2_main} {create_tab} {2} {18} {15} {1} {<aac>[ Create ]<099>} {wizard2_switch_tab create};
+    #dialog {button} {wizard2_main} {settings_tab} {2} {34} {15} {1} {<aac>[ Settings ]<099>} {wizard2_switch_tab settings};
+    #dialog {button} {wizard2_main} {about_tab} {2} {50} {15} {1} {<aac>[ About ]<099>} {wizard2_switch_tab about};
+    
+    #nop Highlight active tab;
+    #switch {$wizard2_current_tab}
+    {
+        #case {worlds}
+        {
+            #dialog {button} {wizard2_main} {worlds_tab} {2} {2} {15} {1} {<acf>[ Worlds ]<099>} {wizard2_switch_tab worlds}
+        };
+        #case {create}
+        {
+            #dialog {button} {wizard2_main} {create_tab} {2} {18} {15} {1} {<acf>[ Create ]<099>} {wizard2_switch_tab create}
+        };
+        #case {settings}
+        {
+            #dialog {button} {wizard2_main} {settings_tab} {2} {34} {15} {1} {<acf>[ Settings ]<099>} {wizard2_switch_tab settings}
+        };
+        #case {about}
+        {
+            #dialog {button} {wizard2_main} {about_tab} {2} {50} {15} {1} {<acf>[ About ]<099>} {wizard2_switch_tab about}
+        }
+    }
+}
+
+#NOP Show worlds tab content
+#ALIAS {wizard2_show_worlds_tab}
+{
+    #nop Title;
+    #dialog {text} {wizard2_main} {worlds_title} {5} {2} {<acf>Available Worlds:};
+    
+    #nop Create worlds list;
+    wizard2_create_worlds_list;
+    
+    #nop World details panel;
+    wizard2_show_world_details;
+    
+    #nop Action buttons;
+    #dialog {button} {wizard2_main} {connect_btn} {20} {2} {12} {1} {<acf>[ Connect ]<099>} {wizard2_connect_selected};
+    #dialog {button} {wizard2_main} {edit_btn} {20} {16} {12} {1} {<afc>[ Edit ]<099>} {wizard2_edit_selected};
+    #dialog {button} {wizard2_main} {delete_btn} {20} {30} {12} {1} {<faa>[ Delete ]<099>} {wizard2_delete_selected};
+    #dialog {button} {wizard2_main} {refresh_btn} {20} {44} {12} {1} {<aaf>[ Refresh ]<099>} {wizard2_refresh_worlds};
+    
+    #nop Close button;
+    #dialog {button} {wizard2_main} {close_btn} {20} {64} {12} {1} {<fcc>[ Close ]<099>} {wizard2_close}
+}
+
+#NOP Create the worlds list
+#ALIAS {wizard2_create_worlds_list}
+{
+    #var list_row 7;
+    
+    #if {&wizard2_worlds[] == 0}
+    {
+        #dialog {text} {wizard2_main} {no_worlds} {$list_row} {4} {<faa>No worlds configured. Use the Create tab to add worlds.};
+        #return
+    };
+    
+    #foreach {$wizard2_worlds[]} {world_name}
+    {
+        #if {$list_row < 18}
+        {
+            #nop Get world details;
+            #var world_host {$wizard2_worlds[$world_name][HOST]};
+            #var world_port {$wizard2_worlds[$world_name][PORT]};
+            #var world_alias {$wizard2_worlds[$world_name][ALIAS]};
+            
+            #nop Create clickable world entry;
+            #format world_display {%-20s %s:%s} {$world_name} {$world_host} {$world_port};
+            
+            #if {"$wizard2_selected_world" == "$world_name"}
+            {
+                #dialog {button} {wizard2_main} {world_$list_row} {$list_row} {4} {50} {1} {<acf>$world_display<099>} {wizard2_select_world {$world_name}}
+            };
+            #else
+            {
+                #dialog {button} {wizard2_main} {world_$list_row} {$list_row} {4} {50} {1} {<aac>$world_display<099>} {wizard2_select_world {$world_name}}
+            };
+            
+            #math list_row $list_row + 1
+        };
+        #else
+        {
+            #break
+        }
+    }
+}
+
+#NOP Select a world from the list
+#ALIAS {wizard2_select_world}
+{
+    #var wizard2_selected_world {%1};
+    
+    #nop Refresh the worlds list to update selection highlighting;
+    wizard2_create_worlds_list;
+    
+    #nop Update world details;
+    wizard2_show_world_details;
+    
+    #showme {<acf>Selected world: <ffa>$wizard2_selected_world}
+}
+
+#NOP Show details of selected world
+#ALIAS {wizard2_show_world_details}
+{
+    #nop Clear previous details;
+    #dialog {clear} {wizard2_main} {7} {56} {18} {78};
+    
+    #if {"$wizard2_selected_world" == ""}
+    {
+        #dialog {text} {wizard2_main} {no_selection} {8} {58} {<aac>Select a world to view details};
+        #return
+    };
+    
+    #if {&wizard2_worlds[$wizard2_selected_world] == 0}
+    {
+        #dialog {text} {wizard2_main} {invalid_world} {8} {58} {<faa>Invalid world selected};
+        #return
+    };
+    
+    #nop Show world details;
+    #dialog {text} {wizard2_main} {detail_title} {7} {58} {<acf>World Details:};
+    
+    #var detail_row 9;
+    #dialog {text} {wizard2_main} {detail_name} {$detail_row} {58} {<fff>Name: <ffa>$wizard2_selected_world};
+    #math detail_row $detail_row + 1;
+    
+    #dialog {text} {wizard2_main} {detail_alias} {$detail_row} {58} {<fff>Alias: <ffa>$wizard2_worlds[$wizard2_selected_world][ALIAS]};
+    #math detail_row $detail_row + 1;
+    
+    #dialog {text} {wizard2_main} {detail_host} {$detail_row} {58} {<fff>Host: <ffa>$wizard2_worlds[$wizard2_selected_world][HOST]};
+    #math detail_row $detail_row + 1;
+    
+    #dialog {text} {wizard2_main} {detail_port} {$detail_row} {58} {<fff>Port: <ffa>$wizard2_worlds[$wizard2_selected_world][PORT]};
+    #math detail_row $detail_row + 1;
+    
+    #if {"$wizard2_worlds[$wizard2_selected_world][SSL]" != ""}
+    {
+        #dialog {text} {wizard2_main} {detail_ssl} {$detail_row} {58} {<fff>SSL: <ffa>$wizard2_worlds[$wizard2_selected_world][SSL]};
+        #math detail_row $detail_row + 1
+    };
+    
+    #if {"$wizard2_worlds[$wizard2_selected_world][CHARACTER]" != ""}
+    {
+        #dialog {text} {wizard2_main} {detail_char} {$detail_row} {58} {<fff>Character: <ffa>$wizard2_worlds[$wizard2_selected_world][CHARACTER]};
+        #math detail_row $detail_row + 1
+    };
+    
+    #if {"$wizard2_worlds[$wizard2_selected_world][FILE]" != ""}
+    {
+        #dialog {text} {wizard2_main} {detail_file} {$detail_row} {58} {<fff>Init File: <ffa>$wizard2_worlds[$wizard2_selected_world][FILE]};
+        #math detail_row $detail_row + 1
+    }
+}
+
+#NOP Connect to selected world
+#ALIAS {wizard2_connect_selected}
+{
+    #if {"$wizard2_selected_world" == ""}
+    {
+        #dialog {msgbox} {No Selection} {Please select a world to connect to.};
+        #return
+    };
+    
+    #if {&wizard2_worlds[$wizard2_selected_world] == 0}
+    {
+        #dialog {msgbox} {Error} {Selected world not found in configuration.};
+        #return
+    };
+    
+    #nop Get world connection details;
+    #var world_alias {$wizard2_worlds[$wizard2_selected_world][ALIAS]};
+    #var world_host {$wizard2_worlds[$wizard2_selected_world][HOST]};
+    #var world_port {$wizard2_worlds[$wizard2_selected_world][PORT]};
+    #var world_ssl {$wizard2_worlds[$wizard2_selected_world][SSL]};
+    #var world_file {$wizard2_worlds[$wizard2_selected_world][FILE]};
+    #var world_character {$wizard2_worlds[$wizard2_selected_world][CHARACTER]};
+    #var world_password {$wizard2_worlds[$wizard2_selected_world][PASSWORD]};
+    
+    #nop Validate required fields;
+    #if {"$world_host" == "" || "$world_port" == ""}
+    {
+        #dialog {msgbox} {Invalid World} {World configuration is missing required host or port information.};
+        #return
+    };
+    
+    #nop Close wizard dialog;
+    #dialog {destroy} {wizard2_main};
+    
+    #showme {<acf>Connecting to <ffa>$wizard2_selected_world <acf>(<ffa>$world_host:$world_port<acf>)...};
+    
+    #nop Check if session already exists;
+    #info sessions save;
+    #foreach {*info[SESSIONS][]} {session_name}
+    {
+        #if {"$session_name" == "$world_alias"}
+        {
+            #showme {<acf>Switching to existing session <ffa>$world_alias<acf>...};
+            #session $world_alias;
+            #return
+        }
+    };
+    
+    #nop Create new connection;
+    #if {"$world_ssl" == "on"}
+    {
+        #if {"$world_file" != ""}
+        {
+            #ssl $world_alias $world_host $world_port $world_file
+        };
+        #else
+        {
+            #ssl $world_alias $world_host $world_port
+        }
+    };
+    #else
+    {
+        #if {"$world_file" != ""}
+        {
+            #session $world_alias $world_host $world_port $world_file
+        };
+        #else
+        {
+            #session $world_alias $world_host $world_port
+        }
+    };
+    
+    #nop Auto-login if character info provided;
+    #info session save;
+    #if {"$info[SESSION][NAME]" != "wizard2" && "$world_character" != ""}
+    {
+        #delay {auto_login} 
+        {
+            #send $world_character;
+            #if {"$world_password" != ""}
+            {
+                #nop Decode base64 password if encoded;
+                #if {"%?" "$world_password"} {!}
+                {
+                    #format decoded_password {%+64Z} {$world_password};
+                    #send $decoded_password
+                };
+                #else
+                {
+                    #send $world_password
+                }
+            }
+        } {2}
+    }
+}
+
+#NOP Edit selected world
+#ALIAS {wizard2_edit_selected}
+{
+    #if {"$wizard2_selected_world" == ""}
+    {
+        #dialog {msgbox} {No Selection} {Please select a world to edit.};
+        #return
+    };
+    
+    wizard2_show_edit_dialog $wizard2_selected_world
+}
+
+#NOP Delete selected world
+#ALIAS {wizard2_delete_selected}
+{
+    #if {"$wizard2_selected_world" == ""}
+    {
+        #dialog {msgbox} {No Selection} {Please select a world to delete.};
+        #return
+    };
+    
+    #dialog {yesno} {Confirm Deletion} {Are you sure you want to delete world '$wizard2_selected_world'?\n\nThis action cannot be undone.}
+    {
+        #unvar wizard2_worlds[$wizard2_selected_world];
+        wizard2_save_worlds;
+        #var wizard2_selected_world {};
+        wizard2_create_worlds_list;
+        wizard2_show_world_details;
+        #dialog {msgbox} {Deleted} {World deleted successfully.}
+    }
+}
+
+#NOP Refresh worlds list
+#ALIAS {wizard2_refresh_worlds}
+{
+    wizard2_load_worlds;
+    #var wizard2_selected_world {};
+    wizard2_create_worlds_list;
+    wizard2_show_world_details;
+    #dialog {msgbox} {Refreshed} {Worlds list refreshed from file.}
+}
+
+#NOP Show create tab content
+#ALIAS {wizard2_show_create_tab}
+{
+    #dialog {text} {wizard2_main} {create_title} {5} {2} {<acf>Create New World:};
+    
+    #nop Input fields;
+    #dialog {text} {wizard2_main} {name_label} {7} {2} {<fff>Name:};
+    #dialog {input} {wizard2_main} {world_name} {7} {10} {30} {};
+    
+    #dialog {text} {wizard2_main} {alias_label} {9} {2} {<fff>Alias:};
+    #dialog {input} {wizard2_main} {world_alias} {9} {10} {20} {};
+    
+    #dialog {text} {wizard2_main} {host_label} {11} {2} {<fff>Host:};
+    #dialog {input} {wizard2_main} {world_host} {11} {10} {30} {};
+    
+    #dialog {text} {wizard2_main} {port_label} {13} {2} {<fff>Port:};
+    #dialog {input} {wizard2_main} {world_port} {13} {10} {10} {4000};
+    
+    #dialog {text} {wizard2_main} {ssl_label} {15} {2} {<fff>SSL:};
+    #dialog {checkbox} {wizard2_main} {world_ssl} {15} {10} {Use SSL/TLS encryption} {off};
+    
+    #dialog {text} {wizard2_main} {char_label} {17} {2} {<fff>Character:};
+    #dialog {input} {wizard2_main} {world_character} {17} {13} {20} {};
+    
+    #dialog {text} {wizard2_main} {pass_label} {19} {2} {<fff>Password:};
+    #dialog {input} {wizard2_main} {world_password} {19} {13} {20} {} {password};
+    
+    #nop Right column - optional settings;
+    #dialog {text} {wizard2_main} {file_label} {7} {45} {<fff>Init File:};
+    #dialog {input} {wizard2_main} {world_file} {7} {56} {20} {};
+    
+    #dialog {text} {wizard2_main} {desc_label} {9} {45} {<fff>Description:};
+    #dialog {input} {wizard2_main} {world_description} {9} {58} {18} {};
+    
+    #nop Action buttons;
+    #dialog {button} {wizard2_main} {create_world_btn} {21} {2} {15} {1} {<acf>[ Create World ]<099>} {wizard2_create_world};
+    #dialog {button} {wizard2_main} {clear_form_btn} {21} {20} {15} {1} {<afc>[ Clear Form ]<099>} {wizard2_clear_create_form};
+    #dialog {button} {wizard2_main} {test_connection_btn} {21} {38} {18} {1} {<aaf>[ Test Connection ]<099>} {wizard2_test_connection}
+}
+
+#NOP Create new world from form
+#ALIAS {wizard2_create_world}
+{
+    #nop Get form values;
+    #dialog {get} {wizard2_main} {world_name} {new_name};
+    #dialog {get} {wizard2_main} {world_alias} {new_alias};
+    #dialog {get} {wizard2_main} {world_host} {new_host};
+    #dialog {get} {wizard2_main} {world_port} {new_port};
+    #dialog {get} {wizard2_main} {world_ssl} {new_ssl};
+    #dialog {get} {wizard2_main} {world_character} {new_character};
+    #dialog {get} {wizard2_main} {world_password} {new_password};
+    #dialog {get} {wizard2_main} {world_file} {new_file};
+    #dialog {get} {wizard2_main} {world_description} {new_description};
+    
+    #nop Validate required fields;
+    #if {"$new_name" == ""}
+    {
+        #dialog {msgbox} {Validation Error} {World name is required.};
+        #return
+    };
+    
+    #if {"$new_host" == "" || "$new_port" == ""}
+    {
+        #dialog {msgbox} {Validation Error} {Host and port are required.};
+        #return
+    };
+    
+    #if {"$new_alias" == ""}
+    {
+        #var new_alias $new_name
+    };
+    
+    #nop Check if world already exists;
+    #if {&wizard2_worlds[$new_name]}
+    {
+        #dialog {yesno} {World Exists} {A world named '$new_name' already exists.\n\nDo you want to replace it?}
+        {
+            #nop User confirmed replacement - continue
+        }
+        {
+            #return
+        }
+    };
+    
+    #nop Create world entry;
+    #var wizard2_worlds[$new_name][NAME] $new_name;
+    #var wizard2_worlds[$new_name][ALIAS] $new_alias;
+    #var wizard2_worlds[$new_name][HOST] $new_host;
+    #var wizard2_worlds[$new_name][PORT] $new_port;
+    #var wizard2_worlds[$new_name][SSL] $new_ssl;
+    #var wizard2_worlds[$new_name][CHARACTER] $new_character;
+    #var wizard2_worlds[$new_name][FILE] $new_file;
+    #var wizard2_worlds[$new_name][DESCRIPTION] $new_description;
+    
+    #nop Encode password if provided;
+    #if {"$new_password" != ""}
+    {
+        #format encoded_password {%+64z} {$new_password};
+        #var wizard2_worlds[$new_name][PASSWORD] $encoded_password
+    };
+    
+    #nop Save worlds;
+    wizard2_save_worlds;
+    
+    #nop Clear form;
+    wizard2_clear_create_form;
+    
+    #dialog {msgbox} {Success} {World '$new_name' created successfully!};
+    
+    #nop Switch to worlds tab and select the new world;
+    #var wizard2_selected_world $new_name;
+    wizard2_switch_tab worlds
+}
+
+#NOP Clear create form
+#ALIAS {wizard2_clear_create_form}
+{
+    #dialog {set} {wizard2_main} {world_name} {};
+    #dialog {set} {wizard2_main} {world_alias} {};
+    #dialog {set} {wizard2_main} {world_host} {};
+    #dialog {set} {wizard2_main} {world_port} {4000};
+    #dialog {set} {wizard2_main} {world_ssl} {off};
+    #dialog {set} {wizard2_main} {world_character} {};
+    #dialog {set} {wizard2_main} {world_password} {};
+    #dialog {set} {wizard2_main} {world_file} {};
+    #dialog {set} {wizard2_main} {world_description} {}
+}
+
+#NOP Test connection
+#ALIAS {wizard2_test_connection}
+{
+    #nop Get host and port from form;
+    #dialog {get} {wizard2_main} {world_host} {test_host};
+    #dialog {get} {wizard2_main} {world_port} {test_port};
+    
+    #if {"$test_host" == "" || "$test_port" == ""}
+    {
+        #dialog {msgbox} {Test Error} {Please enter host and port before testing connection.};
+        #return
+    };
+    
+    #nop Test connection using netcat;
+    #system {timeout 5 nc -z "$test_host" "$test_port"} {test_result};
+    
+    #if {$test_result == 0}
+    {
+        #dialog {msgbox} {Connection Test} {Connection to $test_host:$test_port successful!}
+    };
+    #else
+    {
+        #dialog {msgbox} {Connection Test} {Connection to $test_host:$test_port failed.\n\nThe server may be offline or unreachable.}
+    }
+}
+
+#NOP Show settings tab content
+#ALIAS {wizard2_show_settings_tab}
+{
+    #dialog {text} {wizard2_main} {settings_title} {5} {2} {<acf>Wizard2 Settings:};
+    
+    #dialog {text} {wizard2_main} {worlds_file_label} {7} {2} {<fff>Worlds File:};
+    #dialog {input} {wizard2_main} {settings_worlds_file} {7} {15} {40} $wizard2_worlds_file;
+    
+    #dialog {button} {wizard2_main} {browse_file_btn} {7} {58} {12} {1} {<aac>[ Browse... ]<099>} {wizard2_browse_worlds_file};
+    
+    #dialog {text} {wizard2_main} {backup_label} {9} {2} {<fff>Auto-backup on save:};
+    #dialog {checkbox} {wizard2_main} {settings_backup} {9} {25} {Create backup files} {on};
+    
+    #dialog {text} {wizard2_main} {mouse_label} {11} {2} {<fff>Mouse support:};
+    #dialog {checkbox} {wizard2_main} {settings_mouse} {11} {25} {Enable mouse interactions} {on};
+    
+    #dialog {text} {wizard2_main} {colors_label} {13} {2} {<fff>Color scheme:};
+    #dialog {list} {wizard2_main} {settings_colors} {13} {25} {20} {5} {Default} {Blue} {Green} {Purple} {Monochrome};
+    
+    #nop Action buttons;
+    #dialog {button} {wizard2_main} {save_settings_btn} {19} {2} {15} {1} {<acf>[ Save Settings ]<099>} {wizard2_save_settings};
+    #dialog {button} {wizard2_main} {reset_settings_btn} {19} {20} {15} {1} {<faa>[ Reset to Default ]<099>} {wizard2_reset_settings};
+    
+    #nop Import/Export section;
+    #dialog {text} {wizard2_main} {import_title} {15} {45} {<acf>Import/Export:};
+    #dialog {button} {wizard2_main} {import_btn} {17} {45} {15} {1} {<afc>[ Import Worlds ]<099>} {wizard2_import_worlds};
+    #dialog {button} {wizard2_main} {export_btn} {19} {45} {15} {1} {<aff>[ Export Worlds ]<099>} {wizard2_export_worlds}
+}
+
+#NOP Show about tab content
+#ALIAS {wizard2_show_about_tab}
+{
+    #dialog {text} {wizard2_main} {about_title} {5} {2} {<acf>About Wizard2};
+    
+    #dialog {text} {wizard2_main} {about_version} {7} {2} {<fff>Version: <ffa>2.0};
+    #dialog {text} {wizard2_main} {about_desc1} {9} {2} {<fff>Advanced TinTin++ World Management Wizard};
+    #dialog {text} {wizard2_main} {about_desc2} {10} {2} {<fff>Using native #dialog implementation with mouse support};
+    
+    #dialog {text} {wizard2_main} {about_features} {12} {2} {<acf>Features:};
+    #dialog {text} {wizard2_main} {feature1} {13} {4} {<fff>• Tabbed interface with mouse navigation};
+    #dialog {text} {wizard2_main} {feature2} {14} {4} {<fff>• Visual world selection and management};
+    #dialog {text} {wizard2_main} {feature3} {15} {4} {<fff>• Connection testing and validation};
+    #dialog {text} {wizard2_main} {feature4} {16} {4} {<fff>• Automatic login with saved credentials};
+    #dialog {text} {wizard2_main} {feature5} {17} {4} {<fff>• Import/Export world configurations};
+    #dialog {text} {wizard2_main} {feature6} {18} {4} {<fff>• SSL/TLS connection support};
+    
+    #dialog {text} {wizard2_main} {about_author} {20} {2} {<fff>Author: <ffa>TinTin++ Community};
+    #dialog {text} {wizard2_main} {about_license} {21} {2} {<fff>License: <ffa>Open Source}
+}
+
+#NOP Browse for worlds file
+#ALIAS {wizard2_browse_worlds_file}
+{
+    #dialog {input} {File Selection} {Enter path to worlds file:} $wizard2_worlds_file
+    {
+        #var wizard2_worlds_file $dialog[result];
+        #dialog {set} {wizard2_main} {settings_worlds_file} $wizard2_worlds_file;
+        wizard2_load_worlds;
+        wizard2_create_worlds_list
+    }
+}
+
+#NOP Save settings
+#ALIAS {wizard2_save_settings}
+{
+    #dialog {get} {wizard2_main} {settings_worlds_file} {new_worlds_file};
+    
+    #if {"$new_worlds_file" != "$wizard2_worlds_file"}
+    {
+        #var wizard2_worlds_file $new_worlds_file;
+        wizard2_load_worlds;
+        #if {"$wizard2_current_tab" == "worlds"}
+        {
+            wizard2_create_worlds_list
+        }
+    };
+    
+    #dialog {msgbox} {Settings} {Settings saved successfully!}
+}
+
+#NOP Reset settings to default
+#ALIAS {wizard2_reset_settings}
+{
+    #dialog {yesno} {Reset Settings} {This will reset all settings to their default values.\n\nAre you sure?}
+    {
+        #var wizard2_worlds_file {/world/worlds.txt};
+        #dialog {set} {wizard2_main} {settings_worlds_file} $wizard2_worlds_file;
+        wizard2_load_worlds;
+        #dialog {msgbox} {Reset} {Settings reset to default values.}
+    }
+}
+
+#NOP Show edit dialog for a world
+#ALIAS {wizard2_show_edit_dialog}
+{
+    #var edit_world {%1};
+    
+    #if {&wizard2_worlds[$edit_world] == 0}
+    {
+        #dialog {msgbox} {Error} {World '$edit_world' not found.};
+        #return
+    };
+    
+    #dialog {create} {wizard2_edit} {Edit World: $edit_world} {70} {20};
+    #dialog {set} {wizard2_edit} {mouse} {on};
+    
+    #nop Get current values;
+    #var current_name $edit_world;
+    #var current_alias {$wizard2_worlds[$edit_world][ALIAS]};
+    #var current_host {$wizard2_worlds[$edit_world][HOST]};
+    #var current_port {$wizard2_worlds[$edit_world][PORT]};
+    #var current_ssl {$wizard2_worlds[$edit_world][SSL]};
+    #var current_character {$wizard2_worlds[$edit_world][CHARACTER]};
+    #var current_file {$wizard2_worlds[$edit_world][FILE]};
+    #var current_description {$wizard2_worlds[$edit_world][DESCRIPTION]};
+    
+    #nop Create form;
+    #dialog {text} {wizard2_edit} {name_label} {2} {2} {<fff>Name:};
+    #dialog {input} {wizard2_edit} {edit_name} {2} {10} {25} $current_name;
+    
+    #dialog {text} {wizard2_edit} {alias_label} {4} {2} {<fff>Alias:};
+    #dialog {input} {wizard2_edit} {edit_alias} {4} {10} {20} $current_alias;
+    
+    #dialog {text} {wizard2_edit} {host_label} {6} {2} {<fff>Host:};
+    #dialog {input} {wizard2_edit} {edit_host} {6} {10} {25} $current_host;
+    
+    #dialog {text} {wizard2_edit} {port_label} {8} {2} {<fff>Port:};
+    #dialog {input} {wizard2_edit} {edit_port} {8} {10} {10} $current_port;
+    
+    #dialog {text} {wizard2_edit} {ssl_label} {10} {2} {<fff>SSL:};
+    #dialog {checkbox} {wizard2_edit} {edit_ssl} {10} {10} {Use SSL/TLS} $current_ssl;
+    
+    #dialog {text} {wizard2_edit} {char_label} {12} {2} {<fff>Character:};
+    #dialog {input} {wizard2_edit} {edit_character} {12} {13} {20} $current_character;
+    
+    #dialog {text} {wizard2_edit} {file_label} {2} {38} {<fff>Init File:};
+    #dialog {input} {wizard2_edit} {edit_file} {2} {49} {18} $current_file;
+    
+    #dialog {text} {wizard2_edit} {desc_label} {4} {38} {<fff>Description:};
+    #dialog {input} {wizard2_edit} {edit_description} {4} {51} {15} $current_description;
+    
+    #nop Buttons;
+    #dialog {button} {wizard2_edit} {save_btn} {16} {2} {12} {1} {<acf>[ Save ]<099>} {wizard2_save_edit $edit_world};
+    #dialog {button} {wizard2_edit} {cancel_btn} {16} {16} {12} {1} {<faa>[ Cancel ]<099>} {#dialog destroy wizard2_edit};
+    #dialog {button} {wizard2_edit} {test_btn} {16} {30} {15} {1} {<aaf>[ Test Connect ]<099>} {wizard2_test_edit_connection};
+    
+    #dialog {show} {wizard2_edit}
+}
+
+#NOP Save edited world
+#ALIAS {wizard2_save_edit}
+{
+    #var original_world {%1};
+    
+    #nop Get edited values;
+    #dialog {get} {wizard2_edit} {edit_name} {edited_name};
+    #dialog {get} {wizard2_edit} {edit_alias} {edited_alias};
+    #dialog {get} {wizard2_edit} {edit_host} {edited_host};
+    #dialog {get} {wizard2_edit} {edit_port} {edited_port};
+    #dialog {get} {wizard2_edit} {edit_ssl} {edited_ssl};
+    #dialog {get} {wizard2_edit} {edit_character} {edited_character};
+    #dialog {get} {wizard2_edit} {edit_file} {edited_file};
+    #dialog {get} {wizard2_edit} {edit_description} {edited_description};
+    
+    #nop Validate required fields;
+    #if {"$edited_name" == "" || "$edited_host" == "" || "$edited_port" == ""}
+    {
+        #dialog {msgbox} {Validation Error} {Name, host, and port are required.};
+        #return
+    };
+    
+    #nop If name changed, create new entry and remove old one;
+    #if {"$edited_name" != "$original_world"}
+    {
+        #if {&wizard2_worlds[$edited_name]}
+        {
+            #dialog {msgbox} {Name Conflict} {A world with name '$edited_name' already exists.};
+            #return
+        };
+        
+        #nop Copy old world data to new name;
+        #var wizard2_worlds[$edited_name] $wizard2_worlds[$original_world];
+        #unvar wizard2_worlds[$original_world];
+        #var wizard2_selected_world $edited_name
+    };
+    
+    #nop Update world data;
+    #var wizard2_worlds[$edited_name][NAME] $edited_name;
+    #var wizard2_worlds[$edited_name][ALIAS] $edited_alias;
+    #var wizard2_worlds[$edited_name][HOST] $edited_host;
+    #var wizard2_worlds[$edited_name][PORT] $edited_port;
+    #var wizard2_worlds[$edited_name][SSL] $edited_ssl;
+    #var wizard2_worlds[$edited_name][CHARACTER] $edited_character;
+    #var wizard2_worlds[$edited_name][FILE] $edited_file;
+    #var wizard2_worlds[$edited_name][DESCRIPTION] $edited_description;
+    
+    #nop Save and refresh;
+    wizard2_save_worlds;
+    #dialog {destroy} {wizard2_edit};
+    
+    #if {"$wizard2_current_tab" == "worlds"}
+    {
+        wizard2_create_worlds_list;
+        wizard2_show_world_details
+    };
+    
+    #dialog {msgbox} {Saved} {World '$edited_name' saved successfully!}
+}
+
+#NOP Test connection from edit dialog
+#ALIAS {wizard2_test_edit_connection}
+{
+    #dialog {get} {wizard2_edit} {edit_host} {test_host};
+    #dialog {get} {wizard2_edit} {edit_port} {test_port};
+    
+    #if {"$test_host" == "" || "$test_port" == ""}
+    {
+        #dialog {msgbox} {Test Error} {Please enter host and port before testing.};
+        #return
+    };
+    
+    #system {timeout 5 nc -z "$test_host" "$test_port"} {test_result};
+    
+    #if {$test_result == 0}
+    {
+        #dialog {msgbox} {Connection Test} {Connection to $test_host:$test_port successful!}
+    };
+    #else
+    {
+        #dialog {msgbox} {Connection Test} {Connection to $test_host:$test_port failed.}
+    }
+}
+
+#NOP Close wizard
+#ALIAS {wizard2_close}
+{
+    #dialog {destroy} {wizard2_main};
+    #showme {<acf>Wizard2 closed.}
+}
+
+#NOP Main wizard launcher
+#ALIAS {wizard2}
+{
+    wizard2_init
+}
+
+#NOP Compatibility aliases
+#ALIAS {w2} {wizard2}
+#ALIAS {worldwiz} {wizard2}
+
+#NOP Initialize on load
+wizard2_init;
+
+#showme {<acf>Wizard2 loaded! Use 'wizard2' or 'w2' to launch the world management interface.};
+
+#CLASS WIZARD2 close;

@@ -1,0 +1,233 @@
+#NOP VSOF;
+
+#CLASS WIZARD_DIRS_PYTHON open;
+
+#FUNCTION {create_mud_structure_py}
+{
+    #LOCAL mud_name {%1};
+    #LOCAL alias {%2};
+    #LOCAL result {};
+    #LOCAL python_script {};
+    #LOCAL cmd {};
+    
+    #FORMAT python_script {%s/bin/mud_manager.py} {$info[SYSTEM][HOME]/.lumett};
+    
+    #NOP Prepare command with proper argument handling;
+    #IF {"$alias" == ""}
+    {
+        #FORMAT cmd {python3 "%s" create "%s"} {$python_script} {$mud_name};
+    };
+    #ELSE
+    {
+        #FORMAT cmd {python3 "%s" create "%s" "%s"} {$python_script} {$mud_name} {$alias};
+    };
+    
+    #NOP Execute Python script and capture JSON result;
+    #SYSTEM {$cmd} {result};
+    
+    #NOP Debug - disabled to avoid showing messages in input bar;
+    #NOP #MATH {result_length} {&result};
+    #NOP #SHOWME {<069>DEBUG: Result length: $result_length<099>};
+    #NOP #SHOWME {<069>DEBUG: Raw result: '$result'<099>};
+    
+    #NOP Parse JSON result safely;
+    #VARIABLE py_result {};
+    #NOP Check if result is valid JSON before parsing;
+    #IF {"$result" == ""}
+    {
+        #SHOWME {<129>DEBUG: Empty result from Python script<099>};
+        #RETURN {};
+    };
+    
+    #JSON parse {py_result} {$result};
+    
+    #NOP Debug - disabled to avoid showing messages in input bar;
+    #NOP #SHOWME {<069>DEBUG: Parse result variable count: @py_result[]<099>};
+    #NOP #SHOWME {<069>DEBUG: Success field: '$py_result[success]'<099>};
+    #NOP #SHOWME {<069>DEBUG: Alias field: '$py_result[alias]'<099>};
+    
+    #NOP Ensure we return a simple string, not a complex structure;
+    #IF {"$py_result[success]" == "true"}
+    {
+        #LOCAL alias_result {$py_result[alias]};
+        #NOP Validate that alias_result is a simple string;
+        #IF {"$alias_result" != "" && "$alias_result" != "{}"}
+        {
+            #SHOWME {<139>✅ MUD created successfully with alias: $alias_result<099>};
+            #RETURN {$alias_result};
+        };
+        #ELSE
+        {
+            #SHOWME {<129>DEBUG: Invalid alias returned: '$alias_result'<099>};
+            #RETURN {};
+        };
+    };
+    #ELSE
+    {
+        #SHOWME {<129>❌ MUD creation failed<099>};
+        #SHOWME {<119>DEBUG: Error: '$py_result[error]'<099>};
+        #RETURN {};
+    }
+}
+
+#FUNCTION {delete_mud_structure_py}
+{
+    #LOCAL alias {%1};
+    #LOCAL result {};
+    #LOCAL python_script {};
+    #LOCAL cmd {};
+    
+    #FORMAT python_script {%s/bin/mud_manager.py} {$info[SYSTEM][HOME]/.lumett};
+    #FORMAT cmd {python3 "%s" remove "%s"} {$python_script} {$alias};
+    
+    #NOP Execute Python script and capture JSON result;
+    #SYSTEM {$cmd} {result};
+    
+    #NOP Parse JSON result;
+    #VARIABLE py_result {};
+    #JSON parse {py_result} {$result};
+    
+    #IF {"$py_result[success]" == "true"}
+    {
+        #SHOWME {<139>✅ MUD Removal Success:<099>};
+        #SHOWME {<119>   Alias: <159>$py_result[alias]};
+        #SHOWME {<119>   Message: <159>$py_result[message]};
+        #RETURN 1;
+    };
+    #ELSE
+    {
+        #SHOWME {<129>❌ MUD Removal Failed:<099>};
+        #SHOWME {<119>   Error: <159>$py_result[error]};
+        #SHOWME {<119>   Message: <159>$py_result[message]};
+        #RETURN 0;
+    }
+}
+
+#FUNCTION {list_muds_py}
+{
+    #LOCAL result {};
+    #LOCAL python_script {};
+    #LOCAL cmd {};
+    #LOCAL i 1;
+    
+    #FORMAT python_script {%s/bin/mud_manager.py} {$info[SYSTEM][HOME]/.lumett};
+    #FORMAT cmd {python3 "%s" list} {$python_script};
+    
+    #NOP Execute Python script and capture JSON result;
+    #SYSTEM {$cmd} {result};
+    
+    #NOP Parse JSON result;
+    #VARIABLE py_result {};
+    #JSON parse {py_result} {$result};
+    
+    #IF {"$py_result[success]" == "true"}
+    {
+        #SHOWME {<139>📁 Available MUDs ($py_result[count] total):<099>};
+        #FOREACH {$py_result[muds][%*]} {mud_info}
+        {
+            #LOCAL status_icon {};
+            #IF {"$mud_info[has_main]" == "true"}
+            {
+                #VARIABLE status_icon {<129>✓<099>};
+            };
+            #ELSE
+            {
+                #VARIABLE status_icon {<119>⚠<099>};
+            };
+            
+            #SHOWME {<119>  $status_icon $mud_info[alias] <069>($mud_info[path])};
+        };
+        #RETURN {$py_result[muds]};
+    };
+    #ELSE
+    {
+        #SHOWME {<129>❌ Error listing MUDs:<099>};
+        #SHOWME {<119>   Error: <159>$py_result[error]};
+        #RETURN {};
+    }
+}
+
+#NOP Convenient aliases for manual use;
+#ALIAS {mud_create}
+{
+    #IF {"%1" == ""}
+    {
+        #SHOWME {Usage: mud_create <mud_name> [alias]};
+        #RETURN;
+    };
+    
+    create_mud_structure_py {%1} {%2};
+}
+
+#ALIAS {mud_remove}
+{
+    #IF {"%1" == ""}
+    {
+        #SHOWME {Usage: mud_remove <alias>};
+        #RETURN;
+    };
+    
+    delete_mud_structure_py {%1};
+}
+
+#ALIAS {mud_list}
+{
+    list_muds_py;
+}
+
+#FUNCTION {find_mud_alias_by_name_py}
+{
+    #LOCAL mud_name {%1};
+    #LOCAL result {};
+    #LOCAL python_script {};
+    #LOCAL cmd {};
+    
+    #FORMAT python_script {%s/bin/mud_manager.py} {$info[SYSTEM][HOME]/.lumett};
+    #FORMAT cmd {python3 "%s" find "%s"} {$python_script} {$mud_name};
+    
+    #NOP Execute Python script and capture JSON result;
+    #SYSTEM {$cmd} {result};
+    
+    #NOP Parse JSON result safely;
+    #VARIABLE py_result {};
+    #IF {"$result" == ""}
+    {
+        #SHOWME {<129>DEBUG: Empty result from Python script<099>};
+        #RETURN {};
+    };
+    
+    #JSON parse {py_result} {$result};
+    
+    #IF {"$py_result[success]" == "true"}
+    {
+        #LOCAL alias_result {$py_result[alias]};
+        #IF {"$alias_result" != "" && "$alias_result" != "{}"}
+        {
+            #SHOWME {<139>✅ Found MUD '$py_result[name]' with alias: $alias_result<099>};
+            #RETURN {$alias_result};
+        };
+        #ELSE
+        {
+            #SHOWME {<129>DEBUG: Invalid alias returned: '$alias_result'<099>};
+            #RETURN {};
+        };
+    };
+    #ELSE
+    {
+        #SHOWME {<129>❌ MUD not found: '$py_result[error]'<099>};
+        #RETURN {};
+    }
+}
+
+#ALIAS {mud_find}
+{
+    #IF {"%1" == ""}
+    {
+        #SHOWME {Usage: mud_find <mud_name>};
+        #RETURN;
+    };
+    
+    find_mud_alias_by_name_py {%1};
+}
+
+#CLASS WIZARD_DIRS_PYTHON close;

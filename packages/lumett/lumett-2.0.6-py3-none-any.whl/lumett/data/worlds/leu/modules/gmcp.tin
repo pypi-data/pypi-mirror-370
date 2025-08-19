@@ -1,0 +1,174 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+#var gmcp-description {Funzioni del protocllo GMCP}
+#var gmcp-help {
+Gestione del protocollo GMCP (Generic MUD Communication Protocol):\n
+CARATTERISTICHE:\n
+• Protocollo moderno per scambio dati con il MUD\n
+• Negoziazione automatica all'avvio\n
+• Struttura dati JSON gerarchica\n
+• Integrazione automatica con GUI e mappa\n
+STRUTTURA DATI:\n
+• gmcp[char][vitals] - HP, MANA, MOVIMENTO\n
+• gmcp[char][base] - statistiche base del personaggio\n
+• gmcp[char][status] - stato corrente del personaggio\n
+• gmcp[char][group] - informazioni gruppo\n
+• gmcp[char][affects] - effetti attivi\n
+• gmcp[room][info] - informazioni stanza corrente\n
+• gmcp[room][players] - giocatori nella stanza\n
+EVENTI AUTOMATICI:\n
+• IAC WILL GMCP - negoziazione iniziale\n
+• char.vitals - aggiornamento GUI automatico\n
+• room.info - aggiornamento mappa e sidebar\n
+• char.group - aggiornamento informazioni gruppo\n
+• char.affects - aggiornamento effetti attivi\n
+INTEGRAZIONE:\n
+• Aggiornamento automatico della mappa\n
+• Visualizzazione dati nelle sidebar\n
+• Sincronizzazione con interfaccia grafica\n
+NOTE:\n
+• Preferito rispetto a MSDP quando disponibile\n
+• Supporta strutture dati complesse
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias gmcp-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module gmcp
+	} {
+		fail_module gmcp
+	}
+}
+
+#nop init some gmcp structure data;
+#variable {gmcp}
+{
+    {char}
+    {
+        vitals {}
+        base {}
+        status {}	
+        maxstats {}	
+        group {}
+        worth {}
+        group {}
+        aff {}
+    }
+    {room}
+    {
+        info {}
+        players {}
+    }
+}
+
+#nop this event is fiered on connection and make gmcp negotation with the mud ask for the variables sent;
+#EVENT {IAC WILL GMCP}
+{
+    #info SYSTEM save;
+    #send {$TELNET[IAC]$TELNET[DO]$TELNET[GMCP]\};
+    #send {$TELNET[IAC]$TELNET[SB]$TELNET[GMCP] core.hello { "client": "$info[SYSTEM][CLIENT_NAME]", "version": "$info[SYSTEM][CLIENT_VERSION]" } $TELNET[IAC]$TELNET[SE]\};
+    #send {$TELNET[IAC]$TELNET[SB]$TELNET[GMCP] core.supports.set [ "room 1", "room.info 1", "char 1", "char.status 1" ] $TELNET[IAC]$TELNET[SE]\};
+    #class msdp kill;
+    #variable comm_protcol "GMCP"
+}
+
+#EVENT {IAC SB GMCP char.status IAC SE}
+{
+    #variable gmcp[char][status] {%0}
+}
+
+#EVENT {IAC SB GMCP char.base IAC SE}
+{
+    #variable gmcp[char][base] {%0} 
+}
+
+#EVENT {IAC SB GMCP char.maxstats IAC SE}
+{
+    #variable gmcp[char][maxstats] {%0}
+}
+
+#EVENT {IAC SB GMCP char.worth IAC SE}
+{
+    #variable gmcp[char][worth] {%0}
+}
+
+#EVENT {IAC SB GMCP char.vitals IAC SE}
+{
+    #VARIABLE gmcp[char][vitals] {%0};			
+    gui_ingame_refresh		
+}
+
+#EVENT {IAC SB GMCP room.players IAC SE}
+{
+    #variable gmcp[room][players] {%0}
+}
+
+#EVENT {IAC SB GMCP room.info IAC SE}
+{
+    #variable gmcp[room][info] {%0};
+    
+    #map get roomvnum maproomvnum;
+    #if {$gmcp[room][info][num] != $maproomvnum | $maproomvnum > 0}
+    {
+       #MAP goto $gmcp[room][info][num]
+    };
+    #MAP update;
+
+    #nop if we have the large ui capture and loop gmcp room info and display it in the side_bar;
+    #if {$gui_ingame[ui] == 3}
+    {
+        #nop clear the room tab than fill with gmcp data;
+        #var  {bar_side[tab][room]} 0;   
+        #var room {};
+        #variable gmcp[room][info] {%0};
+        #FORMAT roomdet {$light_red %s $light_blue %s $white %s} $gmcp[room][info][name] $gmcp[room][info][num] $gmcp[room][info][zone];     
+        bar_side_show room $roomdet;
+        #foreach {$gmcp[room][info][characters][]} {roomindex}
+        {
+            #FORMAT roommob {%s,key:$yellow%s$white,lvl:%s,pos:%s} $roomindex[+1] {\e]68;2;EXEC;kill $roomindex[+2]\a\e[4m$roomindex[+2]\e[24m} $roomindex[+3] $roomindex[+4];
+            bar_side_show room $roommob
+        };
+        #foreach {*gmcp[room][info][exits][]} {exitindex}
+        {
+            #FORMAT rommext {Uscite: %s al vnum %s} $exitindex $gmcp[room][info][exits][$exitindex];
+            bar_side_show room $rommext
+        };
+    }
+}
+
+#EVENT {IAC SB GMCP char.group IAC SE}
+{
+    #nop if we have the large ui capture and loop in gmcp group info and display it in the side_bar;    
+    #if {$gui_ingame[ui] == 3}
+    {
+        #nop clear the group tab than fill with gmcp data;
+        #var  {bar_side[tab][grp]} 0;  
+        #var grp {};
+        #variable gmcp[char][group] {%0};
+        sidebar_gmcpgroup
+    }     
+}
+
+#EVENT {IAC SB GMCP char.affects IAC SE}
+{
+    #VARIABLE gmcp[char][affects] {%0};
+    #if {$gui_ingame[ui] == 3 }
+    {	
+        #nop if we have the large ui capture and loop gmcp affects info and display it in the side_bar;
+        #VARIABLE {bar_side[tab][aff]} 0;
+        #foreach {*gmcp[char][affects][]} {affindex}
+        {
+            #FORMAT tmpaffect {Aff: %s stac:[%s] duration:[%s]} $gmcp[char][affects][$affindex][name] $gmcp[char][affects][$affindex][stacks] $gmcp[char][affects][$affindex][duration];
+            bar_side_show aff $tmpaffect
+        }
+    }			
+}
+
+
+

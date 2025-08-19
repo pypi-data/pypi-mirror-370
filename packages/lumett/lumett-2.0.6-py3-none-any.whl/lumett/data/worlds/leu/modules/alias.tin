@@ -1,0 +1,97 @@
+#nop --
+#nop Class Definitions
+#nop --
+
+
+
+#var alias-description {Funzioni degli Alias}
+#var alias-help {
+Gestione degli alias del client TinTin++:\n
+FILE DI CONFIGURAZIONE:\n
+I dati sono salvati in saves/alias.txt in formato JSON\n
+ALIAS PRINCIPALI:\n
+• addalias <nome>/<comando> - aggiunge nuovo alias\n
+• delalias <nome> - rimuove un alias esistente\n
+• showalias - mostra lista completa degli alias\n
+FUNZIONI INTERNE:\n
+• load_alias_bottombar - carica alias nella barra inferiore\n
+COME FUNZIONA:\n
+1. Gli alias vengono salvati in classe 'alias_data'\n
+2. Il formato è: nome_alias/comando_da_eseguire\n
+3. Gli alias sono richiamabili digitando il nome\n
+4. Sono anche visualizzati nella GUI come pulsanti\n
+ESEMPI:\n
+addalias saluta/say Ciao a tutti!\n
+addalias cast_heal/cast 'heal' me\n
+NOTE:\n
+• Gli alias del client sono diversi da quelli del MUD\n
+• Gli alias MUD si creano con: alias <numero> <comando>\n
+• Gli alias client hanno priorità su quelli MUD
+
+}
+
+#nop --
+#nop Modloader Stuff
+#nop --
+
+#alias alias-register {
+	#nop need to check: events;
+	#if {@isloaded{functions}} {
+		register_module alias
+	} {
+		fail_module alias
+	}
+}
+
+#nop -------------------------------------------------------------------------;
+#nop Gestione Alias;
+#nop -------------------------------------------------------------------------;
+
+#class alias_data read $savesdir/alias.txt;
+
+#ALIAS {addalias} 
+{
+    #ECHO {%h} { Sintassi: addalias nome_dell'alias/comando. Vedi help alias};
+    #local _alarg {regex {%0}};
+    #list {_alarg} {explode} {/};
+    #format alias_text %p $_alarg[1];
+    #format alcommand_text %p $_alarg[2];
+    #echo {Aggiunto alias $alias_text con comando: $alcommand_text};
+    #class alias_data assign #ALIAS {${alias_text}} {${alcommand_text}};
+    #class alias_data write $savesdir/alias.txt;
+}
+
+#ALIAS {delalias}
+{
+    #ECHO {%h} { Sintassi: deltrig nome_dell'alias da eliminare};
+    #local _alarg %0;
+    #format delalias_text %p $_alarg;
+    #echo {Rimuovo l'alaias $delalias_text};
+    #class alias_data assign #UNALIAS {$delalias_text};
+    #class alias_data write $savesdir/alias.txt;
+}
+
+#ALIAS {showalias} 
+{
+    #info aliases save;
+    #list info[ALIASES] indexate class;
+    #list info[ALIASES] filter alias_data;
+    #foreach {$info[ALIASES]} {ainde}
+    {
+        #showme $ainde[arg1];
+        #showme $ainde[arg2]
+    }
+}
+
+#ALIAS {load_alias_bottombar} 
+{
+    #info aliases save;
+    #list info[ALIASES] indexate class;
+    #list info[ALIASES] filter alias_data;
+    #foreach {$info[ALIASES][]} {aindex}
+    {
+        #FORMAT {tmpal} {%s} {\e]68;2;EXEC;$aindex[arg2]\a\e[4;24m$aindex[arg1]\e[24m};
+        bar_bottom_show alias $tmpal
+    }
+}
+
