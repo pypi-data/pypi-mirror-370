@@ -1,0 +1,85 @@
+from setuptools import setup, find_packages
+import codecs
+import os
+
+here = os.path.abspath(os.path.dirname(__file__))
+
+with codecs.open(os.path.join(here, 'src', 'bdownload', 'VERSION'), 'r', 'utf-8') as fd:
+    version = fd.read().strip()
+    
+with codecs.open(os.path.join(here, 'README.md'), 'r', 'utf-8') as fd:
+    long_description = fd.read()
+    
+# Extends the Setuptools `clean` command
+with open(os.path.join(here, 'third_parties', 'setupext_janitor', 'janitor.py')) as setupext_janitor:
+    exec(setupext_janitor.read())
+
+# try:
+#     from setupext_janitor import janitor
+#     CleanCommand = janitor.CleanCommand
+# except ImportError:
+#     CleanCommand = None
+
+cmd_classes = {}
+if CleanCommand is not None:
+    cmd_classes['clean'] = CleanCommand
+
+setup(
+    name='bdownload',
+    version=version,
+    package_dir={'': 'src'},
+    packages=find_packages('src'),
+    include_package_data=True,
+    zip_safe=False,
+    python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*',
+    install_requires=[
+        'urllib3>=1.26,<2; python_version<="3.7"',
+        'requests>=2.32.4; python_version>="3.13"',
+        'requests>=2.32.2; python_version>="3.11"',
+        'requests>=2.27.1; python_version<="3.10"',
+        'requests[socks]',
+        'PySocks',
+        'clint',
+        'futures; python_version=="2.7"',
+        'certifi==2021.10.8; python_version=="2.7"',
+        'setuptools; python_version>="3.12"'
+    ],
+    setup_requires=[],
+    cmdclass=cmd_classes,
+    entry_points={
+        'console_scripts': [
+            'bdownload = bdownload.cli:main',
+            'bdownload-upd-cacert-py2 = bdownload.utils:update_cacert'
+        ],
+        'distutils.commands': [
+            'clean = CleanCommand'
+        ]
+    },
+    url='https://github.com/Jesseatgao/bdownload',
+    license='MIT License',
+    author='Jesse Gao',
+    author_email='changxigao@gmail.com',
+    description='A multi-threaded and multi-source aria2-like batch file downloading library for Python',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+    classifiers=[
+        'Intended Audience :: Developers',
+        'Environment :: Console',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Programming Language :: Python :: Implementation :: PyPy',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: OS Independent'
+    ]
+)
