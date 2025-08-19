@@ -1,0 +1,60 @@
+Index: mcp_email_server/emails/models.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>from datetime import datetime\nfrom typing import Any\n\nfrom pydantic import BaseModel\n\n\nclass EmailData(BaseModel):\n    subject: str\n    sender: str\n    body: str\n    date: datetime\n    attachments: list[str]\n\n    @classmethod\n    def from_email(cls, email: dict[str, Any]):\n        return cls(\n            subject=email[\"subject\"],\n            sender=email[\"from\"],\n            body=email[\"body\"],\n            date=email[\"date\"],\n            attachments=email[\"attachments\"],\n        )\n\n\nclass EmailPageResponse(BaseModel):\n    page: int\n    page_size: int\n    before: datetime | None\n    since: datetime | None\n    subject: str | None\n    body: str | None\n    text: str | None\n    emails: list[EmailData]\n    total: int\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/mcp_email_server/emails/models.py b/mcp_email_server/emails/models.py
+--- a/mcp_email_server/emails/models.py	(revision ddc8e07841a6a9ee67e4a35bca06521772c3da3c)
++++ b/mcp_email_server/emails/models.py	(date 1755594200622)
+@@ -1,8 +1,7 @@
+ from datetime import datetime
+ from typing import Any
+ 
+-from pydantic import BaseModel
+-
++from pydantic import BaseModel, field_serializer
+ 
+ class EmailData(BaseModel):
+     subject: str
+@@ -11,6 +10,15 @@
+     date: datetime
+     attachments: list[str]
+ 
++    @field_serializer('date')
++    def serialize_datetime(self, dt: datetime) -> str:
++        """Serialize datetime to ISO 8601 format with timezone info."""
++        # Ensure timezone info is present
++        if dt.tzinfo is None:
++            # Assume UTC if none is set
++            dt = dt.replace(tzinfo=datetime.timezone.utc)
++        return dt.isoformat()
++
+     @classmethod
+     def from_email(cls, email: dict[str, Any]):
+         return cls(
+@@ -21,7 +29,6 @@
+             attachments=email["attachments"],
+         )
+ 
+-
+ class EmailPageResponse(BaseModel):
+     page: int
+     page_size: int
+@@ -32,3 +39,14 @@
+     text: str | None
+     emails: list[EmailData]
+     total: int
++
++    @field_serializer('before', 'since')
++    def serialize_optional_datetime(self, dt: datetime | None) -> str | None:
++        """Serialize optional datetime to ISO 8601 format with timezone info."""
++        if dt is None:
++            return None
++        # Ensure timezone info is present
++        if dt.tzinfo is None:
++            # Assume UTC if none is set
++            dt = dt.replace(tzinfo=datetime.timezone.utc)
++        return dt.isoformat()
+\ No newline at end of file
