@@ -1,0 +1,79 @@
+"""Class for stream 12 function 18."""
+
+from secsgem.secs.data_items import BINLT, IDTYP, MID, XYPOS
+from secsgem.secs.functions.base import SecsStreamFunction
+
+
+class SecsS12F18(SecsStreamFunction):
+    """map data type 3.
+
+    Args:
+        value: parameters for this function (see example)
+
+    Examples:
+        >>> import secsgem.secs
+        >>> secsgem.secs.functions.SecsS12F18
+        {
+            MID: A/B[80]
+            IDTYP: B[1]
+            DATA: [
+                {
+                    XYPOS: I1/I2/I4/I8[2]
+                    BINLT: U1/A
+                }
+                ...
+            ]
+        }
+
+        >>> import secsgem.secs
+        >>> secsgem.secs.functions.SecsS12F18({
+        ...     "MID": "materialID",
+        ...     "IDTYP": secsgem.secs.data_items.IDTYP.WAFER,
+        ...     "DATA": [
+        ...         {"XYPOS": [1, 2], "BINLT": [1, 2, 3, 4]},
+        ...         {"XYPOS": [3, 4], "BINLT": [5, 6, 7, 8]}]})
+        S12F18
+          <L [3]
+            <A "materialID">
+            <B 0x0>
+            <L [2]
+              <L [2]
+                <I1 1 2 >
+                <U1 1 2 3 4 >
+              >
+              <L [2]
+                <I1 3 4 >
+                <U1 5 6 7 8 >
+              >
+            >
+          > .
+
+    Data Items:
+        - :class:`MID <secsgem.secs.data_items.MID>`
+        - :class:`IDTYP <secsgem.secs.data_items.IDTYP>`
+        - :class:`XYPOS <secsgem.secs.data_items.XYPOS>`
+        - :class:`BINLT <secsgem.secs.data_items.BINLT>`
+
+    """
+
+    _stream = 12
+    _function = 18
+
+    _data_format = [
+        MID,
+        IDTYP,
+        [
+            [
+                XYPOS,
+                BINLT
+            ]
+        ]
+    ]
+
+    _to_host = False
+    _to_equipment = True
+
+    _has_reply = False
+    _is_reply_required = False
+
+    _is_multi_block = True
