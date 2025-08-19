@@ -1,0 +1,135 @@
+include:
+  - https://gitlab.com/Linaro/tuxpkg/-/raw/v0.16.0/gitlab-ci-pipeline.yml
+
+variables:
+  PROJECT_DIR: $CI_PROJECT_DIR
+  TUXPKG: python3 -m tuxpkg
+  TUXPKG_PROJECT: tuxbake
+
+pages:
+  stage: deploy
+  needs:
+    - test
+    - repository
+  only:
+    - tags
+  script:
+    - mkdir public
+    - echo SOON > public/index.html
+    - cp -r dist/repo public/packages
+  artifacts:
+    paths:
+      - public
+
+
+#############
+# Templates #
+#############
+.python:
+  image:
+    name: public.ecr.aws/lambda/python:3.9
+    entrypoint:
+    - "/usr/bin/env"
+    - "PATH=/var/lang/bin:/usr/local/bin:/usr/bin/:/bin:/opt/bin"
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  cache:
+    paths: [.cache/pip]
+  before_script:
+  - yum install --assumeyes make
+  - python3 -V
+  - python3 -m pip install --upgrade virtualenv
+  - virtualenv venv
+  - source venv/bin/activate
+
+pylint:
+  extends: .python
+  stage: test
+  script:
+  - python3 -m pip install --upgrade pylint==2.6.0
+  - make pylint
+
+################
+# build images #
+################
+
+.build-image:
+  stage: build
+  image: docker:20.10
+  only:
+    refs:
+      - main
+    changes:
+      - dockerfiles/**/*
+
+  services:
+    - name: docker:20.10-dind
+  before_script:
+  - apk add --upgrade make
+  - docker login --username ${DOCKER_USER} --password-stdin < "${DOCKER_PASSWORD_FILE}"
+  script:
+    - make -B -C $PROJECT_DIR/dockerfiles/ list=$TARGET build publish
+
+centos-8:
+  extends: .build-image
+  variables:
+    TARGET: centos-8
+
+debian-bookworm:
+  extends: .build-image
+  variables:
+    TARGET: debian-bookworm
+
+debian-bullseye:
+  extends: .build-image
+  variables:
+    TARGET: debian-bullseye
+
+fedora-33:
+  extends: .build-image
+  variables:
+    TARGET: fedora-33
+
+fedora-34:
+  extends: .build-image
+  variables:
+    TARGET: fedora-34
+
+opensuse-leap-15.2:
+  extends: .build-image
+  variables:
+    TARGET: opensuse-leap-15.2
+
+ubuntu-18.04:
+  extends: .build-image
+  variables:
+    TARGET: ubuntu-18.04
+
+ubuntu-20.04:
+  extends: .build-image
+  variables:
+    TARGET: ubuntu-20.04
+
+ubuntu-22.04:
+  extends: .build-image
+  variables:
+    TARGET: ubuntu-22.04
+
+ubuntu-24.04:
+  extends: .build-image
+  variables:
+    TARGET: ubuntu-24.04
+
+# trigger packages.tuxsuite.com on release
+trigger_tuxsuite:
+  stage: .post
+  image: $CI_REGISTRY_IMAGE/ci-integration
+  before_script:
+    - apt update
+    - apt install -y curl
+  script:
+    - "curl -X POST -F token=$TUXSUITE_PACKAGES_TRIGGER_TOKEN -F ref=master https://gitlab.com/api/v4/projects/13070238/trigger/pipeline"
+  only:
+    - tags
+  needs:
+    - pages
