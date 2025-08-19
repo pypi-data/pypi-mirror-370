@@ -1,0 +1,358 @@
+Metadata-Version: 2.4
+Name: OACP
+Version: 0.1.8
+Summary: Open Agent Compliance Protocol - Governance layer for LangGraph
+Author-email: Aditya Jangam <aditya@adityajangam.com>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/Aaditya17032002/OACP
+Project-URL: Documentation, https://github.com/Aaditya17032002/OACP#readme
+Project-URL: Repository, https://github.com/Aaditya17032002/OACP
+Project-URL: Issues, https://github.com/Aaditya17032002/OACP/issues
+Keywords: langgraph,governance,ai,agents,voting,consensus
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pydantic<3.0.0,>=2.0.0
+Requires-Dist: typer<1.0.0,>=0.9.0
+Requires-Dist: sqlalchemy<3.0.0,>=2.0.0
+Requires-Dist: aiosqlite<1.0.0,>=0.19.0
+Requires-Dist: ulid-py<2.0.0,>=1.1.0
+Requires-Dist: rich<14.0.0,>=13.0.0
+Requires-Dist: langgraph>=0.0.55
+Provides-Extra: postgres
+Requires-Dist: psycopg[binary]<4.0.0,>=3.1.0; extra == "postgres"
+Provides-Extra: web
+Requires-Dist: fastapi<1.0.0,>=0.104.0; extra == "web"
+Requires-Dist: uvicorn<1.0.0,>=0.24.0; extra == "web"
+Provides-Extra: dev
+Requires-Dist: pytest<8.0.0,>=7.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio<1.0.0,>=0.21.0; extra == "dev"
+Requires-Dist: pytest-cov<5.0.0,>=4.0.0; extra == "dev"
+Requires-Dist: mypy<2.0.0,>=1.5.0; extra == "dev"
+Requires-Dist: ruff<1.0.0,>=0.1.0; extra == "dev"
+Requires-Dist: black<24.0.0,>=23.0.0; extra == "dev"
+Requires-Dist: pre-commit<4.0.0,>=3.0.0; extra == "dev"
+Dynamic: license-file
+
+# Open Agent Compliance Protocol (OACP)
+
+A governance layer for LangGraph that adds voting, consensus, and audit trails to multi-agent workflows. OACP transforms your agent systems with democratic decision-making, adaptive prompting, and comprehensive oversight.
+
+## Overview
+
+OACP provides a framework for building trustworthy multi-agent systems by adding governance mechanisms on top of LangGraph. It enables agents to vote on decisions, reach consensus, maintain audit trails, and adapt their behavior based on feedback.
+
+## Key Features
+
+- **Governance Layer**: Add voting and consensus mechanisms to any LangGraph workflow
+- **Adaptive Prompting**: Automatically improve prompts based on rejection feedback
+- **Audit Trails**: Complete logging and tracking of all agent decisions and votes
+- **Multiple Storage Backends**: File, SQLite, and PostgreSQL support
+- **Voting Strategies**: Unanimous, majority, and weighted voting systems
+- **Retry Logic**: Intelligent retry mechanisms with exponential backoff
+- **LLM Integration**: Built-in adapters for popular language models
+- **CLI Tools**: Command-line interface for management and monitoring
+
+## Installation
+
+### From Source
+
+```bash
+git clone https://github.com/your-org/oacp.git
+cd oacp
+pip install -e .
+```
+
+### Dependencies
+
+OACP requires Python 3.10+ and depends on:
+
+- **LangGraph**: Core workflow framework
+- **Pydantic**: Data validation and settings
+- **SQLAlchemy**: Database abstraction layer
+- **Typer**: CLI framework
+- **Rich**: Terminal formatting
+
+Optional dependencies:
+- **psycopg**: PostgreSQL support
+- **FastAPI**: Web interface
+- **Google Generative AI**: Gemini integration
+
+## Quick Start
+
+### Basic Usage
+
+```python
+from oacp import with_oacp, decision_contract, vote, VoteDecision
+from langgraph.graph import StateGraph
+
+# Wrap any function with OACP governance
+@with_oacp(
+    role="researcher",
+    invariants=["factual_accuracy", "comprehensive_coverage"],
+    log_inputs=True,
+    log_outputs=True
+)
+def research_agent(research_request: dict) -> dict:
+    """Conducts initial research on the given topic."""
+    # Your agent logic here
+    return {"research_results": "..."}
+
+# Create decision contracts for consensus
+@with_oacp(
+    role="synthesizer",
+    contract=decision_contract(
+        required_approvers=["researcher", "analyst", "critic"],
+        strategy="unanimous",
+        timeout_seconds=30
+    )
+)
+def synthesis_agent(data) -> dict:
+    """Synthesizes inputs into final report (requires consensus)."""
+    # Your synthesis logic here
+    return {"final_report": "..."}
+
+# Voting functions
+def researcher_vote(run_id: str, content: str):
+    if meets_standards(content):
+        vote(run_id=run_id, voter_id="researcher", 
+             decision=VoteDecision.APPROVE, 
+             reason="Content meets research standards")
+    else:
+        vote(run_id=run_id, voter_id="researcher", 
+             decision=VoteDecision.REJECT, 
+             reason="Insufficient research depth")
+```
+
+### LangGraph Integration
+
+```python
+from langgraph.graph import StateGraph
+
+# Create your workflow
+workflow = StateGraph(YourState)
+workflow.add_node("research", research_agent)
+workflow.add_node("synthesis", synthesis_agent)
+workflow.add_edge("research", "synthesis")
+
+# OACP governance is automatically applied
+app = workflow.compile()
+```
+
+## Examples
+
+### Research Team Workflow
+
+A multi-agent research team with four specialized agents:
+
+```bash
+cd examples/research_team
+export GOOGLE_AI_API_KEY=your_api_key
+python main.py
+```
+
+Features demonstrated:
+- Multi-agent collaboration
+- Consensus-based decision making
+- Real LLM integration (Gemini 2.5 Flash)
+- Audit trails and governance
+
+### Flappy Bird Game Design
+
+Agent-based game design with component compatibility voting:
+
+```bash
+cd examples/flappy_bird_sim
+python main.py
+```
+
+Features demonstrated:
+- Component compatibility validation
+- Quality control through voting
+- Design iteration with feedback
+
+## Architecture
+
+### Core Components
+
+- **Decorators** (`@with_oacp`, `wrap_node`): Apply governance to functions
+- **Contracts**: Define voting requirements and strategies
+- **Votes**: Cast and track voting decisions
+- **Context**: Access current execution context
+- **Storage**: Pluggable storage backends
+- **Events**: Comprehensive event system
+- **Adaptive Prompting**: Automatic prompt improvement
+
+### Storage Backends
+
+- **File Storage**: JSON-based local storage
+- **SQLite**: Lightweight database storage
+- **PostgreSQL**: Production-ready database storage
+
+### Voting Strategies
+
+- **Unanimous**: All voters must approve
+- **Majority**: More than 50% approval required
+- **Weighted**: Votes have different weights
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Storage configuration
+OACP_STORAGE_TYPE=sqlite
+OACP_STORAGE_URL=sqlite:///oacp.db
+
+# PostgreSQL example
+OACP_STORAGE_TYPE=postgresql
+OACP_STORAGE_URL=postgresql://user:pass@localhost/oacp
+
+# File storage example
+OACP_STORAGE_TYPE=file
+OACP_STORAGE_PATH=./oacp_data
+```
+
+### Programmatic Configuration
+
+```python
+from oacp.storage import configure_storage
+
+# Configure storage backend
+configure_storage(
+    storage_type="sqlite",
+    storage_url="sqlite:///my_oacp.db"
+)
+```
+
+## CLI Usage
+
+OACP includes a command-line interface for management:
+
+```bash
+# View recent activity
+oacp logs --limit 50
+
+# Show statistics
+oacp stats
+
+# Export audit trail
+oacp export --format json --output audit.json
+
+# View voting patterns
+oacp votes --agent researcher --days 7
+```
+
+## Development
+
+### Setup Development Environment
+
+```bash
+git clone https://github.com/your-org/oacp.git
+cd oacp
+pip install -e ".[dev]"
+pre-commit install
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=oacp --cov-report=html
+
+# Run specific test file
+pytest tests/test_decorators.py
+```
+
+### Code Quality
+
+```bash
+# Format code
+black oacp tests
+
+# Lint code
+ruff check oacp tests
+
+# Type checking
+mypy oacp
+```
+
+## API Reference
+
+### Core Decorators
+
+- `@with_oacp()`: Apply OACP governance to functions
+- `wrap_node()`: Wrap LangGraph nodes with governance
+
+### Decision Making
+
+- `decision_contract()`: Define voting requirements
+- `vote()`: Cast votes on decisions
+- `VoteDecision`: Vote decision enum (APPROVE, REJECT, ABSTAIN)
+
+### Context Access
+
+- `current_context()`: Access current execution context
+- `get_adaptation_statistics()`: View adaptive prompting stats
+
+### Storage Interface
+
+- `IStorage`: Abstract storage interface
+- `FileStorage`: File-based storage implementation
+- `SqliteStorage`: SQLite storage implementation
+- `PostgresStorage`: PostgreSQL storage implementation
+
+## Contributing
+
+We welcome contributions! Please see our contributing guidelines:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with tests
+4. Ensure code quality checks pass
+5. Submit a pull request
+
+### Development Guidelines
+
+- Follow PEP 8 style guidelines
+- Write comprehensive tests
+- Update documentation for new features
+- Use type hints throughout
+- Add docstrings for public APIs
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+## Support
+
+- **Documentation**: Full documentation available in the `docs/` directory
+- **Issues**: Report bugs and request features on GitHub Issues
+- **Examples**: See `examples/` directory for working implementations
+- **CLI Help**: Run `oacp --help` for command-line usage
+
+## Roadmap
+
+- Integration with more LLM providers
+- Advanced voting strategies
+- Web-based monitoring dashboard
+- Distributed agent coordination
+- Performance optimizations
+- Enhanced adaptive prompting algorithms
+
+## Version
+
+Current version: 0.1.0 (Beta)
+
+OACP is under active development. APIs may change between versions until 1.0.0 release.
