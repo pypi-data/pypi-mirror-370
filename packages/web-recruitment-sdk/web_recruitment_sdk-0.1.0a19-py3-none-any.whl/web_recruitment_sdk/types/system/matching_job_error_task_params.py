@@ -1,0 +1,21 @@
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+
+from __future__ import annotations
+
+from typing_extensions import Required, Annotated, TypedDict
+
+from ..._utils import PropertyInfo
+
+__all__ = ["MatchingJobErrorTaskParams"]
+
+
+class MatchingJobErrorTaskParams(TypedDict, total=False):
+    error_message: Required[Annotated[str, PropertyInfo(alias="errorMessage")]]
+
+    task_id: Required[Annotated[int, PropertyInfo(alias="taskId")]]
+    """The ID of the task as it exists in the database"""
+
+    task_name: Required[Annotated[str, PropertyInfo(alias="taskName")]]
+    """The name of the task"""
+
+    body_tenant_db_name: Required[Annotated[str, PropertyInfo(alias="tenantDbName")]]
