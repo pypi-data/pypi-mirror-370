@@ -1,0 +1,34 @@
+fragments: &fragments
+  - &frag-systemd https://gitlab.com/Linaro/lkft/kernel-fragments/-/raw/main/systemd.config
+
+# debian rootfs
+rootfs-debian-testing-arm64: &rootfs-debian-testing-arm64 https://storage.tuxboot.com/debian/bookworm/arm64/rootfs.ext4.xz
+rootfs-debian-testing-x86_64: &rootfs-debian-testing-x86_64 https://storage.tuxboot.com/debian/bookworm/amd64/rootfs.ext4.xz
+
+boot-timeout-arm64: &boot-timeout-arm64 30
+boot-timeout-x86: &boot-timeout-x86 15
+
+kselftest-tc-testing-timeout: &kselftest-tc-testing-timeout 40
+
+version: 1
+name: Build kernel and kselftest.
+description: Build and test linux kernel with kselftest-tc-testing suites
+jobs:
+- name: arm64-clang-config-kselftest
+  builds:
+    - build_name: clang-nightly-config-kselftest
+      target_arch: arm64
+      toolchain: clang-nightly
+      make_variables:
+        LLVM: 1
+        LLVM_IAS: 1
+        TARGETS: tc-testing
+      targets: ["dtbs", "headers", "kernel", "kselftest", "modules"]
+      kconfig: [ defconfig, *frag-systemd, tools/testing/selftests/tc-testing/config ]
+  tests:
+    - device: qemu-arm64
+      boot_args: rw
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", KSELFTEST: "$BUILD/kselftest.tar.xz"}
+      rootfs: *rootfs-debian-testing-arm64
+      tests: [kselftest-tc-testing]
+      timeouts: { "boot": *boot-timeout-arm64, "kselftest-tc-testing": *kselftest-tc-testing-timeout }
