@@ -1,0 +1,8 @@
+__title__ = 'lins_healthchecks'
+__description__ = 'Pacote que integra containers do docker ao sistema de healthcheck da lins-ferrão'
+__url__ = 'https://bitbucket.org/grupolinsferrao/pypck-lins-health-check'
+__version__ = '1.0.2'
+__author__ = 'Grupo Lins Ferrão'
+__author_email__ = 'ti@grupolinsferrao.com.br'
+__license__ = 'MIT'
+__copyright__ = 'Copyright (c) 2025 Grupo Lins Ferrão'
