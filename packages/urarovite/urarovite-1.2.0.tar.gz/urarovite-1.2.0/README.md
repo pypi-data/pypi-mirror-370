@@ -1,0 +1,554 @@
+# Urarovite 🔍
+
+[![PyPI version](https://badge.fury.io/py/urarovite.svg)](https://badge.fury.io/py/urarovite)
+[![Python versions](https://img.shields.io/pypi/pyversions/urarovite.svg)](https://pypi.org/project/urarovite/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A comprehensive spreadsheet validation library with **universal format support** for both Google Sheets and Excel files. Urarovite provides robust data validation, modern authentication, formula preservation, and seamless integration with contemporary codebases through a clean abstraction layer.
+
+## 🚀 Features
+
+### Universal Spreadsheet Support
+- **Google Sheets**: Full gspread integration with modern authentication
+- **Excel Files**: Native `.xlsx` and `.xls` support via openpyxl
+- **Format Agnostic**: Validators work identically across all spreadsheet formats
+- **Formula Preservation**: Maintains formulas during conversion between formats
+- **Intelligent Defaults**: Smart target location detection and file management
+
+### Modern Architecture
+- **Abstraction Layer**: Clean SpreadsheetInterface for format-independent operations
+- **Template Methods**: Consistent validation patterns with automatic resource management
+- **Performance Optimized**: Smart read-only mode detection and client caching
+- **Type Safety**: Comprehensive type hints throughout (Python 3.9+)
+
+### Authentication & Security
+- **Service Account Only**: Base64-encoded credentials (no file storage required)
+- **Domain-wide Delegation**: Enterprise-grade user impersonation support
+- **Secure Credential Handling**: No sensitive data in logs or error messages
+- **Environment Integration**: Seamless .env file support
+
+### Validation System
+- **19+ Built-in Validators**: Data quality, range validation, platform neutralization
+- **Fix & Flag Modes**: Automatic issue resolution or reporting-only modes
+- **Comprehensive Coverage**: Empty cells, duplicates, formatting, tab names, ranges
+- **Excel Compatibility**: Tab name validation, formula detection, range verification
+
+## 📦 Installation
+
+```bash
+pip install urarovite
+```
+
+### Optional Dependencies
+
+```bash
+# For Excel file support
+pip install urarovite[excel]
+
+# For development
+pip install urarovite[dev]
+
+# For Jupyter notebook support
+pip install urarovite[notebook]
+
+# Install all extras
+pip install urarovite[excel,dev,notebook]
+```
+
+## 🔑 Authentication Setup
+
+### Service Account (Recommended)
+
+1. **Create a Google Cloud Project**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+
+2. **Enable APIs**:
+   - Navigate to "APIs & Services" > "Library"
+   - Enable "Google Sheets API" and "Google Drive API"
+
+3. **Create Service Account**:
+   - Go to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "Service Account"
+   - Download the JSON key file
+
+4. **Prepare Credentials**:
+
+   ```python
+   import base64
+   import json
+   
+   # Load your service account JSON
+   with open('path/to/service-account.json', 'r') as f:
+       service_account = json.load(f)
+   
+   # Encode for use with urarovite
+   encoded_creds = base64.b64encode(json.dumps(service_account).encode()).decode()
+   ```
+
+### Domain-wide Delegation (Enterprise)
+
+For enterprise users who need to impersonate other users:
+
+1. **Enable Domain-wide Delegation** in your service account settings
+2. **Add OAuth Scopes** in Google Admin Console:
+   - `https://www.googleapis.com/auth/spreadsheets`
+   - `https://www.googleapis.com/auth/drive.readonly`
+
+## 💻 Usage
+
+### Basic Validation
+
+```python
+from urarovite.core.api import execute_validation, get_available_validation_criteria
+
+# List available validators
+validators = get_available_validation_criteria()
+print(validators)
+# [{"id": "empty_cells", "name": "Fix Empty Cells (with range targeting)"}, ...]
+
+# Google Sheets validation (requires authentication)
+encoded_creds = "eyJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsIC4uLn0="
+result = execute_validation(
+    check={"id": "empty_cells", "mode": "fix"},
+    sheet_url="https://docs.google.com/spreadsheets/d/1ABC123/edit",
+    auth_secret=encoded_creds,
+    subject="user@domain.com"  # Optional: for domain-wide delegation
+)
+
+# Excel file validation (no authentication required)
+result = execute_validation(
+    check={"id": "empty_cells", "mode": "fix"},
+    sheet_url="./data/spreadsheet.xlsx"
+)
+
+# Excel to Google Sheets conversion with validation
+result = execute_validation(
+    check={"id": "tab_names", "mode": "fix"},
+    sheet_url="./data/spreadsheet.xlsx",
+    auth_secret=encoded_creds,
+    target="1hWMAXridd8Gd_ND6p8r4bGLQYZnL0b52",  # Drive folder ID
+    target_format="sheets"
+)
+
+print(f"Fixed {result['fixes_applied']} flags")
+print(f"Found {result['flags_flagged']} additional flags")
+print(f"Logs: {result['automated_logs']}")
+```
+
+### Advanced Validation: Target Specific Ranges
+
+The `empty_cells` validator now supports targeting specific cell ranges instead of checking all cells. This is useful when you only want to validate certain areas of your spreadsheet.
+
+#### Range Targeting Examples
+
+```python
+from urarovite.validators.data_quality import EmptyCellsValidator
+
+validator = EmptyCellsValidator()
+
+# Target a specific range (e.g., 'Case'!D72:D76)
+result = validator.validate(
+    "spreadsheet.xlsx",
+    mode="flag",
+    target_ranges="Case!D72:D76"
+)
+
+# Target individual cells
+result = validator.validate(
+    "spreadsheet.xlsx", 
+    mode="fix",
+    target_ranges=["Case!D72", "Case!D73", "Case!D74"],
+    fill_value="N/A"
+)
+
+# Target multiple ranges
+result = validator.validate(
+    "spreadsheet.xlsx",
+    mode="flag", 
+    target_ranges=["Sheet1!A1:B10", "Sheet1!D5:F15"]
+)
+
+# Without sheet name (uses default sheet)
+result = validator.validate(
+    "spreadsheet.xlsx",
+    mode="flag",
+    target_ranges="A1:C5"
+)
+```
+
+#### Range Format Support
+
+- **Range notation**: `'Sheet'!A1:B10` - checks all cells from A1 to B10
+- **Individual cells**: `'Sheet'!A1, 'Sheet'!B2` - checks only specific cells
+- **Mixed formats**: Combine ranges and individual cells in a list
+- **Sheet names**: Use quotes for sheets with spaces: `'My Sheet'!A1`
+- **Backward compatibility**: No `target_ranges` parameter = check all cells (default behavior)
+
+#### Command Line Usage with Ranges
+
+```bash
+# Target specific range
+./run_validation.sh --check '{"id": "empty_cells", "mode": "flag", "target_ranges": "Case!D72:D76"}' 'spreadsheet.xlsx'
+
+# Target individual cells  
+./run_validation.sh --check '{"id": "empty_cells", "mode": "fix", "target_ranges": ["Case!D72", "Case!D73"], "fill_value": "N/A"}' 'spreadsheet.xlsx'
+```
+
+### Sheet Crawling & Batch Validation
+
+Urarovite includes powerful sheet crawling capabilities that can automatically discover and validate all sheets referenced in a metadata spreadsheet. This is perfect for processing large datasets with multiple input/output sheet pairs.
+
+#### 🚀 Super Simple Usage
+
+```bash
+# Just provide the URL - saves fixed sheets as Google Sheets in same folder as source
+./run_crawl_validation.sh "https://docs.google.com/spreadsheets/d/1Jx5CHYvKt3y2aO-1vFKT7botQUWnvp-CcZftvFGz2pQ/edit#gid=114720924"
+```
+
+**What this does:**
+- ✅ Crawls through your metadata sheet
+- ✅ Finds all input/output sheet URLs automatically
+- ✅ Runs ALL available validations on each sheet
+- ✅ **Saves fixed sheets as Google Sheets in the same folder as the source** (NEW DEFAULT!)
+- ✅ **Automatically adds fixed sheet URLs back to your metadata sheet** (NEW!)
+- ✅ Provides comprehensive results and statistics
+
+#### Command Line Options
+
+```bash
+# With domain-wide delegation
+./run_crawl_validation.sh "https://docs.google.com/spreadsheets/d/your-sheet-id" "user@yourdomain.com"
+
+# Flag mode only (no fixes applied)
+./run_crawl_validation.sh "https://docs.google.com/spreadsheets/d/your-sheet-id" --mode flag
+
+# Save to local Excel files instead
+./run_crawl_validation.sh "https://docs.google.com/spreadsheets/d/your-sheet-id" --target local --format excel
+
+# Save to specific Google Drive folder
+./run_crawl_validation.sh "https://docs.google.com/spreadsheets/d/your-sheet-id" --target "1A2B3C4D5E6F7G8H9I0J"
+```
+
+#### 📋 New Defaults (Google-First)
+
+- **Target**: Same folder as source (intelligent default) ← was "local"
+- **Format**: Google Sheets ← was "excel"
+
+**Why This is Better:**
+1. **Seamless Google Workflow**: Fixed sheets stay in Google Drive where you can easily access them
+2. **Same Folder Organization**: Fixed sheets are created right next to your source sheets
+3. **No File Management**: No need to upload/download Excel files
+4. **Team Collaboration**: Everyone can access the fixed sheets immediately
+5. **Version History**: Google Sheets maintains version history of fixes
+6. **Automatic Audit Trail**: Fixed sheet URLs are automatically added to your metadata sheet
+
+#### 📝 New Metadata Columns
+
+After running the crawling script, your metadata sheet will automatically get new columns added:
+
+**For Google Sheets Output (Default):**
+- **`input_sheet_url_fixed`**: URLs to the fixed versions of input sheets
+- **`example_output_sheet_url_fixed`**: URLs to the fixed versions of output sheets
+- **`input_fixes_applied`**: Number of fixes applied to input sheets
+- **`input_flags_found`**: Number of flags found in input sheets
+- **`input_validation_summary`**: Summary of validation results for input sheets
+- **`input_validation_errors`**: Any validation errors for input sheets
+- **`output_fixes_applied`**: Number of fixes applied to output sheets
+- **`output_flags_found`**: Number of flags found in output sheets
+- **`output_validation_summary`**: Summary of validation results for output sheets
+- **`output_validation_errors`**: Any validation errors for output sheets
+
+**For Excel Output:**
+- **`input_sheet_path_fixed`**: Relative paths to the fixed Excel files for input sheets
+- **`example_output_sheet_path_fixed`**: Relative paths to the fixed Excel files for output sheets
+- **Plus all the same validator output columns as above**
+
+#### Example Results
+
+**Before:**
+| worker_id | input_sheet_url | example_output_sheet_url |
+|-----------|----------------|--------------------------|
+| ABC123    | https://docs.google.com/.../input123 | https://docs.google.com/.../output123 |
+
+**After (showing key columns):**
+| worker_id | input_sheet_url_fixed | input_fixes_applied | input_flags_found | input_validation_summary | output_sheet_url_fixed | output_fixes_applied | output_flags_found |
+|-----------|----------------------|--------------------|--------------------|-------------------------|----------------------|--------------------|--------------------|
+| ABC123    | https://docs.google.com/.../input123_fixed | 15 | 3 | ✅ 12 successful; ❌ 1 failed | https://docs.google.com/.../output123_fixed | 8 | 0 |
+
+This creates a **complete audit trail** showing:
+- 🔗 **Where the fixed sheets are located** (direct links)
+- 📊 **Exactly what was fixed** (number of fixes applied)
+- ⚠️ **What flags remain** (flags found but not fixed)
+- ✅ **Validation success rate** (how many validators succeeded)
+- 🚨 **Any errors encountered** (validation errors for troubleshooting)
+
+#### 📊 Expected Output
+
+```
+🚀 Starting Urarovite Sheet Crawling and Validation
+==================================================
+[INFO] Metadata Sheet: https://docs.google.com/spreadsheets/d/...
+[INFO] Authentication: ✓ Configured
+[INFO] Validation Mode: fix
+[INFO] Target: Same folder as source (intelligent default)
+[INFO] Format: sheets
+[INFO] Preserve Formatting: true
+
+🔍 Starting crawling and validation...
+   Metadata Sheet: https://docs.google.com/spreadsheets/d/...
+   Authentication: ✓ Configured
+   Validation Mode: fix
+   Target: Same folder as source (intelligent default)
+   Format: sheets
+
+📋 CRAWLING AND VALIDATION RESULTS
+==================================================
+✅ Overall Status: SUCCESS
+
+📊 Summary Statistics:
+   Total Sheet Pairs: 15
+   Successful Pairs: 15
+   Failed Pairs: 0
+   Total Input Fixes: 47
+   Total Output Fixes: 23
+   Total Input flags: 12
+   Total Output flags: 8
+   Total Errors: 0
+
+⏱️  Performance Metrics:
+   Total Time: 125.30 seconds
+   Crawling Time: 5.20 seconds
+   Validation Time: 120.10 seconds
+   Processing Rate: 0.12 pairs/second
+
+💾 Output Files:
+   Results JSON: ./output/crawl_validation_results_20241220_143022.json
+   Processing Log: ./output/crawl_validation_20241220_143022.log
+   Validated Files: Check Google Drive - fixed sheets created in source folders
+
+🎉 Crawling and validation completed successfully!
+   Applied 70 fixes across all sheets
+   Check Google Drive for the fixed sheets
+```
+
+#### 🎯 Perfect for Batch Processing
+
+This crawling functionality is ideal for data cleaning tasks because:
+
+1. **Batch Processing**: Processes all your input/output sheet pairs at once
+2. **Intelligent Detection**: Automatically finds sheet URLs in your metadata
+3. **Comprehensive Validation**: Runs all available validators on each sheet
+4. **Google-Native**: Keeps everything in Google Drive for easy access
+5. **Detailed Reporting**: Shows exactly what was fixed and where
+
+Just run it once and get all your sheets validated and fixed! 🚀
+
+#### Prerequisites for Crawling
+
+```bash
+# Set your authentication (required)
+export AUTH_SECRET="eyJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsIC4uLn0="
+
+# Optional: For domain-wide delegation
+export DELEGATION_SUBJECT="user@yourdomain.com"
+```
+
+### Advanced Usage with gspread
+
+```python
+from urarovite.auth import get_gspread_client, create_sheets_service_from_encoded_creds
+from urarovite.utils.sheets import extract_sheet_id, get_sheet_values
+
+# Create gspread client (recommended)
+client = get_gspread_client(encoded_creds, subject="user@domain.com")
+spreadsheet = client.open_by_key(sheet_id)
+
+# Or create traditional Google Sheets API service
+service = create_sheets_service_from_encoded_creds(encoded_creds)
+
+# Use utility functions
+sheet_id = extract_sheet_id("https://docs.google.com/spreadsheets/d/1ABC123/edit")
+data = get_sheet_values(service, sheet_id, "Sheet1!A1:Z1000")
+```
+
+## ⚙️ Configuration
+
+### Range Separator Configuration
+
+Urarovite supports configurable range separators for parsing verification field ranges. By default, ranges are separated by `@@`, but you can configure this to use any separator (e.g., commas).
+
+#### Global Configuration
+
+```python
+from urarovite.utils.sheets import get_segment_separator, set_segment_separator
+
+# Check current separator
+print(f"Current separator: '{get_segment_separator()}'")  # Default: '@@'
+
+# Change to comma separator
+set_segment_separator(",")
+
+# Now all functions will use comma by default
+from urarovite.utils.sheets import split_segments
+ranges = "Sheet1!A1:B2,Sheet2!C3:D4"
+segments = split_segments(ranges)  # Uses comma separator
+print(segments)  # ['Sheet1!A1:B2', 'Sheet2!C3:D4']
+
+# Restore default
+set_segment_separator("@@")
+```
+
+#### Per-Validator Configuration
+
+You can also specify separators per validation call:
+
+```python
+from urarovite.validators import get_validator
+
+validator = get_validator("open_ended_ranges")
+
+# Use comma separator for this validation
+result = validator.validate(
+    spreadsheet_source=sheet_url,
+    mode="flag",
+    auth_credentials=auth_creds,
+    row=row_data,
+    separator=","  # Override separator for this call
+)
+```
+
+#### Supported Separators
+
+- **Default**: `@@` (double at-sign)
+- **Comma**: `,` (comma)
+- **Pipe**: `|` (pipe)
+- **Semicolon**: `;` (semicolon)
+- **Any string**: Custom separators as needed
+
+#### Backward Compatibility
+
+All existing code continues to work unchanged:
+- Functions default to `@@` separator if no separator is specified
+- Explicit separator parameters override global settings
+- No breaking changes to existing APIs
+
+## 🔧 Migration from OAuth
+
+If you're migrating from OAuth-based authentication:
+
+```python
+# OLD: OAuth-based authentication
+from urarovite.checker.auth import get_credentials, get_sheets_service
+creds = get_credentials()  # Interactive OAuth flow
+service = get_sheets_service()
+
+# NEW: Service account with base64 credentials
+from urarovite.auth import create_sheets_service_from_encoded_creds
+service = create_sheets_service_from_encoded_creds(encoded_creds)
+
+# Or use modern gspread client (recommended)
+from urarovite.auth import get_gspread_client
+client = get_gspread_client(encoded_creds)
+```
+
+## 📚 Documentation
+
+- **Migration Guide**: See [MIGRATION_SUMMARY.md](MIGRATION_SUMMARY.md) for detailed changes
+- **Validator Migration**: See [VALIDATOR_MIGRATION_GUIDE.md](VALIDATOR_MIGRATION_GUIDE.md) for validator development
+- **Spreadsheet Abstraction**: See [SPREADSHEET_ABSTRACTION_GUIDE.md](SPREADSHEET_ABSTRACTION_GUIDE.md) for multi-format support
+- **API Reference**: Full type hints and docstrings throughout the codebase
+- **Command Line Usage**: Use `./run_validation.sh` for batch validation operations
+- **Examples**: Check the `/tests` directory for comprehensive usage examples
+
+## 🧪 Testing
+
+```bash
+# Install with dev dependencies
+pip install urarovite[dev]
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=urarovite
+```
+
+## 🖥️ Command Line Usage
+
+The repository includes convenient shell scripts for running validations from the command line:
+
+### Single Sheet Validation (`run_validation.sh`)
+
+For validating individual spreadsheets:
+
+### Prerequisites
+
+1. **Make the script executable** (if needed):
+   ```bash
+   chmod +x run_validation.sh
+   ```
+
+2. **For Google Sheets validation**, create a `.env` file with your base64-encoded service account:
+   ```bash
+   # .env file
+   AUTH_SECRET=eyJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsIC4uLn0=
+   ```
+
+### Usage Examples
+
+```bash
+# Run all validations on Google Sheets
+./run_validation.sh --all 'https://docs.google.com/spreadsheets/d/abc123'
+
+# Run all validations on local Excel file
+./run_validation.sh --all './data/spreadsheet.xlsx'
+
+# Run single validation with JSON
+./run_validation.sh --check '{"id": "empty_cells", "mode": "fix"}' 'https://docs.google.com/spreadsheets/d/abc123'
+
+# Run single validation on Excel file
+./run_validation.sh --check '{"id": "tab_names", "mode": "fix"}' './spreadsheet.xlsx'
+
+# With delegation subject (Google Sheets only)
+./run_validation.sh --all 'https://docs.google.com/spreadsheets/d/abc123' 'user@domain.com'
+
+# Load check from JSON file
+echo '{"id": "duplicate_rows", "mode": "flag"}' > check.json
+./run_validation.sh --check check.json 'https://docs.google.com/spreadsheets/d/abc123'
+```
+
+### Script Options
+
+- `--all`: Run all available validation criteria
+- `--check <json_or_file>`: Run a single validation check (JSON string or file path)
+
+### Supported Input Types
+
+- **Google Sheets**: URLs containing `docs.google.com` (requires authentication)
+- **Excel Files**: Local `.xlsx` or `.xls` files (no authentication required)
+
+The script automatically detects the input type and applies appropriate authentication requirements.
+
+### Batch Validation with Crawling (`run_crawl_validation.sh`)
+
+For processing multiple sheets referenced in a metadata spreadsheet, see the [Sheet Crawling & Batch Validation](#sheet-crawling--batch-validation) section above. This script can automatically discover and validate all sheets in your data processing workflow.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Install development dependencies: `pip install urarovite[dev]`
+4. Make your changes with proper type hints and tests
+5. Run tests and linting: `pytest && ruff check`
+6. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the GNU General Public License v3 (GPLv3) - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- **PyPI**: <https://pypi.org/project/urarovite/>
+- **GitHub**: <https://github.com/ParetoWorkers/Urarovite>
+- **flags**: <https://github.com/ParetoWorkers/Urarovite/flags>
