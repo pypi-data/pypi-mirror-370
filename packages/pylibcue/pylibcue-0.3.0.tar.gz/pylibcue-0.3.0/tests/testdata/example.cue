@@ -1,0 +1,27 @@
+CATALOG 4549767191621
+PERFORMER "サンドリオン"
+TITLE "天体図"
+FILE "COCC-18150.wav" WAVE
+  TRACK 01 AUDIO
+    TITLE "天体図"
+    PERFORMER "サンドリオン"
+    ISRC JPCO02329890
+    INDEX 01 00:00:00
+  TRACK 02 AUDIO
+    TITLE "ゆびきりの唄"
+    PERFORMER "サンドリオン"
+    ISRC JPCO02329840
+    INDEX 00 04:08:50
+    INDEX 01 04:10:59
+  TRACK 03 AUDIO
+    TITLE "天体図 (off vocal ver.)"
+    PERFORMER "サンドリオン"
+    ISRC JPCO02329898
+    INDEX 00 08:15:16
+    INDEX 01 08:17:38
+  TRACK 04 AUDIO
+    TITLE "ゆびきりの唄 (off vocal ver.)"
+    PERFORMER "サンドリオン"
+    ISRC JPCO02329849
+    INDEX 00 12:25:25
+    INDEX 01 12:27:43
