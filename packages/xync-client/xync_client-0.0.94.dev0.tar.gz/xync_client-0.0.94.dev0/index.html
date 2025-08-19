@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Scanner Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 300px;
+            width: 100%;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .scan-button {
+            background: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 20px;
+            transition: opacity 0.2s;
+        }
+
+        .scan-button:hover {
+            opacity: 0.8;
+        }
+
+        .scan-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .result-container {
+            background: var(--tg-theme-secondary-bg-color, #f4f4f4);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: left;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .result-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .result-text {
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .error {
+            color: #ff3b30;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .info {
+            color: var(--tg-theme-hint-color, #999999);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">QR Сканер</h1>
+        <p class="info">Нажмите кнопку для сканирования QR-кода</p>
+
+        <button class="scan-button" id="scanButton">
+            📱 Сканировать QR-код
+        </button>
+
+        <div id="result" style="display: none;">
+            <div class="result-container">
+                <div class="result-title">Результат сканирования:</div>
+                <div class="result-text" id="resultText"></div>
+            </div>
+        </div>
+
+        <div id="debug" class="result-container" style="display: block; background: #e8f4fd; border: 1px solid #3390ec;">
+            <div class="result-title">Отладочная информация:</div>
+            <div class="result-text" id="debugText">Инициализация...</div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Проверяем доступность Telegram Web App API
+        let tg = null;
+        let isTelegramEnvironment = false;
+
+        try {
+            if (window.Telegram && window.Telegram.WebApp) {
+                tg = window.Telegram.WebApp;
+                isTelegramEnvironment = true;
+
+                // Настройка темы и интерфейса
+                tg.ready();
+                tg.expand();
+            } else {
+                // Создаем заглушку для тестирования вне Telegram
+                tg = {
+                    themeParams: {
+                        bg_color: '#ffffff',
+                        text_color: '#000000',
+                        button_color: '#3390ec',
+                        button_text_color: '#ffffff'
+                    },
+                    showScanQrPopup: function(params) {
+                        // Имитация сканирования для тестирования
+                        setTimeout(() => {
+                            const mockQRData = 'https://example.com/test-qr-data-' + Date.now();
+                            // Имитируем событие qrTextReceived
+                            if (this.eventHandlers && this.eventHandlers['qrTextReceived']) {
+                                this.eventHandlers['qrTextReceived'].forEach(handler => {
+                                    handler({ data: mockQRData });
+                                });
+                            }
+                        }, 2000);
+                    },
+                    sendData: function(data) {
+                        console.log('Mock sendData:', data);
+                    },
+                    onEvent: function(event, callback) {
+                        console.log('Mock onEvent:', event);
+                        if (!this.eventHandlers) this.eventHandlers = {};
+                        if (!this.eventHandlers[event]) this.eventHandlers[event] = [];
+                        this.eventHandlers[event].push(callback);
+                    },
+                    offEvent: function(event, callback) {
+                        console.log('Mock offEvent:', event);
+                        if (this.eventHandlers && this.eventHandlers[event]) {
+                            const index = this.eventHandlers[event].indexOf(callback);
+                            if (index > -1) {
+                                this.eventHandlers[event].splice(index, 1);
+                            }
+                        }
+                    }
+                };
+            }
+        } catch (error) {
+            console.error('Ошибка инициализации Telegram Web App:', error);
+            addDebugInfo = function(msg) { console.log(msg); };
+            // Используем заглушку
+            tg = {
+                themeParams: {},
+                showScanQrPopup: null,
+                sendData: function() {},
+                onEvent: function() {}
+            };
+        }
+
+        // Инициализируем функцию отладки если она еще не определена
+        if (typeof addDebugInfo === 'undefined') {
+            addDebugInfo = function(msg) { console.log(msg); };
+        }
+
+        // Применяем тему Telegram
+        if (tg && tg.themeParams) {
+            document.body.style.backgroundColor = tg.themeParams.bg_color || '#ffffff';
+            document.body.style.color = tg.themeParams.text_color || '#000000';
+        }
+
+        // Элементы DOM
+        const scanButton = document.getElementById('scanButton');
+        const resultDiv = document.getElementById('result');
+        const resultText = document.getElementById('resultText');
+        const errorDiv = document.getElementById('error');
+        const debugDiv = document.getElementById('debug');
+        const debugText = document.getElementById('debugText');
+
+        // Функция для добавления отладочной информации
+        function addDebugInfo(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugText.innerHTML += `<br>[${timestamp}] ${message}`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+
+        // Функция для показа ошибки
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            addDebugInfo(`ОШИБКА: ${message}`);
+        }
+
+        // Функция для показа результата
+        function showResult(data) {
+            resultText.textContent = data;
+            resultDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            addDebugInfo(`РЕЗУЛЬТАТ ОТОБРАЖЕН: "${data}"`);
+        }
+
+        // Функция сканирования QR-кода
+        function scanQRCode() {
+            addDebugInfo('Начало сканирования...');
+
+            // Скрываем предыдущие результаты и ошибки
+            resultDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+
+            // Блокируем кнопку во время сканирования
+            scanButton.disabled = true;
+            scanButton.textContent = '🔍 Сканирование...';
+
+            try {
+                // Проверяем доступность API
+                if (!tg || !tg.showScanQrPopup) {
+                    if (isTelegramEnvironment) {
+                        throw new Error('QR сканер недоступен в этой версии Telegram');
+                    } else {
+                        throw new Error('Приложение должно запускаться в Telegram');
+                    }
+                }
+
+                addDebugInfo('API доступен, открываем сканер...');
+
+                // Устанавливаем обработчики событий ДО открытия сканера
+                const handleQrText = function(data) {
+                    addDebugInfo(`Получено событие qrTextReceived: ${JSON.stringify(data)}`);
+
+                    let qrData = null;
+
+                    // Пробуем разные форматы данных
+                    if (typeof data === 'string') {
+                        qrData = data;
+                    } else if (data && data.data) {
+                        qrData = data.data;
+                    } else if (data && typeof data === 'object') {
+                        qrData = JSON.stringify(data);
+                    }
+
+                    if (qrData) {
+                        // Сразу закрываем сканер при успешном распознавании
+                        addDebugInfo('Закрываем сканер после успешного распознавания...');
+                        if (tg.closeScanQrPopup) {
+                            try {
+                                tg.closeScanQrPopup();
+                                addDebugInfo('Сканер закрыт программно');
+                            } catch (e) {
+                                addDebugInfo(`Ошибка закрытия сканера: ${e.message}`);
+                            }
+                        }
+
+                        showResult(qrData);
+
+                        // Отправляем данные обратно в Telegram
+                        if (isTelegramEnvironment && tg.sendData) {
+                            try {
+                                tg.sendData(JSON.stringify({
+                                    action: 'qr_scanned',
+                                    data: qrData,
+                                    timestamp: Date.now()
+                                }));
+                                addDebugInfo('Данные отправлены в Telegram');
+                            } catch (e) {
+                                addDebugInfo(`Ошибка отправки данных: ${e.message}`);
+                            }
+                        }
+                    } else {
+                        showError('QR-код не содержит данных или данные в неизвестном формате');
+                    }
+
+                    // Разблокируем кнопку
+                    scanButton.disabled = false;
+                    scanButton.textContent = '📱 Сканировать QR-код';
+
+                    // Удаляем обработчик
+                    if (tg.offEvent) {
+                        tg.offEvent('qrTextReceived', handleQrText);
+                    }
+                };
+
+                const handleScanClosed = function() {
+                    addDebugInfo('Сканер закрыт пользователем');
+
+                    // НЕ сбрасываем результат если он уже есть
+                    if (resultDiv.style.display !== 'block') {
+                        // Только если результата нет, показываем отмену
+                        showError('Сканирование отменено');
+                    } else {
+                        // Если результат есть, просто скрываем ошибку
+                        errorDiv.style.display = 'none';
+                        addDebugInfo('Результат сохранен после закрытия сканера');
+                    }
+
+                    scanButton.disabled = false;
+                    scanButton.textContent = '📱 Сканировать QR-код';
+
+                    if (tg.offEvent) {
+                        tg.offEvent('qrTextReceived', handleQrText);
+                        tg.offEvent('scanQrPopupClosed', handleScanClosed);
+                    }
+                };
+
+                // Устанавливаем обработчики
+                tg.onEvent('qrTextReceived', handleQrText);
+                tg.onEvent('scanQrPopupClosed', handleScanClosed);
+
+                addDebugInfo('Обработчики событий установлены');
+
+                // Открываем сканер QR-кода
+                tg.showScanQrPopup({
+                    text: 'Наведите камеру на QR-код'
+                });
+
+                addDebugInfo('Сканер открыт, ждем сканирования...');
+
+                // Добавляем таймаут на случай зависания
+                setTimeout(() => {
+                    if (scanButton.disabled) {
+                        addDebugInfo('Таймаут: сканирование длится более 30 секунд');
+                        scanButton.disabled = false;
+                        scanButton.textContent = '📱 Сканировать QR-код';
+                    }
+                }, 30000);
+
+            } catch (error) {
+                addDebugInfo(`Исключение в scanQRCode: ${error.message}`);
+                showError('Ошибка: ' + error.message);
+
+                // Разблокируем кнопку
+                scanButton.disabled = false;
+                scanButton.textContent = '📱 Сканировать QR-код';
+            }
+        }
+
+        // Обработчик события для кнопки сканирования
+        scanButton.addEventListener('click', scanQRCode);
+
+        // Обработчик закрытия сканера (если пользователь отменил)
+        if (isTelegramEnvironment && tg.onEvent) {
+            tg.onEvent('scanQrPopupClosed', function() {
+                console.log('Сканер QR-кода закрыт');
+                // Разблокируем кнопку если сканер был закрыт
+                scanButton.disabled = false;
+                scanButton.textContent = '📱 Сканировать QR-код';
+
+                // Показываем сообщение о том, что сканирование отменено
+                showError('Сканирование отменено');
+            });
+        }
+
+        // Проверяем поддержку QR сканера при загрузке
+        window.addEventListener('load', function() {
+            addDebugInfo(`Среда Telegram: ${isTelegramEnvironment}`);
+            addDebugInfo(`Версия WebApp: ${tg.version || 'неизвестно'}`);
+            addDebugInfo(`Platform: ${tg.platform || 'неизвестно'}`);
+            addDebugInfo(`showScanQrPopup доступен: ${!!tg.showScanQrPopup}`);
+            addDebugInfo(`onEvent доступен: ${!!tg.onEvent}`);
+
+            if (!isTelegramEnvironment) {
+                addDebugInfo('⚠️ Тестовый режим - имитация сканирования через 2 секунды');
+            } else if (!tg.showScanQrPopup) {
+                showError('QR сканер не поддерживается в этой версии Telegram. Обновите приложение.');
+                scanButton.disabled = true;
+                addDebugInfo('QR сканер недоступен');
+            } else {
+                addDebugInfo('✅ QR сканер готов к работе');
+            }
+        });
+    </script>
+</body>
+</html>
