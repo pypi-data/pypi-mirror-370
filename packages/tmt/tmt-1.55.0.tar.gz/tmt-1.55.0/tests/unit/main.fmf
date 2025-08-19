@@ -1,0 +1,89 @@
+summary: Python unit tests
+description:
+    Run all available python unit tests using pytest.
+duration: 30m
+environment:
+    LANG: en_US.UTF-8
+
+    ENABLE_PARALLELIZATION: "no"
+    ENABLE_CONTAINERS: "no"
+    WITH_SYSTEM_PACKAGES: "no"
+
+adjust+:
+  - when: distro == centos-stream-9
+    environment+:
+      HATCH_ENVIRONMENT: dev-not-editable
+
+require+:
+  - gcc
+  - git
+  - python3-nitrate
+  - libvirt-devel
+  - krb5-devel
+  - libpq-devel
+  - python3-devel
+  - jq
+  - podman
+  - buildah
+
+# Run against development packages via `hatch`.
+/with-development-packages:
+    enabled: false
+
+    require+:
+      - hatch
+
+    adjust+:
+      - when: initiator is not defined or distro == fedora-rawhide
+        enabled: true
+        because:
+            We want to run this locally and it's enough to execute
+            on a single distro when run in the CI. We don't need
+            to exercise this again and again across all distros.
+      - when: distro == fedora-rawhide
+        enabled: false
+        because: |
+          Python 3.14 wheels for lxml and pydantic are not available yet
+
+    /basic:
+        summary: Basic unit tests (development packages)
+        tier: 0
+
+    /extended:
+        summary: Extended unit tests (development packages)
+        tier: 2
+        duration: 1h
+
+        environment+: &extended_environment
+            ENABLE_PARALLELIZATION: "yes"
+            ENABLE_CONTAINERS: "yes"
+
+# Run against system, distro-packaged ones via `venv`.
+/with-system-packages:
+    enabled: false
+
+    environment+:
+        WITH_SYSTEM_PACKAGES: "yes"
+
+    require+:
+      - python3-pytest
+
+    adjust+:
+      - when: initiator == packit
+        because: Enable in CI only
+        enabled: true
+      - when: distro == fedora-rawhide
+        enabled: false
+        because: |
+          Python 3.14 wheels for lxml and pydantic are not available yet
+
+    /basic:
+        summary: Basic unit tests (system packages)
+        tier: 0
+
+    /extended:
+        summary: Extended unit tests (system packages)
+        tier: 2
+        duration: 1h
+
+        environment+: *extended_environment

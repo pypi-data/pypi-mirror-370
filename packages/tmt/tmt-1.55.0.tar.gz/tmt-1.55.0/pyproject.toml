@@ -1,0 +1,470 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tmt"
+dynamic = ["version"]
+description = "Test Management Tool"
+readme = "README.rst"
+license = "MIT"
+license-file = "LICENSE"
+requires-python = ">=3.9"
+authors = [
+    { name = "Petr Splichal", email = "psplicha@redhat.com" },
+    ]
+maintainers = [
+    { name = "Petr Splichal", email = "psplicha@redhat.com" },
+    ]
+keywords = [
+    "metadata",
+    "testing",
+    ]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+    "Topic :: Software Development :: Testing",
+    "Operating System :: POSIX :: Linux",
+    ]
+dependencies = [
+    # Minimal versions based on c9s rpms
+    "click>=8.0.3",
+    "docutils>=0.16",
+    "fmf>=1.7.0",
+    "jinja2>=2.11.3",
+    "packaging>=20.9",
+    "pint>=0.16.1",
+    "pydantic>=1.10.14",
+    "pygments>=2.7.4",
+    "requests>=2.25.1",
+    "ruamel.yaml>=0.16.6",
+    "urllib3>=1.26.5, <3.0",
+    "typing-extensions>=4; python_version < '3.13'",
+    ]
+
+[project.optional-dependencies]
+ansible = [
+    "ansible-core>=2.14.18",
+    ]
+test-convert = [
+    "html2text>=2020.1.16",
+    "markdown>=3.3.4",
+    "nitrate>=1.9.0",
+    "python-bugzilla>=3.2.0",
+    ]
+export-polarion = [
+    "pylero>=0.1.0",
+    ]
+provision-beaker = [
+    "mrack>=1.23.2",
+    ]
+provision-virtual = [
+    "testcloud>=0.11.7",
+    ]
+provision-container = []
+provision-bootc = []
+report-junit = [
+    # Required to support XML parsing and checking the XSD schemas.
+    "lxml>=4.6.5",
+    ]
+report-polarion = [
+    "tmt[report-junit]",
+    "tmt[export-polarion]",
+    ]
+link-jira = [
+    "jira>=3.5.0, <4",
+    ]
+all = [
+    "tmt[test-convert]",
+    "tmt[export-polarion]",
+    "tmt[provision-container]",
+    "tmt[provision-bootc]",
+    "tmt[provision-virtual]",
+    "tmt[provision-beaker]",
+    "tmt[report-junit]",
+    "tmt[report-polarion]",
+    "tmt[link-jira]",
+    ]
+# Needed for readthedocs and man page build. Not being packaged in rpm.
+docs = [
+    "renku-sphinx-theme==0.4.0",
+    "readthedocs-sphinx-ext",
+    "docutils>=0.18.1",
+    "Sphinx==7.3.7",
+    "fmf>=1.7.0",
+    ]
+
+[project.scripts]
+tmt = "tmt.__main__:run_cli"
+
+[project.urls]
+Homepage = "https://github.com/teemtee/tmt"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options.version_scheme = "release-branch-semver"
+raw-options.git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--abbrev=9", "--match", "*[0-9]*"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/tmt",
+    "/LICENSE",
+    "/examples",
+    "/README.rst",
+    "/tests",
+    "/tmt.spec",
+    "/tmt.1",
+    "/completions",
+    "/.fmf",
+    ]
+
+artifacts = ["tmt.1"]
+
+[tool.hatch.envs.default]
+platforms = ["linux"]
+
+[tool.hatch.envs.dev]
+description = "Development environment"
+dependencies = [
+    "autopep8",
+    "ruff",
+    "mypy",
+    "pytest",
+    "python-coveralls",
+    "pytest-container",
+    "pytest-xdist",
+    "requre",
+    "yq==3.1.1",
+    "pre-commit",
+    # Do not install *types-click* - it's not recommended with Click 8 & newer,
+    # which is the version a developer encounters given the requirements are not
+    # frozen.
+    "types-Markdown",
+    # prevent conflict between types-requests and urllib3
+    "types-requests<2.31.0.7; python_version < '3.10'",
+    "types-requests; python_version >= '3.10'",
+    "types-setuptools",
+    "types-jsonschema",
+    "types-urllib3",
+    "types-jinja2",
+    "types-babel",
+    "types-docutils",
+    "types-lxml",
+    ]
+features = ["all"]
+
+[tool.hatch.envs.dev.scripts]
+lint = ["autopep8 {args:.}", "ruff --fix {args:.}"]
+type = ["mypy {args:tmt}"]
+check = ["lint", "type"]
+
+unit = "make images/test && pytest -vvv -ra --showlocals -n 0 tests/unit"
+smoke = "pytest -vvv -ra --showlocals -n 0 tests/unit/test_cli.py"
+cov = [
+    "coverage run --source=tmt -m pytest -vvv -ra --showlocals -n 0 tests",
+    "coverage report",
+    "coverage annotate",
+    ]
+requre = [
+    "cd {root}/tests/integration",
+    "pytest -vvv -ra --showlocals -n 0",
+    "requre-patch purge --replaces :milestone_url:str:SomeText --replaces :latency:float:0 tests/integration/test_data/test_nitrate/*",
+    ]
+
+[tool.hatch.envs.dev-not-editable]
+template = "dev"
+description = "Same as 'dev', but not using editable install"
+dev-mode = false
+
+[tool.hatch.envs.test]
+template = "dev"
+description = "Test environment"
+
+[tool.hatch.envs.docs]
+dependencies = [
+    "tmt[docs]",
+    "sphinx-lint"
+]
+
+[tool.hatch.envs.docs.scripts]
+# Note that in RTD there are a few additional flags (from RTD's default build
+# script) e.g. -E, -d, and -D. These should not affect generated documentation
+# files below, but it may be providing additional metadata for RTD to index.
+html = "sphinx-build -b html {root}/docs {root}/docs/_build {args}"
+linkcheck = "sphinx-build -b linkcheck {root}/docs {root}/docs/_build {args}"
+sphinx-rest-linter = [
+    "sphinx-build -b dummy {root}/docs {root}/docs/_build {args}",
+    "sphinx-lint --ignore=.hatch_envs"
+]
+man = [
+    "cp {root}/docs/header.txt {root}/man.rst",
+    "tail -n+8 docs/overview.rst >> {root}/man.rst",
+    # TODO rst2man cannot process this directive, removed for now
+    "sed '/versionadded::/d' -i {root}/man.rst",
+    "rst2man.py {root}/man.rst > {root}/tmt.1",
+    "rm -f {root}/man.rst",
+    ]
+
+[dirs.env]
+virtual = ".venv"
+
+[tool.mypy]
+# Be vewy, vewy stwict, we'we hunting wabbits^Wbugs.
+strict = true
+
+# Automagically make imported object part of mypy's view of module's namespace.
+implicit_reexport = true
+
+# Make error messages more rich, this helps better targeted waivers.
+show_error_codes = true
+
+# Allow mypy to follow imports to get correct picture of type
+# annotations across module boundaries.
+follow_imports = "normal"
+
+python_version = "3.9"
+files = ["tmt/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "bugzilla.*",
+    "gssapi.*",
+    "guestfs.*",
+    "html2text.*",
+    "fmf.*",
+    "lxml.*",
+    "libvirt.*",
+    "nitrate.*",
+    "pylero.*",
+    "testcloud.*",
+    "mrack.*",
+    ]
+ignore_missing_imports = true
+
+[tool.pyright]
+include = [
+    "tmt/**/*.py",
+]
+ignore = [
+    "docs/**",
+    "examples/**",
+    "tests/**",
+    "tmt/_compat/pydantic.py",
+    "tmt/export/*.py",
+    "tmt/plugins/*.py",
+    "tmt/steps/*.py",
+    "tmt/steps/discover/*.py",
+    "tmt/steps/execute/*.py",
+    "tmt/steps/finish/*.py",
+    "tmt/steps/prepare/feature/__init__.py",
+    "tmt/steps/prepare/__init__.py",
+    "tmt/steps/prepare/install.py",
+    "tmt/steps/provision/*.py",
+    "tmt/steps/report/__init__.py",
+    "tmt/steps/report/polarion.py",
+    "tmt/steps/report/reportportal.py",
+    "tmt/__init__.py",
+    "tmt/base.py",
+    "tmt/convert.py",
+    "tmt/lint.py",
+    "tmt/queue.py",
+    "tmt/utils/__init__.py",
+    "tmt/utils/structured_field.py",
+    "tmt/hardware.py",  # pyright does not pick up pint's _typing.py or something :/
+]
+
+pythonVersion = "3.9"
+pythonPlatform = "Linux"
+
+# Be vewy, vewy stwict, we'we hunting wabbits^Wbugs.
+typeCheckingMode = "strict"
+
+# Kicking off with some common issues we put aside for now. We might re-enable
+# these checks later, or not, but for now they are not useful.
+reportMissingTypeStubs = false  # Stub file not found for "foo.bar"
+reportPrivateUsage = false
+reportUnknownMemberType = false
+reportUnnecessaryCast = false  # Unnecessary "cast" call; type is already...
+
+[tool.ruff]
+line-length = 99
+src = ["tmt", "tests"]
+target-version = "py39"
+
+[tool.ruff.format]
+quote-style = "preserve"  # TODO: Convert to a specific quote style
+
+[tool.ruff.lint]
+# Enable preview rules...
+preview = true
+# ... but enable them manually for now.
+explicit-preview-rules = true
+
+select = [
+    "F",  # pyflakes
+    "E",  # pycodestyle error
+    "W",  # pycodestyle warning
+    "I",  # isort
+    "N",  # pep8-naming
+    "PERF",  # Perflint
+    "D",    # pydocstyle
+    "UP",  # pyupgrade
+    "YTT",  # flake8-2020
+    "ASYNC",  # flake8-async
+    "S",  # flake8-bandit
+    "B",  # flake8-bugbear
+    "A",  # flake8-builtins
+    "COM",  # flake8-commas
+    "C4",  # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "T10",  # flake8-debugger
+    "EXE",  # flake8-executable
+    "ISC",  # flake8-implicit-str-concat
+    "ICN",  # flake8-import-conventions
+    "LOG",  # flake8-logging
+    "G",  # flake8-logging-format
+    "PIE",  # flake8-pie
+    "PYI",  # flake8-pyi
+    "PT",  # flake8-pytest-style
+    "Q003",  # avoidable-escaped-quote
+    "Q004",  # unnecessary-escaped-quote
+    "RSE",  # flake8-raise
+    "RET",  # flake8-return
+    "SIM",  # flake8-simplify
+    "TID",  # flake8-tidy-imports
+    "INT",  # flake8-gettext
+    "PGH",  # pygrep-hooks
+    "PLC",  # pylint-convention
+    "PLE",  # pylint-error
+    "PLR",  # pylint-refactor
+    "FLY",  # flynt
+    "FURB",  # refurb
+    "RUF",  # ruff
+    "D",    # pydocstyle
+    # Override docstring convention
+    "D213", # multi-line-summary-second-line
+    ]
+ignore = [
+    "B904",  # Within an `except` clause, raise exceptions with `raise ... from err` or `raise ...
+    "COM812",  # Trailing comma missing
+    "G004",  # Logging statement uses f-string
+    "PIE790",  # Unnecessary `pass` statement
+    "PLC1901",  # `{}` can be simplified to `{}` as an empty string is falsey
+    "PLE1205",  # Too many arguments for `logging` format string
+    "PLR09",  # Too many branches/statements/arguments/returns
+    "PLR2004",  # Magic value used in comparison
+    "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
+    "RUF013",  # PEP 484 prohibits implicit `Optional`
+    # flake8-bandit (S) https://docs.astral.sh/ruff/rules/#flake8-bandit-s
+    "S101",  # Use of `assert` detected
+    "S603",  # `subprocess` call: check for execution of untrusted input
+    "S607",  # Starting a process with a partial executable path
+    "S105",  # Possible hardcoded password assigned to: "PASS"
+    "SIM103",  # Return the condition directly - can hurt readability
+    "PERF203", # `try`-`except` within a loop incurs performance overhead
+    "D200",  # One-line docstring should fit on one line
+    "D212",  # Multi-line docstring summary should start at the first line
+
+    # pydocstyle
+    # TODO: the permanent list (drop this comment once the temporary list
+    # below gets to zero items...)
+    "D203",  # 1 blank line required before class docstring
+    # TODO: the temporary list - some of these will be enabled in their
+    # own patches
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D104",  # Missing docstring in public package
+    "D105",  # Missing docstring in magic method
+    "D106",  # Missing docstring in public nested class
+    "D107",  # Missing docstring in __init__
+    "D202",  # No blank lines allowed after function docstring
+    "D205",  # 1 blank line required between summary line and description
+    "D301",  # Use r""" if any backslashes in a docstring
+    "D400",  # First line should end with a period
+    "D401",  # First line of docstring should be in imperative mood
+    "D415",  # First line should end with a period, question mark, or exclamation point
+    ]
+
+logger-objects = ["tmt.log.Logger"]
+typing-modules = ["tmt._compat.typing"]
+
+[tool.ruff.lint.per-file-ignores]
+# Less strict security checks in tests
+"tests/unit*" = [
+    "S604",  # Function call with shell=True parameter identified, security issue
+    "S605",  # Starting a process with a shell: seems safe, but may be changed in the future
+    "S318",  # Using xml to parse untrusted data is known to be vulnerable to XML attacks
+    "S108",  # Probable insecure usage of temporary file or directory: "{}"
+    "FLY002",  # Use f-string instead of .join
+    ]
+# The naming scheme of tmt/_compat will overshadow stdlib modules
+"tmt/_compat/pathlib.py" = ["A005"]
+"tmt/_compat/typing.py" = ["A005"]
+"tmt/_compat/warnings.py" = ["A005"]
+# Following files also overshadow stdlib modules
+"tmt/queue.py" = ["A005"]
+"tmt/steps/report/html.py" = ["A005"]
+# The purpose of tmt/_compat is to be used with TID251 (banned imports)
+"tmt/_compat/**.py" = ["TID251"]
+"docs/conf.py" = ["TID251"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["tmt.utils.field"]
+
+[tool.ruff.lint.pydocstyle]
+# "The PEP 257 convention includes all D errors apart from: D203, D212,
+# D213, D214, D215, D404, D405, D406, D407, D408, D409, D410, D411, D413,
+# D415, D416, and D417."
+#
+# See https://docs.astral.sh/ruff/faq/#does-ruff-support-numpy-or-google-style-docstrings for
+# the most up-to-date info.
+convention = "pep257"
+
+[tool.ruff.lint.flake8-builtins]
+builtins-ignorelist = ["help", "format", "input", "filter", "copyright", "max"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.TypeAlias".msg = "Use tmt._compat.typing.TypeAlias instead."
+"typing_extensions.TypeAlias".msg = "Use tmt._compat.typing.TypeAlias instead."
+"typing.Self".msg = "Use tmt._compat.typing.Self instead."
+"typing_extensions.Self".msg = "Use tmt._compat.typing.Self instead."
+"pathlib.Path".msg = "Use tmt._compat.pathlib.Path instead."
+"pathlib.PosixPath".msg = "Use tmt._compat.pathlib.Path instead."
+"pydantic".msg = "Use tmt._compat.pydantic instead."
+"warnings.deprecated".msg = "Use tmt._compat.warnings.deprecated instead."
+"os.path".msg = "Use tmt._compat.pathlib.Path and pathlib instead."
+# Banning builtins is not yet supported: https://github.com/astral-sh/ruff/issues/10079
+# "builtins.open".msg = "Use Path.{write_text,append_text,read_text,write_bytes,read_bytes} instead."
+"dataclasses.dataclass".msg = "Use tmt.container.container instead."
+"dataclasses.field".msg = "Use tmt.container.field instead."
+"click.style".msg = "Use tmt.log.style instead."
+"annotationlib".msg = "Use tmt._compat.annotationlib instead"
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["tmt.config.models.BaseConfig"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tmt"]
+
+[tool.pytest.ini_options]
+markers = [
+    "containers: tests which need to spawn containers",
+    "web: tests which need to access the web"
+    ]
+
+[tool.codespell]
+ignore-words = "docs/codespell.dic"
+exclude-file = "docs/codespell.ignore"
+skip = "tests/execute/weird/data/weird.txt,tests/lint/plan/data/invalid_attr.fmf,tests/lint/plan/test.sh"
+
+[tool.djlint]
+use_gitignore=true
+ignore="H005,H030,H031"
