@@ -1,0 +1,140 @@
+name: Python Artifacts for PyPi
+
+on:
+  push:
+    branches:
+      - main 
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  generate_source:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+        - uses: actions/setup-python@v5
+        
+        - name: Update Pip
+          shell: bash
+          run: |
+            python -m pip install --upgrade pip 
+            pip install build scikit-build-core setuptools-scm
+        - name: Build Self-contained Python Module
+          shell: bash
+          run: |
+            if [ "${{ github.event_name }}" == "release" ]; then
+              VERSION=${{ github.event.release.tag_name }}
+              VERSION=${VERSION#v}
+              SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION" python -m build . -s
+            else
+              SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0" python -m build . -s
+            fi
+        - name: Upload Build Artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: source
+            path: ./dist
+
+  build_non_linux_python_module:
+    runs-on: ${{ matrix.os }}
+    strategy: 
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-13, windows-latest]
+        python: ['3.11','3.12','3.13']
+    steps:
+          - uses: actions/checkout@v4
+          - uses: ilammy/setup-nasm@v1
+          - uses: actions/setup-python@v5
+            with:
+                python-version: ${{ matrix.python }}
+              
+          - name: Update Pip
+            shell: bash
+            run: |
+                python -m pip install --upgrade pip 
+                pip install build scikit-build-core meson ninja setuptools-scm
+
+          - name: Build Self-contained Python Module
+            shell: bash
+            run: |
+                if [ "${{ github.event_name }}" == "release" ]; then
+                  VERSION=${{ github.event.release.tag_name }}
+                  VERSION=${VERSION#v}
+                  SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION" python -m build .
+                else
+                  SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0" python -m build .
+                fi
+          - name: Upload Build Artifact
+            uses: actions/upload-artifact@v4
+            with:
+                name: ${{ matrix.os }}-${{ matrix.python }}
+                path: ./dist
+
+  build_many_linux_python_module:
+    runs-on: ${{ matrix.os }}
+    strategy: 
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        python: [cp311, cp312, cp313]
+
+    steps:
+          - uses: actions/checkout@v4
+          - uses: ilammy/setup-nasm@v1
+          - uses: actions/setup-python@v5
+
+          - name: Update Pip
+            shell: bash
+            run: |
+                python -m pip install --upgrade pip 
+                pip install scikit-build-core uv cibuildwheel setuptools-scm
+
+          - name: Build Self-contained Python Module
+            env:
+                CIBW_BUILD: "${{ matrix.python }}-*"
+                CIBW_SKIP: "*-manylinux_i686 *-musllinux_i686 *-musllinux_x86_64"
+                CIBW_BUILD_FRONTEND: "build"
+                CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64
+                CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64
+                CIBW_MANYLINUX_PYPY_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64
+                CIBW_MANYLINUX_PYPY_AARCH64_IMAGE: quay.io/pypa/manylinux_2_34_aarch64
+                CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel} --exclude libopenslide.so.*"
+            shell: bash
+            run: |
+                if [ "${{ github.event_name }}" == "release" ]; then
+                  VERSION=${{ github.event.release.tag_name }}
+                  VERSION=${VERSION#v}
+                  SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION" python -m cibuildwheel .
+                else
+                  SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0" python -m cibuildwheel .
+                fi
+          - name: Upload Build Artifact
+            uses: actions/upload-artifact@v4
+            with:
+                name: ${{ matrix.os }}-${{matrix.python}}
+                path: ./wheelhouse
+
+  upload_to_pypi:
+        if: github.event_name == 'release'
+        runs-on: ubuntu-latest
+        needs: [generate_source, build_non_linux_python_module, build_many_linux_python_module]
+        environment:
+            name: 'distribute pypi'
+            url: https://pypi.org/project/Iris-Codec/
+        permissions:
+            id-token: write
+        steps:
+        - name: Retrieve Build Artifact
+          uses: actions/download-artifact@v4
+          with:
+            path: ./dist
+            merge-multiple: true
+
+        - name: Publish to PyPi 
+          uses: pypa/gh-action-pypi-publish@release/v1
+          with:
+            verbose: true

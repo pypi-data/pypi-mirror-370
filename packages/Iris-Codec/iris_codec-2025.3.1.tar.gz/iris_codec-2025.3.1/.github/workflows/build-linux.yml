@@ -1,0 +1,84 @@
+name: Iris Codec Linux build
+
+on:
+  workflow_call:
+    inputs:
+        os: 
+            required: true
+            type: string
+        c_compiler:
+            required: true
+            type: string
+        cpp_compiler:
+            required: true
+            type: string
+        build_type:
+            required: true
+            type: string
+        iris_cmake_flags:
+            required: true
+            type: string
+        artifact:
+            required: true
+            type: string
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+          
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set reusable strings
+      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+        echo "install-dir=${{ github.workspace }}/${{ inputs.artifact }}" >> "$GITHUB_OUTPUT"
+
+    - name: Configure Jpeg-Turbo PPA
+      run: |
+        sudo wget -q https://packagecloud.io/dcommander/libjpeg-turbo/gpgkey -O /etc/apt/trusted.gpg.d/libjpeg-turbo &&
+        sudo gpg --dearmor /etc/apt/trusted.gpg.d/libjpeg-turbo &&
+        sudo wget https://raw.githubusercontent.com/libjpeg-turbo/repo/main/libjpeg-turbo.list \
+         -O /etc/apt/sources.list.d/libjpeg-turbo.list &&
+        sudo apt update
+    
+    - name: Fetch Dependencies
+      run: |
+        sudo apt install libhwy-dev \
+        libjpeg-turbo-official \
+        libavif-dev libpng-dev \
+        zlib1g-dev openslide-tools \
+        python3-dev \
+        meson ninja-build -y
+    
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ github.workspace }}
+        -D CMAKE_CXX_COMPILER=${{ inputs.cpp_compiler }}
+        -D CMAKE_C_COMPILER=${{ inputs.c_compiler }}
+        -D CMAKE_BUILD_TYPE=${{ inputs.build_type }}
+        -D CMAKE_INSTALL_PREFIX=${{ steps.strings.outputs.install-dir }}
+        -D CMAKE_PREFIX_PATH="$ENV{CMAKE_PREFIX_PATH};/opt/libjpeg-turbo/lib64/cmake/libjpeg-turbo/"
+        -D TURBOJPEG_INCLUDE="/opt/libjpeg-turbo/include/"
+        ${{ inputs.iris_cmake_flags }}
+
+    - name: Build
+      run: >
+        cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ inputs.build_type }} -j$CPU_COUNT
+
+    - name: Package Build
+      run: > 
+        cmake --install ${{ steps.strings.outputs.build-output-dir }} &&
+        cp ${{ github.workspace }}/LICENSE ${{ steps.strings.outputs.install-dir }} &&
+        cp ${{ github.workspace }}/README.md ${{ steps.strings.outputs.install-dir }} &&
+        tar -cvf iris-codec-${{ inputs.artifact }}.tar.gz -C ${{ steps.strings.outputs.install-dir }} .
+  
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact }}
+        path: iris-codec-${{ inputs.artifact }}.tar.gz
