@@ -1,0 +1,102 @@
+[project]
+name = "cartographer3d-plugin"
+requires-python = "~= 3.8"
+license = { file = "LICENSE" }
+dependencies = ["numpy~=1.16", "typing-extensions~=4.12"]
+keywords = ["klipper", "3D printing", "cartographer"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+
+  "Intended Audience :: End Users/Desktop",
+
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+]
+description = "An extras for klipper to integrate with cartographer"
+dynamic = ["version"]
+
+[project.urls]
+homepage = "https://cartographer3d.com/"
+repository = "https://github.com/Cartographer3D/cartographer3d-plugin"
+
+[project.optional-dependencies]
+scipy = ["scipy~=1.9"]
+
+[dependency-groups]
+test = [
+  "pytest~=8.3",
+  "pytest-bdd~=8.1 ; python_version~='3.9'",
+  "pytest-cov~=5.0",
+  "pytest-mock~=3.14",
+]
+lint = ["ruff~=0.11"]
+typecheck = [
+  "basedpyright~=1.27",
+  "hatchling~=1.27",
+  "scipy-stubs~=1.15 ; python_version~='3.10'",
+]
+dev = []
+scripts = ["matplotlib>=3.7.5"]
+
+[tool.pyright]
+pythonVersion = "3.8"
+venvPath = "./"
+venv = ".venv"
+allowedUntypedLibraries = ["numpy.polynomial"]
+reportMissingModuleSource = false              # klippy imports are always missing sources
+reportMissingTypeStubs = true
+reportAny = false                              # Consider if we can get rid of this
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["tests"]
+
+[tool.uv]
+default-groups = ["test", "lint", "typecheck", "scripts"]
+
+[tool.hatch.version]
+source = "vcs"
+# TestPyPi does not support local version identifiers
+# https://github.com/ofek/hatch-vcs/issues/43
+raw-options.local_scheme = "no-local-version"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/cartographer/__version__.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.github", "/.jj", "/docs"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/cartographer"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+omit = ["tests", "src/cartographer/klipper/**"]
+source = ["src"]
+
+[tool.coverage.report]
+exclude_also = [
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
+  'class .*\bProtocol\):',
+  '@(abc\.)?abstractmethod',
+]
+
+[tool.hatch.envs.hatch-static-analysis]
+config-path = "none"
+
+[tool.hatch.envs.hatch-test.scripts]
+run = "pytest{env:HATCH_TEST_ARGS:} {args}"
+run-cov = "coverage run -m pytest{env:HATCH_TEST_ARGS:} --junitxml=junit.{env:HATCH_ENV_ACTIVE:}.xml {args}"
+cov-combine = "coverage combine"
+cov-report = "coverage report"
+
+[[tool.hatch.envs.hatch-test.matrix]]
+python = ["3.13", "3.12", "3.11", "3.10", "3.9", "3.8"]
