@@ -1,0 +1,51 @@
+Estimation functions
+====================
+
+.. currentmodule:: pitchmeld
+
+Functions
+---------
+
+.. function:: estimation_f0(wav:ndarray, fs:float, winlen:float=0.020*fs, timestep:float=0.005*fs, f0_min:float=27.5, f0_max:float=3520) -> ndarray[float32]
+
+    .. note::
+        It assumes the signal is *monophonic*, like a voice, a flute, a violin, saxophone, etc.
+
+        It makes no sense to use it on polyphonic signals like a piano, a guitar, a drum set, etc.
+
+    :arg wav: Input signal to transform.
+        There is no reason to support multichannel in this function. This function will average the channels and process the signal as a monophonic signal.
+
+    :arg fs: Sampling rate [Hz].
+
+    .. note::
+        The following arguments below are used to optimize the processing speed.
+        It is not recommended to changed them unless you know what you are doing.
+
+    :arg winlen: Inner window length [#samples, def. 0.020*fs].
+        This is the window length used for the processing.
+        The bigger the value, the more stable the f0 estimate but the less precise it will be.
+        This value is equivalent to :py:attr:`winlen_inner` in :py:attr:`pitchmeld.transform`.
+
+    :arg timestep: Inner window length [#samples, def. 0.005*fs].
+        This is the time step from one estimation frame to the next.
+
+    :arg f0_min: Minimum value for the fundamental frequency [Hz, def. 440/16=27.5].
+
+    :arg f0_max: Maximum value for the fundamental frequency [Hz, def. 440*8=3520].
+
+    :return:
+        - `ndarray[float32]` - An array of shape (N, 3) where N is the number of frames.
+            First column is the time in seconds of the center of the estimation window.
+            Second column is the fundamental frequency in Hz.
+            Third column is a confidence coefficient (in [0,1]) of the estimated f0 value.
+
+    :Example:
+
+    .. code-block:: python
+
+        import pitchmeld
+        import soundfile
+        wav, fs = soundfile.read('path/to/audio.wav')
+        f0s = pitchmeld.estimation_f0(wav, fs)
+        print(f"The median f0: {np.median(f0s[f0s[:,2]>0.5,1])} Hz")
