@@ -1,0 +1,270 @@
+Metadata-Version: 2.4
+Name: toronto-open-data
+Version: 0.1.4
+Summary: A package for easily accessing Toronto Open Data
+Project-URL: Homepage, https://github.com/alexwolson/toronto-open-data
+Project-URL: Repository, https://github.com/alexwolson/toronto-open-data.git
+Project-URL: Issues, https://github.com/alexwolson/toronto-open-data/issues
+Project-URL: Changelog, https://github.com/alexwolson/toronto-open-data/blob/main/CHANGELOG.md
+Author-email: Alex Olson <alexwaolson@gmail.com>
+License-File: LICENSE
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Database
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.8
+Requires-Dist: ckanapi>=0.0.0
+Requires-Dist: pandas>=1.3.0
+Requires-Dist: requests>=2.25.0
+Requires-Dist: tqdm>=4.60.0
+Provides-Extra: dev
+Requires-Dist: bandit>=1.7.0; extra == 'dev'
+Requires-Dist: black>=23.0.0; extra == 'dev'
+Requires-Dist: flake8>=6.0.0; extra == 'dev'
+Requires-Dist: isort>=5.12.0; extra == 'dev'
+Requires-Dist: mypy>=1.0.0; extra == 'dev'
+Requires-Dist: pre-commit>=3.0.0; extra == 'dev'
+Requires-Dist: pytest-cov>=4.0.0; extra == 'dev'
+Requires-Dist: pytest-mock>=3.10.0; extra == 'dev'
+Requires-Dist: pytest>=7.0.0; extra == 'dev'
+Requires-Dist: safety>=2.0.0; extra == 'dev'
+Provides-Extra: docs
+Requires-Dist: myst-parser>=1.0.0; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme>=1.2.0; extra == 'docs'
+Requires-Dist: sphinx>=6.0.0; extra == 'docs'
+Provides-Extra: test
+Requires-Dist: pytest-cov>=4.0.0; extra == 'test'
+Requires-Dist: pytest-mock>=3.10.0; extra == 'test'
+Requires-Dist: pytest>=7.0.0; extra == 'test'
+Description-Content-Type: text/markdown
+
+# TorontoOpenData Python Package
+
+## Overview
+
+The `TorontoOpenData` package provides a Python interface to interact with the Toronto Open Data portal. It allows users to list, search, and download datasets, as well as load specific resources.
+
+## Installation
+
+To install the package, run:
+
+```bash
+pip install toronto-open-data
+```
+
+### Development Installation
+
+For development and contributing:
+
+```bash
+git clone https://github.com/alexwolson/toronto-open-data.git
+cd toronto-open-data
+pip install -e ".[dev]"
+make pre-commit  # Install pre-commit hooks
+```
+
+## Dependencies
+
+- `pandas`
+- `requests`
+- `tqdm`
+- `ckanapi`
+
+## Usage
+
+### Initialization
+
+Initialize the `TorontoOpenData` class:
+
+```python
+from toronto_open_data import TorontoOpenData
+
+tod = TorontoOpenData()
+```
+
+### List All Datasets
+
+List all available datasets:
+
+```python
+datasets = tod.list_all_datasets()
+```
+
+### Search Datasets
+
+Search datasets by keyword:
+
+```python
+search_results = tod.search_datasets('parks')
+```
+
+### Download Dataset
+
+Download a specific dataset:
+
+```python
+tod.download_dataset('dataset_name')
+```
+
+### Load Dataset
+
+Load a specific file from a dataset:
+
+```python
+file_path = tod.load('dataset_name', 'file_name.csv', smart_return=False)
+```
+
+Load a specific file, returning an object if supported (default behaviour):
+
+```python
+file_object = tod.load('dataset_name', 'file_name.csv', smart_return=True)
+```
+
+### Using the Datastore API (New!)
+
+For datasets that support CKAN's datastore, you can query data directly without downloading files:
+
+#### Basic Datastore Search
+
+```python
+# Get type-enforced data directly from the datastore
+data = tod.datastore_search('resource-id-here', limit=100)
+print(data.dtypes)  # Shows proper data types (dates, numbers, etc.)
+```
+
+#### Filtered Search
+
+```python
+# Search with filters and sorting
+filtered_data = tod.datastore_search(
+    'resource-id-here',
+    filters={'status': 'active', 'year': 2023},
+    sort='date_created desc',
+    limit=50
+)
+```
+
+#### Get Resource Metadata
+
+```python
+# Get field information and descriptions
+info = tod.datastore_info('resource-id-here')
+for field in info['fields']:
+    print(f"{field['id']}: {field.get('type')} - {field.get('info', {}).get('label', 'No description')}")
+```
+
+#### Custom SQL Queries
+
+```python
+# Advanced querying with SQL
+data = tod.datastore_search_sql('''
+    SELECT category, COUNT(*) as count, AVG(value) as avg_value
+    FROM "resource-id-here"
+    WHERE status = 'active'
+    GROUP BY category
+    ORDER BY count DESC
+    LIMIT 10
+''')
+```
+
+#### Find Datastore Resources
+
+```python
+# Check which resources support datastore
+datastore_resources = tod.get_datastore_resources('dataset-name')
+for resource in datastore_resources:
+    print(f"Datastore resource: {resource['name']} (ID: {resource['id']})")
+```
+
+### Datastore vs File Download
+
+| Feature | File Download (`load()`) | Datastore API |
+|---------|-------------------------|---------------|
+| Data freshness | Static files | Real-time data |
+| Type enforcement | Basic pandas inference | CKAN-defined types |
+| Filtering | Client-side (after download) | Server-side |
+| Metadata | Limited | Rich field descriptions |
+| Query flexibility | None | Full SQL support |
+| Network usage | Downloads entire file | Only requested data |
+
+## Methods
+
+### Basic Dataset Operations
+- `list_all_datasets(as_frame=True)`: List all datasets.
+- `search_datasets(query, as_frame=True)`: Search datasets by keyword.
+- `search_resources_by_name(name, as_frame=True)`: Get dataset by name.
+- `download_dataset(name, file_path='./cache/', overwrite=False)`: Download resource.
+- `load(name, filename, file_path='./cache/', reload=False, smart_return=True)`: Load a file from the dataset.
+
+### Datastore API Methods (New!)
+- `datastore_search(resource_id, filters=None, q=None, limit=100, offset=0, fields=None, sort=None, as_frame=True)`: Search datastore records with type-enforced results and filtering.
+- `datastore_info(resource_id)`: Get metadata about datastore resource fields, types, and descriptions.
+- `datastore_search_sql(sql, as_frame=True)`: Execute SQL queries on datastore resources.
+- `get_datastore_resources(name, as_frame=True)`: Get only datastore-enabled resources for a dataset.
+
+## Smart Return File Types
+
+The package supports smart return for the following file types:
+
+- csv
+- docx
+- gpkg
+- geojson
+- jpeg
+- json
+- kml
+- pdf
+- sav
+- shp
+- txt
+- xlsm
+- xlsx
+- xml
+- xsd
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage
+make test-cov
+
+# Run linting checks
+make lint
+```
+
+### Code Quality
+
+This project uses several tools to maintain code quality:
+
+- **Black**: Code formatting
+- **isort**: Import sorting
+- **flake8**: Linting
+- **mypy**: Type checking
+- **pre-commit**: Automated checks
+
+### Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+## License
+
+MIT License
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of changes and version history.
