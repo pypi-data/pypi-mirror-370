@@ -1,0 +1,61 @@
+# File di configurazione per LogWatch
+
+# Sezione per la configurazione dei provider LLM
+llm_providers:
+  ollama:
+    type: "ollama"
+    api_url: "http://localhost:11434/api/generate"
+    model: "gemma3:12b"
+
+  gemma:
+    type: "gemma"
+    # L'URL per Gemmma-3-27b-it. Cambialo se vuoi usare un altro modello.
+    api_url: "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent"
+    # La chiave API verrà letta dalla variabile d'ambiente specificata qui.
+    api_key_env: "GEMINI_API_KEY"
+
+  gemini:
+    type: "gemini"
+    # L'URL per Gemini 1.5 Flash. Cambialo se vuoi usare un altro modello.
+    api_url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    # La chiave API verrà letta dalla variabile d'ambiente specificata qui.
+    api_key_env: "GEMINI_API_KEY"
+
+  openrouter:
+    type: "openrouter"
+    api_url: "https://openrouter.ai/api/v1/"
+    # Puoi cambiare il modello qui. Esempi: "google/gemma-2-9b-it", "anthropic/claude-3-haiku"
+    model: "qwen/qwen-2.5-coder-32b-instruct:free"
+    #model: "deepseek/deepseek-chat-v3-0324:free"
+    #model: "openai/gpt-oss-20b:free"
+    api_key_env: "OPENROUTER_API_KEY"
+
+# Scegli quale provider LLM usare tra quelli definiti sopra.
+active_llm_provider: "gemini"
+
+
+# Definizione dei task di analisi dei log
+logs:
+  - name: "SSH Failed Logins"
+    command: "journalctl -u sshd -p err -o json --no-pager --since '1 day ago'"
+    parser: "ssh_parser"
+    # Filtri per ignorare log irrilevanti (esempi)
+    filters:
+      - "pam_unix(sshd:auth): authentication failure" # Spesso ridondante se si guarda solo "Failed password"
+
+  - name: "Sudo Usage"
+    command: "journalctl /usr/bin/sudo -o json --no-pager --since '1 day ago'"
+    parser: "llm_parser"
+    filters:
+      - "pam_unix(sudo:session): session opened for user root"
+      - "pam_unix(sudo:session): session closed for user root"
+
+  - name: "Kernel Errors"
+    command: "journalctl -k -p err -o json --no-pager --since '1 day ago'"
+    parser: "kernel_parser"
+    filters: []
+
+  - name: "General System Analysis"
+    command: "journalctl -p err -o json --no-pager --since '1 hour ago'"
+    parser: "llm_parser"
+    filters: []
