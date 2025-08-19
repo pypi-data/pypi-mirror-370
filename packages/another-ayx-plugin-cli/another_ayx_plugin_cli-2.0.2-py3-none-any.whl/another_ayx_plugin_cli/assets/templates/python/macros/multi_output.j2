@@ -1,0 +1,58 @@
+{% macro init(plugin_class) %}
+        self.provider = provider
+        self.provider.io.info("{{plugin_class}} tool started.")
+{% endmacro %}
+
+{% macro on_record_batch() %}
+        metadata = batch.schema
+        if not any([field_name == "Value" for field_name in metadata.names]):
+            raise RuntimeError(
+                "Incoming data must contain a column with the name 'Value'"
+            )
+        input_dataframe = batch.to_pandas()
+
+        if not is_integer_dtype(input_dataframe["Value"]):
+            raise RuntimeError("'Value' column must be of 'int' data type")
+
+        grouped = input_dataframe.groupby("Value")
+        odds = grouped.filter(lambda row: (row["Value"] % 2 == 1).any())
+        evens = grouped.filter(lambda row: (row["Value"] % 2 == 0).any())
+
+        odd_batch = RecordBatch.from_pandas(odds, preserve_index=False)
+        even_batch = RecordBatch.from_pandas(evens, preserve_index=False)
+        self.provider.write_to_anchor("Output1", odd_batch)
+        self.provider.write_to_anchor("Output2", even_batch)
+{% endmacro %}
+
+{% macro on_incoming_connection_complete() %}
+        self.provider.io.info(
+            f"Received complete update from {anchor.name}:{anchor.connection}."
+        )
+{% endmacro %}
+
+{% macro on_complete(plugin_class) %}
+        self.provider.io.info("{{plugin_class}} tool done.")
+{% endmacro %}
+
+{% macro helper_methods() %}
+{% endmacro %}
+
+
+{% macro on_record_batch_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == [
+        "ERROR:<class 'RuntimeError'>: Incoming data must contain a column with the name 'Value'"
+    ]
+{% endmacro %}
+
+{% macro on_incoming_connection_closed_test(snake_case_plugin_name) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == [
+        f"INFO:Received complete update from {anchor.name}:{anchor.connection}."
+    ]
+{% endmacro %}
+
+{% macro on_complete_test(snake_case_plugin_name, plugin_class) %}
+    assert {{snake_case_plugin_name}}.data_streams == {}
+    assert {{snake_case_plugin_name}}.io_stream == ["INFO:{{plugin_class}} tool done."]
+{% endmacro %}

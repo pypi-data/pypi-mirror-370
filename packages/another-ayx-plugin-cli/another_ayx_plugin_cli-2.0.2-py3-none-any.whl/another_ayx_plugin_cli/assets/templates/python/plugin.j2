@@ -1,0 +1,152 @@
+{% import 'macros/input.j2' as input -%}
+{% import 'macros/multi_conn.j2' as multi_conn -%}
+{% import 'macros/multi_output.j2' as multi_output -%}
+{% import 'macros/multi_input.j2'as multi_input -%}
+{% import 'macros/optional.j2' as optional -%}
+{% import 'macros/output.j2' as output -%}
+{% import 'macros/passthrough.j2' as passthrough -%}
+# Copyright (C) 2022 Alteryx, Inc. All rights reserved.
+#
+# Licensed under the ALTERYX SDK AND API LICENSE AGREEMENT;
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    https://www.alteryx.com/alteryx-sdk-and-api-license-agreement
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Example input tool."""
+from collections import namedtuple
+
+from another_ayx_python_sdk.core import PluginV2
+from another_ayx_python_sdk.providers.amp_provider.amp_provider_v2 import AMPProviderV2
+
+from pyarrow import Table
+
+
+class {{plugin_class}}(PluginV2):
+    """Concrete implementation of a Plugin."""
+
+    def __init__(self, provider: AMPProviderV2) -> None:
+        """Construct a plugin."""
+        {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+        {{ passthrough.init(plugin_class) }}
+        {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+        {{ multi_conn.init(plugin_class) }}
+        {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+        {{ multi_input.init(plugin_class) }}
+        {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+        {{ multi_output.init(plugin_class) }}
+        {% elif num_input_anchors == 0 -%}
+        {{ input.init(plugin_class) }}
+        {% elif num_output_anchors == 0 -%}
+        {{ output.init(plugin_class) }}
+        {% else -%}
+        {{ optional.init(plugin_class) }}
+        {% endif -%}
+
+    {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+    {{ passthrough.helper_methods() }}
+    {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+    {{ multi_conn.helper_methods() }}
+    {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+    {{ multi_input.helper_methods() }}
+    {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+    {{ multi_output.helper_methods() }}
+    {% elif num_input_anchors == 0 -%}
+    {{ input.helper_methods() }}
+    {% elif num_output_anchors == 0 -%}
+    {{ output.helper_methods() }}
+    {% else -%}
+    {{ optional.helper_methods() }}
+    {% endif -%}
+
+    def on_incoming_connection_complete(self, anchor: namedtuple) -> None:
+        """
+        Call when an incoming connection is done sending data including when no data is sent on an optional input anchor.
+
+        This method IS NOT called during update-only mode.
+
+        Parameters
+        ----------
+        anchor
+            NamedTuple containing anchor.name and anchor.connection.
+        """
+        {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+        {{ passthrough.on_incoming_connection_complete() }}
+        {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+        {{ multi_conn.on_incoming_connection_complete() }}
+        {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+        {{ multi_input.on_incoming_connection_complete() }}
+        {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+        {{ multi_output.on_incoming_connection_complete() }}
+        {% elif num_input_anchors == 0 -%}
+        {{ input.on_incoming_connection_complete() }}
+        {% elif num_output_anchors == 0 -%}
+        {{ output.on_incoming_connection_complete() }}
+        {% else -%}
+        {{ optional.on_incoming_connection_complete() }}
+        {% endif -%}
+
+    def on_record_batch(self, batch: "Table", anchor: namedtuple) -> None:
+        """
+        Process the passed record batch that comes in on the specified anchor.
+
+        The method that gets called whenever the plugin receives a record batch on an input.
+
+        This method IS NOT called during update-only mode.
+
+        Parameters
+        ----------
+        batch
+            A pyarrow Table containing the received batch.
+        anchor
+            A namedtuple('Anchor', ['name', 'connection_name']) containing input connection identifiers.
+        """
+        {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+        {{ passthrough.on_record_batch() }}
+        {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+        {{ multi_conn.on_record_batch() }}
+        {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+        {{ multi_input.on_record_batch() }}
+        {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+        {{ multi_output.on_record_batch() }}
+        {% elif num_input_anchors == 0 -%}
+        {{ input.on_record_batch() }}
+        {% elif num_output_anchors == 0 -%}
+        {{ output.on_record_batch() }}
+        {% else -%}
+        {{ optional.on_record_batch() }}
+        {% endif -%}
+
+    def on_complete(self) -> None:
+        """
+        Clean up any plugin resources, or push records for an input tool.
+
+        This method gets called when all other plugin processing is complete.
+
+        In this method, a Plugin designer should perform any cleanup for their plugin.
+        However, if the plugin is an input-type tool (it has no incoming connections),
+        processing (record generation) should occur here.
+
+        Note: A tool with an optional input anchor and no incoming connections should
+        also write any records to output anchors here.
+        """
+        {% if num_input_anchors == 1 and num_output_anchors == 1 -%}
+        {{ passthrough.on_complete(plugin_class) }}
+        {% elif num_input_anchors == 1 and num_output_anchors > 2 -%}
+        {{ multi_conn.on_complete(plugin_class) }}
+        {% elif num_input_anchors == 2 and num_output_anchors == 1 -%}
+        {{ multi_input.on_complete(plugin_class) }}
+        {% elif num_input_anchors == 1 and num_output_anchors == 2 -%}
+        {{ multi_output.on_complete(plugin_class) }}
+        {% elif num_input_anchors == 0 -%}
+        {{ input.on_complete(plugin_class) }}
+        {% elif num_output_anchors == 0 -%}
+        {{ output.on_complete(plugin_class) }}
+        {% else -%}
+        {{ optional.on_complete(plugin_class) }}
+        {% endif -%}
