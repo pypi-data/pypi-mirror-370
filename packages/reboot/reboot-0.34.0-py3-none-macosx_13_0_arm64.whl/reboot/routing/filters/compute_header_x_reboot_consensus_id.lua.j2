@@ -1,0 +1,221 @@
+local sha1 = require "sha1.init"
+
+-- Constants
+local _STATE_TYPE_TAG_LENGTH = 14
+
+-- A list of consensus IDs, efficient for random selection.
+local consensus_ids_list = {
+  {% for consensus_id in consensus_ids %}
+  "{{ consensus_id }}",
+  {% endfor %}
+}
+-- A set of consensus IDs, efficient for membership testing.
+local consensus_ids_set = {
+  {% for consensus_id in consensus_ids %}
+  ["{{ consensus_id }}"] = true,
+  {% endfor %}
+}
+-- A representation of the route map, efficient for lookup.
+local consensus_id_by_keyrange_start = {
+  {% for route_map_entry in route_map %}
+  [{{ route_map_entry.shard_keyrange_start }}] = "{{ route_map_entry.consensus_id }}",
+  {% endfor %}
+}
+-- The "first byte"s (shard boundaries) from the route map, from high to low.
+local shard_keyrange_starts_high_to_low = {
+  {% for route_map_entry in route_map|reverse %}
+  {{ route_map_entry.shard_keyrange_start }},
+  {% endfor %}
+}
+
+-- A StackOverflow-provided url-safe base64 encoder, because...
+-- (1) there are no great libraries to find for this, and...
+-- (2) it's really not worth the effort of installing another
+--     Lua library into all of our proxy environments to avoid
+--     these 13 lines of code.
+local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+function base64_urlsafe(data)
+    return ((data:gsub('.', function(x)
+        local r,b='',x:byte()
+        for i=8,1,-1 do r=r..(b%2^i-b%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+        if (#x < 6) then return '' end
+        local c=0
+        for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
+        return b:sub(c+1,c+1)
+    end)..({ '', '==', '=' })[#data%3+1])
+end
+
+-- Generate a type tag for a given state type.
+-- E.g.: "tests.reboot.General" -> "AFk1ev8EXQ5LUQ".
+--
+-- This is a re-implementation of the Python function
+-- `rebootdev.aio.state_type_tag_for_name()` in `public/rebootdev/aio/types.py`; we MUST keep
+-- them in sync for our routing logic to work.
+local function state_type_tag_for_name(state_type)
+    -- Compute SHA-1 hash
+    local state_type_hash = sha1.binary(state_type)
+
+    -- Take the first half of the hash
+    local half_length = math.floor(#state_type_hash / 2)
+    local state_type_bytes = state_type_hash:sub(1, half_length)
+
+    -- Zero the high-order byte
+    state_type_bytes = "\0" .. state_type_bytes:sub(2)
+
+    -- URL-safe base64 encode the bytes
+    local state_type_tag = base64_urlsafe(state_type_bytes)
+
+    -- Validate and truncate padding
+    if state_type_tag:sub(-2) ~= "==" then
+        error({message="Unexpected base64 padding"})
+    end
+    state_type_tag = state_type_tag:sub(1, -3)
+
+    -- Ensure length is correct
+    assert(#state_type_tag == _STATE_TYPE_TAG_LENGTH, "Incorrect tag length")
+
+    return state_type_tag
+end
+
+-- Function to turn a (partially) human-readable state ref into a state type tag
+-- E.g.: "tests.reboot.General:foo/tests.reboot.Lieutenant:bar"
+--       -> "AFk1ev8EXQ5LUQ:foo/BDkaev8DE2Mak:bar".
+--
+-- This is a re-implementation of the Python function
+-- `rebootdev.aio.StateRef.from_maybe_readable()` in `public/rebootdev/aio/types.py`; we
+-- MUST keep them in sync for our routing logic to work.
+local function state_ref_from_maybe_human_readable(state_ref)
+    local result = {}
+
+    -- Use 'gmatch' to split the state ref into components separated by "/".
+    for component in state_ref:gmatch("[^/]+") do
+        -- Each component is a state type and state ID separated by a colon.
+        local component_pieces = {}
+        for piece in component:gmatch("[^:]+") do
+            table.insert(component_pieces, piece)
+        end
+
+        if #component_pieces ~= 2 then
+            error({message=string.format(
+                "Invalid state reference component '%s': must contain exactly one ':'. "
+                .. "If your state ID contains slashes ('/'), remember to replace them "
+                .. "with their escape character: a backslash ('\\').",
+                component
+            )})
+        end
+
+        -- Whether a state ref component is human-readable or "tagged" can be
+        -- determined by looking for a period (".") in the component. If the
+        -- state type is human-readable then it must contain a proto package
+        -- name, so must contain a period. State type tags don't have periods.
+        if string.find(state_ref, "%.") == nil then
+            -- This is already a "tagged" state ref.
+            return state_ref
+        end
+        -- This is a human-readable state ref; convert its state type(s) into tag(s).
+
+        -- Generate the state type tag for this state type.
+        local state_type_tag = state_type_tag_for_name(component_pieces[1])
+        local state_id = component_pieces[2]
+        table.insert(result, state_type_tag .. ":" .. state_id)
+    end
+
+    if #result == 0 then
+        error({message="Cannot create empty StateRef."})
+    end
+
+    return table.concat(result, "/")
+end
+
+function envoy_on_request(request_handle)
+  local consensus_id = request_handle:headers():get("x-reboot-consensus-id")
+  if consensus_id ~= nil then
+    -- Caller has already chosen a consensus.
+    if consensus_ids_set[consensus_id] == nil then
+      -- Since this may be a transient error (this router may not have
+      -- heard about a new consensus) we'd like gRPC callers to get the
+      -- clearly-retryable "UNAVAILABLE" error code. That leaves us with
+      -- primarily the 50x status codes:
+      --   https://github.com/grpc/grpc/blob/master/doc/http-grpc-status-mapping.md
+      -- From this list we use 502 "Bad Gateway" to indicate that this is
+      -- not an error at the server but at the router.
+      request_handle:respond(
+          {[":status"] = "502"}, "Unknown consensus '" .. consensus_id .. "'"
+      )
+    end
+    -- Caller picked a legal consensus, so our header matching route
+    -- logic will handle the rest.
+    return
+  end
+
+  local state_ref = request_handle:headers():get("x-reboot-state-ref")
+  if state_ref == nil then
+    -- This request doesn't care which consensus it goes to. Pick a random one.
+    local consensus_id = consensus_ids_list[math.random(#consensus_ids_list)]
+    request_handle:headers():add("x-reboot-consensus-id", consensus_id)
+    request_handle:logDebug(
+        "No state reference; picked random consensus '" .. consensus_id .. "'"
+    )
+    return
+  end
+
+  -- If the state ref is a human-readable string, we must convert its state
+  -- type(s) into a state type _tags_ first.
+  --
+  -- `pcall` is used to catch errors in the conversion process. If an error
+  -- occurs, we assume the user made a typo in the state ref and return a
+  -- 400 error with details about the error. We use a `message` field in the
+  -- error object to obtain just our developer-facing error message without
+  -- a maintainer-facing line number.
+  local success, state_ref_or_error = pcall(state_ref_from_maybe_human_readable, state_ref)
+  if not success then
+    request_handle:logInfo(
+      "Failed to convert state ref " .. state_ref .. " to state type tag: " .. state_ref_or_error.message
+    )
+    request_handle:respond({[":status"] = "400"}, state_ref_or_error.message)
+    return
+  end
+  state_ref = state_ref_or_error
+
+  -- Pick a consensus based on the state ID. We do this as follows:
+  -- 1. Take a SHA1 hash of the state ID (which includes a service tag).
+  --    TODO: only hash the _top-level_ state ID, once colocation is a thing.
+  -- 2. Walk through the shard map, and find the shard whose key range
+  --    contains the resulting hash.
+  --    TODO: in the current implementation, key ranges are defined by a
+  --          single byte, so we only need to look at the hash's first
+  --          byte. As we build colocation and splitting and thereby have
+  --          finer-grained key ranges, we will need to look deeper.
+  local hashed_state_ref = sha1.binary(state_ref)
+  local hashed_state_ref_first_byte = string.byte(hashed_state_ref, 1)
+  -- TODO: do binary search instead of this linear lookup.
+  for i = 1, #shard_keyrange_starts_high_to_low do
+    local shard_keyrange_start = shard_keyrange_starts_high_to_low[i]
+    if shard_keyrange_start <= hashed_state_ref_first_byte then
+      -- This is the shard that will hold our state.
+      local consensus_id = consensus_id_by_keyrange_start[shard_keyrange_start]
+      request_handle:headers():add("x-reboot-consensus-id", consensus_id)
+      request_handle:logDebug(
+          "Picked consensus '" .. consensus_id .. "' for state '" .. state_ref .. "'"
+      )
+      return
+    end
+  end
+
+  -- This code should be unreachable; the last shard in the
+  -- `shard_keyrange_start` list should have a value of `0` and thereby
+  -- there can't be traffic that doesn't have a shard to go to. If we
+  -- print the following we in fact have a bug.
+  request_handle:logErr(
+      "Failed to pick consensus for state '" .. state_ref .. "'"
+  )
+  -- If we let the request continue we'd get a "no_route" error, which is
+  -- a 404 that gRPC interprets as "not implemented". We'd like to send a
+  -- 'internal error' instead; to gRPC that would be error code 400, but
+  -- to any other (HTTP) client error 500 (to gRPC: "unknown") is more
+  -- accurate. See:
+  --   https://github.com/grpc/grpc/blob/master/doc/http-grpc-status-mapping.md
+  request_handle:respond({[":status"] = "500"}, "Router internal error")
+end
