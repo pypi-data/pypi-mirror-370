@@ -1,0 +1,210 @@
+{
+    "$id": "/schemas/course_config",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Brightspace scripts course configuration",
+    "description": "The schema of Brightspace scripts application configuration data for a specific course.",
+    "type": "object",
+    "properties": {
+        "courseName": {
+            "type": "string",
+            "description": "The Brightspace course name.",
+            "examples": ["2425 Processors (KW2 V"]
+        },
+        "course": {
+            "type": "string",
+            "description": "The internal course name for course plugin and course specific data selection.",
+            "examples": ["proc"]
+        },
+        "assignmentDefaults": {
+            "$ref": "#/$defs/assignmentDefaults",
+            "description": "The defaults for assignments if not overwritten on an individual basis."
+        },
+        "assignments": {
+            "type": "object",
+            "patternProperties": {
+                ".*": {"$ref": "#/$defs/assignment"}
+            },
+            "description": "The collection of assignments tied to this course, where keys are assignment identifiers."
+        },
+        "graders": {
+            "type": "object",
+            "patternProperties": {
+                ".*": { "$ref": "#/$defs/grader"}
+            },
+            "description": "The collection of graders tied to this course, where keys are grader identifiers."
+        }
+    },
+    "required": ["courseName", "course", "assignmentDefaults", "assignments", "graders"],
+    "$defs": {
+        "grader": {
+            "title": "Grader schema",
+            "description": "The schema of a grader.",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the grader.",
+                    "examples": ["John Doe"]
+                },
+                "email": {
+                    "type": "string",
+                    "description": "The email of the grader to which distributed assignments are sent.",
+                    "format": "email",
+                    "examples": ["J.Doe@student.science.ru.nl"]
+                },
+                "contactEmail": {
+                    "type": "string",
+                    "description": "The email advertised to students which they can use to contact the grader (if different from the distribution email).",
+                    "format": "email",
+                    "examples": ["John.Doe@ru.nl"]
+                }
+            },
+            "required": ["name", "email"]
+        },
+        "assignmentDefaults": {
+            "title": "Default assignment configuration schema",
+            "description": "The schema that describes the defaults for assignment configurations.",
+            "type": "object",
+            "properties": {
+                "ignoredSubmissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "A list of entity names of which to ignore submissions."
+                },
+                "draftFeedback": {
+                    "type": "boolean",
+                    "description": "Specifies whether feedback is uploaded to Brightspace in a draft or published state."
+                },
+                "defaultCodeBlockLanguage": {
+                    "type": "string",
+                    "description": "The default code block language to use for Markdown style code blocks in the feedback.",
+                    "examples": ["clike"]
+                },
+                "fileHierarchy": {
+                    "type": "string",
+                    "enum": ["smart", "flatten", "original"],
+                    "description": "Specifies how the file hierarchy in each submission is processed."
+                },
+                "division": {
+                    "$ref": "#/$defs/division",
+                    "description": "Specifies how the assignment is divided over the graders."
+                },
+                "gradeAliases": {
+                    "type": "object",
+                    "patternProperties": {
+                        ".*": {
+                            "type": "string"
+                        }
+                    },
+                    "description": "Mapping of aliases to numeric grade strings or symbols which graders can use as a shorthand notation.",
+                    "examples": [{"nsa": "Not Seriously Attempted"}, {"pass": "8.0"}]
+                },
+                "removeFiles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "A list of glob-like file names to remove from submissions.",
+                    "examples": ["*.exe", ".gitignore", ".*"]
+                },
+                "removeFolders": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "A list of glob-like folder names to remove from submissions.",
+                    "examples": [".git", ".*", "__MACOSX", "__pycache__"]
+                }
+            }
+        },
+        "assignment": {
+            "title": "Assignment configuration schema",
+            "description": "The schema that describes assignment configurations, which may overwrite fields from the default configuration.",
+            "allOf": [{"$ref": "#/$defs/assignmentDefaults"}],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the Brightspace DropBox folder assignment.",
+                    "examples": ["Assignment 1 - Boolean algebra"]
+                },
+                "encryptionPassword": {
+                    "type": "string",
+                    "description": "Password for FileSender encryption. Transfers will be encrypted with this password. Should contain at least one lowercase letter, one uppercase letter, one digit, and one special character.",
+                    "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).*$",
+                    "examples": ["MySecurePassword123"]
+                }
+            },
+            "required": ["name"]
+        },
+        "division": {
+            "title": "Division schema",
+            "description": "The schema that describes how an assignment is divided over the graders.",
+            "type": "object",
+            "properties": {
+                "method": {
+                    "type": "string",
+                    "enum": ["brightspace", "persistent", "random", "custom"],
+                    "description": "The division method to use."
+                },
+                "groupCategoryName": {
+                    "type": "string",
+                    "description": "The Brightspace grader group category name, or persistent group name."
+                },
+                "groupMapping": {
+                    "type": "object",
+                    "patternProperties": {
+                        ".*": {
+                            "type": "string"
+                        }
+                    },
+                    "description": "Mapping of Brightspace grader group name to grader identifier."
+                },
+                "graderWeights": {
+                    "type": "object",
+                    "patternProperties": {
+                        ".*": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                        }
+                    },
+                    "description": "Mapping of grader identifier to grading workload weight."
+                }
+            },
+            "required": ["method"],
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "method": { "const": "brightspace" }
+                        }
+                    },
+                    "then": {
+                        "required": ["method", "groupCategoryName", "groupMapping"]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "method": { "const": "persistent" }
+                        }
+                    },
+                    "then": {
+                        "required": ["method", "groupCategoryName", "graderWeights"]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "method": { "const": "random" }
+                        }
+                    },
+                    "then": {
+                        "required": ["method", "graderWeights"]
+                    }
+                }
+            ]
+        }
+    }
+}
