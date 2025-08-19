@@ -1,0 +1,54 @@
+SET(IPOPT_LINALG_C_SOURCES
+    ${IPOPT_SRCDIR}/LinAlg/IpBlas.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpCompoundMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpCompoundSymMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpCompoundVector.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDenseGenMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDenseSymMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDenseVector.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDiagMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpExpandedMultiVectorMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpExpansionMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpIdentityMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpLapack.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpLowRankUpdateSymMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpMultiVectorMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpScaledMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpSumMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpSumSymMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpSymScaledMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpTransposeMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpVector.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpZeroMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/IpZeroSymMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/TMatrices/IpGenTMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/TMatrices/IpSymTMatrix.cpp
+    ${IPOPT_SRCDIR}/LinAlg/TMatrices/IpTripletHelper.cpp
+    )
+    
+SET(IPOPT_LINALG_C_HEADERS
+    ${IPOPT_SRCDIR}/LinAlg/IpBlas.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpCompoundMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpCompoundSymMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpCompoundVector.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDenseGenMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDenseSymMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDenseVector.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpDiagMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpExpandedMultiVectorMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpExpansionMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpIdentityMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpLapack.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpLowRankUpdateSymMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpMultiVectorMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpScaledMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpSumMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpSumSymMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpSymMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpSymScaledMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpTransposeMatrix.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpVector.hpp
+    ${IPOPT_SRCDIR}/LinAlg/IpZeroMatrix.hpp
+)

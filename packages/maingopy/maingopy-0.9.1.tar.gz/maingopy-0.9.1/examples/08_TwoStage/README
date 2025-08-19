@@ -1,0 +1,59 @@
+# Nonlinear Two-Stage Stochastic Programming Problems
+
+This example showcases the usage of MAiNGO for solving nonlinear two-stage stochastic programming problems.
+The subalgorithm adressing these kinds of problems in MAiNGO is called MUSE-BB, and will be described in detail, in a forthcoming publication.
+
+## Structure
+For the implementation, we currently only allow for problem formulations where second stage objective and constraints only differ in numeric values, not in structure, i.e., the deterministic equivalent (DE) takes the form:
+```
+min  f_{I}(x) + sum(w[s] * f_{II}(x, y[s], data[s]), s in S)
+s.t. g_{I}(x) <= 0
+     g_{II}(x, y[s], data[s]) <= 0, s in S
+```
+Note, however, that the above form indirectly also allows for different expression structures, e.g., by setting certain elements of `data` which are multiplied to expressions to 0.
+This renders the above form equivalent to the apparently more generic case:
+```
+min  f_{I}(x) + sum(w[s] * f_{II_s}(x, y[s]), s in S)
+s.t. g_{I}(x) <= 0
+     g_{II,s}(x, y[s]) <= 0
+```
+
+The above problem formulations exhibit a staircase structure, visualized below:
+
+![Two-Stage Problem Structure](structure.png)
+
+## Specification
+The assumption that the different instances of functions `f_{II,s}` and `g_{II,s}` only differ in some numeric parameter values allows users to define `DE` in a compact manner, by providing functions `fII_func` and `gII_func`, which take appropriate arguments, instead of explicitly constructing the each individual instance of `fII,s` and `gII,s`.
+Furthermore, this allows to easily scale the problem by simply increasing the number of entries in `w` and `data`.
+
+In the problem definition users thus need to specify:
+- `x`: the `Nx` first stage variables
+- `y`: the `Ny` second stage variables
+- `fI`: the first stage objective
+- `fII_func`: the function that can be used to generate second stage objectives for each scenario
+- `gI`: the `NgI` first stage constraints
+- `gII_func`: the function that can be used to generate the `NgII` second stage constraints for each scenario
+
+The functions `fII_func` and `gII_func` implicitly define `Np` parameters that may vary with the scenario.
+Specific instances of a particular problem can therefore be instantiated by specifying:
+- `w`: the `Ns` sceanrio weights (which should sum to 1)
+- `data`: the `Ns` * `Np` values of the `Np` parameter vectors, used in the second stage objective and constraints.
+
+## Example: Combined Heat and Power Unit Sizing
+
+This directory contains code for running a simplified CHP sizing problem as an example.
+
+- `CHP_sizing.h` is a basic variant of this example problem, with a fixed number of 8 scenarios and a branching priority ratio of 16:1, showcasing the basic usage in C++.
+- `CHP_sizing.py` is a more elaborate implementation, using the `maingopy` python interface.
+It allows for additional features like changing the number of scenarios (using pseudorandomly generated demands), and branching priorities, switching between full- or reduced-space variants of the problem, and optionally considering an additional electric heater.
+Furthermore, running this example is possible for both the default implementation of MAiNGO (via `python CHP_sizing.py [options]`) as well as the MPI parallelized implementation (via `mpiexec -n [numper of processors] python CHP_sizing.py [options]`).
+For the reduced-space formulation an initialization by simple sampling is implemented, which results in initial points extremely close to the global optima.
+Finally, the python implementation also provides functionality for debugging, printing the resulting objective and constraint expressions, and plotting the resulting feasible set and objective valiues.
+
+The example in `CHP_sizing.h` matches the results for running `CHP_sizing.py` with the options `--Ns 8 --reduced_space --sample` and branching priorities of 16:1, corresponding to a `prios.txt` file containing the line `Qdot_nom 16`.
+An example plot for this case is given below.
+
+![CHP_sizing8.png](CHP_sizing8.png)
+ 
+
+

@@ -1,0 +1,23 @@
+SET(IPOPT_INTERFACES_C_SOURCES
+    ${IPOPT_SRCDIR}/Interfaces/IpInterfacesRegOp.cpp
+    ${IPOPT_SRCDIR}/Interfaces/IpIpoptApplication.cpp
+    ${IPOPT_SRCDIR}/Interfaces/IpSolveStatistics.cpp
+    ${IPOPT_SRCDIR}/Interfaces/IpStdCInterface.cpp
+    ${IPOPT_SRCDIR}/Interfaces/IpStdFInterface.c
+    ${IPOPT_SRCDIR}/Interfaces/IpStdInterfaceTNLP.cpp
+    ${IPOPT_SRCDIR}/Interfaces/IpTNLPAdapter.cpp
+    ${IPOPT_SRCDIR}/Interfaces/IpTNLPReducer.cpp
+    )
+SET(IPOPT_INTERFACES_C_HEADER
+   ${IPOPT_SRCDIR}/Interfaces/IpAlgTypes.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpInterfacesRegOp.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpIpoptApplication.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpNLP.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpReturnCodes.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpSolveStatistics.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpStdInterfaceTNLP.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpTNLPAdapter.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpTNLP.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpTNLPReducer.hpp
+   ${IPOPT_SRCDIR}/Interfaces/IpReturnCodes_inc.h
+)

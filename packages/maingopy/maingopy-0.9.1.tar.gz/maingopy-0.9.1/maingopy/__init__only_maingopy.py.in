@@ -1,0 +1,161 @@
+"""A Python package for using MAiNGO
+
+MAiNGO (McCormick-based Algorithm for mixed-integer Nonlinear Global
+Optimization) is a deterministic global optimization solver for mixed-integer
+nonlinear programming problems.
+For information about the capabilities and use of MAiNGO, please refer to the
+documentation at https://avt-svt.pages.rwth-aachen.de/public/maingo/.
+"""
+import os
+maingopy_dir = os.path.dirname(__file__)
+
+try:
+    from ._maingopy import *
+except ImportError:
+    # NOTE: since Python 3.8 %PATH% is no longer searched for DLLs on Windows
+    #       for security reasons. This can result in failure to find DLLs
+    #       required by certain modules like maingopy. Let's see if this is
+    #       simply because we can't find CPLEX...
+    print("\nI found maingopy but encountered an error when trying to import "
+          "it. Most likely this is because some shared libraries of "
+          "dependencies (e.g. cplex, knitro, ...) could not be found.")
+    import sys
+    if (sys.platform == 'win32'
+            and sys.version_info.major >= 3
+            and sys.version_info.minor >= 8):
+        import os
+        from packaging import version
+        print("\nI'll now try looking for CPLEX versions based on environment "
+              "variables starting with 'CPLEX_STUDIO_DIR'...\n")
+        CPLEX_versions = {
+            version.parse(f'{k[16:18]}.{k[18:]}'):
+            v[1:-1] if v.startswith('"') else v
+            for k, v in os.environ.items()
+            if k.startswith('CPLEX_STUDIO_DIR')
+        }
+        if len(CPLEX_versions) == 0:
+            raise ImportError("CPLEX was not found, but maingopy might depend "
+                              "on it. Try determining the the dependencies of "
+                              f"_maingopy.<version>.pyd in {maingopy_dir} and "
+                              "add them to Python's dll search paths. The "
+                              "simplest way to achieve this is to copy them "
+                              "to this folder.")
+        if len(CPLEX_versions) == 1:
+            version, path = next(iter(CPLEX_versions.items()))
+        else:
+            print('Found multiple CPLEX versions:')
+            for version, path in CPLEX_versions.items():
+                print('  Version', version, 'at', path)
+            version = max(CPLEX_versions)
+            path = CPLEX_versions[version]
+
+        print(f'using CPLEX {version} from {path}')
+
+        dll_path = os.path.join(path, "cplex", "bin", "x64_win64")
+        os.add_dll_directory(dll_path)
+
+        import re
+        for file in os.listdir(dll_path):
+            if re.search(r"cplex\d+.dll", file):
+                break
+        else:
+            # raise FileNotFoundError(f"No cplex<version>.dll in {dll_path}")
+            file = "cplex<version>.dll"
+        
+        try:
+            from ._maingopy import *
+        except ImportError:
+            print(" ... Searching for CPLEX didn't help.")
+
+            # Similarly, Gurobi might be the problem
+
+            print("\nI'll now try looking for Gurobi versions based on environment "
+                  "variable 'GUROBI_HOME'...\n")
+
+            gurobiHome = os.getenv('GUROBI_HOME')
+            if gurobiHome is not None:
+                gurobiPaths = gurobiHome.split(';')
+            else:
+                raise ImportError("Gurobi was not found, but maingopy might depend "
+                                  "on it. Try determining the the dependencies of "
+                                  f"_maingopy.<version>.pyd in {maingopy_dir} and "
+                                  "add them to Python's dll search paths. The "
+                                  "simplest way to achieve this is to copy them "
+                                  "to this folder.")
+
+            grbVersion = 0
+            if len(gurobiPaths) > 1:
+                print('Found multiple Gurobi versions:')
+            for gurobiPath in gurobiPaths:
+                if len(gurobiPaths) > 1:
+                    print(gurobiPath)
+                # Search for latest version
+                tmpVersion = re.search(r'gurobi(\d+)',gurobiPath)
+                if tmpVersion:
+                    versionNumber = int(tmpVersion.group(1))
+                    if versionNumber > grbVersion:
+                        grbVersion = versionNumber
+                        dll_path_gurobi = os.path.join(gurobiPath, "bin")
+
+            print(f'Using Gurobi from {dll_path_gurobi}')
+            os.add_dll_directory(dll_path_gurobi)
+            for fileGurobi in os.listdir(dll_path_gurobi):
+                if re.search(r'gurobi\d+.dll', fileGurobi):
+                    break
+                else:
+                    grbVersion = grbVersion // 10
+                    # raise FileNotFoundError(f"No gurobi<version>.dll in {dll_path}")
+                    fileGurobi = "gurobi<grbVersion>.dll"
+
+            try:
+                from ._maingopy import *
+            except ImportError:
+                print("... Looking for Gurobi didn't help.")
+                raise
+            print("... That helped! If you do not want to redo this all the time "
+                  f"consider copying '{fileGurobi}' from {dll_path_gurobi} to {maingopy_dir}.")
+        print("... That helped! If you do not want to redo this all the time "
+              f"consider copying '{file}' from {dll_path} to {maingopy_dir}.")
+    else:
+        raise
+
+if HAVE_MAiNGO_MPI():
+    import sys
+    try:
+        from mpi4py import MPI
+    except ImportError:
+        print("maingopy was built with MPI support, but mpi4py was not found.")
+        sys.exit(1)
+
+    __comm = MPI.COMM_WORLD
+    __rank = __comm.Get_rank()
+
+    def _get_old_stdout():
+        return _get_old_stdout.stdout
+    
+    _get_old_stdout.stdout = None
+    
+    __cppMuteWorker = muteWorker
+
+    def muteWorker():
+        """Mute the worker process.
+
+        This function extends the existing muteWorker function to work for any output generated on the Python side.
+        """
+        if __rank != 0 and _get_old_stdout() is None:
+            _get_old_stdout.stdout = sys.stdout
+            sys.stdout = open(os.devnull, 'w')
+        return __cppMuteWorker()
+
+    muteWorker = muteWorker
+
+    __cppUnmuteWorker = unmuteWorker
+    def unmuteWorker(buffers):
+        """Unmute the worker process.
+
+        This function extends the existing unmuteWorker function to work for any output generated on the Python side.
+        """
+        if __rank != 0 and _get_old_stdout() is not None:
+            sys.stdout = _get_old_stdout()
+            _get_old_stdout.stdout = None
+        __cppUnmuteWorker(buffers)

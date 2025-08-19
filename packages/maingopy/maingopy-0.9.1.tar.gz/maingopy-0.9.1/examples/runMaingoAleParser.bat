@@ -1,0 +1,1 @@
+"C:\Program Files (x86)\IntelSWTools\compilers_and_libraries_2018.0.124\windows\mpi\intel64\bin\mpiexec.exe" -n 4 -wdir "C:\myWorkingDir"  "PathToYourMAiNGOExe\maingo.exe"

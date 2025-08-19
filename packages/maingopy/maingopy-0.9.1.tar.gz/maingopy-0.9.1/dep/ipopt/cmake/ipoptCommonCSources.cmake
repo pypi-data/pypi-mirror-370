@@ -1,0 +1,25 @@
+SET(IPOPT_COMMON_C_SOURCES
+    ${IPOPT_SRCDIR}/Common/IpJournalist.cpp
+    ${IPOPT_SRCDIR}/Common/IpObserver.cpp
+    ${IPOPT_SRCDIR}/Common/IpOptionsList.cpp
+    ${IPOPT_SRCDIR}/Common/IpRegOptions.cpp
+    ${IPOPT_SRCDIR}/Common/IpTaggedObject.cpp
+    ${IPOPT_SRCDIR}/Common/IpUtils.cpp
+    )
+    
+SET(IPOPT_COMMON_C_HEADER
+    ${IPOPT_SRCDIR}/Common/IpoptConfig.h
+    ${IPOPT_SRCDIR}/Common/IpCachedResults.hpp
+    ${IPOPT_SRCDIR}/Common/IpDebug.hpp
+    ${IPOPT_SRCDIR}/Common/IpException.hpp
+    ${IPOPT_SRCDIR}/Common/IpJournalist.hpp
+    ${IPOPT_SRCDIR}/Common/IpObserver.hpp
+    ${IPOPT_SRCDIR}/Common/IpOptionsList.hpp
+    ${IPOPT_SRCDIR}/Common/IpRegOptions.hpp
+    ${IPOPT_SRCDIR}/Common/IpReferenced.hpp
+    ${IPOPT_SRCDIR}/Common/IpSmartPtr.hpp
+    ${IPOPT_SRCDIR}/Common/IpTaggedObject.hpp
+    ${IPOPT_SRCDIR}/Common/IpTimedTask.hpp
+    ${IPOPT_SRCDIR}/Common/IpTypes.hpp
+    ${IPOPT_SRCDIR}/Common/IpUtils.hpp
+    )

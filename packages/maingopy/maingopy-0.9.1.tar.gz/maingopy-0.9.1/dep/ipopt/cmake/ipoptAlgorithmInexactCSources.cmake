@@ -1,0 +1,34 @@
+SET(IPOPT_ALGORITHM_INEXACT_C_SOURCES
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactAlgBuilder.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactCq.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactData.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactDoglegNormal.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactLSAcceptor.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactNewtonNormal.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactNormalTerminationTester.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactRegOp.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactSearchDirCalc.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactTSymScalingMethod.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpIterativeSolverTerminationTester.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactPDSolver.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactPDTerminationTester.cpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpIterativePardisoSolverInterface.cpp
+    )
+    
+SET(IPOPT_ALGORITHM_INEXACT_C_HEADER
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactAlgBuilder.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactCq.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactData.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactDoglegNormal.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactLSAcceptor.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactNewtonNormal.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactNormalStepCalc.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactNormalTerminationTester.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactPDSolver.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactPDTerminationTester.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactRegOp.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactSearchDirCalc.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpInexactTSymScalingMethod.hpp
+    ${IPOPT_SRCDIR}/Algorithm/Inexact/IpIterativePardisoSolverInterface.hpp
+${IPOPT_SRCDIR}/Algorithm/Inexact/IpIterativeSolverTerminationTester.hpp
+)

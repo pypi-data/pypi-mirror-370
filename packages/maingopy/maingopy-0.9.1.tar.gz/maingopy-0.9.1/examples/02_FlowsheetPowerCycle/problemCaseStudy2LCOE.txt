@@ -1,0 +1,283 @@
+# **********************************************************************************
+# * Copyright (c) 2019 Process Systems Engineering (AVT.SVT), RWTH Aachen University
+# *
+# * This program and the accompanying materials are made available under the
+# * terms of the Eclipse Public License 2.0 which is available at
+# * http://www.eclipse.org/legal/epl-2.0.
+# *
+# * SPDX-License-Identifier: EPL-2.0
+# *
+# * @file problemCaseStudy2LCOE.txt
+# *
+# * @brief Problem definition for Case Study II (Regenerative Rankine Cycle) for
+# *        minimizing the levelized cost of electricity that was published in
+# *        D. Bongartz, A. Mitsos: "Deterministic global optimization of process
+# *             flowsheets in a reduced space using McCormick relaxations",
+# *             Journal of Global Optimization 69 (2017), 761-796.
+# *             https://link.springer.com/article/10.1007/s10898-017-0547-4
+# *        E-mail: amitsos@alum.mit.edu
+# *
+# **********************************************************************************
+
+definitions:
+#Parameters
+#Thermodynamics
+  real A := 3.55959;
+  real B := 643.748;
+  real C := -198.043;
+  real cpig := 2.08;
+  real cif := 4.18;
+  real vif := 0.001;
+  real deltaH := 2480.;
+  real T0 := 313.8336;
+  real Rm := 0.462;
+#Cost data
+  real k1A := 4.3247;
+  real k2A := -0.303;
+  real k3A := 0.1634;
+  real k1B := 3.5565;
+  real k2B := 0.3776;
+  real k3B := 0.0905;
+  real c1A := 0.03881;
+  real c2A := -0.11272;
+  real c3A := 0.08183;
+  real FmA := 2.75;
+  real B1A := 1.63;
+  real B2A := 1.66;
+  real kEco := 0.06;
+  real kEvap := 0.06;
+  real kSH := 0.03;
+  real kCond := 0.35;
+  real InvGT := 22.7176e6;
+  real WorkGT := 69676;
+  real FuelHeat := 182359;
+  real FuelPrice := 14;
+  real fPhi := 1.06;
+  real fAnnu := 0.1875;
+  real Teq := 4000;
+  real VarCost := 4;
+  real B1B := 1.49;
+  real B2B := 1.52;
+  real FmB := 1;
+#Other
+  real etaT := 0.9;
+  real etaP := 0.8;
+  real mcpG := 200;
+  real TGin := 900;
+  real Tmax := 873.15;
+  real dTap := 10;
+  real dTmin := 15;
+  real xmin := 0.85;
+  real Amin := 10;
+  real Vmin := 1;
+  real p1 := 0.05;
+  real Tcout := 303;
+  real Tcin := 298;
+
+
+#Continuous variables
+  real p2   in [0.2,5];
+  real p4   in [3,100];
+  real mdot in [5,100];
+  real h7   in [2480,3750];
+  real k    in [0.01,0.2];
+
+
+#Reduced-space model
+#General
+  real p0() := antoine_psat(T0,A,B,C);
+  real deltaS() := deltaH/T0;
+  real mBleed() := mdot*k;
+  real mMain() := mdot*(1-k);
+#Turbines
+#Inlet
+  real p7() := p4;
+  real h7vap() := deltaH + cpig*(antoine_tsat(p7(),A,B,C)-T0);
+  real T7() := T0 + (h7-deltaH)/cpig;
+  real s7() := deltaS() + log(T7()/T0)*cpig - log(p7()/p0())*Rm;
+#Turbine 1 (bleed)
+  real p8() := p2;
+  real s8iso() := s7();
+  real s8liq() := log(antoine_tsat(p8(),A,B,C)/T0)*cif;
+  real s8vap() := log(antoine_tsat(p8(),A,B,C)/T0)*cpig+deltaS()-log(p8()/p0())*Rm;
+  real x8iso() := (s8iso()-s8liq())/(s8vap()-s8liq());
+  real h8liq() := cif*(antoine_tsat(p8(),A,B,C)-T0) + 1e2*vif*(p8()-p0());
+  real h8vap() := deltaH + cpig*(antoine_tsat(p8(),A,B,C)-T0);
+  real h8iso() := h8liq()*(1-x8iso()) + x8iso()*h8vap();
+  real wtBleed() := etaT*(h7-h8iso());
+  real WorkTurbBleed() := mBleed()*wtBleed();
+  real h8() := h7*(1-etaT)+etaT*h8iso();
+  real x8() := (h8()-h8liq())/(h8vap()-h8liq());
+  real T8() := antoine_tsat(p8(),A,B,C);
+#Turbine 2 (main)
+  real p9() := p1;
+  real s9iso() := s7();
+  real s9liq() := log(antoine_tsat(p9(),A,B,C)/T0)*cif;
+  real s9vap() := log(antoine_tsat(p9(),A,B,C)/T0)*cpig+deltaS()-log(p9()/p0())*Rm;
+  real x9iso() := (s9iso()-s9liq())/(s9vap()-s9liq());
+  real h9liq() := cif*(antoine_tsat(p9(),A,B,C)-T0) + 1e2*vif*(p9()-p0());
+  real h9vap() := deltaH + cpig*(antoine_tsat(p9(),A,B,C)-T0);
+  real h9iso() := h9liq()*(1-x9iso()) + x9iso()*h9vap();
+  real wtMain() := etaT*(h7-h9iso());
+  real WorkTurbMain() := mMain()*wtMain();
+  real h9() := h7*(1.-etaT) + etaT*h9iso();
+  real T9() := antoine_tsat(p9(),A,B,C);
+  real x9() := (h9()-h9liq())/(h9vap()-h9liq());
+#Feedwater line
+#Condenser
+  real T1() := antoine_tsat(p1,A,B,C);
+  real h1() := cif*(antoine_tsat(p1,A,B,C)-T0) + 1e2*vif*(p1-p0());
+  real s1() := cif*log(antoine_tsat(p1,A,B,C)/T0);
+  real QCond() := mMain()*(h9()-h1());
+#Condensate pump
+  real s2iso() := s1();
+  real T2iso() := T0*exp(s2iso()/cif);
+  real h2iso() := cif*(T2iso()-T0) + 1e2*vif*(p2-p0());
+  real wpCond() := (h2iso()-h1())/etaP;
+  real WorkPumpCond() := mMain()*wpCond();
+  real h2() := h1()*(1-1/etaP) + h2iso()/etaP;
+  real T2() := T0 + (h2()-1e2*vif*(p2-p0()))/cif;
+#Deaerator
+  real p3() := p2;
+  real h3liq() := cif*(antoine_tsat(p3(),A,B,C)-T0) + 1e2*vif*(p3()-p0());
+  real h3() := h3liq();
+  real s3liq() := cif*log(antoine_tsat(p3(),A,B,C)/T0);
+  real s3() := s3liq();
+  real T3() := antoine_tsat(p3(),A,B,C);
+#Feedwater pump
+  real s4iso() := s3();
+  real T4iso() := T0*exp(s4iso()/cif);
+  real h4iso() := cif*(T4iso()-T0) + 1e2*vif*(p4-p0());
+  real wpFeed() := (h4iso()-h3())/etaP;
+  real WorkPumpFeed() := mdot*wpFeed();
+  real h4() := h3()*(1-1/etaP) + h4iso()/etaP;
+  real h4liq() := cif*(antoine_tsat(p4,A,B,C)-T0) + 1e2*vif*(p4-p0());
+  real T4() := T0 + (h4()-1e2*vif*(p4-p0()))/cif;
+#Boiler
+#Superheater
+  real p6() := p4;
+  real T6() := antoine_tsat(p6(),A,B,C);
+  real h6() := deltaH + cpig*(antoine_tsat(p6(),A,B,C)-T0);
+  real QSH() := mdot*(h7-h6());
+  real TG2() := TGin - QSH()/mcpG;
+#Evaporator
+  real p5() := p4;
+  real T5() := antoine_tsat(p5(),A,B,C) - dTap;
+  real h5() := cif*(T5()-T0) + 1e2*vif*(p5()-p0());
+  real QEvap() := mdot*(h6()-h5());
+  real TG3() := TGin - mdot*(h7-h5())/mcpG;
+#Eco
+  real QEco() := mdot*(h5()-h4());
+  real TGout() := TGin - mdot*(h7-h4())/mcpG;
+#Overall
+  real WorkNet() := mBleed()*(wtBleed()-wpFeed()) + mMain()*(wtMain()-wpCond()-wpFeed());
+  real Qzu() := mdot*(h7-h4());
+  real eta() := WorkNet()/Qzu();
+#Combined Cycle Power Plant
+  real WorkTotal() := max(WorkNet() + WorkGT,WorkGT);
+  real etaCC() := WorkTotal() / FuelHeat;
+
+#Investment cost
+#Condenser
+  real dT1cond() := T9()-Tcout;
+  real dT2cond() := T1()-Tcin;
+  real rLMTDcond() := rlmtd(dT1cond(),dT2cond());
+  real ACond() := rLMTDcond()*QCond()/kCond;
+  real Cp0cond() := cost_turton(max(Amin,ACond()),k1A,k2A,k3A);
+  real FpCond() := 1.0;
+  real InvCond() := 1.18 * (B1A+B2A*FmA*FpCond()) * Cp0cond();
+#Pumps
+  real InvPumpCond() := 3540.*pow(max(WorkPumpCond(),1e-3),0.71);
+  real InvPumpFeed() := 3540.*pow(max(WorkPumpFeed(),1e-3),0.71);
+#Turbines incl. generator
+  real InvTurb() := 6000.*pow(max(WorkTurbBleed()+WorkTurbMain(),1e-3),0.7) + 60.*pow(max(WorkTurbBleed()+WorkTurbMain(),1e-3),0.95);
+#Economizer
+  real dT1eco() := max(dTmin,TGout() - T4());
+  real dT2eco() := max(dTmin,TG3() - T5());
+  real rLMTDeco() := rlmtd(dT1eco(),dT2eco());
+  real AEco() := rLMTDeco()*QEco() / kEco;
+  real Cp0Eco() := cost_turton(max(Amin,AEco()),k1A,k2A,k3A);
+  real Fp() := cost_turton(p4,c1A,c2A,c3A);
+  real InvEco() := 1.18 * (B1A+B2A*FmA*Fp()) * Cp0Eco();
+#Evaporator
+  real dT1evap() := max(dTmin,TG3() - T6());
+  real dT2evap() := max(dTmin,TG2() - T6());
+  real rLMTDevap() := rlmtd(dT1evap(),dT2evap());
+  real AEvap() := rLMTDevap()*QEvap() / kEvap;
+  real Cp0evap() := cost_turton(max(Amin,AEvap()),k1A,k2A,k3A);
+  real InvEvap() := 1.18 * (B1A+B2A*FmA*Fp()) * Cp0evap();
+#Superheater
+  real dT1SH() := max(dTmin,TG2() - T6());
+  real dT2SH() := max(dTmin,TGin - T7());
+  real rLMTDSH() := rlmtd(dT1SH(),dT2SH());
+  real ASH() := rLMTDSH()*QSH() / kSH;
+  real Cp0SH() := cost_turton(max(Amin,ASH()),k1A,k2A,k3A);
+  real InvSH() := 1.18 * (B1A+B2A*FmA*Fp()) * Cp0SH();
+#Deaerator
+  real VDae() := 1.5 * 600 * mdot * vif;
+  real Cp0DAE() := cost_turton(VDae(),k1B,k2B,k3B);
+  real FpDAE() := 1.25;
+  real InvDae() := 1.18 * (B1B+B2B*FmB*FpDAE()) * Cp0DAE();
+#Cycle
+  real Inv() := InvCond() + InvPumpCond() + InvPumpFeed() + InvEco() + InvEvap() + InvSH() + InvTurb() + InvDae();
+#Combined Cycle Plant
+  real InvTotal() := Inv() + InvGT;
+  real LCOE() := (InvTotal()*fPhi*fAnnu*1000/Teq+FuelPrice*FuelHeat)/WorkTotal() + VarCost;
+
+
+constraints:
+#Inequalities
+ (h7vap()-h7)*0.001 <= 0                                "hvap(p7())<=h7";
+ (T7()-Tmax)*0.01 <= 0                                  "T7()<=Tmax";
+ (s8liq()-s8iso())*1 <= 0                               "sliq(p8())<=s8iso()";
+ (s8iso()-s8vap())*1 <= 0                               "s8iso()<=svap(p8())";
+ (h8liq()-h8())*0.01 <= 0                               "hliq(p8())<=h8()";
+ (h8()-h8vap())*0.001 <= 0                              "h8()<=hvap(p8())";
+ (s9liq()-s9iso())*1 <= 0                               "sliq(p9())<=s9iso()";
+ (s9iso()-s9vap())*1 <= 0                               "s9iso()<=svap(p9())";
+ (h9liq()-h9())*0.01 <= 0                             "hliq(p9())<=h8()";
+ (h9()-h9vap())*0.001 <= 0                            "h9()<=hvap(p9())";
+ (xmin*h9vap()-h9()+h9liq()*(1-xmin))*0.1 <= 0      "xmin<=x9()";
+ (p2-p4)*1 <= 0                                         "p2<=p4";
+ (h4()-h4liq())*0.01 <= 0                               "h4()<=hliq(p4)";
+ (dTmin-(TG3()-T6()))*0.1 <= 0                          "Pinch: Evaporator, cold end";
+ (dTmin-(TGout()-T4()))*0.1 <= 0                        "Pinch: Economizer, cold end";
+ (WorkGT - WorkTotal())*1e-5 <= 0                       "WorkGT<=WorkTotal()";
+ (Amin-ACond())*0.1 <= 0                                "Amin<=ACond()";
+ (Amin-AEco())*0.1 <= 0                                 "Amin<=AEco()";
+ (Amin-AEvap())*0.1 <= 0                                "Amin<=AEvap()";
+ (Amin-ASH())*0.1 <= 0                                  "Amin<=ASH()";
+ (Vmin-VDae())*1 <= 0                                   "Vmin<=VDae()";
+ (1e-3-WorkPumpCond())*1e-3 <= 0                        "0.001<=WorkPumpCond()";
+ (1e-3-WorkPumpFeed())*1e-3 <= 0                        "0.001<=WorkPumpFeed()";
+ (1e-3-WorkTurbBleed())*1e-5 <= 0                       "0.001<=WorkTurbBleed()";
+ (1e-3-WorkTurbMain())*1e-5 <= 0                        "0.001<=WorkTurbMain()";
+#Equalities
+ (mBleed()*(h3()-h8())+mMain()*(h3()-h2()))*0.001 = 0   "Deaerator energy balance";
+
+
+objective:
+#Objective function
+  LCOE();
+
+
+outputs:
+#Additional outputs
+  T1()-273.15 "T1() [C]";
+  T2()-273.15 "T2() [C]";
+  T3()-273.15 "T3() [C]";
+  T4()-273.15 "T4() [C]";
+  T5()-273.15 "T5() [C]";
+  T6()-273.15 "T6() [C]";
+  T7()-273.15 "T7() [C]";
+  T8()-273.15 "T8() [C]";
+  T9()-273.15 "T9() [C]";
+  x8() "x8()";
+  x9() "x9()";
+  TGin-273.15 "TG1 [C]";
+  TG2()-273.15 "TG2() [C]";
+  TG3()-273.15 "TG3() [C]";
+  TGout()-273.15 "TG4 [C]";
+  WorkNet() "Work Steam Cycle [kW]";
+  eta() "eta() [-]";
+  etaCC() "etaCC() [-]";

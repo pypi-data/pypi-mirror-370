@@ -1,0 +1,20 @@
+SET(MUMPS_C_SOURCES
+	${MUMPS_DIR}/src/mumps_c.c
+	${MUMPS_DIR}/src/mumps_common.c
+	${MUMPS_DIR}/src/mumps_io.c
+	${MUMPS_DIR}/src/mumps_io_basic.c
+	${MUMPS_DIR}/src/mumps_io_err.c
+	${MUMPS_DIR}/src/mumps_io_thread.c
+	${MUMPS_DIR}/src/mumps_metis.c
+	${MUMPS_DIR}/src/mumps_metis_int.c
+	${MUMPS_DIR}/src/mumps_metis64.c
+	${MUMPS_DIR}/src/mumps_numa.c
+	${MUMPS_DIR}/src/mumps_pord.c
+	${MUMPS_DIR}/src/mumps_save_restore_C.c
+	${MUMPS_DIR}/src/mumps_scotch.c
+	${MUMPS_DIR}/src/mumps_scotch_int.c
+	${MUMPS_DIR}/src/mumps_scotch64.c
+	${MUMPS_DIR}/src/mumps_size.c
+	${MUMPS_DIR}/src/mumps_thread.c
+)
+

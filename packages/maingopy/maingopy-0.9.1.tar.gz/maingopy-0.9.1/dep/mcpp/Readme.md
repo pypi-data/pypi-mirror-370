@@ -1,0 +1,1 @@
+This repository contains a modified version of MC++ by Benoit Chachuat et al. as obtained from https://github.com/omega-icl/mcpp.

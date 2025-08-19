@@ -1,0 +1,3 @@
+This folder contains the tinyxml2 library, commit ff61650517cc32d524689366f977716e73d4f924 from https://github.com/leethomason/tinyxml2.
+All files and folders except for 'tinyxml2.h' and 'tinyxml2.cpp' were deleted to save space. Furthermore, 'tinyxml2.h' was moved to the folder 'inc' and 'tinyxml2.cpp' was moved to the folder 'src' to match the directory structure of the MeLOn library.
+For licensing information, see the corresponding file.

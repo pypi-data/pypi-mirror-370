@@ -1,0 +1,474 @@
+#########################################################################################
+# Symbols
+#########################################################################################
+# Symbols are named entities that refer to fixed values (parameters), variables, functions, or expressions of a particular type.
+# The names must start with a letter and are allowed to contain letters, numbers, and underscores.
+# Symbols can only be used once they have been defined, therefore, it is advisable to collect all definitions at the beginning of the input file.
+# All definitions begin with a declarator indicating the desired data type and are terminated with a semicolon.
+
+
+#########################################################################################
+# Symbol types
+#########################################################################################
+# All data types are constructed from the basic types real, index, and boolean and potentially derived types such as set and tensor.
+# Furthermore, data types can either be constant (parameters) or variable (variables).
+
+# To define a parameter of such a basic type, the type, identifier, and value, which is set with the operator ':= ', is needed.
+real x1 := 5.51;                                                                        # Defines a scalar parameter identified by 'x1' of the type real with the value 5.51. Reals can take the value of any real number.
+index i1 := 4;                                                                          # Defines a scalar parameter identified by 'i1' of the type index with the value 4. Indices can only take values of whole numbers (integers).
+boolean b1 := true;                                                                     # Defines a scalar parameter 'b1' of type boolean with value true. Booleans can take the values 'true' and false'.
+
+# To define a variable of type real, the type, and identifier are needed. The bounds of the variable are optional. If no bounds are given, bounds from -inf to inf are assumed.
+# Note that variables (defined as below) cannot be evaluated in libALE but may be used in, e.g., MAiNGO or libDIPS
+real var1 in [0,1];                                                                     # Defines a scalar variable 'var1' of type real with bounds [0,1].
+real var3 "this is a comment";                                                          # Defines a scalar variable 'var3' of type real with bounds from -inf to inf with the comment "this is a comment". The bounds can be set later as shown below in subsection 'Assignments'.
+
+# Integral variables can be defined by replacing the real declarator by either binary or integer.
+# In the case of a binary variable, no bounds can be assigned as they are implicit.
+binary y1;                                                                              # Defines a scalar variable 'y1' of type binary. Binaries can take the values '0' and '1'.
+integer var5 in [0,100];                                                                # Defines a scalar variable 'var5' of type integer with bounds [0,100].
+
+# The following examples of sets, variable- and parameter-tensors, functions, etc. use the basic types reals and indices. However, if not explicitly mentioned, other types may be used instead.
+real[2,2] var2 in [0,1];                                                                # Defines a tensor variable 'var2' of type real and size 2x2 with bounds [0,1]^(2x2).
+real[3,2] var4 in [0, ((1,2),(3,4),(5,6))];                                             # Defines a tensor variable 'var4' of type real and size 3x2. All entries have the lower bound of 0. The upper bounds are given individually.
+
+set{index} set1 := {1,2,3};                                                             # Defines a set of indices 'set1' containing the values 1,2, and 3. Sets are, e.g., used iterating (see below).
+set{real[:]} set2 := {(1,2),(8,9),(19.9,0)};                                            # Defines a set of vectors with any size and type real. For the definition of tensors, see below. For the meaning and usage of the wildcard symbol ':' see below.
+set{index} set3 := {1 .. 7};                                                            # Defines a set of indices in the range from 1 to 7. This is equivalent to writing 'set{index} set3 := {1,2,3,4,5,6,7};'.
+index i2 := 3;
+set{index} set4 := {i2 .. 4};                                                           # Defines a set of indices in the range using the prefined parameter 'i2'. 'i2' is defined with the value 3 above and its value has not changed since then. Hence, the set contains the values 3 and 4.
+set{index} setIndicatorInit := {o in {1 .. 3}: o > 2};                                  # Defines a set of indices using an 'indicator set'.
+boolean[3] boolTensor1 := (true, false, true);                                          # Defines a parameter vector using a pre-defined parameter of type boolean.
+set{index} setIsIt :={i in {1 .. 3}: boolTensor1[i]};                                   # Defines a set of indices using an 'indicator set' using the entries of the bool parameter.
+
+real[4] tensor1 := (3,1.4,1,1);                                                         # Defines a parameter vector of size 4 with the following entries of type real: 3, 1.4, 1, 1. Tensors of type real may contain any real values.
+index[i2] tensor2 := (1,1,8);                                                           # Defines a parameter vector of size 'i2' (which currently has the value 3) with the entries 1, 1, 8 of type index. Tensors of type index may only contain indices.
+real[2,2] tensor3 := ((1.5,2),(3,4));                                                   # Defines a parameter matrix of size 2x2 containing real values.
+index [2,4] tensor4 := ((0,1,2,3),(8,9,9,10));                                          # Defines a parameter matrix of size 2x4 containing indices.
+index[3,3] tensor5 := 3;                                                                # Defines a parameter matrix of size 3x3, whereas every entry is set to 3. This is equivalent to writing 'index[3,3] tensor5 := ((3,3,3),(3,3,3),(3,3,3));'.
+index i3 := 2;
+real[i3*2-1] tensor6 := (1,2,3);                                                        # Defines a parameter vector using a pre-defined parameter of type index. 'i3*2-1' is computed to 3 during parsing, as 'i3' currently has the value 2.
+real[2] tensor7 in [-1,1];                                                              # Defines a variable of size 2, whereas each entry is a variable of type real in the range from -1 to 1. This is equivalent to writing '([-1,1],[-1,1])'.
+
+boolean b2 := 7 >= 7;                                                                   # Defines a boolean expression that evaluates '7<=7'. A boolean expression may be an equality or an inequality.
+boolean b3 := 1.9 < 1.8999999;                                                          # Defines a boolean expression that evaluates an inequality;
+boolean b4 := x1 = 3;                                                                   # Defines a boolean expression that evaluates an equality;
+
+
+#########################################################################################
+# Wildcards
+#########################################################################################
+# Wildcards may be used in expressions or definitions to be a substitute for any indice.
+# This can be useful when, e.g., defining sets containing vectors of different sizes, as shown below.
+# The symbol for wildcards is ':'.
+# Note that the consistency between arguments and return value is not fully checked (although checks might be implemented in the future).
+# Therefore, it is strongly recommended to always explicitly define the dimensions (or use the wildcards with great caution).
+
+set{index[:]} set5 := { (1), (2,4)};                                                    # Defines a parameter set of of vector of type index with any size. The character ':' is a wildcard symbol and can be any value. The defined set contains one vector of size 1 and one vector of size 2.
+
+set{real[:]}[2] tensor8 := ({(1.5,1.5)}, {(0,1),(1,3)});                                # Defines a parameter tensor set of size 2 of type real. The set may contain real vectors of an size of the type real. 'set{}' defines the type of the tensor (tensor set), 'real[:]' defines the type of the set and '[2]' defines the dimension of the tensor.
+
+real[2,3] function1(real [2,3,2] m) := m[1,:,:];                                        # Defines a function, which takes a real tensor of shape (2,3,2) as an argument and returns the first entry of this argument. The expressions 'm[1,:,:]' means that all entries of the argument are returned, which indices in the first dimension is 1; the indices in the other dimensions may be arbitrary. Functions will be further explained below.
+
+
+#########################################################################################
+# Assignments
+#########################################################################################
+# Assigments are used to assign a new value or bound to an already existing parameter or variable, respectively.
+
+real x2 := 6;                                                                           # Defines a scalar parameter real with the value 6.
+x2 <- 3.8;                                                                              # Assigns the value 3.8 to the scalar parameter 'x2'. If 'x2' is used after this line, it has the value 3.8 (until another assinged is done).
+
+index i4 := 2;                                                                          # Defines an index with value 2.
+real[i4] tensor9 := (1,2);                                                              # Defines a parameter vector of size 2.
+i4 <- 3;                                                                                # Assigns the value 3 to the index 'i4'. The size of 'tensor9' does not change, as this expression is parsed after the line above (sequential parsing).
+
+index i6 := 2;
+index i7 := 2*i6 - 1;                                                                   # Defines an index using the pre-defined index 'i6'. 'i8' has the value 3.
+i6 <- 3;                                                                                # Assigns the value 3 to the index 'i6'. If the index 'i6' is used after this line, it has the value 3 (until another assinged is performed). The value of 'i7' does not change
+
+index[4] tensor10 := (1,2,3,4);                                                         # the following definitions are used to illustrate the assignment operator (see below)
+index[2,2] tensor11 := ((1,2),(3,4));
+index i5 := 2;
+tensor10[1] <- 10;                                                                      # Assigns the new value 10 to the first tensor entry. 'tensor10[1]' is used to access the first entry of a tensor. The resulting vector will be '(10,2,3,4)'.
+tensor10[i5] <- 0;                                                                      # Assigns a new value to tensor entry using a pre-defined parameter. The resulting vector will be '(10,0,3,4)'.
+tensor11[1,:] <- 5;                                                                     # Assigns a new value to multiple entries in tensor 'tensor11' using the wildcard operator. 5 will be assigned to every entry of the first entry of the tensor. The resulting values of the vector will be '(((5,5),(3,4)).
+
+real[2,2] tensor12 := ((0,2),(3,4));
+forall i in {1,2}:
+    tensor12[i,1] <- 1;                                                                 # Assigns new value to the entries of a tensor using a for-all statement. For each value 'i' of the set '{1,2}' it will assign the value 1 to the entry of indices [i,1]. The resulting tensor is '((1,2),(1,4))'. The usage of for-all expressions is further explained below.
+
+# For-all assignments can be used to iterated over a set (in a for-loop manner) and with each iteration the assignment is carried out.
+# Note that there currently exists some restrictions for nested forall assignements (c.f., section 'Limitations and unsupported functionalities')
+
+index[3] tensor13 := (0,0,0);
+set{index} set6 := {1,2,3};
+forall i in set6:                                                                       # Loop is executed for every value in 'set6': 1,2,3
+    tensor13[i]<- i;                                                                    # Assigns new values to the entries of a tensor. The resulting vector is '(1,2,3)';
+# For-all assignements can also be used nested. The inner loop is executed for each iteration of the outer for-all.
+index[2,4] tensor14 := ((0,1,2,3),(8,9,9,10));
+forall k in {1,2}:                                                                      # Outer for-all (loop).
+    forall j in {2,3}:                                                                  # Inner for-all (loop). Executed for every iteration of the outer for-all (loop).
+        tensor14[k,j]<-j+k;                                                             # Assigment to be carried out. The resulting tensor is '((0,3,4,3),(8,4,5,10))'
+
+# The assignment of arameters of type real is also possible with an for-all assignment.
+real[4] real_vector := 0;
+forall k in {1,2,3,4}:
+   real_vector[k]<- x1 + as_real(k);
+
+# For-all assignements can also be used with set intersections. The following assignment assigns the entries at index 'n1' of 'tensor15' to 1 if the entries exist in both 'set7' and 'set8' using an indicator set.
+real[6] tensor15  := (0,0,0,0,0,0);
+set{index} set7 := {1,2,4,5};
+set{index} set8 := {1,2,3,4};
+forall n1 in {n2 in set7: n2 in set8}:
+    tensor15[n1]<-1;
+
+# For-all expressions can be used to iterated over a set (in a for-loop manner) and with each iteration the boolean expression evaluated. The expression in the for-all will only evaluate to true, if every condition in the loop is evaluated to true.
+index[2,2] tensor16:= 1;
+boolean b5 :=
+    forall k in {1,2}:                  # for-all (outer loop)
+        forall j in {1,2}:              # for-all (inner loop)
+            tensor16[k,j]=j+k-j-k+1;    # condition
+
+# Assignments can also be used to assign initial values to variables or change the lower- or upper-bound of the variable.
+real var6;                                                                              # Defines a tensor variable 'var7' of type real and size 2x2 with bounds -inf to inf in every entry.
+real[2,2] var7 in [0,5];                                                                # Defines a tensor variable 'var7' of type real and size 2x2 with bounds 0 to 5 in every entry.
+var6.init <- 0.2;                                                                       # Assigns the variable 'var6' the initial value 0.2.
+var6.lb <- -10;                                                                         # Assigns (changes) the lower bound of 'var6' to -10.
+var6.ub <- 98;                                                                          # Assigns (changes) the upper bound of 'var6' to 98.
+var2.ub[1,1] <- 10;                                                                     # Assigns (changes) the upper bound of the entry [1,1] of 'var2' to 10.
+var4.prio[:,:] <- 5;                                                                    # Assigns (changes) the branching priority of var4 of the all entries to 5.
+var4.prio[:,2] <- 10;                                                                   # Assigns (changes) the branching priority of var4 of the entries [:,2] to 10.
+
+
+#########################################################################################
+# Functions
+#########################################################################################
+# Functions are defined with a return type, an identifier, parameters, and an expression. They can used in expressions (see below) which are evaluated at the second stage, if the requiered arguments are passed to them.
+# Both the return type and the arguments of a function must be of the same basic type. For a (unsave) workaround see section 'Limitations and unsupported functionalities'.
+
+index function2() := 5;                                                                 # Defines a function that returns in index and is called 'function2'. It does not take any parameters and will always evaluate to 5.
+index i8 := function2();                                                                # Defines an index using a pre-defined function
+real function3(real m) := m*3.5;                                                        # Defines a function that returns a real and that takes one argument of type real. The passed argument will be multiplied by 3.5 and then returned. E.g., 'function3(2);' will evaluate to 7.
+real function4(real[2] m) := m[1] + m[2] + 1;                                           # Defines a function that returns a value of type real and takes a vector of size 2 as an argument.
+index function5(index m, index[2] n) := m + n[2];                                       # Defines a function that returns an index and takes a vector and a scalar as arguments.
+real[2] function6(real[2] m) := m;                                                      # Defines a functions that takes a tensor as an argument and returns a tensor.
+real[2,2] function7 (real m) := ((m,m),(m,m));                                          # Defines a functions that takes a scalar as an argument and returns a tensor. The function will construct a tensor based on the passed argument.
+real x4 := 2.5;
+real function8(real m) := m * x4;                                                       # Defines a function that returns a real value. The function uses the passed argument as well as the pre-defined real 'x4'. If evaluated after this line, this is equivalent to 'real function8(real m) := m*2.5;'. This might differ if a new value is assigned to 'x4'.
+real[2,3] function9(real [2,3,2] m) := m[:,:,1];                                        # Defines a function that returns specific entries of the tensor passed as an argument using the wildcard functionality (':'). ':' can be any value, so m[:,:,1] will return a tensor with all entries which have this format (first two indices arbitrary, third fixed to 1)
+boolean function10(boolean m) := m;                                                     # Defines a function that returns a boolean and takes a boolean as its argument.
+real function11(real m) := m + function3(m);                                            # Defines a nested function. It calls the function function3 with the passed parameter m and returns the sum of the result of 'function3' and 'm'.
+
+# Some basic and special functions are already internally pre-defined. You may use them in functions or expressions. Below there is a list of all internally pre-defined functions given.
+# Pre-defined basic functions: sum, product, min, max, mid, forall, exp, log, pow, sqr, sqrt, abs, inv, sin, asin, cos, acos, tan, atan, sinh, cosh, tanh, coth, asinh, acosh, atanh, acoth, round
+# Pre-defined special functions: arh, xexpy, xexpax, xlogx, xabsx, erf, erfc, norm2, sum_div, xlog_sum, pos, neg, lb_func, ub_func, bounding_func, squash, regnormal,
+# lmtd, rlmtd, cost_turton, covar_matern_1, covar_matern_3, covar_matern_5, covar_sqrexp, af_lcb, af_ei, af_pi, gpdf, nrtl_tau, nrtl_dtau, nrtl_g, nrtl_gtau, nrtl_gdtau,
+# nrtl_dgtau, antoine_psat, ext_antoine_psat, wagner_psat, ik_cape_psat, antoine_tsat, aspen_hig, nasa9_hig, dippr107_hig, dippr127_hig, watson_dhvap, dippr106_dhvap,
+# schroeder_ethanol_p,schroeder_ethanol_rhovap,schroeder_ethanol_rholiq
+
+real function12(real m, real n, real o) := cost_turton(1,m,n,0.5) - inv(sqrt(o));       # This defines a real function that uses some basic and pre-defined functions. The rules for the pre-defined functions are the same as explained above.
+
+# We also provide the functions as_index and as_real, which can interpret a real as an index and vice versa. Using this, e.g., functions with mixed parameters can be realized as shown below. Reals must represent a whole number if they are about to be converted to an index (the user must round manually if necessary).
+
+real x5 := 5;
+index i9 := as_index(x5);                                                               # 'i9' will now have the value 5
+real x7 := as_real(i9);                                                                 # 'x7' will now have the value 5.0
+
+
+# Shown below are the different possiblities to define a function using the basic functions 'product', 'sum', 'max', and 'min', which calculates the product, sum, maximum, and minimum of the passed arguments.
+
+real[2,4] tensor17 := ((1,2,3,4), (5,6,7,8));
+set{index} set9 := {2,4};
+real product1() := product(i in {1,2,3}: tensor17[1,i] + 1);                            # Defines a product of the entries of tensors. One by one the function iterates the entries of the product, adds 1 to the and multiplies them.
+real product2() := product(i in set9 : tensor17[1,i]);                                  # Defines a product that iterate a tensor using a pre-defined set. Instead of giving a set directly, one can be defined beforehand and reused.
+real product3() := product(i in {1,2}: product(j in set9: tensor17[i,j]));              # Defines a nested product. The outer product multiplies the results of the inner products.
+real product4() := product(i in { }: tensor17[1,i]);                                    # Defines a product that iterates over an empty set. By convention, this evaluates to 1.
+
+real sum1() := sum(i in {1,2,3}: tensor17[1,i] + 1);                                    # Defines a sum of the entries 1, 2, and 3 of the tensor 'tensor17'.
+real sum2() := sum(i in set9 : tensor17[1,i]);                                          # Defines a sum that iterates a tensor using a pre-defined set. Instead of giving a set directly, one can define the set beforehand.
+real sum3() := sum(i in {1,2}: sum(j in set9: tensor17[i,j]));                          # Defines a nested sum. The outer sum adds the results of the inner sum.
+real sum4() := sum(i in { }: tensor17[1,i]);                                            # Defines a sum that iterates over an empty set. By convention, this evaluates to 0.
+real sum5() := sum(i in {1..4}: real_vector[i]);                                        # Defines a sum that iterates over a set produced by a sequence.
+real sum6() := sum(i in {4..1}: real_vector[i]);                                        # A sequence with 'start' > 'end' is also considered empty. Therefore, the set is empty and 'sum6()' evaluates to 0.
+
+real[4] tensor18 := (10,20,30,40);
+real[2,2] tensor19 := ((2,3),(8.5,-10));
+real max1() := max(5,8);                                                                # Defines a function returning the maximum of 5 and 8. More arguments may be passed by seperating them with ','.
+real min1(real x, real y) := min(x,y,100);                                              # Defines a function returning the minimum of 100 and the two passed scalar arguments x and y.
+real max2() := max(i in {1,2,3,4}: tensor18[i]);                                        # Defines a function returning the maximum of the entries of tensor18 using a loop inside the max function.
+real min2() := min(i in {1,2,3,4}: i);                                                  # Defines a function returning the minimum of the elements of the set containing values 1 to 4 using a loop inside the min function.
+real max3() := max(i in {1,2}: max(j in {1,2}: tensor19[i,j]));                         # Defines a function returning the maximum of the entries of tensor19 using a nested loop inside the max function.
+
+# Function definitions do not 'capture' any of the used symbols, meaning that only the status at the time of evaluation has an impact on the result. For example:
+real offset := 0.1;
+real function14() := sum(i in {1,2,3}: tensor17[1,i] + offset);
+offset <- 0.2;                                                                          # The value of 'offset' (or any later assigment) will determine the result of an evaluation of the function defined above.
+
+
+#########################################################################################
+# Symbolic differentiation
+#########################################################################################
+# Any real expression can be differentiated using the 'diff'-function.
+# The first argument is the expression to be differentiated and the second argument specifies with respect to which variable the expression is differentiated. This can be either a real variable or a real parameter.
+# In case of tensors any number of dimensions can be fixed, the expression will then be differentiated in all remaining free dimensions.
+# The differentiation will be carried out at parse time.
+
+real x := 2;
+real[2, 2] y := ((1, 2), (3, 4));
+real z := 0;
+
+# Note that in the following examples only scalar real expressions are allowed (please refer to the section 'Expressions' below). Therefore, we need to select one element of the tensor.
+# But the results mentioned in the comments refer only to the diff commands evaluation.
+
+# is equivalent to writing '2*x', which then evaluates to 4
+diff(x*x, x)                                                                "diff(x*x, x); # x = 2";
+# differentiates 'y[1, 1]' wrt y[1, 1], y[1, 2], y[2, 1], y[2, 2] therefore evaluates to ((1, 0), (0, 0))[1, 1]
+diff(y[1, 1], y)[1, 1]                                                      "diff(y[1, 1], y)[1, 1]; # y =  ((1, 2), (3, 4))";
+# differentiates 'y[1, 1]' wrt y[1, 1], y[1, 2] therefore evaluates to (1, 0)
+diff(y[1, 1], y[1])[1]                                                      "diff(y[1, 1], y[1])[1]; # y =  ((1, 2), (3, 4))";
+# differentiates 'y[1, 1]' wrt y[1, 1] therefore evaluates to 1
+diff(y[1, 1], y[1, 1])                                                      "diff(y[1, 1], y[1, 1]); # y =  ((1, 2), (3, 4))";
+# evaluates to ((1, 0), (2, 0))
+diff(((x, 1), (2*x, 2)), x)[1, 1]                                           "diff(((x, 1), (2*x, 2)), x)[1, 1]; # y =  ((1, 2), (3, 4))";
+
+# Some examples of differentiating functions / variables.
+real func(real x) := 2 * x * x;
+real diff_func(real x) := diff(func(x), x);
+diff_func(1)                                                                "diff_func(1)";
+
+# sums/products over sets are differentiated at parse-time but independet of the set
+diff(sum(i in {1, 2, 3}: as_real(i) * x), x)                                "diff(sum(i in {1, 2, 3}: as_real(i) * x), x)"; # (x+2x+3x)' = 6
+diff(product(i in {1, 2}: as_real(i) * x), x)                               "diff(product(i in {1, 2}: as_real(i) * x), x)"; # (x*2x)'= 4x -> 8
+
+# some more examples
+diff(1 / exp(x), x)                                                         "diff(1 / exp(x), x)";
+diff(sqrt(log(x)), x)                                                       "diff(sqrt(log(x)), x)";
+diff(sin(xlogx(x)), x)                                                      "diff(sin(xlogx(x)), x)"; # asin, cos, tan, ... can also be differentiated
+diff(erf(x), x)                                                             "diff(erf(x), x)";
+diff(erfc(x), x)                                                            "diff(erfc(x), x)";
+diff(2^(x^3), x)                                                            "diff(2^(x^3), x)";
+
+
+#########################################################################################
+# Expressions (to be evaluated in the second stage)
+#########################################################################################
+# There exist three types of expressions: real, index, and boolean expressions. All expressions are scalar.
+# Examples of expressions are shown below. Expressions can have an optional comment, which can be appended within quotation marks as shown below (alignemt of the comment is only for readability).
+# The expressions will be evaluated in the second stage, the output will be printed in the output window. The comment of the expression is printed as well.
+
+# Real expressions
+
+function3(2.0)                                                            "function3(2.0) = 2.0 * 3.5";  # result: 7
+function4((1,2))                                                          "function4((1,2)) = (1,2)[1]+(1,2)[2]+1 = 1+2+1";  # result: 4
+real[2] tensor20 := (5,10);
+function6(tensor20)[1]                                                    "function6((5,10))[1] = (5,10)[1]";  # result: 5
+function7(5)[1,1]                                                         "function7(5)[1,1] = ((5,5),(5,5))[1,1]";  # result: 5
+function8(5)                                                              "function8(5) = 5*x4 = 5*2,5";  # result: 12.5
+real [2,3,2] tensor21 := (((1,2),(3,4),(5,6)),((7,8),(9,10),(11,12)));
+function9(tensor21)[1][1]                                                 "(((1,2),(3,4),(5,6)),((7,8),(9,10),(11,12)))[:,:,1] = ((1,3,6),(7,9,11))[1,1]";  # result: 1
+function14()                                                              "function14() = sum(i in {1,2,3}: ((1,2,3,4), (5,6,7,8))[1,i] + offset) = 1+2+3+3*0.2";  # result: 6.6
+
+product1()                                                                "product(i in {1,2,3}: ((1,2,3,4), (5,6,7,8))[1,i] + 1) = 2*3*4";  # result: 24
+product2()                                                                "product(i in {2,4} : ((1,2,3,4), (5,6,7,8))[1,i]) = 2*4";  # result: 8
+product3()                                                                "product(i in {1,2}: product(j in {2,4}: ((1,2,3,4), (5,6,7,8))[i,j])) = (2*4)*(6*8)";  # result: 384
+product4()                                                                "product(i in { }: ((1,2,3,4), (5,6,7,8))[1,i])";  # result: 1
+
+sum1()                                                                    "sum(i in {1,2,3}: ((1,2,3,4), (5,6,7,8))[1,i] + 1)    = (1+1)+(2+1)+(3+1) = 2+3+4             ";  # result: 9
+sum2()                                                                    "sum(i in {2,4} : ((1,2,3,4), (5,6,7,8))[1,i]) = 2+4                                           ";  # result: 6
+sum3()                                                                    "sum(i in {1,2}: sum(j in {2,4}: ((1,2,3,4), (5,6,7,8))[i,j]))    = (2+4)+(6+8) = 6+14         ";  # result: 20
+sum4()                                                                    "sum(i in { }: ((1,2,3,4), (5,6,7,8))[1,i])                                                    ";  # result: 0
+sum5()                                                                    "sum(i in {1,2,3,4}: (x1+1,x1+2,x1+3,x1+4)[i]) = (4*5.51+10) = 32.04                           ";  # result: 32.04
+sum6()                                                                    "sum(i in {4 .. 1 }: (x1+1,x1+2,x1+3,x1+4)[i]) = 0                                             ";  # result: 0
+
+max1()                                                                    "max(5,8)"; # result: 8
+min1(100.00001, 100)                                                      "min(100.00001,100,100)"; # result: 100
+max2()                                                                    "max(i in {1,2,3,4}: (10,20,30,40)[i]) = max(10,20,30,40)"; # result: 40
+min2()                                                                    "min(i in {1,2,3,4}: i) = min(1,2,3,4)"; # result: 1
+max3()                                                                    "max(i in {1,2}: max(j in {1,2}: ((2,3),(8.5,-10))[i,j])) = max(2,3,8.5,-10)"; # result: 8.5
+
+exp(3)                                                                    "exp(3)";  # result: 20.0855
+inv(x1)                                                                   "inv(x1) = 1/5.51 = 0.1814";  # result: 0.1814
+log(8)                                                                    "log(8)";  # result: 2.07944
+abs(-23)                                                                  "abs(-23)= |-23|";  # result: 23
+sin(60)                                                                   "sin(60)";  # result: -0.304811
+pow(2,3)                                                                  "pow(2,3) = 2*2*2";  # result: 8
+cosh(6)                                                                   "cosh(6)";  # result: 201.716
+sqrt(143)                                                                 "sqrt(143)";  # result: 11.5983
+round(92.6)                                                               "round(92.6)";  # result: 93
+
+cost_turton(1,0.1,5,1)                                                    "cost_turton(1,0.1,5,1)";  # result: 1.25893
+ext_antoine_psat(1,-1,3,4,10,1,2,0)                                       "ext_antoine_psat(1,-1,3,4,10,1,2,0)";  # result: 109098
+xexpax(1,1)                                                               "xexpax(1,1);";  # result: 2.71828
+
+# Index expressions
+
+i8                                                                        "i8";  # result: 5
+i1                                                                        "i1";  # result: 4
+i1+1                                                                      "i1+1";  # result: 5
+
+function2()                                                               "function2()";  # result: 5
+function5(i1, (1,2))                                                      "function5(4, (1,2)) = 4 + (1,2)[2] = 4+2";  # result: 6
+
+# Boolean expressions
+
+2 > 1                                                                     "2 > 1";  # result: true
+5*inv(x1) = 10                                                            "5*inv(x1) = 10";  # result: false
+round(92.6) <= 92.6                                                       "round(92.6) <= 92.6";  # result: false
+round(92.6) >= 92                                                         "round(92.6) >= 92";  # result: true
+b1                                                                        "b1";  # result: true
+function10(false)                                                         "function10(false)";  # result: false
+function10(1 < 3)                                                         "function10(1 < 3) = 1 < 3";  # result: true
+
+
+#########################################################################################
+# Limitations and unsupported functionalities
+#########################################################################################
+# There are some functionalities which are currently not supported.
+# The inner set of a nested forall must not depend on the outer forall. For example, the following is not possible
+real[3,6] par_tensor6 := 0;
+# forall k in {1,2,3}:
+#   forall j in {k+1,k+2,k+3}:          # set depends on outer k -> unsupported for expression
+#       par_tensor6[k,j]>= as_real(k);  # expression
+# However, this is possible in assignments, e.g.,
+forall k in {1,2,3}:
+    forall j in {k+1,k+2,k+3}:          # set depends on outer k -> supported for assignements
+        par_tensor6[k,j] <- as_real(k); # assignment
+
+# Evaluting variables is in libALE not supported. However, variables are an important feature for MAiNGO and libDIPS. The following expressions would generate an error.
+real var8 in [0,1];
+# var8;               # Evaluation is not possible in libALE as 'var8' is a variable.
+# function3(var8);    # Evaluation is not possible in libALE as the argument of 'function3' is a variable.
+
+# Functions do not support mixed types of arguments or a different return type than the argument type.
+# real[2] m in [1,0];
+# real function14(index n) := m[n];             # Unsupported because the return type is real, while the input is of type index
+# real function13(real[2] m, index n) := m[n];  # Unsupported because the argument types are mixed basic types
+# However, with the internal functions as_index and as_real one can realize mixed basic types in functions.
+# Utilizing as_index, functions with mixed basic types can be realized.
+real function13(real[4] m , real n) := m[as_index(n)];                                  # The real function function13 takes a vector and a real number as arguments and returns the n'th entry of the vector. As vector entries cannot be accessed using reals, the n is converted to an index.
+function13(tensor1, 1)                                                    "function13((3,1.4,1,1), 1) = (3,1.4,1,1)[as_index(1)] = (3,1.4,1,1)[1]";  # result: 3
+
+
+#########################################################################################
+# [DEPRICATED] Expressions symbols
+#########################################################################################
+
+# Expression symbols will not be supported in the future. Please use functions with no arguments instead.
+# Expression symbols can be defined using pre-defined variables (and pre-defined parameters). They can be used in expressions.
+# In essence, expression symbols are functions without arguments. Consider the following examples
+
+real x3 := 0;
+real x6 in [0,1];
+real an_expression_symbol := 0.55 + x6 + x3;                                            # This defines a real expression symbol and its value is evaluated at evaluation time. x3 will have the last assigned value. Because 'x6' is variable, we are not able to evaluate 'an_expression_symbol' in libALE; but e.g., in MAiNGO.
+
+real not_an_expression_symbol := 0.5 + x3;                                              # This defines a real parameter and its value is evaluated at parse time. Therefore, its value is ALWAYS 0.5 (0.5 + x3, with x3 = current value = 0), although we change the value of x3 in the next line.
+x3 <- 10;
+not_an_expression_symbol                                                  "not_an_expression_symbol = 0.5 + x3 = 0.55 + 0";  # result: 0.5
+
+
+#########################################################################################
+# DEBUG CHECK - ONLY IMPORTANT FOR DEVELOPERS
+#########################################################################################
+
+# Evaluation of real expressions
+
+not_an_expression_symbol                                    = 0.5         "CHECK | not_an_expression_symbol = 0.5";
+function3(2.0)                                              = 7           "CHECK | function3(2.0) = 7";
+function4((1,2))                                            = 4           "CHECK | function4((1,2)) = 4";
+function6(tensor20)[1]                                      = 5           "CHECK | function6(tensor18)[1] = 5";
+function7(5)[1,1]                                           = 5           "CHECK | function7(5)[1,1] = 5";
+function8(5)                                                = 12.5        "CHECK | function8(5) = 12.5";
+function9(tensor21)[1][1]                                   = 1           "CHECK | function9(tensor19)[1][1] = 1";
+function13(tensor1, 1)                                      = 3           "CHECK | function13(tensor1, 1) = 3";
+function14()                                                <= 6.61       "CHECK | function14() <= 6.61";
+function14()                                                >= 6.59       "CHECK | function14() >= 6.59";
+product1()                                                  = 24          "CHECK | product(i in {1,2,3}: tensor17[1,i] + 1) = 2";
+product2()                                                  = 8           "CHECK | product(i in set9 : tensor17[1,i]) = 8";
+product3()                                                  = 384         "CHECK | product(i in {1,2}: product(j in set9: tensor17[i,j])) = 384";
+product4()                                                  = 1           "CHECK | product(i in { }: tensor17[1,i])= 1";
+
+sum1()                                                      = 9           "CHECK | sum(i in {1,2,3}: tensor17[1,i] + 1)";
+sum2()                                                      = 6           "CHECK | sum(i in set9 : tensor17[1,i])";
+sum3()                                                      = 20          "CHECK | sum(i in {1,2}: sum(j in set9: tensor17[i,j])) = 20";
+sum4()                                                      = 0           "CHECK | sum(i in { }: tensor17[1,i]) = 0";
+
+max1()                                                      = 8           "CHECK | max(5,8) = 8";
+min1(100.00001, 100)                                        = 100         "CHECK | min(100.00001,100,100) = 100";
+max2()                                                      = 40          "CHECK | max(i in {1,2,3,4}: (10,20,30,40)[i]) = 40";
+min2()                                                      = 1           "CHECK | min(i in {1,2,3,4}: i) = 1";
+max3()                                                      = 8.5         "CHECK | max(i in {1,2}: max(j in {1,2}: ((2,3),(8.5,-10))[i,j])) = 8.5";
+
+exp(3)                                                     >= 20.0855     "CHECK | exp(3) >= 20.0855";
+exp(3)                                                     <= 20.0856     "CHECK | exp(3) <= 20.0856";
+inv(4)                                                      = 0.25        "CHECK | inv(4) = 0.25";
+log(8)                                                     >= 2.07944     "CHECK | log(8) >= 2.07944";
+log(8)                                                     <= 2.07945     "CHECK | log(8) <= 2.07945";
+abs(-23)                                                    = 23          "CHECK | abs(-23) = 23";
+sin(60)                                                    >= -0.304811   "CHECK | sin(60) >= -0.304811";
+sin(60)                                                    <= -0.304810   "CHECK | sin(60) <= -0.304810";
+pow(2,3)                                                    = 8           "CHECK | pow(2,3) = 8";
+cosh(6)                                                    >= 201.715     "CHECK | cosh(6) >= 201.715";
+cosh(6)                                                    <= 201.716     "CHECK | cosh(6) <= 201.716";
+sqrt(143)                                                  >= 11.9582     "CHECK | sqrt(143) >= 11.9582";
+sqrt(143)                                                  <= 11.9583     "CHECK | sqrt(143) <= 11.9583";
+round(92.6)                                                 = 93          "CHECK | round(92.6) = 93";
+
+cost_turton(1,0.1,5,1)                                     >= 1.25892     "CHECK | cost_turton(1,0.1,5,1) >= 1.25892";
+cost_turton(1,0.1,5,1)                                     <= 1.25893     "CHECK | cost_turton(1,0.1,5,1) <= 1.25893";
+ext_antoine_psat(1,-1,3,4,10,1,2,0)                        >= 109097      "CHECK | ext_antoine_psat(1,-1,3,4,10,1,2,0) >= 109097";
+ext_antoine_psat(1,-1,3,4,10,1,2,0)                        <= 109098      "CHECK | ext_antoine_psat(1,-1,3,4,10,1,2,0) <= 109098";
+xexpax(1,1)                                                >= 2.71828     "CHECK | xexpax(1,1) >= 2.71828";
+xexpax(1,1)                                                <= 2.71829     "CHECK | xexpax(1,1) <= 2.71829";
+
+var4.prio[1,1] = 5                                                        "CHECK | var4.prio[1,1] == 5";
+var4.prio[1,2] = 10                                                       "CHECK | var4.prio[1,2] == 10";
+!(var6.prio  >= 1.0)                                                      "CHECK | var6.prio = nan !>= 1";
+var6.init = 0.2                                                           "CHECK | var6.init == 0.2";
+
+# Evaluation of differentiated expressions
+
+# check differentiation for seperate nodes
+diff(1 / x, x) = - 1 / x^2                                                "CHECK | (1/x)'|x=2 = -1/4";
+diff(exp(x), x) = exp(x)                                                  "CHECK | (e^x)'|x=2 = e^2";
+diff(sqrt(x), x) = 1 / (2 * sqrt(x))                                      "CHECK | (sqrt(x))'|x=2 = 1 / (2 * sqrt(2))";
+diff(log(x), x) = 1 / x                                                   "CHECK | (log(x))'|x=2 = 1 / 2";
+diff(xlogx(x), x) = log(x) + 1                                            "CHECK | (xlogx(x))'|x=2 = log(2) + 1";
+diff(sin(x), x) = cos(x)                                                  "CHECK | (sin(x))'|x=2 = cos(2)";
+diff(cos(x), x) = -sin(x)                                                 "CHECK | (cos(x))'|x=2 = -sin(2)";
+diff(asin(z), z) = 1 / sqrt(1 - z^2)                                      "CHECK | (asin(z))'|z=0 = 1/sqrt(1 - 0^2)";
+diff(acos(z), z) = - 1 / sqrt(1 - z^2)                                    "CHECK | (acos(z))'|z=0 = -1/sqrt(1 - 0^2)";
+diff(tan(x), x) = 1 / (cos(x))^2                                          "CHECK | (tan(x))'|x=2 = 1/(cos(2))^2";
+diff(atan(x), x) = 1 / (1 + x^2)                                          "CHECK | (atan(x))'|x=2 = 1/(1 + 2^2)";
+diff(sinh(x), x) = cosh(x)                                                "CHECK | (sinh(x))'|x=2 = cosh(2)";
+diff(cosh(x), x) = sinh(x)                                                "CHECK | (cosh(x))'|x=2 = sinh(2)";
+diff(asinh(x), x) = 1 / sqrt(1 + x^2)                                     "CHECK | (asinh(x))'|x=2 = 1 / sqrt(1 + 2^2)";
+diff(acosh(x), x) = 1 / (sqrt(x - 1) * sqrt(x + 1))                       "CHECK | (acosh(x))'|x=2 = 1 / (sqrt(2 - 1) * sqrt(2 + 1))";
+diff(tanh(x), x) = 1 / (cosh(x))^2                                        "CHECK | (tanh(x))'|x=2 = 1 / (cosh(2))^2";
+diff(atanh(x), x) = 1 / (1 - x^2)                                         "CHECK | (atanh(x))'|x=2 = 1 / (1 - 2^2)";
+diff(coth(x), x) = - 1 / (sinh(x))^2                                      "CHECK | (coth(x))'|x=2 = - 1 / (sinh(2))^2";
+diff(acoth(x), x) = 1 / (1 - x^2)                                         "CHECK | (acoth(x))'|x=2 = 1 / (1 - 2^2)";
+(diff(erf(x), x) - (2 / sqrt(3.14)) * exp(-x^2)) < 0.01                   "CHECK | (erf(x))'|x=2 = (2/sqrt(pi))*e^(-2^2)";
+(diff(erfc(x), x) + (2 / sqrt(3.14)) * exp(-x^2)) < 0.01                  "CHECK | (erfc(x))'|x=2 = -(2/sqrt(pi))*e^(-2^2)";
+
+# test chain rule
+(diff(1 / exp(sqrt(x)), x) - 0.0859547) < 0.01                            "CHECK | (1/ e^sqrt(x))'|x=2 = -0.0859547";
+(diff(exp(tan(log(x))), x) - 1.93906) < 0.01                              "CHECK | exp(tan(log(x)))'|x=2 = 1.93906";
+
+# Evaluation of index expressions
+
+i8                                                          = 5           "CHECK | i8 = 5";
+i1                                                          = 4           "CHECK | i1 = 4";
+
+function2()                                                 = 5           "CHECK | function2() = 5";
+function5(i1, (1,2))                                        = 6           "CHECK | function5(i1=4, (1,2)) = 4 + (1,2)[2] = 4+2 = 6";
+
+# Evaluation of boolean expressions
+
+b1                                                                        "CHECK | b1";
+b2                                                                        "CHECK | b2";
+!(b3)                                                                     "CHECK | b3";
+b4                                                                        "CHECK | b4";
+b5                                                                        "CHECK | b5";
+function10(1 < 3)                                                         "CHECK | function10(1 < 3)";
+!(function10(false))                                                      "CHECK | function10(false)";
