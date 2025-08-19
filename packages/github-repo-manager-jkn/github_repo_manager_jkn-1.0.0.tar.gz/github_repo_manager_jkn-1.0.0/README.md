@@ -1,0 +1,144 @@
+# 🚀 GitHub Repository Manager
+
+Un outil professionnel en Python pour créer et cloner automatiquement des dépôts GitHub de manière sécurisée et efficace.
+
+## ✨ Fonctionnalités
+
+- ✅ **Interface graphique moderne** avec animations fluides
+- ✅ **Authentification sécurisée** au démarrage
+- ✅ Création automatique de dépôts GitHub (publics ou privés)
+- ✅ **Push de projets locaux** vers GitHub (initialise Git si nécessaire)
+- ✅ Clonage automatique après création
+- ✅ Barre de progression animée en temps réel
+- ✅ Journal d'activité interactif
+- ✅ Gestion d'erreurs robuste avec notifications
+- ✅ Test de connexion intégré
+- ✅ Interface utilisateur thème GitHub
+
+## 🔧 Installation
+
+### Prérequis
+
+- Python 3.6+
+- Git installé et configuré
+- Un token GitHub avec les permissions appropriées
+
+### Dépendances
+
+```bash
+pip install -r requirements.txt
+```
+
+Ou manuellement :
+```bash
+pip install requests
+```
+
+## 🔑 Configuration
+
+1. **Créer un token GitHub** :
+   - Allez sur GitHub → Settings → Developer settings → Personal access tokens
+   - Créez un nouveau token avec les permissions `repo`
+
+2. **Configurer la variable d'environnement** :
+   
+   **Windows :**
+   ```cmd
+   set GITHUB_TOKEN=votre_token_ici
+   ```
+   
+   **Linux/Mac :**
+   ```bash
+   export GITHUB_TOKEN=votre_token_ici
+   ```
+
+## 🚀 Utilisation
+
+### Installation via pip (Recommandé)
+
+```bash
+# Installer le package
+pip install github-manager-pro
+
+# Lancer l'application
+github-manager
+```
+
+### Installation depuis les sources
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/JonathanK-N/github-manager-pro.git
+cd github-manager-pro
+
+# Installer les dépendances
+pip install -r requirements.txt
+
+# Lancer l'interface
+python github_manager_secure_gui.py
+
+# Ou utiliser le script de lancement Windows
+launch_secure_gui.bat
+```
+
+**Fonctionnalités de l'interface :**
+- 🔐 **Authentification sécurisée** au démarrage
+- 🎨 Interface de connexion animée avec logo GitHub
+- 🔑 Saisie sécurisée du token (masqué par défaut)
+- ✅ Validation en temps réel des credentials
+- 📊 Barre de progression animée
+- 📋 Journal d'activité en temps réel
+- 🌈 Animations de succès/erreur
+- 📁 Interface utilisateur moderne thème GitHub
+- 🚪 Gestion de session avec déconnexion
+- 🔍 Test de connexion intégré
+
+### Utilisation de l'interface
+
+1. **Lancez l'application** : `github-manager`
+2. **Saisissez vos credentials GitHub** dans la fenêtre de connexion
+3. **Choisissez le mode** :
+   - 🚀 **Créer et cloner** : Nouveau dépôt
+   - 📤 **Pousser projet local** : Publier un projet existant
+4. **Remplissez le formulaire** de création de dépôt
+5. **Cliquez sur le bouton d'action**
+6. **Suivez la progression** dans le journal d'activité
+
+## 🛡️ Sécurité
+
+- ✅ **Tokens sécurisés** : Utilisation des variables d'environnement
+- ✅ **Validation des entrées** : Vérification des paramètres
+- ✅ **Gestion d'erreurs** : Messages d'erreur clairs et informatifs
+- ✅ **Timeouts** : Protection contre les blocages
+
+## 🔍 Dépannage
+
+### Erreurs courantes
+
+**"Token invalide ou expiré"**
+- Créez un nouveau token sur GitHub avec les permissions `repo`
+- Vérifiez que le token commence par `ghp_`
+
+**"Le dépôt existe déjà"**
+- Choisissez un nom différent pour votre dépôt
+- Vérifiez vos dépôts existants sur GitHub
+
+**"Git n'est pas installé"**
+- Installez Git depuis [git-scm.com](https://git-scm.com/)
+- Vérifiez que Git est dans votre PATH
+
+**"Pas un dépôt Git valide"**
+- L'outil initialise automatiquement Git si nécessaire
+- Assurez-vous d'avoir des fichiers dans le dossier sélectionné
+
+## 📝 Licence
+
+Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou soumettre une pull request.
+
+---
+
+*Développé avec ❤️ pour simplifier la gestion des dépôts GitHub*
