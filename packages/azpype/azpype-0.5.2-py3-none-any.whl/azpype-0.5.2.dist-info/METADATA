@@ -1,0 +1,398 @@
+Metadata-Version: 2.4
+Name: azpype
+Version: 0.5.2
+Summary: A native Python interface wrapping AzCopy for bulk data transfer to and from Azure Blob Storage.
+Home-page: https://github.com/yusuf-jkhan1/azpype
+Author: Yusuf Khan
+License: MIT
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: NOTICE.txt
+Requires-Dist: appnope==0.1.3
+Requires-Dist: asttokens==2.2.1
+Requires-Dist: backcall==0.2.0
+Requires-Dist: cffi==1.17.1
+Requires-Dist: click==8.1.3
+Requires-Dist: comm==0.1.3
+Requires-Dist: cryptography==40.0.2
+Requires-Dist: debugpy==1.6.7
+Requires-Dist: decorator==5.1.1
+Requires-Dist: executing==1.2.0
+Requires-Dist: ipykernel==6.23.1
+Requires-Dist: ipython==8.13.2
+Requires-Dist: jedi==0.18.2
+Requires-Dist: jupyter_client==8.2.0
+Requires-Dist: jupyter_core==5.3.0
+Requires-Dist: matplotlib-inline==0.1.6
+Requires-Dist: nest-asyncio==1.5.6
+Requires-Dist: packaging==23.1
+Requires-Dist: parso==0.8.3
+Requires-Dist: pexpect==4.8.0
+Requires-Dist: pickleshare==0.7.5
+Requires-Dist: platformdirs==3.5.1
+Requires-Dist: prompt-toolkit==3.0.38
+Requires-Dist: psutil==5.9.5
+Requires-Dist: ptyprocess==0.7.0
+Requires-Dist: pure-eval==0.2.2
+Requires-Dist: pyyaml==6.0.1
+Requires-Dist: pycparser==2.21
+Requires-Dist: Pygments==2.15.1
+Requires-Dist: python-dateutil==2.8.2
+Requires-Dist: python-dotenv==1.0.0
+Requires-Dist: pyzmq==26.0.3
+Requires-Dist: six==1.16.0
+Requires-Dist: stack-data==0.6.2
+Requires-Dist: tornado==6.3.2
+Requires-Dist: traitlets==5.9.0
+Requires-Dist: watchdog==3.0.0
+Requires-Dist: wcwidth==0.2.6
+Requires-Dist: certifi==2023.7.22
+Requires-Dist: charset-normalizer==3.2.0
+Requires-Dist: idna==3.4
+Requires-Dist: requests==2.31.0
+Requires-Dist: urllib3==2.0.4
+Requires-Dist: rich>=13.0.0
+Requires-Dist: loguru>=0.7.0
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
+
+# Azpype 🚀 [beta]
+
+A Python wrapper for AzCopy that feels native and gets out of your way.
+
+## Why Azpype?
+
+**Performance**: AzCopy, written in Go, significantly outperforms Python's Azure SDK for bulk transfers. Go's goroutines provide true parallelism for file I/O and network operations, while Python's GIL limits concurrency. For large-scale transfers, AzCopy can be 5-10x faster.
+
+**Python Integration**: But switching between Python and bash scripts breaks your workflow. Azpype solves this by wrapping AzCopy in a native Python interface. Now you can:
+- Write pure Python scripts with data processing before and after transfers
+- Capture and parse output programmatically
+- Handle errors with try/except blocks
+- Integrate with your existing Python data pipeline
+
+**Additional Benefits**:
+- **Zero-configuration setup** - Bundles the right AzCopy binary for your platform
+- **Smart defaults** - YAML config for common settings, override with kwargs when needed
+- **Rich logging** - Structured logs with loguru, daily rotation, and visual command output
+- **Built-in validation** - Checks auth, network, and paths before executing
+- **Job management** - List, resume, and recover failed transfers programmatically
+
+## Installation
+
+```bash
+pip install azpype
+```
+
+That's it. Azpype automatically:
+- Downloads the appropriate AzCopy binary (v10.18.1) for your platform
+- Creates a config directory at `~/.azpype/`
+- Sets up a default configuration file
+
+## Quick Start
+
+### Basic Copy Operation
+
+```python
+from azpype.commands.copy import Copy
+
+# Upload a local directory to Azure Blob Storage
+Copy(
+    source="./data",
+    destination="https://myaccount.blob.core.windows.net/mycontainer/"
+).execute()
+
+# Download from Azure to local
+Copy(
+    source="https://myaccount.blob.core.windows.net/mycontainer/data/",
+    destination="./downloads"
+).execute()
+```
+
+### Working with Return Values
+
+The `execute()` method returns an `AzCopyStdoutParser` object with parsed attributes - no manual string parsing needed!
+
+```python
+# Execute returns a parsed object with useful attributes
+result = Copy(
+    source="./data",
+    destination="https://myaccount.blob.core.windows.net/mycontainer/"
+).execute()
+
+# Access structured data directly
+print(f"Job ID: {result.job_id}")
+print(f"Files transferred: {result.number_of_file_transfers_completed}")
+print(f"Files skipped: {result.number_of_file_transfers_skipped}")
+print(f"Bytes transferred: {result.total_bytes_transferred}")
+print(f"Elapsed time: {result.elapsed_time} minutes")
+print(f"Final status: {result.final_job_status}")
+
+# Use exit code for flow control
+if result.exit_code == 0:
+    print("Transfer successful!")
+else:
+    print(f"Transfer failed: {result.stdout}")
+```
+
+#### Available Attributes
+
+The parser automatically extracts these attributes from AzCopy output:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `exit_code` | int | Command exit code (0 = success) |
+| `job_id` | str | Unique job identifier for resuming |
+| `elapsed_time` | float | Transfer duration in minutes |
+| `final_job_status` | str | Status like "Completed", "CompletedWithSkipped", "Failed" |
+| `number_of_file_transfers` | int | Total files attempted |
+| `number_of_file_transfers_completed` | int | Successfully transferred files |
+| `number_of_file_transfers_skipped` | int | Files skipped (already exist, etc.) |
+| `number_of_file_transfers_failed` | int | Failed file transfers |
+| `total_bytes_transferred` | int | Total data transferred in bytes |
+| `total_number_of_transfers` | int | Total transfer operations |
+| `stdout` | str | Raw command output if needed |
+| `raw_stdout` | str | Unprocessed output with ANSI codes |
+
+#### Real-World Example: Pipeline Integration
+
+```python
+def smart_sync_with_monitoring(local_path, remote_path):
+    """
+    Sync data and monitor transfer metrics
+    """
+    result = Copy(
+        source=local_path,
+        destination=remote_path,
+        overwrite="ifSourceNewer",
+        recursive=True
+    ).execute()
+    
+    # Make decisions based on parsed results
+    if result.exit_code != 0:
+        raise Exception(f"Transfer failed: {result.final_job_status}")
+    
+    if result.number_of_file_transfers_failed > 0:
+        print(f"Warning: {result.number_of_file_transfers_failed} files failed")
+        # Could trigger retry logic here
+    
+    if result.number_of_file_transfers_skipped == result.number_of_file_transfers:
+        print("All files already up-to-date")
+        return "NO_CHANGES"
+    
+    # Report transfer metrics
+    gb_transferred = result.total_bytes_transferred / (1024**3)
+    transfer_rate = gb_transferred / (result.elapsed_time / 60)  # GB/hour
+    
+    print(f"Transferred {gb_transferred:.2f} GB at {transfer_rate:.2f} GB/hour")
+    print(f"Completed: {result.number_of_file_transfers_completed} files")
+    
+    return result.job_id  # Return for potential resume operations
+```
+
+## Authentication
+
+### Service Principal (Recommended)
+
+Set these environment variables:
+
+```python
+import os
+
+os.environ["AZCOPY_TENANT_ID"] = "your-tenant-id"
+os.environ["AZCOPY_SPA_APPLICATION_ID"] = "your-app-id"  
+os.environ["AZCOPY_SPA_CLIENT_SECRET"] = "your-secret"
+os.environ["AZCOPY_AUTO_LOGIN_TYPE"] = "SPN"
+```
+
+Or use a `.env` file:
+
+```bash
+# .env
+AZCOPY_TENANT_ID=your-tenant-id
+AZCOPY_SPA_APPLICATION_ID=your-app-id
+AZCOPY_SPA_CLIENT_SECRET=your-secret
+AZCOPY_AUTO_LOGIN_TYPE=SPN
+```
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+
+from azpype.commands.copy import Copy
+Copy(source, destination).execute()
+```
+
+### SAS Token
+
+Pass the token directly (without the leading `?`):
+
+```python
+Copy(
+    source="./data",
+    destination="https://myaccount.blob.core.windows.net/mycontainer/",
+    sas_token="sv=2021-12-02&ss=b&srt=sco&sp=rwdlacyx..."
+).execute()
+```
+
+## Configuration System
+
+Azpype uses a two-level configuration system:
+
+### 1. YAML Config File (Defaults)
+
+Located at `~/.azpype/copy_config.yaml`:
+
+```yaml
+# Overwrite strategy at destination
+overwrite: 'ifSourceNewer'  # Options: 'true', 'false', 'prompt', 'ifSourceNewer'
+
+# Recursive copy for directories
+recursive: true
+
+# Create MD5 hashes during upload
+put-md5: true
+
+# Number of parallel transfers
+concurrency: 16
+```
+
+### 2. Runtime Overrides (kwargs)
+
+Override any config value at runtime:
+
+```python
+Copy(
+    source="./data",
+    destination="https://...",
+    overwrite="true",           # Override YAML setting
+    concurrency=32,              # Increase parallelism
+    dry_run=True,               # Test without copying
+    exclude_pattern="*.tmp"     # Add exclusion pattern
+).execute()
+```
+
+## Common Usage Patterns
+
+### Upload with Patterns
+
+```python
+# Upload only Python files
+Copy(
+    source="./project",
+    destination="https://myaccount.blob.core.windows.net/code/",
+    include_pattern="*.py",
+    recursive=True
+).execute()
+
+# Exclude temporary files
+Copy(
+    source="./data",
+    destination="https://myaccount.blob.core.windows.net/backup/",
+    exclude_pattern="*.tmp;*.log;*.cache",
+    recursive=True
+).execute()
+```
+
+### Sync with Overwrite Control
+
+```python
+# Only upload newer files
+Copy(
+    source="./local-data",
+    destination="https://myaccount.blob.core.windows.net/data/",
+    overwrite="ifSourceNewer",
+    recursive=True
+).execute()
+
+# Never overwrite existing files
+Copy(
+    source="./archive",
+    destination="https://myaccount.blob.core.windows.net/archive/",
+    overwrite="false"
+).execute()
+```
+
+### Dry Run Testing
+
+```python
+# See what would be copied without actually transferring
+Copy(
+    source="./large-dataset",
+    destination="https://myaccount.blob.core.windows.net/datasets/",
+    dry_run=True
+).execute()
+```
+
+## Job Management
+
+Resume failed or cancelled transfers:
+
+```python
+from azpype.commands.jobs import Jobs
+
+jobs = Jobs()
+
+# List all jobs
+exit_code, output = jobs.list()
+
+# Resume a specific job
+jobs.resume(job_id="abc123-def456")
+
+# Find and resume the last failed job
+job_id = jobs.last_failed()
+if job_id:
+    jobs.resume(job_id=job_id)
+
+# Auto-recover (find and resume last failed)
+jobs.recover_last_failed()
+```
+
+## Logging
+
+Azpype provides rich logging with automatic rotation:
+
+- **Location**: `~/.azpype/azpype_YYYY-MM-DD.log`
+- **Rotation**: Daily, with 7-day retention and gzip compression
+- **Console output**: Color-coded with progress indicators
+- **Command details**: Full command, exit codes, and stdout/stderr captured
+
+Example log output:
+```
+2025-08-15 19:09:29 | INFO | COPY | Starting copy operation
+2025-08-15 19:09:29 | INFO | COPY | ========== COMMAND EXECUTION ==========
+2025-08-15 19:09:29 | INFO | COPY | Command: azcopy copy ./data https://...
+2025-08-15 19:09:29 | INFO | COPY | Exit Code: 0
+2025-08-15 19:09:29 | INFO | COPY | STDOUT:
+2025-08-15 19:09:29 | INFO | COPY |   Job abc123 has started
+2025-08-15 19:09:29 | INFO | COPY |   100.0%, 10 Done, 0 Failed, 0 Pending
+```
+
+## Available Options
+
+Common options for the `Copy` command:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `overwrite` | str | How to handle existing files: 'true', 'false', 'prompt', 'ifSourceNewer' |
+| `recursive` | bool | Include subdirectories |
+| `include_pattern` | str | Include only matching files (wildcards supported) |
+| `exclude_pattern` | str | Exclude matching files (wildcards supported) |
+| `dry_run` | bool | Preview what would be copied without transferring |
+| `concurrency` | int | Number of parallel transfers |
+| `block_size_mb` | float | Block size for large files (in MiB) |
+| `put_md5` | bool | Create MD5 hashes during upload |
+| `check_length` | bool | Verify file sizes after transfer |
+| `as_subdir` | bool | Place folder sources as subdirectories |
+
+## License
+MIT
