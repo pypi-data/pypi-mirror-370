@@ -1,0 +1,55 @@
+---
+services:
+  postgres:
+    build:
+      context: tools/dev_postgres
+      dockerfile: Dockerfile
+    container_name: dab_postgres
+    ports:
+      - "55432:5432"
+
+  test_app:
+    build:
+      context: .
+    working_dir: /src
+    command: './test_app/scripts/container_startup_uwsgi.sh'
+    volumes:
+      - '.:/src:z'
+    ports:
+      - '8000:8000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DJANGO_SETTINGS_MODULE: test_app.settings
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: dab
+      DB_PASSWORD: dabing
+    
+    # the following 2 parameters makes the container interactive
+    # for debugging purposes, a breakpoint can be set in the code
+    # and the container can be attached to with `docker attach test_app`
+    # and the code can be debugged interactively 
+    stdin_open: true
+    tty: true
+
+  # This is the intermediate application reverse proxy without ssl
+  nginx:
+    build: ./compose/nginx
+    image: "dab_nginx:1.27"
+    ports:
+      - '80:80'
+    depends_on:
+      - test_app
+
+  # This is the ssl terminated "ingress" reverse proxy
+  ingress:
+    build: ./compose/ingress
+    image: "dab_ingress:1.27"
+    command: './entrypoint.sh'
+    ports:
+      - "443:443"
+    depends_on:
+      - test_app
+      - nginx

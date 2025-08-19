@@ -1,0 +1,159 @@
+[project.urls]
+Repository = "https://github.com/ansible/django-ansible-base"
+
+[project]
+name = "django-ansible-base"
+authors = [
+    {name = "Red Hat, Inc.", email = "info@ansible.com"},
+    {name = "John Westcott IV", email = "john.westcott.iv@redhat.com"},
+]
+description = "A Django app used by ansible services"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["ansible", "django"]
+license = {text = "Apache-2.0"}
+classifiers = [
+    "Framework :: Django",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dynamic = ["version", "dependencies", "optional-dependencies"]
+
+[tool.setuptools.packages.find]
+include = ["ansible_base*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements/requirements.in"]}
+optional-dependencies.all = { file = [
+    "requirements/requirements_activitystream.in",
+    "requirements/requirements_authentication.in",
+    "requirements/requirements_api_documentation.in",
+    "requirements/requirements_rest_filters.in",
+    "requirements/requirements_channels.in",
+    "requirements/requirements_jwt_consumer.in",
+    "requirements/requirements_testing.txt",
+    "requirements/requirements_redis_client.in",
+    "requirements/requirements_oauth2_provider.in",
+    "requirements/requirements_resource_registry.in",
+    "requirements/requirements_feature_flags.in",
+] }
+optional-dependencies.activitystream = { file = [ "requirements/requirements_activitystream.in" ] }
+optional-dependencies.authentication = { file = [ "requirements/requirements_authentication.in" ] }
+optional-dependencies.api_documentation = { file = [ "requirements/requirements_api_documentation.in" ] }
+optional-dependencies.rest_filters = { file = [ "requirements/requirements_rest_filters.in" ] }
+optional-dependencies.rbac = { file = [ "requirements/requirements_rbac.in" ] }
+optional-dependencies.channel_auth = { file = [ "requirements/requirements_channels.in" ] }
+optional-dependencies.jwt_consumer = { file = [ "requirements/requirements_jwt_consumer.in" ] }
+optional-dependencies.testing = { file = [ "requirements/requirements_testing.txt" ] }
+optional-dependencies.redis_client = { file = [ "requirements/requirements_redis_client.in" ] }
+optional-dependencies.oauth2_provider = { file = [ "requirements/requirements_oauth2_provider.in" ] }
+optional-dependencies.resource_registry = { file = [ "requirements/requirements_resource_registry.in" ] }
+optional-dependencies.feature_flags = { file = [ "requirements/requirements_feature_flags.in" ] }
+
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools_scm]
+version_scheme = "calver-by-date"
+
+[tool.black]
+line-length = 160
+fast = true
+skip-string-normalization = true
+force-exclude = '''
+.*/migrations/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 160
+extend_skip = [ "test_app/migrations" ]
+skip_glob = [ "ansible_base/*/migrations" ]
+
+
+[tool.flake8]
+max-line-length = 160
+extend-ignore = [ "E203" ]
+exclude = [ 'ansible_base/*/migrations/*', 'test_app/migrations/*', '.tox', 'build', '.venv', 'venv']
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "test_app.settings"
+addopts = "--strict-markers --reuse-db --migrations -vvv"
+
+[tool.tox]
+legacy_tox_ini = """
+    [tox]
+    min_version = 4.0
+    no_package = true
+    env_list =
+        check
+        py39
+        py310
+        py311
+        py311sqlite
+    labels =
+        test = py39, py310, py311, py311sqlite, check
+        lint = flake8, black, isort
+
+    [testenv]
+    deps =
+        -r{toxinidir}/requirements/requirements_all.txt
+        -r{toxinidir}/requirements/requirements_dev.txt
+    allowlist_externals = sh
+    commands = pytest -n auto --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=django-ansible-base-test-results.xml {env:ANSIBLE_BASE_PYTEST_ARGS} {env:ANSIBLE_BASE_TEST_DIRS:test_app/tests} {posargs}
+    docker = db
+
+    [testenv:check]
+    deps =
+        -r{toxinidir}/requirements/requirements_all.txt
+        -r{toxinidir}/requirements/requirements_dev.txt
+    docker = db
+    commands =
+        python3 manage.py check
+        python3 manage.py makemigrations --check
+
+    [testenv:py311sqlite]
+    docker = db
+    setenv =
+        DJANGO_SETTINGS_MODULE = test_app.sqlite3settings
+
+    [docker:db]
+    dockerfile = {toxinidir}/tools/dev_postgres/Dockerfile
+    expose =
+        DB_PORT=5432/tcp
+
+    [testenv:flake8]
+    deps =
+        flake8==7.1.1
+        Flake8-pyproject==1.2.3
+    docker =
+    commands = flake8 {posargs:.}
+
+    [testenv:black]
+    deps =
+        black==25.1.0
+    allowlist_externals = sh
+    docker =
+    commands = sh -c 'black --version && black {posargs:.}'
+
+    [testenv:isort]
+    deps =
+        isort==6.0.0
+    docker =
+    commands = isort {posargs:.}
+"""
+
+[tool.coverage.run]
+omit = ["test_app/*", "manage.py"]
+relative_files = true
