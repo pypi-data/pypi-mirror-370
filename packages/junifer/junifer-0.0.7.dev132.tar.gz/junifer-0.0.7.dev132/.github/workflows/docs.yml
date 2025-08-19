@@ -1,0 +1,75 @@
+name: Build and publish docs
+
+on:
+  push:
+    # Sequence of patterns matched against refs/heads
+    branches:
+      - main
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - v*
+  workflow_dispatch: {}
+
+jobs:
+  build-docs:
+    # https://github.com/actions/setup-python/issues/1013#issuecomment-2642078401
+    runs-on: ubuntu-22.04
+    # Use custom docs CI image
+    container: ghcr.io/juaml/junifer-docs:main
+    steps:
+    - name: Check ANTs
+      run: |
+        echo "Using ANTs : $(antsRegistration --version)"
+    - name: Install system dependencies
+      # actions/checkout fails to identify Git as it's not in the CI image
+      run: |
+        apt-get -qq update
+        apt-get -qq install -y \
+        git \
+        git-annex \
+        make \
+        jq
+    - name: Copy junifer-data directory
+      run: |
+        mkdir -p $HOME/junifer_data/v3
+        cp -ar /root/junifer_data/v3/. $HOME/junifer_data/v3/
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        # require all of history to see all tagged versions' docs
+        fetch-depth: 0
+        submodules: true
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        python -m pip install -e ".[docs,neurokit2]"
+        python -m pip install git+https://github.com/dls-controls/sphinx-multiversion@only-arg
+    - name: Configure Git for DataLad
+      run: |
+        git config --global user.email "junifer-runner@github.com"
+        git config --global user.name "GitHub Runner"
+    - name: Checkout gh-pages
+      # As we already did a deploy of gh-pages above, it is guaranteed to be there
+      # so check it out so we can selectively build docs below
+      uses: actions/checkout@v5
+      with:
+          ref: gh-pages
+          path: docs/_build
+    - name: Build docs
+      # Use the args we normally pass to sphinx-build, but run sphinx-multiversion
+      # https://github.com/actions/checkout/issues/1169#issuecomment-2291682583
+      run: |
+        git config --system --add safe.directory $(pwd)
+        make -C docs/ html
+        touch docs/_build/.nojekyll
+        cp docs/redirect.html docs/_build/index.html
+    - name: Publish docs to gh-pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: docs/_build
+        keep_files: true
