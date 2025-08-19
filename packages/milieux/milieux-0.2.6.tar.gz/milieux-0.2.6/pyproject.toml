@@ -1,0 +1,140 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "milieux"
+dynamic = ["version"]
+description = "Tool to assist in developing, building, and installing Python packages."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = ["virtualenv"]
+authors = [
+  { name = "Jeremy Silver", email = "jeremys@nessiness.com" }
+]
+classifiers = [
+  "Programming Language :: Python"
+]
+dependencies = [
+  "fancy_dataclass >= 0.7.3",  # extra dataclass features
+  # "griffe-fieldz",  # docs for dataclass-like objects
+  "griffe-typingdoc",  # docs for Annotated/Doc syntax
+  "hatch",  # environment management
+  "jinja2",  # templating
+  "mkdocs >= 1.6",  # documentation generation
+  "mkdocs-api-autonav",  # auto-generation of mkdocs templates
+  "mkdocs-material",  # Material theme for mkdocs
+  "mkdocstrings[python]",  # auto-generation of mkdocs API docs from Python code
+  "packaging",  # resolving requirement strings to package names
+  "rich",  # pretty terminal colors/tables
+  "ruff",  # formatting function signatures
+  "tomli",  # TOML parsing
+  "typing_extensions >= 4.10",  # extra types
+  "uv >= 0.5.16",  # dependency management
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.scripts]
+milieux = "milieux.cli.main:MilieuxCLI.main"
+
+[project.urls]
+Documentation = "https://github.com/jeremander/milieux#readme"
+Issues = "https://github.com/jeremander/milieux/issues"
+Source = "https://github.com/jeremander/milieux"
+
+[tool.hatch.build]
+packages = ["milieux"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [".venv", "TODO.md"]
+
+[tool.hatch.version]
+path = "milieux/__init__.py"
+
+[tool.hatch.envs.lint]
+dependencies = [
+  "mypy>=1.16",
+  "py-gadzooks>=0.2.9",
+  "ruff>=0.12",
+  "pytest-mypy",
+  "vermin>=1.6",
+]
+
+[tool.hatch.envs.lint.scripts]
+# linting
+run-ruff = "ruff check {args:milieux tests}"
+# ensure compatibility with minimum Python version
+run-vermin = "vermin {args:.}"
+# type-checking
+run-mypy = "mypy --install-types --non-interactive {args:milieux tests}"
+# print info about lines of code
+run-loc-summarize = "gadzooks loc-summarize milieux"
+# print out formatter diffs
+run-format = "gadzooks check-format milieux --formatter yapf --ignore-patterns '\\s*'"
+all = ["run-ruff", "run-vermin", "run-mypy", "run-loc-summarize"]
+
+[tool.hatch.envs.test]
+dependencies = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.hatch.envs.test.scripts]
+test = "pytest {args:tests}"
+test-debug = "pytest --pdb {args:tests}"
+cov-report = ["- coverage combine", "coverage report", "coverage html"]
+cov = ["test", "cov-report"]
+
+[[tool.hatch.envs.test.matrix]]
+python = ["3.10", "3.11", "3.12", "3.13"]
+
+[tool.hatch.envs.badge]
+dependencies = [
+  "coverage",
+  "genbadge[tests,coverage]"
+]
+
+[tool.hatch.envs.badge.scripts]
+badge-cov = ["coverage xml", "genbadge coverage -i coverage.xml"]
+badges = ["badge-cov"]
+
+[tool.hatch.publish.index]
+disable = true
+
+[tool.coverage.run]
+source_pkgs = ["milieux", "tests"]
+branch = true
+parallel = true
+omit = ["venv/*"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+
+[tool.commitizen]
+tag_format = "v$major.$minor.$patch"
+
+[tool.mypy]
+exclude = ["tmp.*"]
+warn_unused_configs = true
+strict = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+strict = false
+disable_error_code = ["attr-defined", "no-untyped-call", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = "milieux.cli.doc"
+disable_error_code = ["import-not-found", "method-assign"]
+
+[tool.pytest.ini_options]
+addopts = "--verbose --durations=10 --cov=milieux --cov-config pyproject.toml"
