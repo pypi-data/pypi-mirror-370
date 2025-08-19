@@ -1,0 +1,711 @@
+# Slack MCP Server
+
+A Model Context Protocol (MCP) server for Slack workspace integration with comprehensive messaging, user management, and workspace analytics capabilities.
+
+## Features
+
+- **Conversation Management**: Message history, replies, search, and posting
+- **User Operations**: Profile information, presence status, and bulk operations
+- **Channel Management**: Channel info, member lists, topic/purpose settings
+- **Workspace Analytics**: Workspace information, file management, and permissions
+- **Caching System**: Intelligent caching for improved performance
+- **Interactive Features**: Reactions, permalinks, and message threading
+- **HTTP Transport**: RESTful API interface with Bearer token authentication
+- **Stateless Architecture**: Each request is independent with no session management
+
+## Quick Start
+
+### Starting the Server
+
+```bash
+# Start HTTP server on port 30000 (default)
+python slack_mcp_server_stateless.py
+
+# Start on custom port
+python slack_mcp_server_stateless.py --port 8080
+
+# Start with debug logging
+python slack_mcp_server_stateless.py --log-level DEBUG
+
+# Install and run from PyPI
+pip install slack-mcp-server
+slack-mcp-server-stateless
+```
+
+The server provides these endpoints:
+- **`POST /mcp`** - Main MCP endpoint for tool execution
+- **`GET /health`** - Health check endpoint
+
+### Authentication
+
+All requests require a Slack Bot Token via Authorization header:
+
+```bash
+Authorization: Bearer xoxb-your-slack-bot-token
+```
+
+[Create a Slack App](https://api.slack.com/apps) and get a Bot User OAuth Token with appropriate scopes.
+
+## Tools
+
+The server provides 21 tools for comprehensive Slack API access. Each tool requires `Authorization: Bearer <token>` header.
+
+### 1. conversations_history
+Get message history from a channel or DM.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "tools/call",
+    "params": {
+      "name": "conversations_history",
+      "arguments": {
+        "channel_id": "#general",
+        "limit": "50",
+        "include_user_details": true
+      }
+    }
+  }'
+```
+
+### 2. users_list
+Get list of users in the workspace.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "2",
+    "method": "tools/call",
+    "params": {
+      "name": "users_list",
+      "arguments": {
+        "include_deleted": false,
+        "include_bots": true,
+        "use_cache": true
+      }
+    }
+  }'
+```
+
+### 3. channel_info
+Get detailed information about a specific channel.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "3",
+    "method": "tools/call",
+    "params": {
+      "name": "channel_info",
+      "arguments": {
+        "channel_id": "#general",
+        "include_locale": false
+      }
+    }
+  }'
+```
+
+### 4. conversations_replies
+Get replies to a specific message thread.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "4",
+    "method": "tools/call",
+    "params": {
+      "name": "conversations_replies",
+      "arguments": {
+        "channel_id": "#general",
+        "thread_ts": "1234567890.123456"
+      }
+    }
+  }'
+```
+
+### 5. conversations_add_message
+Post a message to a channel or DM.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "5",
+    "method": "tools/call",
+    "params": {
+      "name": "conversations_add_message",
+      "arguments": {
+        "channel_id": "#general",
+        "text": "Hello from Slack MCP Server!",
+        "thread_ts": "1234567890.123456"
+      }
+    }
+  }'
+```
+
+### 6. conversations_search_messages
+Search for messages across the workspace.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "6",
+    "method": "tools/call",
+    "params": {
+      "name": "conversations_search_messages",
+      "arguments": {
+        "query": "important project update",
+        "count": 20,
+        "sort": "timestamp"
+      }
+    }
+  }'
+```
+
+### 7. bulk_conversations_history
+Get message history from multiple channels efficiently.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "7",
+    "method": "tools/call",
+    "params": {
+      "name": "bulk_conversations_history",
+      "arguments": {
+        "channel_ids": "#general,#random,#dev",
+        "limit": "1d",
+        "include_user_details": true
+      }
+    }
+  }'
+```
+
+### 8. user_info
+Get detailed information about users.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "8",
+    "method": "tools/call",
+    "params": {
+      "name": "user_info",
+      "arguments": {
+        "user_ids": "@john,@jane,U123456789",
+        "use_cache": true
+      }
+    }
+  }'
+```
+
+### 9. user_presence
+Get user presence status.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "9",
+    "method": "tools/call",
+    "params": {
+      "name": "user_presence",
+      "arguments": {
+        "user_id": "@john"
+      }
+    }
+  }'
+```
+
+### 10. channel_members
+Get list of members in a channel.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "10",
+    "method": "tools/call",
+    "params": {
+      "name": "channel_members",
+      "arguments": {
+        "channel_id": "#general"
+      }
+    }
+  }'
+```
+
+### 11. channels_list
+Get list of all channels.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "11",
+    "method": "tools/call",
+    "params": {
+      "name": "channels_list",
+      "arguments": {
+        "exclude_archived": true,
+        "types": "public_channel,private_channel"
+      }
+    }
+  }'
+```
+
+### 12. channels_detailed
+Get detailed information about multiple channels.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "12",
+    "method": "tools/call",
+    "params": {
+      "name": "channels_detailed",
+      "arguments": {
+        "channel_ids": "#general,#random,#dev"
+      }
+    }
+  }'
+```
+
+### 13. set_channel_topic
+Set the topic for a channel.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "13",
+    "method": "tools/call",
+    "params": {
+      "name": "set_channel_topic",
+      "arguments": {
+        "channel_id": "#general",
+        "topic": "Welcome to our general discussion channel"
+      }
+    }
+  }'
+```
+
+### 14. set_channel_purpose
+Set the purpose for a channel.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "14",
+    "method": "tools/call",
+    "params": {
+      "name": "set_channel_purpose",
+      "arguments": {
+        "channel_id": "#general",
+        "purpose": "General team discussions and announcements"
+      }
+    }
+  }'
+```
+
+### 15. workspace_info
+Get workspace information and analytics.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "15",
+    "method": "tools/call",
+    "params": {
+      "name": "workspace_info",
+      "arguments": {}
+    }
+  }'
+```
+
+### 16. message_permalink
+Get a permanent link to a message.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "16",
+    "method": "tools/call",
+    "params": {
+      "name": "message_permalink",
+      "arguments": {
+        "channel_id": "#general",
+        "message_ts": "1234567890.123456"
+      }
+    }
+  }'
+```
+
+### 17. add_reaction
+Add an emoji reaction to a message.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "17",
+    "method": "tools/call",
+    "params": {
+      "name": "add_reaction",
+      "arguments": {
+        "channel_id": "#general",
+        "timestamp": "1234567890.123456",
+        "name": "thumbsup"
+      }
+    }
+  }'
+```
+
+### 18. files_list
+List files in the workspace.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "18",
+    "method": "tools/call",
+    "params": {
+      "name": "files_list",
+      "arguments": {
+        "channel": "#general",
+        "count": 20,
+        "types": "images,pdfs,docs"
+      }
+    }
+  }'
+```
+
+### 19. initialize_cache
+Initialize the user and channel cache.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "19",
+    "method": "tools/call",
+    "params": {
+      "name": "initialize_cache",
+      "arguments": {
+        "force_refresh": false
+      }
+    }
+  }'
+```
+
+### 20. cache_info
+Get information about the current cache status.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "20",
+    "method": "tools/call",
+    "params": {
+      "name": "cache_info",
+      "arguments": {}
+    }
+  }'
+```
+
+### 21. clear_cache
+Clear the user and channel cache.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "21",
+    "method": "tools/call",
+    "params": {
+      "name": "clear_cache",
+      "arguments": {}
+    }
+  }'
+```
+
+### 22. check_permissions
+Check bot permissions and scopes.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "22",
+    "method": "tools/call",
+    "params": {
+      "name": "check_permissions",
+      "arguments": {}
+    }
+  }'
+```
+
+### 23. analytics_summary
+Get workspace analytics and usage summary.
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "23",
+    "method": "tools/call",
+    "params": {
+      "name": "analytics_summary",
+      "arguments": {
+        "limit": "30d"
+      }
+    }
+  }'
+```
+
+## List Available Tools
+
+Get the complete list of available tools:
+
+```bash
+curl -X POST http://localhost:30000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer xoxb-your-slack-bot-token" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "tools-list",
+    "method": "tools/list",
+    "params": {}
+  }'
+```
+
+## Installation
+
+### From PyPI
+```bash
+pip install slack-mcp-server
+slack-mcp-server-stateless
+```
+
+### From Source
+```bash
+pip install -r requirements.txt
+python slack_mcp_server_stateless.py
+```
+
+## Authentication Setup
+
+1. **Create a Slack App:**
+   - Go to [Slack API Apps](https://api.slack.com/apps)
+   - Click "Create New App" → "From scratch"
+   - Name your app and select your workspace
+
+2. **Configure OAuth & Permissions:**
+   - Go to "OAuth & Permissions" in your app settings
+   - Add the following Bot Token Scopes:
+     - `channels:history` - View messages in public channels
+     - `channels:read` - View basic information about public channels
+     - `chat:write` - Send messages as the app
+     - `groups:history` - View messages in private channels
+     - `groups:read` - View basic information about private channels
+     - `im:history` - View messages in direct messages
+     - `im:read` - View basic information about direct messages
+     - `mpim:history` - View messages in group direct messages
+     - `mpim:read` - View basic information about group direct messages
+     - `reactions:write` - Add and remove emoji reactions
+     - `users:read` - View people in the workspace
+     - `files:read` - View files shared in channels and conversations
+
+3. **Install App to Workspace:**
+   - Click "Install to Workspace"
+   - Copy the Bot User OAuth Token (starts with `xoxb-`)
+
+4. **Configure Token:**
+   - Set environment variable: `SLACK_BOT_TOKEN=xoxb-your-token`
+   - Or pass via `Authorization: Bearer` header in requests
+
+## Usage with Claude Desktop
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "slack": {
+      "command": "python",
+      "args": ["/path/to/slack_mcp_server_stateless.py"],
+      "env": {
+        "SLACK_BOT_TOKEN": "xoxb-your-slack-bot-token"
+      }
+    }
+  }
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Required
+SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
+
+# Optional
+SLACK_MCP_USERS_CACHE=~/slack-cache/users_cache.json
+SLACK_MCP_CHANNELS_CACHE=~/slack-cache/channels_cache_v2.json
+```
+
+### Cache Configuration
+
+The server uses intelligent caching to improve performance:
+- **User Cache**: Stores user information to reduce API calls
+- **Channel Cache**: Stores channel metadata for faster lookups
+- **Auto-refresh**: Cache automatically refreshes when data is stale
+- **Fallback**: Falls back to API calls when cache is unavailable
+
+## Use Cases
+
+### Team Communication Analysis
+- Analyze message patterns and team engagement
+- Track conversation threads and response times
+- Monitor channel activity and participation
+
+### Workspace Management
+- Audit channel permissions and membership
+- Manage channel topics and purposes
+- Track file sharing and workspace usage
+
+### Automation & Integrations
+- Automate message posting and reactions
+- Create custom notification systems
+- Build workspace analytics dashboards
+
+### Content Discovery
+- Search across all workspace conversations
+- Find important messages and decisions
+- Track project-related discussions
+
+## Error Handling
+
+The server provides detailed error messages for common issues:
+- **401**: Invalid or expired Slack token
+- **403**: Insufficient permissions or missing scopes
+- **404**: Channel, user, or message not found
+- **429**: Rate limit exceeded
+- **500**: Internal server errors
+
+## Slack API Concepts
+
+### Channel IDs
+- Public channels: `#general` or `C1234567890`
+- Private channels: `#private-team` or `G1234567890`
+- Direct messages: `@username` or `D1234567890`
+
+### User IDs
+- Username format: `@john.doe`
+- User ID format: `U1234567890`
+- Display name: `@John Doe`
+
+### Message Timestamps
+- Format: Unix timestamp with microseconds (`1234567890.123456`)
+- Used for message threading and permalinks
+
+## Development
+
+### Run in Development Mode
+```bash
+python slack_mcp_server_stateless.py --log-level DEBUG --port 8080
+```
+
+### Testing
+```bash
+python test_final.py
+```
+
+## License
+
+This MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License.
