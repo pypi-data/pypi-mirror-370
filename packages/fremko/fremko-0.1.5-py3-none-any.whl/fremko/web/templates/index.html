@@ -1,0 +1,328 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Fremko Control Plane</title>
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-nav">
+        <h3>Fremko Control Plane</h3>
+        <nav class="nav-links">
+          <a href="/" class="active">Device Control</a>
+          <a href="/executor">Code Executor</a>
+        </nav>
+      </div>
+    </header>
+    <main class="app-main">
+      <section class="panel clients" id="clients-panel">
+        <div class="row space-between">
+          <strong>Connected Phones</strong>
+          <button id="refresh-btn">Refresh</button>
+        </div>
+        <div id="clients"></div>
+      </section>
+
+      <section class="panel control" id="control-panel">
+        <div class="row space-between">
+          <strong id="detail-title">Device</strong>
+          <div class="row">
+            <button id="full-info-btn">Full Device Info</button>
+            <button id="screenshot-btn">Screenshot</button>
+            <button id="apps-btn">Apps</button>
+            <button id="preview-settings-btn" title="Preview resize settings">⚙️</button>
+          </div>
+        </div>
+
+        <div class="control-grid">
+          <div class="control-left">
+            <div id="details" class="pad"></div>
+
+            <div class="pad">
+              <label>Agent Goal</label>
+              <textarea id="goal" placeholder="e.g. Open Settings and turn on Wi-Fi&#10;&#10;You can write multi-line goals here..." rows="3"></textarea>
+              <div class="row" style="margin-top: 8px;">
+                <button id="send-goal-btn">Send Goal</button>
+                <button id="agent-settings-btn">⚙️ Settings</button>
+              </div>
+            </div>
+
+            <div class="grid two">
+              <div>
+                <label>Tap (x, y)</label>
+                <div class="row">
+                  <input id="tapx" placeholder="x" />
+                  <input id="tapy" placeholder="y" />
+                  <button id="tapxy-btn">Tap</button>
+                </div>
+              </div>
+              <div>
+                <label>Type Text</label>
+                <div class="row">
+                  <input id="text" placeholder="text" />
+                  <button id="input-text-btn">Send</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="pad">
+              <label>Swipe</label>
+              <div class="row">
+                <input id="sx" placeholder="sx" />
+                <input id="sy" placeholder="sy" />
+                <input id="ex" placeholder="ex" />
+                <input id="ey" placeholder="ey" />
+                <input id="dur" placeholder="ms" value="300" />
+                <button id="swipe-btn">Swipe</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="control-center">
+            <div class="pad">
+              <div class="preview-centered">
+                <label>Screen Share</label>
+                <div class="muted small">Preview. Draw on the canvas to perform gestures.</div>
+                <div class="video-wrap" id="videoCanvasWrap" style="display:none;">
+                  <canvas id="videoCanvas"></canvas>
+                </div>
+              </div>
+              <div class="grid two" style="margin-top:8px;">
+                <div>
+                  <label>Frames per second (1–30)</label>
+                  <input id="stream-fps" placeholder="1..30" value="12" />
+                </div>
+                <div id="quality-wrap">
+                  <label>Quality (30–95)</label>
+                  <input id="stream-quality" placeholder="30..95" value="75" />
+                </div>
+              </div>
+              <div class="grid two" style="margin-top:8px;">
+                <div id="bitrate-wrap" style="display:none;">
+                  <label>Bitrate (kbps)</label>
+                  <input id="stream-bitrate" placeholder="e.g. 1500" value="1500" />
+                </div>
+              </div>
+              <div class="row" style="gap:8px; margin-top:8px; align-items:center;">
+                <label for="stream-format">Format</label>
+                <select id="stream-format">
+                  <option value="h264">H.264</option>
+                  <option value="jpeg" selected>JPEG</option>
+                </select>
+              </div>
+              <div class="row" style="gap:8px; margin-top:8px;">
+                <button id="stream-start-btn">Start Stream</button>
+                <button id="stream-update-btn" hidden>Update</button>
+                <button id="stream-stop-btn" hidden>Stop</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="control-right">
+            <div class="pad">
+              <div class="agent-status-panel">
+                <div class="row space-between">
+                  <strong>Agent Status</strong>
+                  <button id="refresh-agent-btn" class="small-btn">Refresh</button>
+                </div>
+                <div id="agent-status" class="agent-status">
+                  <div class="status-indicator">⚡ Ready</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pad">
+              <div class="agent-todo-panel">
+                <div class="row space-between">
+                  <strong>Tasks</strong>
+                  <span id="task-counter" class="muted small">0/0</span>
+                </div>
+                <div id="agent-todos" class="agent-todos">
+                  <div class="no-tasks muted small">No active tasks</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal: Full Device Info -->
+    <div class="modal" id="full-info-modal" aria-hidden="true">
+      <div class="modal-backdrop" id="modal-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="full-info-title">
+        <div class="modal-header">
+          <h4 id="full-info-title">Full Device Info</h4>
+          <button class="icon-btn" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <pre id="full-info-pre" class="mono"></pre>
+        </div>
+        <div class="modal-footer">
+          <button id="modal-close-footer">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Screenshot -->
+    <div class="modal" id="screenshot-modal" aria-hidden="true">
+      <div class="modal-backdrop" id="screenshot-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="screenshot-title">
+        <div class="modal-header">
+          <h4 id="screenshot-title">Screenshot</h4>
+          <button class="icon-btn" id="screenshot-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <img id="screenshot-img" alt="Device screenshot" style="max-width:100%; height:auto; display:block;" />
+        </div>
+        <div class="modal-footer">
+          <button id="screenshot-close-footer">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Preview Settings -->
+    <div class="modal" id="preview-settings-modal" aria-hidden="true">
+      <div class="modal-backdrop" id="preview-settings-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-settings-title">
+        <div class="modal-header">
+          <h4 id="preview-settings-title">Preview Resize</h4>
+          <button class="icon-btn" id="preview-settings-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="grid two">
+            <div>
+              <label>Width (px)</label>
+              <input id="preview-width" placeholder="e.g. 480" />
+            </div>
+            <div>
+              <label>Height (px)</label>
+              <input id="preview-height" placeholder="e.g. 960" />
+            </div>
+          </div>
+          <div class="pad">
+            <label>Aspect ratio (W:H)</label>
+            <div class="row" style="gap:6px; align-items:center;">
+              <input id="preview-ar-w" placeholder="W e.g. 9" style="width:90px;" />
+              <span class="muted">:</span>
+              <input id="preview-ar-h" placeholder="H e.g. 16" style="width:90px;" />
+              <label class="row" style="gap:6px; margin-left:8px;">
+                <input type="checkbox" id="preview-lock-aspect" />
+                <span class="small">Lock</span>
+              </label>
+            </div>
+          </div>
+          <div class="muted small" style="margin-top:8px;">Leave blank to use source size.</div>
+        </div>
+        <div class="modal-footer">
+          <button id="preview-settings-reset">Reset</button>
+          <button id="preview-settings-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Apps List -->
+    <div class="modal" id="apps-modal" aria-hidden="true">
+      <div class="modal-backdrop" id="apps-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="apps-title">
+        <div class="modal-header">
+          <h4 id="apps-title">Installed Apps</h4>
+          <button class="icon-btn" id="apps-close">✕</button>
+        </div>
+        <div class="modal-body apps-modal-body">
+          <div id="apps-loading" class="apps-loading">Loading apps...</div>
+          <div id="apps-list" class="apps-list" style="display: none;"></div>
+          <div id="apps-error" class="apps-error" style="display: none;">Failed to load apps</div>
+        </div>
+        <div class="modal-footer">
+          <button id="apps-close-footer">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Agent Settings -->
+    <div class="modal" id="agent-settings-modal" aria-hidden="true">
+      <div class="modal-backdrop" id="agent-settings-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-settings-title">
+        <div class="modal-header">
+          <h4 id="agent-settings-title">Agent Settings</h4>
+          <button class="icon-btn" id="agent-settings-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="grid two">
+            <div>
+              <label>Provider <span class="tooltip-trigger" title="LlamaIndex class name for the LLM provider">ℹ️</span></label>
+              <input id="agent-provider" placeholder="e.g. GoogleGenAI" />
+            </div>
+            <div>
+              <label>Model</label>
+              <input id="agent-model" placeholder="e.g. gemini-2.5-flash" />
+            </div>
+          </div>
+          <div class="grid two" style="margin-top:8px;">
+            <div>
+              <label>Base URL</label>
+              <input id="agent-base-url" placeholder="e.g. https://api.anthropic.com" />
+            </div>
+            <div>
+              <label>Max Steps</label>
+              <input id="agent-steps" type="number" placeholder="150" min="1" max="1000" />
+            </div>
+          </div>
+          <div class="grid two" style="margin-top:8px;">
+            <div>
+              <label>Timeout (seconds)</label>
+              <input id="agent-timeout" type="number" placeholder="700" min="1" />
+            </div>
+            <div>
+              <!-- Empty for spacing -->
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <div class="checkbox-group">
+              <div class="checkbox-item">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="agent-vision" />
+                  <span>Enable Vision <span class="tooltip-trigger" title="Sends screenshots to LLM for visual analysis of device state">ℹ️</span></span>
+                </label>
+              </div>
+              <div class="checkbox-item">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="agent-reasoning" />
+                  <span>Enable Reasoning <span class="tooltip-trigger" title="Uses todo tasks to hand out single tasks at a time">ℹ️</span></span>
+                </label>
+              </div>
+              <div class="checkbox-item">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="agent-reflection" />
+                  <span>Enable Reflection <span class="tooltip-trigger" title="Adds verification step after each todo item (requires both vision and reasoning)">ℹ️</span></span>
+                </label>
+              </div>
+              <div class="checkbox-item">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="agent-tracing" />
+                  <span>Enable Tracing <span class="tooltip-trigger" title="Enables Arize Phoenix tracing for debugging agentic failures">ℹ️</span></span>
+                </label>
+              </div>
+              <div class="checkbox-item">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="agent-debug" />
+                  <span>Enable Debug <span class="tooltip-trigger" title="Enables more detailed logs on the server">ℹ️</span></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="agent-settings-reset">Reset to Defaults</button>
+          <button id="agent-settings-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+  </body>
+  </html>
+
+
