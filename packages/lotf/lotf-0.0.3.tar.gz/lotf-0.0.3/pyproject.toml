@@ -1,0 +1,152 @@
+[build-system]
+requires = ["scikit-build-core >=0.10", "nanobind >=1.3.2"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "lotf"
+version = "0.0.3"
+description = "LotusFilter: Diversity-aware approximate nearest neighbor search"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Yusuke Matsui", email = "matsui@hal.t.u-tokyo.ac.jp" },
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "numpy",
+]
+
+[project.urls]
+Homepage = "https://github.com/matsui528/lotf"
+Documentation = "https://matsui528.github.io/lotf"
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=7.0",
+    "furo>=2024.1.29",
+    "myst-parser>=2.0",
+    "sphinx-autodoc-typehints>=1.25",
+    "sphinx-copybutton>=0.5",
+    "linkify-it-py>=2.0",  # Required for myst-parser linkify extension
+]
+
+
+[tool.scikit-build]
+# Protect the configuration against future changes in scikit-build-core
+minimum-version = "build-system.requires"
+
+# Setuptools-style build caching in a local directory
+build-dir = "build/{wheel_tag}"
+
+# Build stable ABI wheels for CPython 3.12+
+wheel.py-api = "cp312"
+
+[tool.cibuildwheel]
+# Maximum verbosity to see Boost detection and compilation details
+build-verbosity = 2
+
+# Run pytest to ensure that the package was correctly built
+test-command = "pytest {project}/tests"
+test-requires = "pytest"
+
+# Shared Boost installation script for Unix-like systems (Linux/macOS)
+[tool.cibuildwheel.linux]
+before-all = [
+    "echo '=== Installing latest Boost headers ==='",
+    # Auto-detect latest Boost version from GitHub releases
+    "BOOST_VERSION=$(curl -s https://api.github.com/repos/boostorg/boost/releases/latest | grep -o 'boost-[0-9]\\+\\.[0-9]\\+\\.[0-9]\\+' | head -1)",
+    "echo \"Downloading Boost version: $BOOST_VERSION\"",
+    "curl -L \"https://github.com/boostorg/boost/releases/download/$BOOST_VERSION/$BOOST_VERSION-b2-nodocs.tar.gz\" | tar xz",
+    "cp -r \"$BOOST_VERSION/boost\" /usr/local/include/",
+    "echo '=== Checking Boost installation ==='", 
+    "find /usr/local -name 'unordered_flat_map.hpp' 2>/dev/null && echo 'Latest Boost with unordered_flat_map found!' || echo 'Using std containers fallback'",
+    "echo '=== Boost setup complete ==='",
+]
+
+[tool.cibuildwheel.macos]
+before-all = [
+    "echo '=== Installing latest Boost headers ==='",
+    # Auto-detect latest Boost version from GitHub releases
+    "BOOST_VERSION=$(curl -s https://api.github.com/repos/boostorg/boost/releases/latest | grep -o 'boost-[0-9]\\+\\.[0-9]\\+\\.[0-9]\\+' | head -1)",
+    "echo \"Downloading Boost version: $BOOST_VERSION\"",
+    "curl -L \"https://github.com/boostorg/boost/releases/download/$BOOST_VERSION/$BOOST_VERSION-b2-nodocs.tar.gz\" | tar xz",
+    "cp -r \"$BOOST_VERSION/boost\" /usr/local/include/",
+    "echo '=== Checking Boost installation ==='",
+    "find /usr/local -name 'unordered_flat_map.hpp' 2>/dev/null && echo 'Latest Boost with unordered_flat_map found!' || echo 'Using std containers fallback'",
+    "echo '=== Boost setup complete ==='",
+]
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.14" }
+
+# Install latest Boost headers on Windows
+[tool.cibuildwheel.windows]
+before-all = [
+    "echo === Installing Boost unordered headers on Windows ===",
+    "vcpkg install boost-unordered:x64-windows || echo Boost install failed, using std fallback",
+    "echo === Windows Boost unordered setup complete ===",
+]
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+# Same as Black.
+line-length = 88
+indent-width = 4
+
+# Target Python 3.10
+target-version = "py310"
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = ["E4", "E7", "E9", "F"]
+ignore = []
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
