@@ -1,0 +1,72 @@
+name: Python Package
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_release_branch:
+        description: 'Confirm you want to deploy from release branch'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build-and-publish:
+    if: ${{ inputs.confirm_release_branch }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      
+      - name: Get version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(grep -E "version\s*=\s*" pyproject.toml | sed -E 's/.*version\s*=\s*"([^"]+)".*/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version found: $VERSION"
+      
+      - name: Clean previous build artifacts
+        run: |
+          rm -rf build/ dist/ *.egg-info/
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      
+      - name: Build package
+        run: python -m build
+      
+      - name: Verify built distributions
+        run: |
+          echo "Files built for distribution:"
+          ls -la dist/
+          python -m twine check dist/*
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          password: ${{ secrets.PYPI_TOKEN }}
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
+          body: |
+            Release version ${{ env.VERSION }}
+            
+            Manually triggered release from the 'releases' branch
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
