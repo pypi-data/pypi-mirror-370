@@ -1,0 +1,2 @@
+HISTORICAL = 'historical'
+FORECAST = 'forecast'
