@@ -1,0 +1,230 @@
+batou
+=====
+
+.. rubric::  automating web application deployments
+
+.. raw:: html
+
+  <a href="https://github.com/flyingcircusio/batou" class="github-corner" aria-label="View source on GitHub"><svg width="80" height="80" viewBox="0 0 250 250" style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
+
+Release v\ |version|.
+
+|build-status| |github-stars| |badge-opensource| |badge-downloads| |badge-python|
+
+batou is a BSD-licensed utility, written in Python, to configure
+development and production environments for web applications.
+
+Deployments are hard and complicated. Tools like Docker, Puppet, chef, and
+others exist that try to solve this problem once and for all. However, they
+usually need you to change your workflow or toolchain massively while still
+missing important steps.
+
+batou makes deployments more bearable without requiring developers to change
+their applications. It provides a "one command" approach that should never
+need additional wrapper scripts.
+
+As a developer all you ever have to run after cloning or updating your project
+is:
+
+.. code-block:: console
+
+ $ git clone https://github.com/myorg/myproject
+ $ cd myproject
+ $ ./batou deploy dev
+
+To run a production deployment all you should ever have to run is:
+
+.. code-block:: console
+
+ $ cd my-project
+ $ git pull
+ $ ./batou deploy prod
+
+Writing a deployment with batou is a two step process:
+
+Step 1: Model your application's configuration
+----------------------------------------------
+
+With our component model you write a configuration specification in Python
+based on a simple API. Components make configuration `convergent <https://en.wikipedia.org/wiki/Convergence_(logic)>`_ and `idempotent <https://en.wikipedia.org/wiki/Idempotence>`_
+and using Python lets you perform any computation you need. The component
+model is recursive, so you can refactor complicated components into simpler
+ones without breaking your setup.
+
+Here is an example application model that installs a Python package into a
+VirtualEnv and asks Supervisor to run it:
+
+.. code-block:: python
+
+  from batou.component import Component
+  from batou.lib.python import VirtualEnv, Package
+  from batou.lib.supervisor import Program
+
+  class MyApp(Component):
+
+    def configure(self):
+      venv = VirtualEnv('3.5')
+      self += venv
+      venv += Package('myapp')
+      self += Program('myapp', command='bin/myapp')
+
+Step 2: Fit your model to your environments
+-------------------------------------------
+
+Your model from step 1 is abstract: it does not mention the names of the
+servers you deploy to.
+
+By describing an environment you tell batou how your abstract model should
+actually be applied: on your local development machine, to a vagrant setup, or
+on servers on the network.
+
+Here's an environment specification that sets up an application on multiple
+hosts and provides an override for the publicly visible address.
+
+.. code-block:: ini
+
+    [environment]
+    host_domain = fcio.net
+
+    [host:host01]
+    components = nginx, haproxy, varnish
+
+    [host:host02]
+    components = myapp
+
+    [host:host03]
+    components = myapp
+
+    [host:host04]
+    components = postgresql
+
+    [component:nginx]
+    server_name = staging.example.com
+
+Features
+--------
+
+* Run the same command to deploy locally, to Vagrant, or to remote clusters.
+* Use different versions of batou in different projects. batou automatically
+  ensures everyone uses the correct version in each project and updates when
+  needed.
+* Check before deploying whether your configuration is internally consistent and consistent with what has been deployed before.
+* Predict changes and predict what further changes will be triggered.
+* Convergent, idempotent components are fast to deploy.
+* Resume partial deployments where they were aborted.
+* Store database passwords, SSH keys, SSL certificates or other secret data with on the-fly decryption. Manage access to secrets per environment and user.
+* Use Jinja2 templates to easily create dynamic configuration.
+* Dynamically connect services during deployments and track their dependencies.
+* Few run-time requirements on your servers: only Python 3 and SSH are needed.
+* Use pre-defined components to manage files, python environments, supervisor, cronjobs, and more.
+* Writing your own components is easy and you can use additional Python
+  package dependencies.
+
+User guide
+----------
+
+This part of the documentation, begins with some background information about batou, then focuses on the basic parts needed on a regular basis when creating and maintaining increasingly complex deployments with batou. The last part of the narrative documentation covers selected topics in depth.
+
+.. toctree::
+   :maxdepth: 2
+
+   user/intro
+   user/install
+   user/quickstart
+   user/advanced
+   user/age
+
+Reference: Command line interface
+---------------------------------
+
+If you are looking for information on what commands the batou CLI provides then this is for you.
+
+.. toctree::
+   :maxdepth: 2
+
+   cli/index
+
+
+Reference: Component Library
+----------------------------
+
+This is the list of components that batou provides -- builtin and through the `batou_ext` package:
+
+.. toctree::
+   :maxdepth: 2
+
+   components/files.txt
+   components/downloads-vcs.txt
+   components/cmmi.txt
+   components/python.txt
+   components/services.txt
+
+
+Reference: Python API
+---------------------
+
+If you are looking for information on a specific function, class or method, this part of the documentation is for you.
+
+.. toctree::
+   :maxdepth: 2
+
+   api/component
+   api/environment
+   api/templates
+   api/utilities
+   api/exceptions
+
+Contributor guide
+-----------------
+
+If you want to contribute to the project, this part of the documentation is for you.
+
+
+.. toctree::
+   :maxdepth: 1
+
+   dev/contributing
+   dev/testing
+   dev/todo
+   dev/authors
+
+Support
+-------
+
+batou itself is released "as is".
+You can also report bugs to our `bugtracker <https://github.com/flyingcircusio/batou/issues>`_.
+
+We also have a matrix channel: `#batou:matrix.org <https://matrix.to/#/#batou:matrix.org>`_.
+
+.. rubric:: Commercial support
+
+We will be happy to give you commercial support for batou: feature
+implementation, bug fixing, consulting, or education.
+
+To get in touch, send an email to `mail@flyingcircus.io
+<mailto:mail@flyingcircus.io?Subject=Support%20for%20batou>`_ and we'll
+be happy to discuss your requirements.
+
+Resources
+---------
+
+.. toctree::
+    :maxdepth: 1
+
+    changes
+    upgrading
+
+Presentations from conferences:
+
+* `EuroPython 2013 - batou (talk slides) <http://www.slideshare.net/theuni/batou-multicomponenthostenvironment-deployment>`_
+* `PyConDE 2013 - batou (talk video, German) <ttp://pyvideo.org/video/2436/batou-multicomponenthostenvironment-depl>`_
+
+.. |build-status| image:: https://img.shields.io/travis/flyingcircusio/batou
+
+.. |github-stars| image:: https://img.shields.io/github/stars/flyingcircusio/batou.svg?style=social&label=Star&maxAge=2592000
+
+.. |badge-opensource| image:: https://badges.frapsoft.com/os/v3/open-source.svg?v=103
+
+.. |badge-downloads| image:: https://img.shields.io/pypi/dm/batou
+
+.. |badge-python| image:: https://img.shields.io/badge/Made%20with-Python-1f425f.svg
