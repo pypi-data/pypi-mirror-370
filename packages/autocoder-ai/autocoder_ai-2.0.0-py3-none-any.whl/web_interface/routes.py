@@ -1,0 +1,276 @@
+"""
+Web routes for the AI Coding Agent System
+"""
+
+from flask import Blueprint, request, jsonify, render_template
+import json
+import asyncio
+from datetime import datetime
+
+from memory.project_memory import ProjectMemory
+from workflow.orchestrator import WorkflowOrchestrator
+from utils.config_loader import ConfigLoader
+from utils.file_handler import FileHandler
+from utils.logger import setup_logger
+
+logger = setup_logger()
+
+# Create blueprints
+api_bp = Blueprint('api', __name__)
+web_bp = Blueprint('web', __name__)
+
+# Initialize components
+memory = ProjectMemory()
+config_loader = ConfigLoader("config.yaml")
+config_loader.load()
+
+@api_bp.route('/projects', methods=['GET'])
+def list_projects():
+    """List all projects"""
+    try:
+        projects = memory.list_projects()
+        return jsonify({'success': True, 'projects': projects})
+    except Exception as e:
+        logger.error(f"Error listing projects: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/projects', methods=['POST'])
+def create_project():
+    """Create a new project"""
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        description = data.get('description', '')
+        metadata = data.get('metadata', {})
+        
+        if not name:
+            return jsonify({'success': False, 'error': 'Project name is required'}), 400
+        
+        project_id = memory.create_project(name, description, metadata)
+        project = memory.get_project(project_id)
+        
+        return jsonify({'success': True, 'project': project})
+    except Exception as e:
+        logger.error(f"Error creating project: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/projects/<project_id>', methods=['GET'])
+def get_project(project_id):
+    """Get project details"""
+    try:
+        project = memory.get_project(project_id)
+        if not project:
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
+        
+        sessions = memory.get_project_sessions(project_id)
+        project['sessions'] = sessions
+        
+        return jsonify({'success': True, 'project': project})
+    except Exception as e:
+        logger.error(f"Error getting project: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/projects/<project_id>/sessions', methods=['GET'])
+def get_project_sessions(project_id):
+    """Get all sessions for a project"""
+    try:
+        sessions = memory.get_project_sessions(project_id)
+        return jsonify({'success': True, 'sessions': sessions})
+    except Exception as e:
+        logger.error(f"Error getting project sessions: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/projects/<project_id>/sessions', methods=['POST'])
+def create_session(project_id):
+    """Create a new session for a project"""
+    try:
+        data = request.get_json()
+        # project_id is already passed as parameter
+        task_description = data.get('task_description')
+        context = data.get('context', {})
+        
+        if not task_description:
+            return jsonify({'success': False, 'error': 'Task description is required'}), 400
+        
+        session_id = memory.create_session(project_id, task_description, context)
+        session = memory.get_session(session_id)
+        
+        return jsonify({'success': True, 'session': session})
+    except Exception as e:
+        logger.error(f"Error creating session: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/sessions/<session_id>/execute', methods=['POST'])
+def execute_task(session_id):
+    """Execute a task using the agent system"""
+    try:
+        data = request.get_json()
+        
+        session = memory.get_session(session_id)
+        if not session:
+            return jsonify({'success': False, 'error': 'Session not found'}), 404
+        
+        # Start async execution (this would be done via WebSocket in practice)
+        return jsonify({
+            'success': True, 
+            'message': 'Task execution started',
+            'session_id': session_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error executing task: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/sessions/<session_id>', methods=['GET'])
+def get_session(session_id):
+    """Get session details"""
+    try:
+        session = memory.get_session(session_id)
+        if not session:
+            return jsonify({'success': False, 'error': 'Session not found'}), 404
+        
+        return jsonify({'success': True, 'session': session})
+    except Exception as e:
+        logger.error(f"Error getting session: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/sessions/<session_id>/download', methods=['GET'])
+def download_session_files(session_id):
+    """Download files generated by a session"""
+    try:
+        session = memory.get_session(session_id)
+        if not session:
+            return jsonify({'success': False, 'error': 'Session not found'}), 404
+        
+        files_created = session.get('files_created', [])
+        if not files_created:
+            return jsonify({'success': False, 'error': 'No files to download'}), 404
+        
+        # In a real implementation, this would create a zip file or similar
+        # For now, return the file list with download links
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'files': files_created,
+            'message': 'File download endpoint - implementation pending'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error downloading session files: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/config', methods=['GET'])
+def get_config():
+    """Get system configuration"""
+    try:
+        return jsonify({
+            'success': True,
+            'config': {
+                'agents': list(config_loader.config.get('agents', {}).keys()),
+                'output_directory': config_loader.config.get('output', {}).get('directory', 'output'),
+                'supported_providers': ['openai', 'anthropic', 'google', 'azure', 'deepseek', 'xai', 'mistral', 'perplexity'],
+                'reasoning_models': ['anthropic/claude-3-7-sonnet-20250219', 'deepseek/deepseek-chat', 'xai/grok-beta', 'perplexity/llama-3.1-sonar-large-128k-online'],
+                'current_settings': config_loader.config
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting config: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_bp.route('/config', methods=['POST'])
+def update_config():
+    """Update system configuration"""
+    try:
+        data = request.get_json()
+        logger.info(f"Updating configuration: {data}")
+        
+        # Update the config - merge with existing config
+        updated_config = dict(config_loader.config)
+        
+        # Update global settings
+        if 'global' in data:
+            updated_config.setdefault('global_settings', {}).update(data['global'])
+        
+        # Update reasoning settings  
+        if 'reasoning' in data:
+            updated_config.setdefault('reasoning_settings', {}).update(data['reasoning'])
+        
+        # Update provider settings (NEW)
+        if 'providers' in data:
+            updated_config.setdefault('providers', {}).update(data['providers'])
+        
+        # Update agent configurations
+        if 'agents' in data:
+            for agent_key, agent_config in data['agents'].items():
+                if agent_key in updated_config.get('agents', {}):
+                    # Parse model string (e.g., "openai/gpt-4" -> provider="openai", model="gpt-4")
+                    model_string = agent_config.get('model', '')
+                    if model_string:
+                        model_parts = model_string.split('/', 1)
+                        provider = model_parts[0] if len(model_parts) > 1 else 'openai'
+                        model = model_parts[1] if len(model_parts) > 1 else model_string
+                    else:
+                        provider = 'openai'
+                        model = 'gpt-4'
+                    
+                    # Update existing agent config
+                    updated_config['agents'][agent_key]['model'].update({
+                        'provider': provider,
+                        'model': model,
+                        'temperature': agent_config.get('temperature', 0),
+                        'max_tokens': agent_config.get('max_tokens', 2048)
+                    })
+                    
+                    # Add reasoning configuration
+                    reasoning_config = {
+                        'enabled': agent_config.get('reasoning_enabled', False)
+                    }
+                    
+                    if agent_config.get('reasoning_enabled'):
+                        reasoning_config.update({
+                            'effort': agent_config.get('reasoning_effort', 'medium'),
+                            'thinking_budget': agent_config.get('thinking_budget', 2048)
+                        })
+                    
+                    updated_config['agents'][agent_key]['reasoning'] = reasoning_config
+        
+        # Update the config loader's config
+        config_loader.config = updated_config
+        
+        # Save to file
+        try:
+            import yaml
+            with open("config.yaml", 'w') as f:
+                yaml.dump(updated_config, f, default_flow_style=False)
+            logger.info("Configuration saved to config.yaml")
+        except Exception as save_error:
+            logger.warning(f"Could not save config to file: {save_error}")
+            # Continue anyway - in-memory update is still valid
+        
+        logger.info("Configuration updated successfully")
+        return jsonify({'success': True, 'message': 'Configuration updated successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error updating config: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Web routes for serving HTML pages
+@web_bp.route('/')
+def index():
+    """Main dashboard"""
+    return render_template('index.html')
+
+@web_bp.route('/projects')
+def projects_page():
+    """Projects management page"""
+    return render_template('projects.html')
+
+@web_bp.route('/project/<project_id>')
+def project_page(project_id):
+    """Individual project page"""
+    return render_template('project.html', project_id=project_id)
+
+@web_bp.route('/new-project')
+def new_project_page():
+    """New project creation page"""
+    return render_template('new_project.html')
