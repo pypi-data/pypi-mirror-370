@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <!-- Force only WebSocket transport -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <title>Streaming: {{ username }}</title>
+</head>
+<body>
+  <h1>Streaming as {{ username }}</h1>
+  <video id="webcam" autoplay playsinline muted></video>
+
+<script>
+  const username = "{{ username }}";
+  // 1) Force only WebSocket
+  const socket = io({ transports: ["websocket"] });
+
+  // Join the room as a streamer
+  socket.emit("join_room", { username });
+
+  socket.on("connect", () => {
+    console.log("Connected as streamer for", username);
+    startWebcam();
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Disconnected");
+  });
+
+  async function startWebcam() {
+    try {
+      const constraints = {
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 15 }
+        },
+        audio: false
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const videoElement = document.getElementById("webcam");
+      videoElement.srcObject = stream;
+
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      canvas.width = settings.width || 640;
+      canvas.height = settings.height || 480;
+
+      // Send frames (binary) ~5 times per second
+      setInterval(() => {
+        context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        // Instead of .toDataURL(), use .toBlob() for binary
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          socket.emit("stream_frame", {
+            username: username,
+            frame: blob
+          });
+        }, "image/jpeg", 0.5); // 'image/jpeg' @ 50% quality
+      }, 200);
+    } catch (err) {
+      console.error("Error accessing webcam:", err);
+    }
+  }
+</script>
+
+</body>
+</html>
+
