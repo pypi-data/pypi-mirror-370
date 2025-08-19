@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Xronos Inc.
+# SPDX-License-Identifier: LicenseRef-Xronos-Commercial-License-v1
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+processors:
+  filter/ottl:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["xronos.element_type"] == nil'
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+    check_collector_pipeline:
+      enabled: false
+      interval: "5m"
+      exporter_failure_threshold: 5
+exporters:
+  influxdb:
+    endpoint: {{endpoint}}/api/v2/write
+    bucket: {{database}}
+    org: {{organization}}
+    token: {{token}}
+    metrics_schema: otel-v1
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [filter/ottl]
+      exporters: [influxdb]
+    metrics:
+      receivers: [otlp]
+      exporters: [influxdb]
