@@ -1,0 +1,94 @@
+{% set comp_errs = file.comparison_errors %}
+<table class="shadow-lg">
+  <!-- HEADERS -->
+  <tr>
+    <th class="p-2" colspan="6">Error</th>
+    <th class="p-2" colspan="99">Source</th>
+  </tr>
+  <tr>
+    <th class="p-2" rowspan="2">Severity</th>
+    <th class="p-2" rowspan="2">Message</th>
+    <th class="p-2" colspan="2">Value</th>
+    <th class="p-2" rowspan="2">Error</th>
+    <th class="p-2" rowspan="2">Diff. Visu.</th>
+    {% if group.type == "lines" %}
+    <th class="p-2" colspan="2">Line Number</th>
+    <th class="p-2" colspan="2">Line(s)</th>
+    {% endif %}
+    {% if group.type == "vectors" %}
+    <th class="p-2" rowspan="2">Column</th>
+    <th class="p-2" rowspan="2">Index</th>
+    <th class="p-2" rowspan="2">Info</th>
+    {% endif %}
+    {% if group.type == "matrix" %}
+    <th class="p-2" rowspan="2">i</th>
+    <th class="p-2" rowspan="2">j</th>
+    <th class="p-2" rowspan="2">x</th>
+    <th class="p-2" rowspan="2">y</th>
+    {% endif %}
+  </tr>
+  <tr>
+    <th class="p-2 test-bg-50">Test</th>
+    <th class="p-2 refe-bg-50">Ref.</th>
+    {% if group.type == "lines" %}
+    <th class="p-2 test-bg-50">Test</th>
+    <th class="p-2 refe-bg-50">Ref.</th>
+    <th class="p-2 test-bg-50">Test</th>
+    <th class="p-2 refe-bg-50">Ref.</th>
+    {% endif %}
+  </tr>
+  <!-- BODY -->
+  {% for error_type in [{"data_key": "error", "class": "ERROR"}, {"data_key": "warning", "class": "WARNING"}] %}
+  {% for item in comp_errs[error_type.data_key] if item.group == group.id %}
+  <tr>
+
+    <td class="{{error_type.class}}">{{error_type.class}}</td>
+    <td>{{ comp_errs.messages[item.msg] }}</td>
+
+    <!-- COMPARISON -->
+
+    <td class="number test-bg-20">{{ item.err.test }}</td>
+    <td class="number refe-bg-20">{{ item.err.reference }}</td>
+    <td class="number">
+      {% if item.err.is_relative %}
+        {{ '%0.2f' % (item.err.value*100)|float}}%
+      {% else %}
+        {{ item.err.value }}
+      {% endif %}
+    </td>
+    <td>
+      {{ macros.compare_visu(item.err.test, item.err.reference) }}
+    </td>
+
+
+    {% if group.type == "vectors" %}
+    {% set group = comp_errs.groups[item.group] %}
+    <td>{{ group.name }}</td>
+    <td>{{ item.info.index }}</td>
+    <td>
+      {% if group.data %}
+      {{ group.data.info_prefix + ": " + item.info.info|string }}
+      {% endif %}
+    </td>
+    {% endif %}
+
+    {% if group.type == "lines" %}
+    <td class="test-bg-20 number">{{ item.info.line_nb_1 }}</td>
+    <td class="refe-bg-20 number">{{ item.info.line_nb_2 }}</td>
+    <td class="test-bg-20"><pre>{{ item.info.line_1 }}</pre></td>
+    <td class="refe-bg-20"><pre>{{ item.info.line_2 }}</pre></td>
+    {% endif %}
+
+    {% if group.type == "matrix" %}
+    <td class="number">{{ item.info.i }}</td>
+    <td class="number">{{ item.info.j }}</td>
+    <td class="number">{{ item.info.x }}</td>
+    <td class="number">{{ item.info.y }}</td>
+    {% endif %}
+
+  </tr>
+  {% endfor %}
+  {% endfor %}
+
+</table>
+
