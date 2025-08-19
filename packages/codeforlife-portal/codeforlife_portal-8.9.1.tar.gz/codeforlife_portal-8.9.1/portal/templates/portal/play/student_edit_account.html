@@ -1,0 +1,178 @@
+{% extends 'portal/base.html' %}
+{% load static %}
+{% load app_tags %}
+
+{% block subNav %}
+{% if user.new_student.class_field %}
+    <section class="banner banner--student row mx-0">
+{% else %}
+    <section class="banner banner--independent-student row mx-0">
+{% endif %}
+        <div>
+            <h1 class="banner__text--primary">Welcome, {{ user|make_into_username }}</h1>
+        </div>
+    </section>
+{% endblock subNav %}
+
+{% block scripts %}
+{{ block.super }}
+<script type="text/javascript" src="{% static 'portal/js/organisation_manage.js' %}"></script>
+    <script type="text/javascript" src="{% static 'portal/js/passwordStrength.js' %}"></script>
+    <script>
+        var INDEP_STUDENT_PASSWORD_FIELD_ID = '{{ form.password.auto_id }}';
+    </script>
+    <script>
+        {% if delete_account_confirm %}
+            showDeleteAccountConfirmation("{{ delete_account_form.delete_password.value }}", "{{ delete_account_form.unsubscribe_newsletter.value }}", false)
+        {% endif %}
+    </script>
+{% endblock scripts %}
+
+{% block content %}
+{% include "portal/partials/delete_popup.html" %}
+
+<div id="play_account_page"></div>
+<div class="background container">
+    <section><h4>
+        {% if user.new_student.class_field %}
+            Update your password
+        {% else %}
+            Update your account details
+        {% endif %}
+    </h4></section>
+
+    {% if user.new_student.class_field %}
+        <p>You may edit your password below. It must be long enough and hard enough to stop your friends guessing it and
+            stealing all of your hard work. Choose something memorable though.</p>
+        <p>If you have any problems, ask a teacher to help you.</p>
+    {% else %}
+        <p>You can update your account details below.</p>
+        <p>Please note: If you change your email address, you will need to re-verify it.</br>
+            Please ensure your password is strong enough to be secure.</p>
+    {% endif %}
+
+    <form autocomplete="off" id="student_account_form" method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        <div class="row form--row">
+
+        {% if not user.new_student.class_field %}
+            <div class="form--row__input col-md-6">
+                <div class="input--icon">
+                    {{ form.name }}
+                    <span class="iconify" data-icon="mdi:account-outline"></span>
+                </div>
+                <small>{{ form.name.help_text }}</small>
+                {{ form.name.errors }}
+            </div>
+
+            <div class="form--row__input col-md-6">
+                <div class="input--icon">
+                    {{ form.email }}
+                    <span class="iconify" data-icon="mdi:email-outline"></span>
+                </div>
+                <small>{{ form.email.help_text }}</small>
+                {{ form.email.errors }}
+            </div>
+        {% endif %}
+
+            <div class="form--row__input col-md-4">
+                <div class="input--icon">
+                    {{ form.password }}
+                    <span id="password-field-icon" class="iconify" data-icon="material-symbols:visibility-off"></span>
+                </div>
+                <small>{{ form.password.help_text }}</small>
+                {{ form.password.errors }}
+            </div>
+            <div class="form--row__input col-md-4">
+                <div class="input--icon">
+                    {{ form.confirm_password }}
+                    <span id="confirm-password-field-icon" class="iconify" data-icon="material-symbols:visibility-off"></span>
+                </div>
+                <small>{{ form.confirm_password.help_text }}</small>
+                {{ form.confirm_password.errors }}
+            </div>
+            <div class="form--row__input col-md-4">
+                <div class="input--icon">
+                    {{ form.current_password }}
+                    <span id="current-password-field-icon" class="iconify" data-icon="material-symbols:visibility-off"></span>
+                </div>
+                <small>{{ form.current_password.help_text }}</small>
+                {{ form.current_password.errors }}
+            </div>
+        </div>
+
+        <div class="row--under">
+            <div class="password-strength-container">
+                <div id="student-password-sign" class="password-strength-sign"></div>
+                <div id="student-password-text" class="password-strength-text"></div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <a id="cancel_button" class="button button--secondary button--secondary--dark"
+                {% if user.new_student.class_field %}
+                    href="{% url 'student_details' %}"
+                {% else %}
+                    href="{% url 'independent_student_details' %}"
+                {% endif %}
+            >Cancel</a>
+            <button id="update_button" type="submit" class="button button--primary" value="Update"/>
+                Update details</button>
+        </div>
+    </form>
+</div>
+
+{% if not user.new_student.class_field %}
+<div class="background background--primary">
+    <div class="container">
+        <h5>Join a school or club</h5>
+        <p>To find out about linking your Code For Life account with a school or club, click 'Join'.</p>
+        <a class="button button--primary" href="{% url 'student_join_organisation' %}">Join</a>
+    </div>
+</div>
+<div id="delete-indy-account" class="background">
+    <div class="container">
+        <h5>Delete account</h5>
+        <p>If you no longer wish to have a Code for Life account, you can delete it by confirming below.
+            You will receive an email to confirm this decision.
+        </p>
+        <p><b>This can't be reversed.</b>
+        </p>
+
+        <form autocomplete="off" method="post" id="form-delete-indy-account">
+
+        {% csrf_token %}
+
+        {{ delete_account_form.non_field_errors }}
+
+        <div class="row form--row">
+            <div class="form--row__input col-sm-6 col-md-4">
+                <div class="input--icon">
+                    {{ delete_account_form.delete_password }}
+                    <span id="delete-password-field-icon" class="iconify" data-icon="material-symbols:visibility-off"></span>
+                </div>
+                <small>{{ delete_account_form.delete_password.help_text }}</small>
+                {{ delete_account_form.delete_password.errors }}
+            </div>
+            <div class="form--row__input col-sm-6 col-md-8">
+                <div class="form__checkbox">
+                    <div class="form__checkbox-input">
+                        {{ delete_account_form.unsubscribe_newsletter }}
+                    </div>
+                    <label for="id_{{ delete_account_form.unsubscribe_newsletter.html_name }}">{{ delete_account_form.unsubscribe_newsletter.label }}</label>
+                </div>
+                {{ delete_account_form.unsubscribe_newsletter.errors }}
+            </div>
+        </div>
+        <button id="delete_account_button" class="button button--primary button--primary--danger button--icon" name="delete_account">
+            Delete account <span class="iconify" data-icon="mdi:delete-outline"></span>
+        </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+
+{% endblock %}
