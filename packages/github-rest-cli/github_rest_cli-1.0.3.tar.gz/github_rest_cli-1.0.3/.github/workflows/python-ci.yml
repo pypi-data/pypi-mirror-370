@@ -1,0 +1,76 @@
+name: Python CI
+run-name: Python build and test
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - closed
+
+jobs:
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "latest"
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff fmt
+        run: ruff format .
+
+  test:
+    name: Python tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: uv sync
+        run: uv sync
+
+      - uses: extractions/setup-just@v3
+
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          just test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: uv sync
+        run: uv sync
+
+      - name: Get CLI version
+        run: |
+          source .venv/bin/activate
+          github-rest-cli --version
