@@ -1,0 +1,28 @@
+# LIM MM CLI: CLI Project to create MM
+
+# LIM Concept
+**LIM framework aims to be open source, realtime data retrieval and micro model training enhancement**
+**- Human Socialism Model Network Simulation**
+**- unlike MCP, LIM resolve the LLM problem. LIM auto pass the query right mm(s) (MCP)**
+**- MaaS based service**
+**- Model on the air**
+**- llm alternative**
+
+
+# CLI
+- mm start mm_name
+    - create the mm project and copy the template folder to initialise the project 
+- mm build
+- mm validate
+    - validate the project by run the project and call /meta.json to see if the service exist
+- mm run
+    - run the project by calling python run/start.py
+- mm push
+    - push the project to lim repository
+- mm list mm_name
+    - list mm information
+- mm pull mm1, mm2
+    - download the mm into models with relevant paths
+
+
+# PROJECT CONTINUED, WAITING FOR STABLE VERSION.
