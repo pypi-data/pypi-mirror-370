@@ -1,0 +1,175 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ikigai"
+dynamic = ["version"]
+description = 'Python client for ikigailabs'
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+keywords = []
+authors = [{ name = "Harsh Parekh", email = "harsh@ikigailabs.io" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "backports.strenum (>=1.3.1,<2.0); python_version<'3.11'",
+  "email-validator",
+  "eval_type_backport; python_version<'3.11'",
+  "pydantic>=2.0",
+  "pandas>=1.5",
+  "requests>=2.32",
+  "tomli; python_version<'3.11'",
+  "tqdm",
+]
+
+[project.urls]
+Documentation = "https://github.com/ikigailabs-io/ikigai#readme"
+Issues = "https://github.com/ikigailabs-io/ikigai/issues"
+Source = "https://github.com/ikigailabs-io/ikigai"
+
+# Confiuring Tooling
+
+## Configure hatch
+
+### Point hatch's build tool to the package version
+[tool.hatch.version]
+path = "src/ikigai/__about__.py"
+
+### Setup hatch for testing package across multiple python versions
+[[tool.hatch.envs.all.matrix]]
+python = ["3.13"]
+
+### Setup venv used for development
+[tool.hatch.envs.default]
+dependencies = ["coverage[toml]>=6.5", "pytest", "pytest-profiling", "ipython", "ipykernel", "Faker>=33.1.0"]
+
+### Setup venv used for test
+[tool.hatch.envs.hatch-test]
+dependencies = [
+  "coverage-enable-subprocess==1.0",
+  "coverage[toml]~=7.4",
+  "pytest-mock~=3.12",
+  "pytest-randomly~=3.15",
+  "pytest-rerunfailures~=14.0",
+  "pytest-xdist[psutil]~=3.5",
+  "pytest~=8.1",
+  # Custom Deps
+  "pytest-profiling",
+  "Faker>=33.1.0",
+]
+
+[[tool.hatch.envs.hatch-test.matrix]]
+python = ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+### Setup scripts for testing and coverage reporting
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-prof = ["pytest --profile --profile-svg {args:tests}", "open prof/combined.svg || xgd-open prof/combined.svg"]
+test-cov = "coverage run -m pytest {args:tests}"
+cov-report = ["- coverage combine", "coverage report", "coverage html"]
+cov = ["test-cov", "cov-report"]
+cov-display = ["cov", "open htmlcov/index.html || xdg-open htmlcov/index.html"]
+
+### Setup venv for linting and static analysis
+[tool.hatch.envs.hatch-static-analysis]
+config-path = "none"
+
+### Setup venv for type-checking
+[tool.hatch.envs.types]
+dependencies = ["mypy>=1.0.0", "pytest", "Faker>=33.1.0"]
+
+### Setup scripts to run type checking
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/ikigai tests}"
+
+## Configure pytest settings
+[tool.pytest.ini_options]
+log_format = "%(asctime)s %(levelname)s \"%(pathname)s:%(lineno)d\" %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+
+log_cli = true
+log_cli_level = "INFO"
+
+log_file = "pytest.log"
+log_file_level = "DEBUG"
+
+## Setup ruff for formatting
+[tool.ruff.lint]
+select = [
+  # Pyflakes
+  "F",
+  # Pycodestyle,
+  "E",
+  "W",
+  # isort
+  "I",
+  # pep8
+  "N",
+  # pyupgrade
+  "UP",
+  # Flake8
+  "C4",
+  "EM",
+  "FA",
+  "PIE",
+  "T20",
+  "SIM",
+  "TID",
+  "PTH",
+  # Flake8 - Logging
+  "LOG",
+  "G",
+  # Commented out code not allowed
+  "ERA",
+  # Pandas & numpy best practices
+  "PD",
+  "NPY",
+  # noqa best practices
+  "PGH004",
+  # Pylint
+  "PLC",
+  "PLE",
+  "PLR",
+  "PLW",
+  # flynt
+  "FLY",
+  # Performance
+  "PERF",
+]
+ignore = [
+  "PLR1711",  # It's better to have explicit return even if it may be useless
+  "PLR0913",  # Some functions require many args to effectively use ikigai's api
+]
+
+
+## Configure coverage
+[tool.coverage.run]
+source_pkgs = ["ikigai", "tests"]
+branch = true
+parallel = true
+omit = ["src/ikigai/__about__.py"]
+
+[tool.coverage.paths]
+ikigai = ["src/ikigai", "*/ikigai/src/ikigai"]
+tests = ["tests", "*/ikigai/tests"]
+
+[tool.coverage.report]
+exclude_also = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if 0:",
+]
