@@ -1,0 +1,64 @@
+formatting:
+  image: ghcr.io/prefix-dev/pixi:latest
+  stage: test
+  script:
+    - pixi global install git
+    - pixi run -e test pre-commit run --all-files
+  tags:
+    - linux
+
+test_linux:
+  image: ghcr.io/prefix-dev/pixi:latest
+  stage: test
+  script:
+    - pixi run -e test pytest
+  # - pixi run -e test mypy src/
+  artifacts:
+    paths:
+      - ./htmlcov
+    when: always
+    expire_in: "2 days"
+  tags:
+    - linux
+
+test_windows:
+  image: registry.windenergy.dtu.dk/dockerimages/windows-pixi:ltsc2019
+  variables:
+    GIT_SUBMODULE_STRATEGY: normal
+    GIT_CLEAN_FLAGS: -ffdx -e .pixi/
+  stage: test
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  script:
+    - pixi run -e test pytest
+  tags:
+    - docker-windows
+
+test_pip_install:
+  image: ghcr.io/prefix-dev/pixi:latest
+  stage: test
+  script:
+    - mkdir test_pip_install
+    - cd test_pip_install
+    - pixi init
+    - pixi add python==3.12 pip
+    - pixi run pip install -e ..[test]
+    - pixi run pytest ../tests
+  tags:
+    - linux
+
+pypi_linux:
+  stage:
+    deploy
+  only:
+    - tags
+    - test_pypi
+  script:
+    - apt-get update
+    - pip install --upgrade pip
+    - pip install -e . --upgrade
+    - pip install --upgrade build
+    - pip install --upgrade twine packaging
+    - python3 -m build
+    - twine upload dist/* -u $TWINE_USERNAME -p $TWINE_PASSWORD
+  tags:
+  - ci-ubuntu
