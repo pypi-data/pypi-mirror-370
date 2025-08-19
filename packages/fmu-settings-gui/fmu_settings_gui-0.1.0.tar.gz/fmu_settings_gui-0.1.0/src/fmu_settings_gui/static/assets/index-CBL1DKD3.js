@@ -1,0 +1,1 @@
+import{j as n,P as t,a as e}from"./index-V2L5n8jS.js";const a=function(){return n.jsxs(n.Fragment,{children:[n.jsx(t,{children:"FMU Settings"}),n.jsx(e,{$variant:"ingress",children:"This is an application for managing the settings of FMU projects."})]})};export{a as component};
