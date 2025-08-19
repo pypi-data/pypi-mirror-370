@@ -1,0 +1,126 @@
+import json
+from dataclasses import dataclass
+from typing import Union, overload
+
+from ..internal.resource import APIResource
+from ..models.extensions.pagination import PaginationDescription
+from ..models import models
+from ..models import primitives
+
+{% set ns = namespace() %}
+
+{% for layer in api_node.layers %}
+{% for next_node in layer.next %}
+from .{{ next_node | api_name | snake_case }} import _{{ next_node | api_name | pascal_case }}Methods
+{% endfor %}
+{% endfor %}
+
+{% for layer in api_node.layers %}
+
+@dataclass
+class {{ api_node.api | pascal_case }}{{ loop.index }}(APIResource{% for next_node in layer.next %}, _{{ next_node | api_name | pascal_case }}Methods{% endfor %}):
+    {% for param in layer.parameters %}
+    {{ param.name | snake_case }}: {{ get_type_hint(param.type) }}
+    {% endfor %}
+
+    {%- for op in layer.operations %}
+
+    def {{ op | method_name }}(self
+            {%- if op.extensions.input_parameters -%}
+            {%- for param in op.extensions.input_parameters.parameters %}, {{ param.name | snake_case }}{% if param.schema_ %}: {{ get_type_hint(param.schema_.type) }}{% endif %}{% endfor %}
+            {%- elif op.request_schemas -%}, req: {{ get_type_hint(*op.request_schemas, include_primitive_type=True) }}{% endif %}, **kwargs)
+            {%- if op.response_schemas | length > 0 %} -> {{ get_type_hint(*op.response_schemas) }}{% endif %}:
+        """
+        {% with ignore_path_params = True %}{% include 'templates/method_docstring.jinja' %}{% endwith %}
+        """
+        {% if op.extensions.response_stream %}
+        kwargs.setdefault('stream', True)
+
+        {% endif -%}
+
+        {% if op.extensions.input_parameters %}
+        req = {{ payload_from_input_parameters(op) }}
+
+        {% endif -%}
+
+        {# Add request schemas info #}
+        {% if op.request_schemas %}
+        req_content_types = [
+        {% for schema in op.request_schemas %}
+            ("{{ schema.content_type }}", {{ get_type_hint(schema) }}),
+        {% endfor %}
+        ]
+
+        {% endif -%}
+
+        {# Pagination description #}
+        {% set has_pagination = op.extensions and op.extensions.pagination and op.extensions.pagination.next %}
+        {% if has_pagination %}
+        pagination_info = PaginationDescription.parse_obj({{ op.extensions.pagination.next.dict(exclude_none=True) }})
+
+        {% endif -%}
+
+        {# Add information of query and header parameters if present. This will be used to evaluate runtime expressions. #}
+        {% set has_params_info = op.params_in('query') or op.params_in('header') %}
+        {% if has_pagination and has_params_info %}
+        param_types = {
+        {% for param_location in ['query', 'header'] %}
+        {% set params = op.params_in(param_location) %}
+        {% if params %}
+            '{{ param_location }}': {
+        {% for param in params %}
+                '{{ param.name }}': {{ get_type_hint(param.type) }},
+        {% endfor %}
+            },
+        {% endif %}
+        {% endfor %}
+        }
+
+        {% endif %}
+        {# Make request #}
+        resp = self._make_request("{{ op.name.upper() }}"{% if op.request_schemas %}, req, req_content_types=req_content_types{% endif %}, **kwargs)
+        {# Process and return response #}
+        return self._handle_response(resp, [
+        {% for schema in op.response_schemas %}
+            ({{ schema.code }}, "{{ schema.content_type }}", {{ get_type_hint(schema) }}),
+        {% endfor %}
+        ]{% if has_pagination %}, pagination_info=pagination_info{% if has_params_info %}, param_types=param_types{% endif %}{% endif %})
+    {% endfor %}
+
+    def _build_partial_path(self):
+        return f"{% if api_node.api %}/{% endif %}{{ api_node.api }}{% for param in layer.parameters %}/{self.{{ param.name | snake_case }}}{% endfor %}"
+
+{% endfor %}
+
+class _{{ api_node | api_name | pascal_case }}Methods:
+    """
+    This class declares and implements the `{{ api_node.api }}()` method.
+    """
+    {% for layer in api_node.layers %}
+
+    @overload
+    def {{ api_node.api | snake_case }}(self{% for param in layer.parameters %}, {{ param.name | snake_case }}: {{ get_type_hint(param.type) }}{% endfor %}) -> {{ api_node.api | pascal_case }}{{ loop.index }}:
+        ...
+    {% endfor %}
+
+    def {{ api_node.api | snake_case }}(self{% for param in api_node.params_set() %}, {{ param.name | snake_case }}: {{ get_type_hint(param.type) }}{% if param.name in optional_param_names %} = None{% endif %}{% endfor %}):
+        {% for layer in api_node.layers %}
+        {% if api_node.layers | length > 1 and layer.parameters | length > 1 or (has_layer_without_params and layer.parameters | length == 1) %}
+        if {% for param in layer.param_names() %}{% if param in optional_param_names %}{{ param | snake_case }} is not None {% if not loop.last %} and {% endif %}{% endif %}{% endfor %}:
+            return {{ api_node.api | pascal_case }}{{ loop.index }}({{ layer.param_names() | map('snake_case') | join (", ") }})._child_of(self)
+
+        {% elif optional_param_names | length > 0 %}
+        if {{ optional_param_names|map('snake_case') | join(" is None and ") }} is None:
+            return {{ api_node.api | pascal_case }}{{ loop.index }}({{ layer.param_names() | map('snake_case') | join(", ") }})._child_of(self)
+
+        {% else %}
+
+        {%- set ns.raise_stmt = False %}
+        return {{ api_node.api | pascal_case }}{{ loop.index }}({{ layer.param_names() | map('snake_case') | join(", ") }})._child_of(self)
+
+        {% endif %}
+        {% endfor  %}
+
+        {%- if ns.raise_stmt is not defined %}
+        raise ValueError("Invalid parameters")
+        {% endif %}

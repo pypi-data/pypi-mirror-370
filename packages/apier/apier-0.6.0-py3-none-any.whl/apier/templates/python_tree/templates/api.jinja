@@ -1,0 +1,177 @@
+from typing import Union
+from urllib.parse import urljoin
+
+import requests
+from pydantic import BaseModel
+
+from .models.exceptions import APIException
+{% if security_scheme_names %}
+from .security import SecurityStrategy, SecurityStrategyWithTokenExchange, {{ security_scheme_names | join(',') }}, SecurityStrategyNotSetError
+{% endif %}
+
+{% for branch in root_branches -%}
+    from .apis.{{ branch | api_name }} import _{{ branch | api_name | pascal_case }}Methods
+{% endfor %}
+
+
+class API(
+    {%- for branch in root_branches -%}
+        _{{ branch | api_name | pascal_case }}Methods
+        {%- if not loop.last %}, {% endif %}
+    {%- endfor %}):
+    """
+    The top-level class used as an abstraction of the {{ openapi.info.title }}.
+    """
+
+    def __init__(self, host: str{% if server_url %} = "{{ server_url }}"{% endif %}
+                 {% if security_scheme_names %},
+                 security_strategy: {{ get_type_hint(*security_scheme_names) }} = None{% endif %},
+                 verify: bool = True):
+        """
+        Creates a new API instance.
+
+        :param host: (optional) Host name of the {{ openapi.info.title }}.
+        {% if security_scheme_names %}
+        :param security_strategy: (optional) The security strategy for the API client.
+        {% endif %}
+        :param verify: (optional) Whether to verify the server's TLS certificate.
+        """
+        if not host.startswith("http://") and not host.startswith("https://"):
+            host = "https://" + host
+
+        self.host = host.rstrip("/")
+        self._verify = verify
+        self.headers = {}
+        self._raise_errors = {{ raise_errors }}
+
+    {% if security_scheme_names %}
+        self._security_strategy = security_strategy
+        if self._security_strategy:
+            self.with_security(self._security_strategy)
+
+    def with_security(self, security_strategy: {{ get_type_hint(*security_scheme_names) }}):
+        """
+        Sets the security strategy for the API client. If the provided security
+        strategy requires token exchange and retrieval, the method will retrieve
+        the access token automatically.
+
+        :param security_strategy: The security strategy to be set for the API client.
+        :type security_strategy: {{ get_type_hint(*security_scheme_names) }}
+        :return: The modified API client with the specified security strategy.
+        """
+        self._security_strategy = security_strategy
+
+        if isinstance(self._security_strategy, SecurityStrategyWithTokenExchange):
+            self._security_strategy.set_token_url_host(self.host)
+            self._security_strategy.set_verify_tls_certificate(self._verify)
+            self._security_strategy.get_token()
+
+        return self
+    {% endif %}
+
+    def make_request(
+        self,
+        method: str,
+        url: str,
+        data=None,
+        files: dict = None,
+        json=None,
+        params=None,
+        headers: dict = None,
+        timeout: float = 3,
+        {% if security_scheme_names %}auth: bool = True,{% endif %}
+        verify=None,
+        **kwargs,
+    ) -> requests.Response:
+        """
+        Makes a request to the API server.
+
+        :param method: HTTP request method used (`GET`, `OPTIONS`, `HEAD`,
+            `POST`, `PUT`, `PATCH`, or `DELETE`).
+        :param url: Request URL. It can be a relative path or a full URL (the
+            host used must be the same as the host in this :class:`API` instance).
+        :param body: (optional) Dictionary, list of tuples, bytes, or file-like
+            object to send in the body of the request.
+        :param files: (optional) Dictionary of files to send in the request.
+        :param params: (optional) Dictionary, list of tuples or bytes to send
+            in the query string for the :class:`Request`.
+        :param headers: (optional) Dictionary of HTTP headers to send.
+        :param timeout: (optional) How many seconds to wait for the server to
+            send data before giving up, as a float, or a `(connect timeout,
+            read timeout)` tuple.
+        :param auth: (optional) If True (default), the authentication token will
+            be sent in the request if a security strategy is set.
+        :param verify: (optional) If set as a boolean, it will override the API
+            verify value.
+        :return: An instance of :class:`request.Response`.
+        """
+        if headers is None:
+            headers = {}
+
+        headers.update(self.headers)
+
+        # If the payload is a pydantic model, handle it as JSON
+        if isinstance(data, BaseModel):
+            json = data.json(by_alias=True)
+        if isinstance(json, BaseModel):
+            json = json.json(by_alias=True)
+
+        if url.lower().startswith("http://") or url.lower().startswith("https://"):
+            url = url
+        else:
+            url = urljoin(self.host, url)
+
+        req = requests.Request(
+            method, url, params=params, headers=headers, data=data, json=json
+        )
+
+        {% if security_scheme_names %}
+        if auth and self._security_strategy:
+            self._security_strategy.apply(req)
+        {% endif %}
+
+        if verify is None:
+            verify = self._verify
+
+        if data and files:
+            # Try to import MultipartEncoder from requests_toolbelt to handle
+            # multipart/form-data encoding with file streams
+            try:
+                from requests_toolbelt import MultipartEncoder
+
+                data_encoded = {
+                    k: v if isinstance(v, bytes) else str(v)
+                    for k, v in data.items()
+                    if v is not None
+                }
+
+                m = MultipartEncoder(fields={**data_encoded, **files})
+                req.data = m
+                files = None
+
+                req.headers["Content-Type"] = m.content_type
+
+            except ImportError:
+                # Fallback to standard file upload handling
+                pass
+
+        return requests.request(
+            req.method,
+            req.url,
+            params=req.params,
+            headers=req.headers,
+            data=req.data,
+            files=files,
+            json=req.json,
+            timeout=timeout,
+            verify=verify,
+            **kwargs,
+        )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        if self._security_strategy:
+            self._security_strategy.clean()
+

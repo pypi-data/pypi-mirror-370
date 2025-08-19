@@ -1,0 +1,41 @@
+import json
+from typing import Union
+
+import requests
+from pydantic import BaseModel
+
+from ..api import API
+from ..models import models
+from ..models import primitives
+
+
+class APIOperations:
+    """
+    This class contains methods for each operation defined in the API specification.
+    """
+
+    def __init__(self, api: API):
+        self.api = api
+
+    {% for endpoint in endpoints %}
+    {% for op in endpoint.operations %}
+    {% if op.definition.operationId %}
+    def {{ op.definition.operationId | snake_case }}(self{% for param in op.params_in('path') %}, {{ param.name | snake_case }}: {{ get_type_hint(param.type) }}{% endfor %}
+            {%- if op.extensions.input_parameters -%}
+            {%- for param in op.extensions.input_parameters.parameters %}, {{ param.name | snake_case }}{% if param.schema_ %}: {{ get_type_hint(param.schema_.type) }}{% endif %}{% endfor %}
+            {%- elif op.request_schemas -%}, req: {{ get_type_hint(*op.request_schemas, include_primitive_type=True) }}{% endif %}, **kwargs)
+            {%- if op.response_schemas | length > 0 %} -> {{ get_type_hint(*op.response_schemas) }}{% endif %}:
+        """
+        {% include 'templates/method_docstring.jinja' %}
+        """
+        return self.api.{% for layer in chain_layers(api_tree, endpoint.path) %}
+        {{- layer.api_levels[0] | snake_case }}({% for param in layer.params_in('path') %}{{ param.name | snake_case }}{% if not loop.last %}, {% endif %}{% endfor %})
+        {%- if not loop.last %}.{% endif -%}
+        {%- endfor %}.{{ op | method_name }}(
+        {%- if op.extensions.input_parameters -%}
+        {%- for param in op.extensions.input_parameters.parameters %}{{ param.name | snake_case }}{% if param.schema_ %}{% endif %}, {% endfor %}
+        {%- elif op.request_schemas -%}req, {% endif %}**kwargs)
+
+    {% endif %}
+    {% endfor %}
+    {% endfor %}
