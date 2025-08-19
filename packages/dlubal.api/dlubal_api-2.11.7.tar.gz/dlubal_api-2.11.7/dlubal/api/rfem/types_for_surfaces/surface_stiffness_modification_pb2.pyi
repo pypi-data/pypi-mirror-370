@@ -1,0 +1,155 @@
+from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from typing import ClassVar as _ClassVar, Iterable as _Iterable, Optional as _Optional, Union as _Union
+
+DESCRIPTOR: _descriptor.FileDescriptor
+
+class SurfaceStiffnessModification(_message.Message):
+    __slots__ = ("no", "type", "user_defined_name_enabled", "name", "factor_of_total_stiffness", "factor_of_bending_stiffness", "factor_of_shear_stiffness", "factor_of_membrane_stiffness", "factor_of_eccentric_effects", "factor_of_weight", "kd11", "kd12", "kd13", "kd22", "kd23", "kd33", "kd44", "kd45", "kd55", "kd66", "kd67", "kd68", "kd77", "kd78", "kd88", "kd16", "kd17", "kd18", "kd27", "kd28", "kd38", "kd11_note", "kd12_note", "kd13_note", "kd22_note", "kd23_note", "kd33_note", "kd44_note", "kd45_note", "kd55_note", "kd66_note", "kd67_note", "kd68_note", "kd77_note", "kd78_note", "kd88_note", "kd16_note", "kd17_note", "kd18_note", "kd27_note", "kd28_note", "kd38_note", "assigned_to_structural_modification", "concrete_stuctures_component_type", "concrete_stuctures_bending_stiffness_factor", "comment", "is_generated", "generating_object_info", "id_for_export_import", "metadata_for_export_import")
+    class Type(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        TYPE_UNKNOWN: _ClassVar[SurfaceStiffnessModification.Type]
+        TYPE_CONCRETE_STRUCTURES_ACI: _ClassVar[SurfaceStiffnessModification.Type]
+        TYPE_CONCRETE_STRUCTURES_CSA: _ClassVar[SurfaceStiffnessModification.Type]
+        TYPE_PARTIAL_STIFFNESSES_FACTORS: _ClassVar[SurfaceStiffnessModification.Type]
+        TYPE_STIFFNESS_MATRIX_ELEMENTS_FACTORS: _ClassVar[SurfaceStiffnessModification.Type]
+        TYPE_TOTAL_STIFFNESS_FACTOR: _ClassVar[SurfaceStiffnessModification.Type]
+    TYPE_UNKNOWN: SurfaceStiffnessModification.Type
+    TYPE_CONCRETE_STRUCTURES_ACI: SurfaceStiffnessModification.Type
+    TYPE_CONCRETE_STRUCTURES_CSA: SurfaceStiffnessModification.Type
+    TYPE_PARTIAL_STIFFNESSES_FACTORS: SurfaceStiffnessModification.Type
+    TYPE_STIFFNESS_MATRIX_ELEMENTS_FACTORS: SurfaceStiffnessModification.Type
+    TYPE_TOTAL_STIFFNESS_FACTOR: SurfaceStiffnessModification.Type
+    class ConcreteStucturesComponentType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        CONCRETE_STUCTURES_COMPONENT_TYPE_UNKNOWN: _ClassVar[SurfaceStiffnessModification.ConcreteStucturesComponentType]
+        CONCRETE_STUCTURES_COMPONENT_TYPE_FLAT_PLATES_AND_FLAT_SLABS: _ClassVar[SurfaceStiffnessModification.ConcreteStucturesComponentType]
+        CONCRETE_STUCTURES_COMPONENT_TYPE_WALLS_CRACKED: _ClassVar[SurfaceStiffnessModification.ConcreteStucturesComponentType]
+        CONCRETE_STUCTURES_COMPONENT_TYPE_WALLS_UNCRACKED: _ClassVar[SurfaceStiffnessModification.ConcreteStucturesComponentType]
+    CONCRETE_STUCTURES_COMPONENT_TYPE_UNKNOWN: SurfaceStiffnessModification.ConcreteStucturesComponentType
+    CONCRETE_STUCTURES_COMPONENT_TYPE_FLAT_PLATES_AND_FLAT_SLABS: SurfaceStiffnessModification.ConcreteStucturesComponentType
+    CONCRETE_STUCTURES_COMPONENT_TYPE_WALLS_CRACKED: SurfaceStiffnessModification.ConcreteStucturesComponentType
+    CONCRETE_STUCTURES_COMPONENT_TYPE_WALLS_UNCRACKED: SurfaceStiffnessModification.ConcreteStucturesComponentType
+    NO_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    USER_DEFINED_NAME_ENABLED_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    FACTOR_OF_TOTAL_STIFFNESS_FIELD_NUMBER: _ClassVar[int]
+    FACTOR_OF_BENDING_STIFFNESS_FIELD_NUMBER: _ClassVar[int]
+    FACTOR_OF_SHEAR_STIFFNESS_FIELD_NUMBER: _ClassVar[int]
+    FACTOR_OF_MEMBRANE_STIFFNESS_FIELD_NUMBER: _ClassVar[int]
+    FACTOR_OF_ECCENTRIC_EFFECTS_FIELD_NUMBER: _ClassVar[int]
+    FACTOR_OF_WEIGHT_FIELD_NUMBER: _ClassVar[int]
+    KD11_FIELD_NUMBER: _ClassVar[int]
+    KD12_FIELD_NUMBER: _ClassVar[int]
+    KD13_FIELD_NUMBER: _ClassVar[int]
+    KD22_FIELD_NUMBER: _ClassVar[int]
+    KD23_FIELD_NUMBER: _ClassVar[int]
+    KD33_FIELD_NUMBER: _ClassVar[int]
+    KD44_FIELD_NUMBER: _ClassVar[int]
+    KD45_FIELD_NUMBER: _ClassVar[int]
+    KD55_FIELD_NUMBER: _ClassVar[int]
+    KD66_FIELD_NUMBER: _ClassVar[int]
+    KD67_FIELD_NUMBER: _ClassVar[int]
+    KD68_FIELD_NUMBER: _ClassVar[int]
+    KD77_FIELD_NUMBER: _ClassVar[int]
+    KD78_FIELD_NUMBER: _ClassVar[int]
+    KD88_FIELD_NUMBER: _ClassVar[int]
+    KD16_FIELD_NUMBER: _ClassVar[int]
+    KD17_FIELD_NUMBER: _ClassVar[int]
+    KD18_FIELD_NUMBER: _ClassVar[int]
+    KD27_FIELD_NUMBER: _ClassVar[int]
+    KD28_FIELD_NUMBER: _ClassVar[int]
+    KD38_FIELD_NUMBER: _ClassVar[int]
+    KD11_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD12_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD13_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD22_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD23_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD33_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD44_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD45_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD55_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD66_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD67_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD68_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD77_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD78_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD88_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD16_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD17_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD18_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD27_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD28_NOTE_FIELD_NUMBER: _ClassVar[int]
+    KD38_NOTE_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNED_TO_STRUCTURAL_MODIFICATION_FIELD_NUMBER: _ClassVar[int]
+    CONCRETE_STUCTURES_COMPONENT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    CONCRETE_STUCTURES_BENDING_STIFFNESS_FACTOR_FIELD_NUMBER: _ClassVar[int]
+    COMMENT_FIELD_NUMBER: _ClassVar[int]
+    IS_GENERATED_FIELD_NUMBER: _ClassVar[int]
+    GENERATING_OBJECT_INFO_FIELD_NUMBER: _ClassVar[int]
+    ID_FOR_EXPORT_IMPORT_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FOR_EXPORT_IMPORT_FIELD_NUMBER: _ClassVar[int]
+    no: int
+    type: SurfaceStiffnessModification.Type
+    user_defined_name_enabled: bool
+    name: str
+    factor_of_total_stiffness: float
+    factor_of_bending_stiffness: float
+    factor_of_shear_stiffness: float
+    factor_of_membrane_stiffness: float
+    factor_of_eccentric_effects: float
+    factor_of_weight: float
+    kd11: float
+    kd12: float
+    kd13: float
+    kd22: float
+    kd23: float
+    kd33: float
+    kd44: float
+    kd45: float
+    kd55: float
+    kd66: float
+    kd67: float
+    kd68: float
+    kd77: float
+    kd78: float
+    kd88: float
+    kd16: float
+    kd17: float
+    kd18: float
+    kd27: float
+    kd28: float
+    kd38: float
+    kd11_note: str
+    kd12_note: str
+    kd13_note: str
+    kd22_note: str
+    kd23_note: str
+    kd33_note: str
+    kd44_note: str
+    kd45_note: str
+    kd55_note: str
+    kd66_note: str
+    kd67_note: str
+    kd68_note: str
+    kd77_note: str
+    kd78_note: str
+    kd88_note: str
+    kd16_note: str
+    kd17_note: str
+    kd18_note: str
+    kd27_note: str
+    kd28_note: str
+    kd38_note: str
+    assigned_to_structural_modification: _containers.RepeatedScalarFieldContainer[int]
+    concrete_stuctures_component_type: SurfaceStiffnessModification.ConcreteStucturesComponentType
+    concrete_stuctures_bending_stiffness_factor: float
+    comment: str
+    is_generated: bool
+    generating_object_info: str
+    id_for_export_import: str
+    metadata_for_export_import: str
+    def __init__(self, no: _Optional[int] = ..., type: _Optional[_Union[SurfaceStiffnessModification.Type, str]] = ..., user_defined_name_enabled: bool = ..., name: _Optional[str] = ..., factor_of_total_stiffness: _Optional[float] = ..., factor_of_bending_stiffness: _Optional[float] = ..., factor_of_shear_stiffness: _Optional[float] = ..., factor_of_membrane_stiffness: _Optional[float] = ..., factor_of_eccentric_effects: _Optional[float] = ..., factor_of_weight: _Optional[float] = ..., kd11: _Optional[float] = ..., kd12: _Optional[float] = ..., kd13: _Optional[float] = ..., kd22: _Optional[float] = ..., kd23: _Optional[float] = ..., kd33: _Optional[float] = ..., kd44: _Optional[float] = ..., kd45: _Optional[float] = ..., kd55: _Optional[float] = ..., kd66: _Optional[float] = ..., kd67: _Optional[float] = ..., kd68: _Optional[float] = ..., kd77: _Optional[float] = ..., kd78: _Optional[float] = ..., kd88: _Optional[float] = ..., kd16: _Optional[float] = ..., kd17: _Optional[float] = ..., kd18: _Optional[float] = ..., kd27: _Optional[float] = ..., kd28: _Optional[float] = ..., kd38: _Optional[float] = ..., kd11_note: _Optional[str] = ..., kd12_note: _Optional[str] = ..., kd13_note: _Optional[str] = ..., kd22_note: _Optional[str] = ..., kd23_note: _Optional[str] = ..., kd33_note: _Optional[str] = ..., kd44_note: _Optional[str] = ..., kd45_note: _Optional[str] = ..., kd55_note: _Optional[str] = ..., kd66_note: _Optional[str] = ..., kd67_note: _Optional[str] = ..., kd68_note: _Optional[str] = ..., kd77_note: _Optional[str] = ..., kd78_note: _Optional[str] = ..., kd88_note: _Optional[str] = ..., kd16_note: _Optional[str] = ..., kd17_note: _Optional[str] = ..., kd18_note: _Optional[str] = ..., kd27_note: _Optional[str] = ..., kd28_note: _Optional[str] = ..., kd38_note: _Optional[str] = ..., assigned_to_structural_modification: _Optional[_Iterable[int]] = ..., concrete_stuctures_component_type: _Optional[_Union[SurfaceStiffnessModification.ConcreteStucturesComponentType, str]] = ..., concrete_stuctures_bending_stiffness_factor: _Optional[float] = ..., comment: _Optional[str] = ..., is_generated: bool = ..., generating_object_info: _Optional[str] = ..., id_for_export_import: _Optional[str] = ..., metadata_for_export_import: _Optional[str] = ...) -> None: ...

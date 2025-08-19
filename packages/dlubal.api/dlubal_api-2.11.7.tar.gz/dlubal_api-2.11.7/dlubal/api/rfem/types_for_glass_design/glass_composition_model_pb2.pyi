@@ -1,0 +1,201 @@
+from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from typing import ClassVar as _ClassVar, Iterable as _Iterable, Optional as _Optional, Union as _Union
+
+DESCRIPTOR: _descriptor.FileDescriptor
+
+class GlassCompositionModel(_message.Message):
+    __slots__ = ("calculation_type", "comment", "coupled_D11", "coupled_D12", "coupled_D13", "coupled_D16", "coupled_D17", "coupled_D18", "coupled_D22", "coupled_D23", "coupled_D27", "coupled_D28", "coupled_D33", "coupled_D38", "coupled_D44", "coupled_D45", "coupled_D55", "coupled_D66", "coupled_D67", "coupled_D68", "coupled_D77", "coupled_D78", "coupled_D88", "display_stiffness_matrix_for_uncoupled_and_coupled", "layers_surface_thickness", "layers_total_thickness", "layers_total_weight", "modeling_type", "name", "no", "shear_coupling_between_layers", "surface_area", "surface_geometry_type", "surface_mass", "surface_stiffness_type", "surface_thickness_with_material", "surface_total_area", "surface_total_mass", "surface_total_volume", "surface_volume", "surfaces", "to_design", "uncoupled_D11", "uncoupled_D12", "uncoupled_D13", "uncoupled_D16", "uncoupled_D17", "uncoupled_D18", "uncoupled_D22", "uncoupled_D23", "uncoupled_D27", "uncoupled_D28", "uncoupled_D33", "uncoupled_D38", "uncoupled_D44", "uncoupled_D45", "uncoupled_D55", "uncoupled_D66", "uncoupled_D67", "uncoupled_D68", "uncoupled_D77", "uncoupled_D78", "uncoupled_D88", "user_defined_name_enabled", "id_for_export_import", "metadata_for_export_import")
+    class CalculationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        CALCULATION_TYPE_1_PHASE_FULL_MODEL: _ClassVar[GlassCompositionModel.CalculationType]
+    CALCULATION_TYPE_1_PHASE_FULL_MODEL: GlassCompositionModel.CalculationType
+    class ModelingType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        MODELING_TYPE_SURFACE_MODEL: _ClassVar[GlassCompositionModel.ModelingType]
+    MODELING_TYPE_SURFACE_MODEL: GlassCompositionModel.ModelingType
+    class ShearCouplingBetweenLayers(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        SHEAR_COUPLING_BETWEEN_LAYERS_COUPLED: _ClassVar[GlassCompositionModel.ShearCouplingBetweenLayers]
+        SHEAR_COUPLING_BETWEEN_LAYERS_UNCOUPLED: _ClassVar[GlassCompositionModel.ShearCouplingBetweenLayers]
+    SHEAR_COUPLING_BETWEEN_LAYERS_COUPLED: GlassCompositionModel.ShearCouplingBetweenLayers
+    SHEAR_COUPLING_BETWEEN_LAYERS_UNCOUPLED: GlassCompositionModel.ShearCouplingBetweenLayers
+    class SurfaceGeometryType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        SURFACE_GEOMETRY_TYPE_UNKNOWN: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+        SURFACE_GEOMETRY_TYPE_MINIMUM_CURVATURE_SPLINE: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+        SURFACE_GEOMETRY_TYPE_NURBS: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+        SURFACE_GEOMETRY_TYPE_PIPE: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+        SURFACE_GEOMETRY_TYPE_PLANE: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+        SURFACE_GEOMETRY_TYPE_QUADRANGLE: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+        SURFACE_GEOMETRY_TYPE_ROTATED: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+        SURFACE_GEOMETRY_TYPE_TRIMMED: _ClassVar[GlassCompositionModel.SurfaceGeometryType]
+    SURFACE_GEOMETRY_TYPE_UNKNOWN: GlassCompositionModel.SurfaceGeometryType
+    SURFACE_GEOMETRY_TYPE_MINIMUM_CURVATURE_SPLINE: GlassCompositionModel.SurfaceGeometryType
+    SURFACE_GEOMETRY_TYPE_NURBS: GlassCompositionModel.SurfaceGeometryType
+    SURFACE_GEOMETRY_TYPE_PIPE: GlassCompositionModel.SurfaceGeometryType
+    SURFACE_GEOMETRY_TYPE_PLANE: GlassCompositionModel.SurfaceGeometryType
+    SURFACE_GEOMETRY_TYPE_QUADRANGLE: GlassCompositionModel.SurfaceGeometryType
+    SURFACE_GEOMETRY_TYPE_ROTATED: GlassCompositionModel.SurfaceGeometryType
+    SURFACE_GEOMETRY_TYPE_TRIMMED: GlassCompositionModel.SurfaceGeometryType
+    class SurfaceStiffnessType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        SURFACE_STIFFNESS_TYPE_STANDARD: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_DISCONTINUITY: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_FLOOR: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_FLOOR_DIAPHRAGM: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_FLOOR_FLEXIBLE_DIAPHRAGM: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_FLOOR_SEMIRIGID: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_GROUNDWATER: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_LOAD_TRANSFER: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_MEMBRANE: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_RIGID: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_WITHOUT_MEMBRANE_TENSION: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+        SURFACE_STIFFNESS_TYPE_WITHOUT_THICKNESS: _ClassVar[GlassCompositionModel.SurfaceStiffnessType]
+    SURFACE_STIFFNESS_TYPE_STANDARD: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_DISCONTINUITY: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_FLOOR: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_FLOOR_DIAPHRAGM: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_FLOOR_FLEXIBLE_DIAPHRAGM: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_FLOOR_SEMIRIGID: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_GROUNDWATER: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_LOAD_TRANSFER: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_MEMBRANE: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_RIGID: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_WITHOUT_MEMBRANE_TENSION: GlassCompositionModel.SurfaceStiffnessType
+    SURFACE_STIFFNESS_TYPE_WITHOUT_THICKNESS: GlassCompositionModel.SurfaceStiffnessType
+    CALCULATION_TYPE_FIELD_NUMBER: _ClassVar[int]
+    COMMENT_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D11_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D12_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D13_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D16_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D17_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D18_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D22_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D23_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D27_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D28_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D33_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D38_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D44_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D45_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D55_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D66_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D67_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D68_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D77_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D78_FIELD_NUMBER: _ClassVar[int]
+    COUPLED_D88_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_STIFFNESS_MATRIX_FOR_UNCOUPLED_AND_COUPLED_FIELD_NUMBER: _ClassVar[int]
+    LAYERS_SURFACE_THICKNESS_FIELD_NUMBER: _ClassVar[int]
+    LAYERS_TOTAL_THICKNESS_FIELD_NUMBER: _ClassVar[int]
+    LAYERS_TOTAL_WEIGHT_FIELD_NUMBER: _ClassVar[int]
+    MODELING_TYPE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    NO_FIELD_NUMBER: _ClassVar[int]
+    SHEAR_COUPLING_BETWEEN_LAYERS_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_AREA_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_GEOMETRY_TYPE_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_MASS_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_STIFFNESS_TYPE_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_THICKNESS_WITH_MATERIAL_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_TOTAL_AREA_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_TOTAL_MASS_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_TOTAL_VOLUME_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_VOLUME_FIELD_NUMBER: _ClassVar[int]
+    SURFACES_FIELD_NUMBER: _ClassVar[int]
+    TO_DESIGN_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D11_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D12_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D13_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D16_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D17_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D18_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D22_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D23_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D27_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D28_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D33_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D38_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D44_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D45_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D55_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D66_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D67_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D68_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D77_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D78_FIELD_NUMBER: _ClassVar[int]
+    UNCOUPLED_D88_FIELD_NUMBER: _ClassVar[int]
+    USER_DEFINED_NAME_ENABLED_FIELD_NUMBER: _ClassVar[int]
+    ID_FOR_EXPORT_IMPORT_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FOR_EXPORT_IMPORT_FIELD_NUMBER: _ClassVar[int]
+    calculation_type: GlassCompositionModel.CalculationType
+    comment: str
+    coupled_D11: float
+    coupled_D12: float
+    coupled_D13: float
+    coupled_D16: float
+    coupled_D17: float
+    coupled_D18: float
+    coupled_D22: float
+    coupled_D23: float
+    coupled_D27: float
+    coupled_D28: float
+    coupled_D33: float
+    coupled_D38: float
+    coupled_D44: float
+    coupled_D45: float
+    coupled_D55: float
+    coupled_D66: float
+    coupled_D67: float
+    coupled_D68: float
+    coupled_D77: float
+    coupled_D78: float
+    coupled_D88: float
+    display_stiffness_matrix_for_uncoupled_and_coupled: bool
+    layers_surface_thickness: int
+    layers_total_thickness: float
+    layers_total_weight: float
+    modeling_type: GlassCompositionModel.ModelingType
+    name: str
+    no: int
+    shear_coupling_between_layers: GlassCompositionModel.ShearCouplingBetweenLayers
+    surface_area: float
+    surface_geometry_type: GlassCompositionModel.SurfaceGeometryType
+    surface_mass: float
+    surface_stiffness_type: GlassCompositionModel.SurfaceStiffnessType
+    surface_thickness_with_material: int
+    surface_total_area: float
+    surface_total_mass: float
+    surface_total_volume: float
+    surface_volume: float
+    surfaces: _containers.RepeatedScalarFieldContainer[int]
+    to_design: bool
+    uncoupled_D11: float
+    uncoupled_D12: float
+    uncoupled_D13: float
+    uncoupled_D16: float
+    uncoupled_D17: float
+    uncoupled_D18: float
+    uncoupled_D22: float
+    uncoupled_D23: float
+    uncoupled_D27: float
+    uncoupled_D28: float
+    uncoupled_D33: float
+    uncoupled_D38: float
+    uncoupled_D44: float
+    uncoupled_D45: float
+    uncoupled_D55: float
+    uncoupled_D66: float
+    uncoupled_D67: float
+    uncoupled_D68: float
+    uncoupled_D77: float
+    uncoupled_D78: float
+    uncoupled_D88: float
+    user_defined_name_enabled: bool
+    id_for_export_import: str
+    metadata_for_export_import: str
+    def __init__(self, calculation_type: _Optional[_Union[GlassCompositionModel.CalculationType, str]] = ..., comment: _Optional[str] = ..., coupled_D11: _Optional[float] = ..., coupled_D12: _Optional[float] = ..., coupled_D13: _Optional[float] = ..., coupled_D16: _Optional[float] = ..., coupled_D17: _Optional[float] = ..., coupled_D18: _Optional[float] = ..., coupled_D22: _Optional[float] = ..., coupled_D23: _Optional[float] = ..., coupled_D27: _Optional[float] = ..., coupled_D28: _Optional[float] = ..., coupled_D33: _Optional[float] = ..., coupled_D38: _Optional[float] = ..., coupled_D44: _Optional[float] = ..., coupled_D45: _Optional[float] = ..., coupled_D55: _Optional[float] = ..., coupled_D66: _Optional[float] = ..., coupled_D67: _Optional[float] = ..., coupled_D68: _Optional[float] = ..., coupled_D77: _Optional[float] = ..., coupled_D78: _Optional[float] = ..., coupled_D88: _Optional[float] = ..., display_stiffness_matrix_for_uncoupled_and_coupled: bool = ..., layers_surface_thickness: _Optional[int] = ..., layers_total_thickness: _Optional[float] = ..., layers_total_weight: _Optional[float] = ..., modeling_type: _Optional[_Union[GlassCompositionModel.ModelingType, str]] = ..., name: _Optional[str] = ..., no: _Optional[int] = ..., shear_coupling_between_layers: _Optional[_Union[GlassCompositionModel.ShearCouplingBetweenLayers, str]] = ..., surface_area: _Optional[float] = ..., surface_geometry_type: _Optional[_Union[GlassCompositionModel.SurfaceGeometryType, str]] = ..., surface_mass: _Optional[float] = ..., surface_stiffness_type: _Optional[_Union[GlassCompositionModel.SurfaceStiffnessType, str]] = ..., surface_thickness_with_material: _Optional[int] = ..., surface_total_area: _Optional[float] = ..., surface_total_mass: _Optional[float] = ..., surface_total_volume: _Optional[float] = ..., surface_volume: _Optional[float] = ..., surfaces: _Optional[_Iterable[int]] = ..., to_design: bool = ..., uncoupled_D11: _Optional[float] = ..., uncoupled_D12: _Optional[float] = ..., uncoupled_D13: _Optional[float] = ..., uncoupled_D16: _Optional[float] = ..., uncoupled_D17: _Optional[float] = ..., uncoupled_D18: _Optional[float] = ..., uncoupled_D22: _Optional[float] = ..., uncoupled_D23: _Optional[float] = ..., uncoupled_D27: _Optional[float] = ..., uncoupled_D28: _Optional[float] = ..., uncoupled_D33: _Optional[float] = ..., uncoupled_D38: _Optional[float] = ..., uncoupled_D44: _Optional[float] = ..., uncoupled_D45: _Optional[float] = ..., uncoupled_D55: _Optional[float] = ..., uncoupled_D66: _Optional[float] = ..., uncoupled_D67: _Optional[float] = ..., uncoupled_D68: _Optional[float] = ..., uncoupled_D77: _Optional[float] = ..., uncoupled_D78: _Optional[float] = ..., uncoupled_D88: _Optional[float] = ..., user_defined_name_enabled: bool = ..., id_for_export_import: _Optional[str] = ..., metadata_for_export_import: _Optional[str] = ...) -> None: ...
