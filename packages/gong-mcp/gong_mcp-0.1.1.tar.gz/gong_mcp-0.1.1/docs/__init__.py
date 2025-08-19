@@ -1,0 +1,1 @@
+"""Documentation for gong-mcp."""
