@@ -1,0 +1,167 @@
+# Medical LLM Fine-tuning Configuration
+# Mac M2/M3 Apple Silicon Optimized Version
+
+# Model Configuration
+model:
+  name: "Qwen/Qwen3-4B-Thinking-2507"
+  cache_dir: "./model_cache"
+  trust_remote_code: true
+  torch_dtype: "float16"  # More stable for MPS
+  device_map: null  # MPS doesn't support auto device_map
+
+# Fine-tuning Configuration
+training:
+  # LoRA Configuration - Apple Silicon Optimized
+  lora:
+    r: 16  # Reduced to save memory
+    alpha: 32
+    dropout: 0.1
+    target_modules: 
+      - "q_proj"
+      - "k_proj" 
+      - "v_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+    bias: "none"
+    task_type: "CAUSAL_LM"
+  
+  # QLoRA Quantization Configuration - May be unstable on Mac M2, recommended to disable
+  quantization:
+    load_in_4bit: false  # Recommended to disable on Mac M2
+    bnb_4bit_use_double_quant: false
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_compute_dtype: "float16"
+  
+  # Training Parameters - Mac M2 Optimized
+  parameters:
+    num_train_epochs: 3
+    per_device_train_batch_size: 1  # Recommended for Mac M2
+    per_device_eval_batch_size: 1
+    gradient_accumulation_steps: 8  # Increased to compensate for small batch size
+    learning_rate: 2.0e-4
+    warmup_steps: 50
+    max_length: 2048  # Reduced to save memory
+    
+  # Optimizer and Scheduler
+  optimizer:
+    type: "adamw_torch"
+    weight_decay: 0.01
+    
+  scheduler:
+    type: "cosine"
+    warmup_ratio: 0.03
+
+# Data Configuration
+data:
+  input_file: "output.json"
+  processed_dir: "processed_data"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  max_samples: 1000  # Limit sample count for Mac M2
+  augmentation:
+    enabled: false  # Disabled to save resources
+
+# RAG Configuration - Updated for RAG-Anything
+rag:
+  # RAG-Anything settings
+  working_dir: "./medical_rag_workspace"
+  api_key_env: "OPENAI_API_KEY"  # Environment variable for API key
+  base_url_env: "OPENAI_BASE_URL"  # Environment variable for base URL
+  model_name: "gpt-4o-mini"
+  
+  # Document parsing settings
+  parser: "mineru"  # "mineru" or "docling"
+  parse_method: "auto"  # "auto", "ocr", "txt"
+  
+  # Chunking and retrieval settings
+  chunk_size: 1200
+  chunk_overlap: 100
+  top_k: 5
+  
+  # Search modes for different use cases
+  search_modes:
+    default: "hybrid"  # "naive", "local", "global", "hybrid"
+    quick: "local"
+    comprehensive: "global"
+  
+  # Multimodal processing settings
+  multimodal:
+    process_images: true
+    process_tables: true
+    process_equations: true
+    image_description_detail: "medium"  # "low", "medium", "high"
+  
+  # Legacy settings for backward compatibility
+  legacy:
+    embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+    vector_db_path: "./vector_db"
+    similarity_threshold: 0.7
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - "precision"
+    - "recall" 
+    - "f1"
+    - "accuracy"
+  entity_types:
+    - "Bacteria"
+    - "Disease"
+    - "Evidence"
+  relation_types:
+    - "is_a"
+    - "biomarker_for"
+    - "correlated_with"
+    - "has_relationship"
+
+# Output Configuration
+output:
+  model_dir: "./medical_llm_output"
+  results_dir: "./evaluation_results"
+  logs_dir: "./logs"
+  save_steps: 100  # More frequent saves
+  eval_steps: 100
+  logging_steps: 10
+
+# Hardware Configuration - Mac M2 Optimized
+hardware:
+  use_gpu: true  # Use MPS
+  mixed_precision: "fp16"  # Recommended for MPS
+  gradient_checkpointing: true
+  dataloader_num_workers: 2  # Reduced to avoid memory issues
+  pin_memory: false
+
+# Wandb Configuration
+wandb:
+  project: "medical-llm-finetune-mac-m2"
+  entity: null  # Enter your wandb username
+  tags: 
+    - "qwen3"
+    - "thinking-model"
+    - "medical-ner"
+    - "relation-extraction"
+    - "apple-silicon"
+    - "mac-m2"
+  notes: "Medical entity and relation extraction with Qwen3-4B-Thinking-2507 on Apple Silicon"
+
+# Mac M2 Special Configuration
+mac_m2:
+  # Memory Management
+  max_memory_usage: 0.8  # Use 80% of available memory
+  
+  # Training Strategy
+  use_unsloth: false  # Auto-disable if Unsloth unavailable
+  fallback_to_cpu: false  # Prefer MPS
+  
+  # Performance Optimization
+  enable_mps_fallback: true  # Allow MPS fallback to CPU
+  
+  # Recommended Settings
+  recommended_settings:
+    batch_size: 1
+    gradient_accumulation: 8
+    max_length: 1024
+    save_frequency: 100

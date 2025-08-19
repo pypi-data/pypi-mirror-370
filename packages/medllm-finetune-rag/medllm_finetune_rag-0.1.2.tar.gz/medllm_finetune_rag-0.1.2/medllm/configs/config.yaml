@@ -1,0 +1,119 @@
+# 医学大语言模型微调配置文件
+# 适配Qwen3-4B-Thinking-2507模型
+
+# 模型配置
+model:
+  name: "Qwen/Qwen3-4B-Thinking-2507"
+  cache_dir: "./model_cache"
+  trust_remote_code: true
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+
+# 微调配置
+training:
+  # LoRA配置
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.1
+    target_modules:
+      - "q_proj"
+      - "k_proj"
+      - "v_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+    bias: "none"
+    task_type: "CAUSAL_LM"
+
+  # QLoRA量化配置
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_compute_dtype: "bfloat16"
+
+  # 训练参数
+  parameters:
+    num_train_epochs: 3
+    per_device_train_batch_size: 2
+    per_device_eval_batch_size: 2
+    gradient_accumulation_steps: 4
+    learning_rate: 2.0e-4
+    warmup_steps: 100
+    max_length: 2048
+
+  # 优化器和调度器
+  optimizer:
+    type: "adamw_torch"
+    weight_decay: 0.01
+
+  scheduler:
+    type: "cosine"
+    warmup_ratio: 0.03
+
+# 数据配置
+data:
+  input_file: "output.json"
+  processed_dir: "processed_data"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  max_samples: null  # null表示使用全部数据
+  augmentation:
+    enabled: true
+    ratio: 0.2
+
+# RAG配置
+rag:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  vector_db_path: "./vector_db"
+  top_k: 3
+  similarity_threshold: 0.7
+
+# 评估配置
+evaluation:
+  metrics:
+    - "precision"
+    - "recall"
+    - "f1"
+    - "accuracy"
+  entity_types:
+    - "Bacteria"
+    - "Disease"
+    - "Evidence"
+  relation_types:
+    - "is_a"
+    - "biomarker_for"
+    - "correlated_with"
+    - "has_relationship"
+
+# 输出配置
+output:
+  model_dir: "./medical_llm_output"
+  results_dir: "./evaluation_results"
+  logs_dir: "./logs"
+  save_steps: 500
+  eval_steps: 500
+  logging_steps: 10
+
+# 硬件配置
+hardware:
+  use_gpu: true
+  mixed_precision: "bf16"
+  gradient_checkpointing: true
+  dataloader_num_workers: 4
+  pin_memory: false
+
+# Wandb配置
+wandb:
+  project: "medical-llm-finetune"
+  entity: null  # 填入你的wandb用户名
+  tags:
+    - "qwen3"
+    - "thinking-model"
+    - "medical-ner"
+    - "relation-extraction"
+  notes: "Medical entity and relation extraction with Qwen3-4B-Thinking-2507"
+
