@@ -1,0 +1,118 @@
+# Ara_core
+
+Ara.Core is a lightweight Python framework for building interactive applications with GLFW.
+It provides an easy way to manage windows, handle input, integrate modules, and run the main loop with logging and error handling out of the box.
+
+---
+
+Features
+
+Window Management – Create and control an OpenGL context window.
+
+Input Handling – High-level API for keyboard and mouse state:
+
+pressed, down, and up queries for keys and mouse buttons
+
+Cursor locking, movement delta, and scroll tracking
+
+
+Module System – Plug in custom modules with lifecycle methods:
+
+init(), process_input(), render(), update(), terminate()
+
+
+Timing Utilities – Frame delta (dt), elapsed time, and FPS measurement.
+
+Logging – Integrated logging system with configurable levels.
+
+Callbacks – Flexible frame_ui, callback, and terminate hooks in the main loop.
+
+
+---
+
+Quick Start
+```
+from ara_core import App
+
+# Create application instance
+app = App(title="My First App", width=1280, height=720, log_level="info")
+
+def frame_ui(app):
+    print("UI frame")
+
+def callback(app):
+    print(f"Frame time: {app.dt()}")
+
+def terminate(app):
+    print("Cleanup done!")
+
+# Run with custom callbacks
+app.run(frame_ui, callback, terminate)
+```
+---
+
+Input API
+```py
+app.key_pressed("w")      # True while 'W' is held
+app.key_down("space")     # True only on the frame space was pressed
+app.key_up("escape")      # True only on the frame escape was released
+
+app.mouse_button_pressed("left")
+pos = app.get_mouse_pos()
+dx, dy = app.get_mouse_delta()
+scroll = app.get_mouse_scroll()
+```
+
+---
+
+Module System
+
+Modules can be classes or instances.
+They may implement any of the lifecycle methods:
+```py
+class ExampleModule:
+    def __init__(self, app): self.app = app
+    def init(self): print("Module initialized")
+    def process_input(self): pass
+    def render(self): pass
+    def update(self): pass
+    def terminate(self): print("Module terminated")
+
+app.add_module(ExampleModule)
+```
+
+---
+
+Utilities
+
+app.close() – close the window
+
+app.time() – elapsed time since start
+
+app.dt() – delta time of last frame
+
+app.fps() – current frames per second
+
+
+---
+
+Requirements
+
+Python 3.8+
+
+GLFW
+
+Ara_log
+
+Install dependencies:
+
+pip install glfw, pyopengl, ara_log
+
+
+---
+
+License
+
+MIT License.
+Feel free to use and modify for your projects.
+
