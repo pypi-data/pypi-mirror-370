@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""
+Main GUI window for Emailer Simple Tool
+Professional implementation with proper structure
+"""
+
+import sys
+from pathlib import Path
+from typing import Optional
+
+try:
+    from PySide6.QtWidgets import (
+        QApplication, QMainWindow, QTabWidget, QWidget, 
+        QVBoxLayout, QStatusBar, QHBoxLayout, QPushButton, QMenu
+    )
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QFont, QIcon, QAction
+except ImportError:
+    raise ImportError("PySide6 not available. Install with: pip install PySide6")
+
+# Import our tab components
+from .tabs.campaign_tab import CampaignTab
+from .tabs.smtp_tab import SMTPTab
+from .tabs.picture_tab import PictureTab
+from .tabs.send_tab import SendTab
+
+# Import core modules
+from ..core.campaign_manager import CampaignManager
+
+# Import translation manager
+from .translation_manager import translation_manager
+
+
+class EmailerMainWindow(QMainWindow):
+    """Main GUI window for Emailer Simple Tool"""
+    
+    def __init__(self):
+        super().__init__()
+        self.campaign_manager = CampaignManager()
+        
+        # Initialize translation system
+        self.translation_manager = translation_manager
+        
+        self.init_ui()
+        self.apply_styling()
+        
+        # Apply initial language
+        self.apply_current_language()
+    
+    def init_ui(self):
+        """Initialize the user interface"""
+        self.setWindowTitle("Emailer Simple Tool v5.0.1")
+        
+        # Set initial size and make window resizable
+        self.resize(1400, 900)  # Initial size (resizable)
+        self.setMinimumSize(1000, 600)  # Minimum size for usability
+        # No maximum size - let users resize as large as they want
+        
+        # Create central widget with tabs
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        layout = QVBoxLayout()
+        
+        # Add language selector at the top
+        top_bar = self.create_top_bar()
+        layout.addWidget(top_bar)
+        
+        # Create tab widget
+        self.tabs = QTabWidget()
+        
+        # Create and add tabs in the correct order: Campaign → Pictures → Send → SMTP
+        self.campaign_tab = CampaignTab(self.campaign_manager)
+        self.smtp_tab = SMTPTab(self.campaign_manager)
+        self.picture_tab = PictureTab(self.campaign_manager)
+        self.send_tab = SendTab(self.campaign_manager)
+        
+        # Add tabs in the desired order: Campaign → Pictures → Send → SMTP (SMTP last)
+        self.tabs.addTab(self.campaign_tab, "📁 Campaign")
+        self.tabs.addTab(self.picture_tab, "🖼️ Pictures")
+        self.tabs.addTab(self.send_tab, "🚀 Send")
+        self.tabs.addTab(self.smtp_tab, "📧 SMTP")
+        
+        # Connect tab change signal
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+        
+        layout.addWidget(self.tabs)
+        central_widget.setLayout(layout)
+        
+        # Create status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("Ready - Select a campaign folder to get started")
+    
+    def create_top_bar(self):
+        """Create top bar with language selector"""
+        top_bar = QWidget()
+        top_layout = QHBoxLayout()
+        top_layout.setContentsMargins(10, 5, 10, 5)
+        
+        # Add stretch to push language selector to the right
+        top_layout.addStretch()
+        
+        # Language selector button
+        self.language_button = QPushButton()
+        self.language_button.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: 500;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+            QPushButton:pressed {
+                background-color: #495057;
+            }
+        """)
+        
+        # Create language menu
+        self.language_menu = QMenu()
+        
+        # Add language options
+        for lang_code, lang_name in self.translation_manager.get_supported_languages().items():
+            action = QAction(f"🌐 {lang_name}", self)
+            action.setData(lang_code)
+            action.triggered.connect(lambda checked, code=lang_code: self.change_language(code))
+            self.language_menu.addAction(action)
+        
+        self.language_button.setMenu(self.language_menu)
+        
+        top_layout.addWidget(self.language_button)
+        top_bar.setLayout(top_layout)
+        
+        return top_bar
+    
+    def apply_current_language(self):
+        """Apply current language to UI elements"""
+        current_lang = self.translation_manager.get_current_language()
+        supported_langs = self.translation_manager.get_supported_languages()
+        
+        # Update language button text
+        if current_lang in supported_langs:
+            self.language_button.setText(f"🌐 {supported_langs[current_lang]}")
+        
+        # Update tab titles (these will be translated if translations exist)
+        self.update_tab_titles()
+        
+        # Update status bar message
+        self.status_bar.showMessage(self.tr("Ready - Select a campaign folder to get started"))
+    
+    def update_tab_titles(self):
+        """Update tab titles with current language"""
+        # Note: Tab titles are not currently in the translation system
+        # They could be added to the .ts file if needed
+        tab_titles = [
+            "📁 Campaign",
+            "📧 SMTP", 
+            "🖼️ Pictures",
+            "🚀 Send"
+        ]
+        
+        for i, title in enumerate(tab_titles):
+            self.tabs.setTabText(i, title)
+    
+    def change_language(self, language_code: str):
+        """Change application language"""
+        if self.translation_manager.set_language(language_code):
+            print(f"🌐 Language changed to: {self.translation_manager.get_supported_languages()[language_code]}")
+            
+            # Update UI elements
+            self.apply_current_language()
+            
+            # Force refresh of all widgets that use translations
+            # This is a simple approach - in a more complex app you might emit a signal
+            self.refresh_translations()
+        else:
+            print(f"❌ Failed to change language to: {language_code}")
+    
+    def refresh_translations(self):
+        """Refresh all translatable UI elements"""
+        # The tabs will automatically refresh their translations when they detect language change
+        # This is handled by Qt's translation system
+        
+        # Update window title if it has translatable parts
+        self.setWindowTitle("Emailer Simple Tool v5.0.1")
+        
+        # Update status bar
+        self.status_bar.showMessage(self.tr("Ready - Select a campaign folder to get started"))
+        
+        # Force update of all child widgets
+        self.update()
+    
+    def tr(self, text: str) -> str:
+        """Translate text using translation manager"""
+        return self.translation_manager.tr(text, "MainWindow")
+    
+    def on_tab_changed(self, index):
+        """Handle tab change events"""
+        tab_names = ["Campaign", "SMTP", "Pictures", "Send"]
+        if 0 <= index < len(tab_names):
+            self.status_bar.showMessage(f"{tab_names[index]} tab active")
+    
+    def apply_styling(self):
+        """Apply modern styling to the application"""
+        # Load styles from external file or define here
+        style_sheet = """
+            QMainWindow {
+                background-color: #f8f9fa;
+            }
+            
+            QTabWidget::pane {
+                border: 1px solid #dee2e6;
+                background-color: white;
+                border-radius: 4px;
+            }
+            
+            QTabBar::tab {
+                background-color: #e9ecef;
+                padding: 12px 20px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                font-weight: 500;
+            }
+            
+            QTabBar::tab:selected {
+                background-color: white;
+                border-bottom: 3px solid #28a745;
+                color: #28a745;
+            }
+            
+            QTabBar::tab:hover {
+                background-color: #f8f9fa;
+            }
+            
+            QGroupBox {
+                font-weight: 600;
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                margin-top: 1ex;
+                padding-top: 15px;
+                background-color: white;
+            }
+            
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 8px 0 8px;
+                color: #495057;
+            }
+            
+            QPushButton {
+                background-color: #007bff;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-weight: 500;
+            }
+            
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+            
+            QPushButton:pressed {
+                background-color: #004085;
+            }
+            
+            QLineEdit, QTextEdit, QSpinBox {
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                padding: 8px;
+                background-color: white;
+            }
+            
+            QLineEdit:focus, QTextEdit:focus, QSpinBox:focus {
+                border-color: #80bdff;
+            }
+            
+            QTableWidget {
+                gridline-color: #dee2e6;
+                background-color: white;
+                alternate-background-color: #f8f9fa;
+            }
+            
+            QTableWidget::item {
+                padding: 8px;
+            }
+            
+            QTreeWidget {
+                background-color: white;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+            }
+            
+            QProgressBar {
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #e9ecef;
+            }
+            
+            QProgressBar::chunk {
+                background-color: #28a745;
+                border-radius: 3px;
+            }
+            
+            QStatusBar {
+                background-color: #f8f9fa;
+                border-top: 1px solid #dee2e6;
+            }
+        """
+        
+        self.setStyleSheet(style_sheet)
+
+
+def main():
+    """Main entry point for GUI application"""
+    app = QApplication(sys.argv)
+    app.setApplicationName("Emailer Simple Tool")
+    app.setApplicationVersion("5.0.1")
+    app.setApplicationDisplayName("Emailer Simple Tool")
+    
+    # Initialize translation system
+    translation_manager.set_language(translation_manager.get_current_language())
+    
+    # Set application icon if available
+    # app.setWindowIcon(QIcon("path/to/icon.png"))
+    
+    try:
+        window = EmailerMainWindow()
+        window.show()
+        
+        print("🚀 Emailer Simple Tool GUI launched successfully!")
+        print(f"🌐 Current language: {translation_manager.get_supported_languages()[translation_manager.get_current_language()]}")
+        return app.exec()
+        
+    except Exception as e:
+        print(f"❌ Error launching GUI: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
