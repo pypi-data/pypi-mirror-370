@@ -1,0 +1,3 @@
+import audiosnatch
+
+audiosnatch.main()
