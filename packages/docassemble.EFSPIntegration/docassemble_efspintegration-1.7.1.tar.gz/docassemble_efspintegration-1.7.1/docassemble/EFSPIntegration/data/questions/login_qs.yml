@@ -1,0 +1,315 @@
+---
+comment: |
+  This file requires the following variables:
+  * `jurisdiction_id`
+---
+objects:
+  - da_store: DAStore
+---
+modules:
+  - .conversions
+  - .interview_logic
+  - .efm_client
+---
+include:
+  - unauthenticated_actions.yml
+---
+code: |
+  logged_out_interview = "docassemble.EFSPIntegration:unauthenticated_interview.yml"
+---
+code: |
+  AL_DEFAULT_COUNTRY = "US"
+---
+code: |
+  AL_DEFAULT_STATE = None
+---
+id: eFile Login
+question: |
+  eFile${ state_name_to_code(jurisdiction_id) } Login Info
+subquestion: |
+  Provide your eFile ${ jurisdiction_id.title() } Login information. If you don't yet have a login, you can create
+  <a href="${ interview_url(i=logged_out_interview, reset=1, jurisdiction_id=jurisdiction_id) }" target="_blank">a new account here</a>.
+fields:
+  - email/username: my_username
+  - password: my_password
+    datatype: ALVisiblePassword
+    hide if: user_forgot_password
+  - I forgot my password: user_forgot_password
+    datatype: yesno
+---
+code: |
+  if showifdef('user_forgot_password'):
+    tyler_reset_password_resp = proxy_conn.reset_user_password(my_username)
+    reset_password_screen
+  else:
+    tyler_login_resp = proxy_conn.authenticate_user(tyler_email=my_username, tyler_password=my_password)
+    del my_password
+    if not tyler_login_resp.is_ok():
+      if int(tyler_login_resp.response_code) != 403:
+        log_error_and_notify('Failed to login', tyler_login_resp)
+      else:
+        log(f'Failed to login: {tyler_login_resp}')
+      login_failed_screen
+    else:
+      log(word("You are now connected to your e-filing account"), "primary")
+  tyler_login = True
+---
+need:
+  - proxy_conn
+  - da_store
+code: |
+    tyler_header_name = f"TYLER-TOKEN-{jurisdiction_id.upper()}"
+    tyler_id_name = f"TYLER-ID-{jurisdiction_id}"
+    try:
+      if da_store.defined("EFSP-" + tyler_header_name):
+        proxy_conn.proxy_client.headers[tyler_header_name] = da_store.get("EFSP-" + tyler_header_name)
+        proxy_conn.proxy_client.headers[tyler_id_name] = da_store.get("EFSP-" + tyler_id_name)
+        tyler_user = proxy_conn.get_user()
+        if tyler_user.is_ok():
+          my_username = tyler_user.data.get('email')
+          if continue_stored_login:
+            log(word("You are now connected to your e-filing account") + f" ({my_username})", "primary")
+            logged_in_user_is_admin, logged_in_user_is_global_admin = get_tyler_roles(proxy_conn, None, tyler_user)
+            tyler_login = True
+          else:
+            da_store.set("EFSP-" + tyler_header_name, '')
+            da_store.set(tyler_user_id_key, '')
+    except NameError as err:
+      # Re-raise only name errors, so DA can work correctly
+      raise err
+    except Exception as ex:
+      log_error_and_notify(f"Error when trying to get da_store Tyler token: {ex}")
+---
+id: login with redis
+continue button field: continue_stored_login
+question: Log in to eFile${ state_name_to_code(jurisdiction_id) } as ${my_username}?
+subquestion: |
+  You recently logged in to eFile${ state_name_to_code(jurisdiction_id) } with the email **${ my_username }**.
+
+  Would you like to continue with this email?
+fields:
+  - no label: continue_stored_login
+    input type: radio
+    choices:
+      - Yes, log me in with this email.: True
+      - No, I want to use a different login email.: False
+---
+code: |
+  tyler_user_id_key = f"EFSP-TYLER-ID-{jurisdiction_id.lower()}"
+---
+only sets:
+  - tyler_user_id
+code: |
+  if da_store.defined(tyler_user_id_key):
+    tyler_user_id = da_store.get(tyler_user_id_key)
+  else:
+    # not there: will need to login to get the same info
+    tyler_user_id = tyler_login_resp.data
+---
+code: |
+  change_resp = proxy_conn.self_change_password(current_password, new_user_password)
+  del current_password, new_user_password, confirm_new_password
+---
+code: |
+  if change_resp.is_ok():
+    changed_password_screen
+    self_change_password = True
+  else:
+    failed_changed_password_screen
+---
+id: changed password
+question: |
+  % if change_resp.is_ok():
+  Your password has been updated
+  % else:
+  Your password change failed
+  % endif
+subquestion: |
+  ${ debug_display(change_resp) }
+continue button field: changed_password_screen
+---
+id: failed changed password
+event: failed_changed_password_screen
+question: |
+  Your password change failed. Please try again.
+subquestion: |
+  ${ debug_display(change_resp) }
+---
+id: password
+question: |
+  New Password?
+fields:
+  - New password: new_user_password
+    datatype: ALVisiblePassword
+  - Confirm new password: confirm_new_password
+    datatype: ALVisiblePassword
+validation code: |
+  if not new_user_password == confirm_new_password:
+    validation_error("Your passwords do not match.", field="confirm_new_password")    
+---
+id: change password
+question: |
+  Change password
+fields:
+  - Current password: current_password
+    datatype: ALVisiblePassword
+  - New password: new_user_password
+    datatype: ALVisiblePassword
+  - Confirm new password: confirm_new_password
+    datatype: ALVisiblePassword
+validation code: |
+  if not new_user_password == confirm_new_password:
+    validation_error(word("Your passwords do not match."), field="confirm_new_password")
+  if not proxy_conn.is_valid_password(new_user_password):
+    password_rules
+    validation_error(password_rules.data.get("validationmessage"))
+---
+if: not can_check_efile or full_court_info.get("efmType", "ecf") != "ecf"
+code: |
+  logged_in_user_is_admin = False
+  logged_in_user_is_global_admin = False
+---
+depends on:
+  - tyler_login
+  - tyler_login_resp
+if: can_check_efile and full_court_info.get("efmType", "ecf") == "ecf"
+code: |
+  logged_in_user_is_admin, logged_in_user_is_global_admin = get_tyler_roles(proxy_conn, {"TYLER-ID": tyler_user_id})
+---
+event: reset_password_screen
+question: |
+  % if tyler_reset_password_resp.is_ok():
+  Your password reset was requested
+  
+  % else:
+  Something went wrong when we tried to reset your password
+  % endif
+subquestion: |
+  ${ tyler_reset_password_resp.error_msg + "." if not tyler_reset_password_resp.is_ok() else ""}
+
+  You can also [resend your activation email](${ url_ask(
+      [{'recompute': ['self_resend_activation','show_activation_resp']}]) }).
+---
+id: results
+question: |
+  % if resent_activation_resp.is_ok():
+  Your activation email has been resent.
+  % else:
+  Something went wrong when we tried to resend your activation email.
+  % endif
+continue button field: show_activation_resp
+---
+id: Login failed
+event: login_failed_screen
+question: |
+  eFile${ state_name_to_code(jurisdiction_id) } Login failed
+subquestion: |
+  % if int(tyler_login_resp.response_code) == 403:
+  Your login information was not correct. Go back and try again.
+
+  You can reset your password if you think your password is wrong.
+  
+  ${ action_button_html(interview_url(i=logged_out_interview, reset=1, jurisdiction_id=jurisdiction_id), label="Reset your password", new_window=True)}
+
+  You can also register for an account if you don't have one yet.
+
+  ${ action_button_html(interview_url(i=logged_out_interview, reset=1, jurisdiction_id=jurisdiction_id), label="Register for a new account", new_window=True)}
+
+  % else:
+  Something went wrong when logging you in. We will not be able to e-file your form.
+  % endif
+---
+##########
+## As a result of logging in, we can use defaults. That's why they're in this file.
+---
+# TODO: consider removing default state
+if: |
+  can_check_efile
+id: your address
+sets:
+  - users[0].address.address
+  - users[0].address.city
+  - users[0].address.zip
+  - users[0].address.unit
+  - users[0].address.state
+  - users[0].address.country
+question: |
+  What is your address?
+subquestion: |
+  Use an address where you can be contacted.
+fields:
+  - code: |
+      address_fields_with_defaults(proxy_conn, users[0], logged_in_user_is_admin, country_code=AL_DEFAULT_COUNTRY, default_state=AL_DEFAULT_STATE)
+---
+id: court
+question: |
+  Choose a court
+fields:
+  - no label: trial_court
+    code: |
+      trial_court_options
+---
+code: |
+  trial_court_resp = proxy_conn.get_courts(fileable_only=True, with_names=True)
+  trial_court_options = sorted([(court['code'], court['name']) for court in trial_court_resp.data or []], key=lambda c: c[1])
+  trial_court_map = {court['code']: court['name'] for court in trial_court_resp.data or []}
+---
+if: defined('court_id')
+code: |
+  trial_court = trial_court_map[court_id]
+---
+id: get available_efile_courts
+code: |
+  available_efile_courts = get_available_efile_courts(proxy_conn)
+---
+depends on:
+  - trial_court
+code: |
+  court_id = convert_court_to_id(trial_court)
+---
+code: |
+  all_party_type_options, all_party_type_map = \
+    choices_and_map(proxy_conn.get_party_types(court_id, None).data)
+---
+id: user-wants-efile
+question: |
+  Do you want to e-file this document directly with the court?
+subquestion: |
+  You are able to electronically-file (e-file) this document with ${ full_court_info['name'] }!
+
+  This means you don't have to print out the document. The court
+  will communicate with you through your email or phone.
+
+  You will have to provide your email to e-file this document. If you don't wish to provide that,
+  you can choose not to efile.
+fields:
+  - Do you want to e-file?: user_wants_efile
+    datatype: yesnoradio
+---
+id: you-will-not-be-able-to-efile
+question: |
+  You will *not* be able to e-file this document
+subquestion: |
+  Unfortunately, you cannot e-file this document at ${ trial_court } through this program.
+
+  However, you can still continue and download a completed form at the end.
+continue button field: show_no_efile
+---
+code: |
+  efile_setup = court_id in available_efile_courts
+---
+id: check efile possibility
+sets:
+  - can_check_efile
+code: |
+  if efile_setup:
+    # Ask the user if they want to efile
+    can_check_efile = user_wants_efile
+  else:
+    show_no_efile
+    can_check_efile = False
+---
+only sets: full_court_info
+code: |
+  full_court_info = get_full_court_info(proxy_conn, court_id)
+---

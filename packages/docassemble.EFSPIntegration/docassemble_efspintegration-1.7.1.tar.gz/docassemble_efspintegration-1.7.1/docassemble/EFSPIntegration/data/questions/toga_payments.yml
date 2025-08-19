@@ -1,0 +1,456 @@
+---
+imports:
+  - os
+---
+modules:
+  - .conversions
+---
+if: |
+  new_account_type_code == 'WV'
+need:
+  - new_account_name
+  - new_account_is_global
+code: |
+  # TODO: this isn't wired up yet!
+  waiver_resp = proxy_conn.create_waiver_account(new_account_name, new_account_is_global)
+  globals().pop('new_account_name', None)
+  globals().pop('new_account_is_global', None)
+---
+if: new_account_type_code == 'WV'
+need:
+  - waiver_resp
+id: waiver payment method created
+question: |
+  % if waiver_resp.is_ok():
+  Waiver payment method created!
+  % else:
+  Something went wrong creating your Waiver payment method
+  % endif
+subquestion: |
+  % if get_config("debug"):
+  The method id is ${ debug_display(waiver_resp) }.
+  % endif
+continue button field: new_payment_account
+---
+if: |
+  new_account_type_code in ['CC','BankAccount']
+comment: |
+  # Basis from https://stackoverflow.com/a/133997
+  # TODO(brycew): just submit this + actual payment info to the Efile server as a POST,
+  # Then hang on to that data with the transaction Id (created there), and send user to
+  # the TOGA site, and it replies back to the proxy, which forwards back to the DA interview
+  #      '  <input type="text" name="RequestXML" value="' + data +  '" style="display:none;"/> ' +
+  #      ' <button>Click here if not working</button> </input>' +
+id: new-payment-method
+question: |
+  % if defined('creation_status') and creation_status == 'success':
+  New payment method added
+  % else:
+  New payment method
+  % endif
+subquestion: |
+  % if defined('creation_status'):
+  % if creation_status == 'success':
+  You've created your new payment method (${new_account_name})!
+  % endif
+  % if creation_status == 'failure':
+  An error has occured. Please try again.
+  % endif
+  % else:
+  <i class="fas fa-cog fa-spin"></i>Sending you to a secure payments site . . .<i class="fas fa-cog fa-spin"></i>
+  % endif
+script: |
+  % if not defined('creation_status'):
+  <script>
+      //data = '<PaymentRequest></PaymentRequest>'; 
+      
+      const form = document.createElement('form');
+      form.method = 'post';
+      //form.target = '_blank';
+      form.action = '${ proxy_conn.full_url('payments/new-toga-account') }';
+
+      const nameField = document.createElement('input');
+      nameField.type = 'hidden';
+      nameField.name = 'account_name';
+      nameField.value = '${ new_account_name }';
+      form.appendChild(nameField);
+      const isglobal = document.createElement('input');
+      isglobal.type = 'hidden';
+      isglobal.name = 'global';
+      isglobal.value = ${ 'true' if new_account_is_global == 'on' else 'false'};
+      form.appendChild(isglobal);
+      const typeCode = document.createElement('input');
+      typeCode.type = 'hidden';
+      typeCode.name = 'type_code';
+      typeCode.value = '${ new_account_type_code }';
+      form.appendChild(typeCode);
+      // TODO(brycew): HACKY: how to propery add Headers here?
+      const tylerInfo = document.createElement('input');
+      tylerInfo.type = 'hidden';
+      tylerInfo.name = 'tyler_info';
+      tylerInfo.value = '${ proxy_conn.tyler_token() }';
+      form.appendChild(tylerInfo);
+      const url = document.createElement('input');
+      url.type = 'hidden';
+      url.name = 'original_url';
+      url.value = '${ interview_url_action('completed_payment_account', creation_status='success') }';
+      form.appendChild(url);
+      const errorUrl = document.createElement('input');
+      errorUrl.type = 'hidden';
+      errorUrl.name = 'error_url';
+      errorUrl.value = '${ interview_url_action('completed_payment_account', creation_status='failure') }';
+      form.appendChild(errorUrl);
+      document.body.appendChild(form);
+      form.submit();
+  </script>
+  % endif
+continue button field: new_payment_account
+---
+event: completed_payment_account
+code: |
+  if 'creation_status' in action_arguments():
+    creation_status = action_argument('creation_status')
+---
+id: what new payment method
+question: |
+  What type of payment method do you want to make?
+subquestion: |
+fields:
+  - Global: new_account_is_global
+    datatype: yesno
+    default: False
+    show if:
+      code: |
+        logged_in_user_is_global_admin
+  - Name of payment method: new_account_name
+    help: |
+      You can name it anything. For example: "My Visa card", or "My bank". This name can help you identify the payment method on other screens.
+  - Type: new_account_type_code
+    datatype: radio
+    choices:
+      - Fee Waiver: WV
+      - Bank account: BankAccount
+        help: |
+          The bank account can be a checking or savings account. This is also known as an eCheck or an ACH transfer.
+      - Credit Card: CC
+  - note: |
+      On the next screen, you'll be sent to a secure payments site to enter your credit card information.
+    show if:
+      variable: new_account_type_code
+      is: CC
+  - note: |
+      On the next screen, you'll be sent to a secure payments site to enter your bank information.
+    show if:
+      variable: new_account_type_code
+      is: BankAccount
+  - note: |
+      Note: ${ fees_explain.content }
+    js show if: |
+      val("new_account_type_code") !== "WV"
+---
+template: fees_explain
+subject: |
+  Are there any fees?
+content: |
+  For payments using a credit card, debit card, or bank account, the following convenience fees apply:
+
+  * Credit card or debit card: $1.00 or 2.89% of the total fees, whichever is greater.
+  * Bank account: $0.25 flat fee for each submissions (also called an envelope).
+---
+code: |
+  if not logged_in_user_is_global_admin:
+    new_account_is_global = False
+---
+code: |
+  new_payment_account_url = url_ask([
+      {'undefine': ['new_payment_account', 'creation_status', 'new_account_type_code', 'new_account_name']},
+      {'recompute': ['new_payment_account']}
+    ])
+---
+template: payment_template
+subject: |
+  Payment methods
+content: |
+  ${ action_button_html(new_payment_account_url, label='New payment method', id_tag="new_payment_account") }
+
+  % for elem in firm_admin_payment_list:
+  ${ action_button_html(url_ask(
+      [{'recompute': [elem[0], 'show_resp']}]), 
+      label=elem[1]) }
+  
+  % endfor
+---
+template: global_admin_payment_template
+subject: |
+  Payment methods
+content: |
+  ${ action_button_html(new_payment_account_url, label='New payment method', id_tag='new_payment_account') }
+
+  % for elem in global_admin_payment_list:
+  ${ action_button_html(url_ask(
+      [{'recompute': [elem[0], 'show_resp']}]), 
+      label=elem[1], id_tag=elem[0]) }
+  
+  % endfor
+---
+if: len(proxy_conn.get_payment_account_list().data or []) > 0
+id: payment method id
+question: |
+  Payment method id?
+subquestion: |
+  Enter a payment method GUID or select from existing
+  payment method in your firm.
+fields:
+  - Payment method id: payment_account_id
+    datatype: combobox
+    code: |
+      payment_account_labels(proxy_conn.get_payment_account_list())
+---
+depends on: payment_account_id
+code: |
+  payment_account_id_resp = proxy_conn.get_payment_account(payment_account_id)
+---
+depends on: global_payment_account_id
+code: |
+  global_account_id_resp = proxy_conn.get_global_payment_account(global_payment_account_id)
+---
+reconsider:
+  - payment_account_id_resp
+depends on:
+  - payment_account_id
+id: update payment method
+question: |
+  Update payment method
+subquestion: |
+  % if payment_account_id_resp.data.get('paymentAccountTypeCode') == 'CC':
+  The card type is ${ payment_account_id_resp.data.get("cardType").get('value') }, the last 4 digits are ${ payment_account_id_resp.data.get("cardLast4") },
+  and it's expiration date is ${ payment_expiration(payment_account_id_resp.data) }.
+
+  To change the card type, number, or expiration date, you should create a new payment method with the updated information.
+  % elif payment_account_id_resp.data.get('paymentAccountTypeCode') == 'BankAccount':
+  The last 4 digits of the bank number are ${ payment_account_id_resp.data.get("cardLast4") }.
+
+  To change the bank account number, you should create a new payment method with the updated information.
+  % endif
+fields:
+  - Payment method name: payment_account_name
+    default: ${ payment_account_id_resp.data.get('accountName') if payment_account_id_resp.data else '' }
+  - Active?: payment_account_active
+    datatype: yesno
+    default: ${ payment_account_id_resp.data.get('active',{}).get('value') if payment_account_id_resp.data else False}
+---
+reconsider:
+  - global_account_id_resp
+depends on:
+  - global_payment_account_id
+id: update payment method 
+question: |
+  Update global payment method
+fields:
+  - Payment method name: global_account_name
+    default: ${ global_account_id_resp.data.get('accountName') if global_account_id_resp.data else '' }
+  - Active?: global_account_active
+    datatype: yesno
+    default: ${ global_account_id_resp.data.get('active',{}).get('value') if global_account_id_resp.data else False}
+---
+id: global payment method id
+question: |
+  Global payment method id?
+fields:
+  - Global payment method id: global_payment_account_id
+---
+code: |
+  service_contact_options = proxy_conn.get_service_contact_list().data or []
+---
+code: |
+  firm_admin_payment_list = [ 
+    ('get_payment_account_type_list', 'Get payment method type list'),
+    ('get_payment_account', 'Get payment method'),
+    ('update_payment_account', 'Update payment method'),
+    ('remove_payment_account', 'Remove payment method'),
+    ('get_global_payment_account_list', 'Get global payment method list'),
+    ('get_global_payment_account', 'Get global payment method'),
+  ]
+---
+code: |
+  global_admin_payment_list = [
+    *firm_admin_payment_list,
+    ('update_global_payment_account', 'Update global payment method'),
+    ('remove_global_payment_account', 'Remove global payment method'),
+  ]
+---
+code: |
+  resp = proxy_conn.get_payment_account_type_list()
+  get_payment_account_type_list = True
+---
+code: |
+  resp = proxy_conn.get_payment_account_list()
+  get_payment_account_list = True
+---
+code: |
+  resp = proxy_conn.get_payment_account(payment_account_id)
+  del payment_account_id
+  get_payment_account = True
+---
+code: |
+  resp = proxy_conn.update_payment_account(payment_account_id, payment_account_name, payment_account_active)
+  globals().pop('payment_account_id', None)
+  globals().pop('payment_account_name', None)
+  globals().pop('payment_account_active', None)
+  update_payment_account = True
+---
+code: |
+  resp = proxy_conn.remove_payment_account(payment_account_id)
+  del payment_account_id
+  remove_payment_account = True
+---
+code: |
+  resp = proxy_conn.get_global_payment_account_list()
+  get_global_payment_account_list = True
+---
+code: |
+  resp = proxy_conn.get_global_payment_account(global_payment_account_id)
+  del global_payment_account_id
+  get_global_payment_account = True
+---
+code: |
+  resp = proxy_conn.update_global_payment_account(global_payment_account_id, global_account_name, global_account_active)
+  del global_payment_account_id
+  update_global_payment_account = True
+---
+code: |
+  resp = proxy_conn.remove_global_payment_account(global_payment_account_id)
+  del global_payment_account_id
+  remove_global_payment_account = True
+---
+code: |
+  def payment_list_table(payment_list_resp):
+      ret = f'<span>{action_button_html(new_payment_account_url, label="Add a new payment method", icon="plus-circle", size="md")}</span>'
+      if not payment_list_resp.data:
+          return ret + "\n<div>You don't currently have any payment methods. Add some using the above button.</div>"
+      ret += f"""
+      <div class="table-responsive">
+      <table class="table table-striped">
+        <thead>
+          <th scope="col">
+            {word("Payment name")}
+          </th>
+          <th scope="col">{word("Payment type")}</th>
+          <th scope="col">{word("Expiration date")}</th>
+          <th scope="col">{word("Active")}</th>
+          <th scope="col"></th>
+          <th scope="col"></th>
+        </thead>
+        <tbody>
+        """
+      for payment in payment_list_resp.data:
+          acc_id = payment.get("paymentAccountID")
+          ret += f'<tr><td class="text-break">{payment.get("accountName")}</td>'
+          ret += f'<td>{_payment_type(payment)}</td>'
+          ret += f'<td>{payment_expiration(payment)}</td>'
+          ret += f'<td>{(payment.get("active") or {}).get("value", False)}</td>'
+          edit_qs = [
+              {"set": [{"payment_account_id": acc_id}]},
+              {"recompute": ["payment_account_name", "payment_account_edit"]}
+          ]
+          ret += f'<td>{action_button_html(url_ask(edit_qs), label="Edit", color="info", icon="pencil")}</td>'
+          rm_qs = [
+              {"set": [{"payment_account_id": acc_id}]},
+              "are_you_sure_remove",
+              {"action": "payment_account_remove", "arguments": {"account_id": acc_id}}
+          ]
+          ret += f'<td>{action_button_html(url_ask(rm_qs), label="Remove", color="danger", icon="trash")}</td></tr>'
+      ret += "</tbody></table></div>"
+      return ret
+---
+event: payment_account_remove
+code: |
+  rm_payment_account_resp = proxy_conn.remove_payment_account(action_argument('account_id'))
+  if rm_payment_account_resp.is_ok():
+    log(word("Removed payment method"), "success")
+  else:
+    log_error_and_notify(f"Wasn't able to remove payment method: {rm_payment_account_resp}")
+    log(word("Wasn't able to remove payment method"), "error")
+---
+question: Are you sure you want to remove your ${ _payment_labels(proxy_conn.get_payment_account(payment_account_id).data) }?
+subquestion: |
+  You won't be able to get it back, and will have to enter all of its details again.
+continue button field: are_you_sure_remove
+---
+code: |
+  payment_account_name
+  payment_account_active
+  log(f"payment_account_id: {payment_account_id}, {payment_account_name}, {payment_account_active}")
+  updated_payment_account_resp = proxy_conn.update_payment_account(payment_account_id, payment_account_name, payment_account_active)
+  log(updated_payment_account_resp)
+  if updated_payment_account_resp.is_ok():
+    log(word("Updated payment method"), "success")
+  else:
+    log_error_and_notify(f"Wasn't able to update payment method: {update_payment_account_resp}")
+    log(word("Wasn't able to update payment method"), "error")
+  payment_account_edit = True
+---
+template: payment_template
+subject: |
+  Payment methods
+content: |
+  ${ payment_list_table(proxy_conn.get_payment_account_list()) }
+---
+need:
+  - tyler_login
+continue button field: payment_main_screen
+id: Payment Main screen
+question: |
+  Edit payment methods for ${ my_username }
+subquestion: |
+  Click **Next** to continue after adding or editing your payment methods.
+
+  ${ payment_template.content }
+---
+reconsider:
+  - tyler_payment_account_options
+id: select a payment method
+question: |
+  Select a payment method
+subquestion: |
+  Your fees will be ready for review after you select a payment method.
+
+  You can add and adjust payment methods with the button below.
+
+  ${ action_button_html(url_ask("payment_main_screen"), label="Add and edit payment methods", icon="money-check-dollar", size="md") }
+fields:
+  - Payment Account: tyler_payment_id
+    datatype: dropdown
+    code: |
+      tyler_payment_account_options
+---
+reconsider:
+  - tyler_payment_account_options
+if: len(tyler_payment_account_options) == 0
+question: |
+  Create a payment method
+subquestion: |
+  Your fees will be ready for review after you add a payment method.
+
+  You can add and adjust payment methods with the button below.
+
+  ${ action_button_html(url_ask("payment_main_screen"), label="Add and edit payment methods", icon="money-check-dollar", size="md") }
+event: tyler_payment_id
+---
+code: |
+  default_jurisdiction_waiver = get_config('efile proxy', {}).get('global waivers', {}).get(jurisdiction_id, '')
+---
+code: |
+  allowable_card_types = full_court_info.get('allowablecardtypes', [])
+  res = proxy_conn.get_payment_account_list().data
+  if res:
+    tyler_payment_account_options = filter_payment_accounts(res, allowable_card_types)
+    tyler_payment_account_map = {val[0]: val[1] for val in tyler_payment_account_options}
+  else:
+    tyler_payment_account_options = []
+    tyler_payment_account_map = {}
+  # For now, don't show global options for payment accounts.
+  #res = proxy_conn.get_global_payment_account_list().data
+  #if res:
+  #  tyler_payment_account_options.extend(filter_payment_accounts(res, allowable_card_types))
+---

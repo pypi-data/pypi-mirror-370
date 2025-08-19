@@ -1,0 +1,194 @@
+---
+comment: |
+  Question and code blocks that are useful for preforming Tyler e-filing
+  actions while unauthenticated, i.e. not logged in as an e-filing user
+
+  These include
+  * new user registration / account creation
+  * resetting a password
+  * resending an activation email
+
+  To use, you need to define `jurisdiction_id`, to be the jurisdiction you are
+  using. For example, "massachusetts", or "illinois".
+---
+modules:
+  - .efm_client
+  - .conversions
+---
+imports:
+  - requests
+---
+include:
+  - docassemble.ALToolbox:phone-number-validation.yml
+  - docassemble.AssemblyLine:assembly_line.yml
+---
+objects:
+  person_to_reg: ALIndividual
+---
+variable name: account_action_list
+data: !!omap
+  - register: "Create an e-filing account"
+  - reset_user_password: "Reset your password"
+  - self_resend_activation: "Resend activation email"
+---
+variable name: account_registration_choices
+data: !!omap
+  - 'INDIVIDUAL': 'Pro Se user'
+  - 'FIRM_ADMINISTRATOR': 'Administrator of a new firm'
+  - 'FIRM_ADMIN_NEW_MEMBER': 'New member of current firm'
+---
+code: |
+  account_action_recompute = {
+    "register": ["register_introduction", "person_to_reg", "register", "register_status"],
+    "reset_user_password": ["reset_user_password", "show_reset_resp"],
+    "self_resend_activation": ["self_resend_activation", "show_resend_resp"]
+  }
+---
+code: |
+  proxy_conn = ProxyConnection(credentials_code_block='', default_jurisdiction=jurisdiction_id)
+---
+id: which-jurisdiction
+question: |
+  Which jurisdiction are you filing in?
+fields:
+  - no label: jurisdiction_id
+    code: |
+      [{k: v} for k, v in jurisdiction_names.items() if k in jurisdiction_choices]
+---
+code: |
+  if 'jurisdiction_id' in url_args:
+    jurisdiction_id = url_args['jurisdiction_id']
+  try:
+    jurisdiction_choices = set(requests.get(get_config("efile proxy", {}).get("url", "") + "/jurisdictions").json().keys())
+  except (requests.exceptions.MissingSchema, requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError) as ex:
+    log_error_and_notify(f"Couldn't connect with the efile proxy server! {ex}")
+    jurisdiction_id = ""
+---
+# Note the lack of Louisiana, not a Tyler jurisdiction. Can still be set manually
+variable name: jurisdiction_names
+data:
+  illinois: Illinois
+  massachusetts: Massachusetts
+  texas: Texas
+  california: California
+  indiana: Indiana
+
+---
+code: |
+  can_connect_to_proxy = proxy_conn.get_server_name().is_ok()
+---
+if: can_connect_to_proxy
+id: unauth-intro
+question: |
+  This website will help you register as an e-filing user in ${ jurisdiction_id.title() }
+subquestion: |
+  You will need to provide your email and create a password.
+continue button field: register_introduction
+---
+if: can_connect_to_proxy
+id: unauth-register-done
+question: |
+  % if register_resp.is_ok():
+  Successfully registered
+  % else:
+  Something went wrong when we tried to register your account
+  % endif
+subquestion: |
+  % if register_resp.is_ok():
+  You will get an email from efile${ state_name_to_code(jurisdiction_id) } asking you to activate your account.
+
+  You can resend this activation email from the next screen.
+
+  % else:
+  ${ debug_display(register_resp) }
+  % endif
+
+continue button field: register_status
+---
+id: unauth-resend-completed
+question: |
+  % if resent_activation_resp.is_ok():
+  Your activation email has been resent
+  % else:
+  Something went wrong when we tried to resend your activation email
+  % endif
+subquestion: |
+  % if not resent_activation_resp.is_ok():
+  Error message: ${ debug_display(resent_activation_resp) }
+  % endif
+continue button field: show_resend_resp
+---
+id: unauth-email
+question: |
+  What is your account email?
+fields:
+  - Email: unauthed_user_email
+---
+only sets: reset_user_password
+code: |
+  reset_password_resp = proxy_conn.reset_user_password(email=unauthed_user_email)
+  del unauthed_user_email
+  reset_user_password = True
+---
+id: registration info
+question: |
+  Create an efile${ state_name_to_code(jurisdiction_id) } account
+fields:
+  - Registration type: reg_type
+    datatype: radio
+    code: |
+      account_registration_choices
+    default: INDIVIDUAL
+  - note: |
+      ---
+  - Email address: person_to_reg.email
+    datatype: email
+    required: True
+  - Phone number: person_to_reg.phone_number
+    datatype: al_international_phone
+  - note: |
+      ${ password_rules.get("validationmessage") }
+  - Password: new_password
+    datatype: ALVisiblePassword
+    validate: proxy_conn.is_valid_password
+  - note: |
+      ---
+  - Firm name: person_to_reg.firm_name
+    show if:
+      variable: reg_type
+      is: FIRM_ADMINISTRATOR
+  - code: person_to_reg.name_fields()
+  - note: |
+      ---
+  - code: |
+      person_to_reg.address_fields(required={"person_to_reg.address.zip": True})
+---
+code: |
+  password_rules_resp = proxy_conn.get_password_rules()
+  if password_rules_resp.is_ok():
+    password_rules = password_rules_resp.data
+  else:
+    password_rules = {}
+---
+code: |
+  resent_activation_resp = proxy_conn.self_resend_activation_email(unauthed_user_email)
+  del unauthed_user_email
+  self_resend_activation = True
+---
+code: |
+  register_resp = proxy_conn.register_user(person_to_reg, registration_type=reg_type, password=new_password, firm_name_or_id=showifdef('person_to_reg.firm_name', ''))
+  del new_password
+  register = True
+---
+id: unauth-reset-completed
+question: |
+  % if reset_password_resp.is_ok():
+  You have been sent an email to reset your password
+  % else:
+  Something went wrong when trying to reset your password
+  % endif
+subquestion: |
+  % if not reset_password_resp.is_ok():
+  Error message: ${ debug_display(reset_password_resp) }
+  % endif
+continue button field: show_reset_resp
