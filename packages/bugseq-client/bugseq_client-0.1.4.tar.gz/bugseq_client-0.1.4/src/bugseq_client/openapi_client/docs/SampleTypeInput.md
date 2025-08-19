@@ -1,0 +1,60 @@
+# SampleTypeInput
+
+
+## Enum
+
+* `ABSCESS` (value: `'ABSCESS'`)
+
+* `BACTERIAL_ISOLATE` (value: `'BACTERIAL_ISOLATE'`)
+
+* `BLOOD` (value: `'BLOOD'`)
+
+* `ENVIRONMENTAL` (value: `'ENVIRONMENTAL'`)
+
+* `GENERIC` (value: `'GENERIC'`)
+
+* `RESPIRATORY_LOWER` (value: `'RESPIRATORY_LOWER'`)
+
+* `RESPIRATORY_UPPER` (value: `'RESPIRATORY_UPPER'`)
+
+* `STERILE_SAMPLE` (value: `'STERILE_SAMPLE'`)
+
+* `CEREBROSPINAL_FLUID` (value: `'CEREBROSPINAL_FLUID'`)
+
+* `STOOL` (value: `'STOOL'`)
+
+* `URINE` (value: `'URINE'`)
+
+* `WASTEWATER` (value: `'WASTEWATER'`)
+
+* `WOUND_DEEP` (value: `'WOUND_DEEP'`)
+
+* `WOUND_SUPERFICIAL` (value: `'WOUND_SUPERFICIAL'`)
+
+* `GENITAL_CERVICAL` (value: `'GENITAL_CERVICAL'`)
+
+* `GENITAL_PENILE` (value: `'GENITAL_PENILE'`)
+
+* `RESPIRATORY_BAL` (value: `'RESPIRATORY_BAL'`)
+
+* `RESPIRATORY_BRONCHIAL_BRUSH` (value: `'RESPIRATORY_BRONCHIAL_BRUSH'`)
+
+* `RESPIRATORY_NASOPHARYNGEAL_OROPHARYNGEAL` (value: `'RESPIRATORY_NASOPHARYNGEAL_OROPHARYNGEAL'`)
+
+* `RESPIRATORY_SPUTUM` (value: `'RESPIRATORY_SPUTUM'`)
+
+* `STERILE_SAMPLE_BIOPSY` (value: `'STERILE_SAMPLE_BIOPSY'`)
+
+* `STERILE_SAMPLE_JOINT_FLUID` (value: `'STERILE_SAMPLE_JOINT_FLUID'`)
+
+* `STERILE_SAMPLE_PERITONEAL_FLUID` (value: `'STERILE_SAMPLE_PERITONEAL_FLUID'`)
+
+* `URINE_CATHETER` (value: `'URINE_CATHETER'`)
+
+* `URINE_MIDSTREAM` (value: `'URINE_MIDSTREAM'`)
+
+* `FOOD` (value: `'FOOD'`)
+
+[[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
+
+
