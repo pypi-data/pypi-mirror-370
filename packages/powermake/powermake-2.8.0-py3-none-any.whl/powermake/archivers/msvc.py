@@ -1,0 +1,42 @@
+# Copyright 2025 Macéo Tuloup
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import subprocess
+import typing as T
+
+from .common import Archiver
+
+
+class ArchiverMSVC(Archiver):
+    type: T.ClassVar = "msvc"
+    static_lib_extension: T.ClassVar = ".lib"
+
+    def __init__(self, path: str = "lib"):
+        super().__init__(path)
+
+    def basic_archive_command(self, outputfile: str, inputfiles: T.Iterable[str], args: T.List[T.Union[str, T.Tuple[str, ...]]] = []) -> T.List[str]:
+        flatten_args: T.List[str] = []
+        for arg in args:
+            if isinstance(arg, tuple):
+                flatten_args.extend(arg)
+            else:
+                flatten_args.append(arg)
+        return [self.path, "/nologo", *flatten_args, "/out:" + outputfile, *inputfiles]
+
+    def check_if_arg_exists(self, arg: T.Union[str, T.Tuple[str, ...]]) -> bool:
+        if isinstance(arg, tuple):
+            return subprocess.run([self.path, *arg, "/WX"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL).returncode == 0
+        else:
+            return subprocess.run([self.path, arg, "/WX"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL).returncode == 0
+
