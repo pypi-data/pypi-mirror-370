@@ -1,0 +1,102 @@
+# Sample configuration for LangGate
+# Copy this file to langgate_config.yaml in your working directory
+# or set the LANGGATE_CONFIG environment variable to point to this file.
+# e.g. export LANGGATE_CONFIG=path/to/langgate_config.yaml
+
+# Global default parameters by modality
+default_params:
+  text:
+    temperature: 0.7
+
+# Service provider configurations
+services:
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    model_patterns:
+      # match any o-series model
+      openai/o:
+        remove_params:
+          - temperature
+      # match any gpt-5 model
+      openai/gpt-5:
+        remove_params:
+          - temperature
+
+  anthropic:
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com"
+    model_patterns:
+      # match any model with reasoning in the id
+      reasoning:
+        override_params:
+          thinking:
+            type: enabled
+        remove_params:
+          - temperature
+
+  replicate:
+    api_key: "${REPLICATE_API_KEY}"
+
+
+# Model-specific configurations
+models:
+  text:
+    - id: openai/gpt-5-chat
+      service:
+        provider: openai
+        model_id: gpt-5-chat-latest
+
+    - id: openai/gpt-5
+      service:
+        provider: openai
+        model_id: gpt-5
+      override_params:
+        include_reasoning: true
+
+    - id: openai/gpt-5-high
+      service:
+        provider: openai
+        model_id: gpt-5
+      name: GPT-5 high
+      description: gpt-5-high applies high-effort reasoning for the gpt-5 model
+      override_params:
+        reasoning_effort: high
+
+    - id: anthropic/claude-sonnet-4
+      service:
+        provider: anthropic
+        model_id: claude-sonnet-4-0
+
+    - id: anthropic/claude-sonnet-4-reasoning
+      service:
+        provider: anthropic
+        model_id: claude-sonnet-4-0
+      name: Claude-4 Sonnet R
+      description: "Claude-4 Sonnet with reasoning capabilities."
+      override_params:
+        thinking:
+          budget_tokens: 1024
+
+  image:
+    - id: openai/gpt-image-1
+      service:
+        provider: openai
+        model_id: gpt-image-1
+
+    - id: openai/dall-e-3
+      service:
+        provider: openai
+        model_id: dall-e-3
+
+    - id: black-forest-labs/flux-dev
+      service:
+        provider: replicate
+        model_id: black-forest-labs/flux-dev
+      default_params:
+        disable_safety_checker: true
+
+    - id: stability-ai/sd-3.5-large
+      service:
+        provider: replicate
+        model_id: stability-ai/stable-diffusion-3.5-large
