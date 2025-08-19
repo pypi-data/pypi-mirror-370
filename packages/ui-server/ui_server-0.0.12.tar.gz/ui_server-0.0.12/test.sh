@@ -1,0 +1,1 @@
+docker run -it --rm -p 13337:13337 python bash -c "pip install ui-server && ui-server"
