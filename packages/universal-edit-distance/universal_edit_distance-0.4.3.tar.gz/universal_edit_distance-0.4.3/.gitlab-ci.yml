@@ -1,0 +1,114 @@
+default:
+  interruptible: true
+  cache:
+    paths:
+      - .cache/pip
+      - .cargo/bin
+      - .cargo/registry/index
+      - .cargo/registry/cache
+      - target/debug/deps
+      - target/debug/build
+
+variables:
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+stages: 
+  - test
+  - build
+  - release
+
+test:
+  stage: test
+  image: 
+    name: ghcr.io/pyo3/maturin:latest
+    entrypoint: [""]
+  parallel:
+    matrix:
+      # if you edit this, make sure you edit Python versions in build
+      # commmand too. Or figure out how to build them both dynamically
+      # from a variable - please send in a PR if you do :-)
+      - PYTHON_VERSION:
+        - python3.8
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - source $HOME/.local/bin/env
+    - uv sync
+    - maturin develop --uv
+  script:
+    - uv run pytest
+
+build-linux:
+  needs: ["test"]
+  stage: build
+  image: 
+    name: ghcr.io/pyo3/maturin:latest
+    entrypoint: [""]
+  parallel:
+    matrix:
+      # tier 1 targets, see https://doc.rust-lang.org/beta/rustc/platform-support.html
+      - TARGET:
+        - x86_64-unknown-linux-gnu
+        - x86_64-unknown-linux-musl
+        - aarch64-unknown-linux-gnu
+        - aarch64-unknown-linux-musl
+        - i686-unknown-linux-gnu
+  before_script:
+    - python3.9 -m venv venv
+    - source venv/bin/activate
+    - pip install ziglang
+    - rustup target add $TARGET
+  script:
+    -  |
+       maturin build -i python3.8 -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13 \
+       --release --target $TARGET --zig
+  artifacts:
+    paths:
+      - target/wheels/*.whl
+  rules:
+    - if: $CI_COMMIT_TAG
+    # do not run on branch pipelines
+    - when: never
+
+build-macos:
+  needs: ["test"]
+  stage: build
+  image: 
+    name: ghcr.io/pyo3/maturin:latest
+    entrypoint: [""]
+  parallel:
+    matrix:
+      - TARGET:
+        - x86_64-apple-darwin
+  before_script:
+    - python3.9 -m venv venv
+    - source venv/bin/activate
+    - pip install ziglang
+    - rustup target add $TARGET
+  script:
+    -  |
+       maturin build -i python3.8 -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13 \
+       --release --target $TARGET --zig
+  artifacts:
+    paths:
+      - target/wheels/*.whl
+  rules:
+    - if: $CI_COMMIT_TAG
+    # do not run on branch pipelines
+    - when: never
+
+publish:
+  stage: release
+  image: 
+    name: ghcr.io/pyo3/maturin:latest
+    entrypoint: [""]
+  needs: ["build-linux", "build-macos", "test"]
+  rules:
+    - if: $CI_COMMIT_TAG
+    # do not run on branch pipelines
+    - when: never
+  script:
+    # set appropriate env vars so this works
+    # see maturin publish --help for more info
+    - maturin publish --non-interactive --skip-existing
+    - maturin upload --non-interactive --skip-existing target/wheels/*.whl
