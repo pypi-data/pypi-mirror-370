@@ -1,0 +1,1385 @@
+#
+# This is an auto-generated file.  DO NOT EDIT!
+#
+# pylint: disable=line-too-long
+
+from ansys.fluent.core.services.datamodel_se import (
+    PyMenu,
+    PyParameter,
+    PyTextual,
+    PyNumerical,
+    PyDictionary,
+    PyNamedObjectContainer,
+    PyCommand,
+    PyQuery
+)
+
+
+class Root(PyMenu):
+    """
+    Singleton Root.
+    """
+    def __init__(self, service, rules, path):
+        self.AssemblyNode = self.__class__.AssemblyNode(service, rules, path + [("AssemblyNode", "")])
+        self.Node = self.__class__.Node(service, rules, path + [("Node", "")])
+        self.ObjectSetting = self.__class__.ObjectSetting(service, rules, path + [("ObjectSetting", "")])
+        self.Refaceting = self.__class__.Refaceting(service, rules, path + [("Refaceting", "")])
+        self.Transform = self.__class__.Transform(service, rules, path + [("Transform", "")])
+        self.GlobalSettings = self.__class__.GlobalSettings(service, rules, path + [("GlobalSettings", "")])
+        self.MeshingOperations = self.__class__.MeshingOperations(service, rules, path + [("MeshingOperations", "")])
+        self.ObjectSettingOperations = self.__class__.ObjectSettingOperations(service, rules, path + [("ObjectSettingOperations", "")])
+        self.RefacetingOperations = self.__class__.RefacetingOperations(service, rules, path + [("RefacetingOperations", "")])
+        self.TransformOperations = self.__class__.TransformOperations(service, rules, path + [("TransformOperations", "")])
+        self.AppendFmdFiles = self.__class__.AppendFmdFiles(service, rules, "AppendFmdFiles", path)
+        self.ChangeFileLengthUnit = self.__class__.ChangeFileLengthUnit(service, rules, "ChangeFileLengthUnit", path)
+        self.ChangeLengthUnit = self.__class__.ChangeLengthUnit(service, rules, "ChangeLengthUnit", path)
+        self.CreateObjForEachPart = self.__class__.CreateObjForEachPart(service, rules, "CreateObjForEachPart", path)
+        self.CreateObjects = self.__class__.CreateObjects(service, rules, "CreateObjects", path)
+        self.Delete = self.__class__.Delete(service, rules, "Delete", path)
+        self.DeletePaths = self.__class__.DeletePaths(service, rules, "DeletePaths", path)
+        self.InitializeTemplate = self.__class__.InitializeTemplate(service, rules, "InitializeTemplate", path)
+        self.InputFileChanged = self.__class__.InputFileChanged(service, rules, "InputFileChanged", path)
+        self.ListMeshingOperations = self.__class__.ListMeshingOperations(service, rules, "ListMeshingOperations", path)
+        self.LoadFmdFile = self.__class__.LoadFmdFile(service, rules, "LoadFmdFile", path)
+        self.LoadTemplate = self.__class__.LoadTemplate(service, rules, "LoadTemplate", path)
+        self.MoveCADComponentsToNewObject = self.__class__.MoveCADComponentsToNewObject(service, rules, "MoveCADComponentsToNewObject", path)
+        self.MoveToObject = self.__class__.MoveToObject(service, rules, "MoveToObject", path)
+        self.RedoAllTransforms = self.__class__.RedoAllTransforms(service, rules, "RedoAllTransforms", path)
+        self.ResetTemplate = self.__class__.ResetTemplate(service, rules, "ResetTemplate", path)
+        self.SaveFmdFile = self.__class__.SaveFmdFile(service, rules, "SaveFmdFile", path)
+        self.SaveTemplate = self.__class__.SaveTemplate(service, rules, "SaveTemplate", path)
+        self.UndoAllTransforms = self.__class__.UndoAllTransforms(service, rules, "UndoAllTransforms", path)
+        super().__init__(service, rules, path)
+
+    class AssemblyNode(PyNamedObjectContainer):
+        """
+        .
+        """
+        class _AssemblyNode(PyMenu):
+            """
+            Singleton _AssemblyNode.
+            """
+            def __init__(self, service, rules, path):
+                self.Refaceting = self.__class__.Refaceting(service, rules, path + [("Refaceting", "")])
+                self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+                self.Context = self.__class__.Context(service, rules, path + [("Context", "")])
+                self.EdgeExtraction = self.__class__.EdgeExtraction(service, rules, path + [("EdgeExtraction", "")])
+                self.FeatureAngle = self.__class__.FeatureAngle(service, rules, path + [("FeatureAngle", "")])
+                self.IsChildrenSettingsChanged = self.__class__.IsChildrenSettingsChanged(service, rules, path + [("IsChildrenSettingsChanged", "")])
+                self.KeyId = self.__class__.KeyId(service, rules, path + [("KeyId", "")])
+                self.MergeChildren = self.__class__.MergeChildren(service, rules, path + [("MergeChildren", "")])
+                self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+                self.OneZonePer = self.__class__.OneZonePer(service, rules, path + [("OneZonePer", "")])
+                self.Parent = self.__class__.Parent(service, rules, path + [("Parent", "")])
+                self.PrefixObjectName = self.__class__.PrefixObjectName(service, rules, path + [("PrefixObjectName", "")])
+                self.RefacetOperation = self.__class__.RefacetOperation(service, rules, path + [("RefacetOperation", "")])
+                self.Transformations = self.__class__.Transformations(service, rules, path + [("Transformations", "")])
+                self._name_ = self.__class__._name_(service, rules, path + [("_name_", "")])
+                self.ChangeChildrenSettings = self.__class__.ChangeChildrenSettings(service, rules, "ChangeChildrenSettings", path)
+                self.Copy = self.__class__.Copy(service, rules, "Copy", path)
+                self.CreateChild = self.__class__.CreateChild(service, rules, "CreateChild", path)
+                self.Move = self.__class__.Move(service, rules, "Move", path)
+                self.ReFacet = self.__class__.ReFacet(service, rules, "ReFacet", path)
+                self.ReFacetNow = self.__class__.ReFacetNow(service, rules, "ReFacetNow", path)
+                self.Rename = self.__class__.Rename(service, rules, "Rename", path)
+                super().__init__(service, rules, path)
+
+            class Refaceting(PyMenu):
+                """
+                Singleton Refaceting.
+                """
+                def __init__(self, service, rules, path):
+                    self.Deviation = self.__class__.Deviation(service, rules, path + [("Deviation", "")])
+                    self.MaxSize = self.__class__.MaxSize(service, rules, path + [("MaxSize", "")])
+                    self.NormalAngle = self.__class__.NormalAngle(service, rules, path + [("NormalAngle", "")])
+                    self.Refacet = self.__class__.Refacet(service, rules, path + [("Refacet", "")])
+                    super().__init__(service, rules, path)
+
+                class Deviation(PyNumerical):
+                    """
+                    Parameter Deviation of value type float.
+                    """
+                    pass
+
+                class MaxSize(PyNumerical):
+                    """
+                    Parameter MaxSize of value type float.
+                    """
+                    pass
+
+                class NormalAngle(PyNumerical):
+                    """
+                    Parameter NormalAngle of value type float.
+                    """
+                    pass
+
+                class Refacet(PyParameter):
+                    """
+                    Parameter Refacet of value type bool.
+                    """
+                    pass
+
+            class Children(PyTextual):
+                """
+                Parameter Children of value type list[str].
+                """
+                pass
+
+            class Context(PyNumerical):
+                """
+                Parameter Context of value type int.
+                """
+                pass
+
+            class EdgeExtraction(PyTextual):
+                """
+                Parameter EdgeExtraction of value type str.
+                """
+                pass
+
+            class FeatureAngle(PyNumerical):
+                """
+                Parameter FeatureAngle of value type float.
+                """
+                pass
+
+            class IsChildrenSettingsChanged(PyParameter):
+                """
+                Parameter IsChildrenSettingsChanged of value type bool.
+                """
+                pass
+
+            class KeyId(PyNumerical):
+                """
+                Parameter KeyId of value type int.
+                """
+                pass
+
+            class MergeChildren(PyParameter):
+                """
+                Parameter MergeChildren of value type bool.
+                """
+                pass
+
+            class Name(PyTextual):
+                """
+                Parameter Name of value type str.
+                """
+                pass
+
+            class OneZonePer(PyTextual):
+                """
+                Parameter OneZonePer of value type str.
+                """
+                pass
+
+            class Parent(PyTextual):
+                """
+                Parameter Parent of value type str.
+                """
+                pass
+
+            class PrefixObjectName(PyParameter):
+                """
+                Parameter PrefixObjectName of value type bool.
+                """
+                pass
+
+            class RefacetOperation(PyTextual):
+                """
+                Parameter RefacetOperation of value type str.
+                """
+                pass
+
+            class Transformations(PyTextual):
+                """
+                Parameter Transformations of value type list[str].
+                """
+                pass
+
+            class _name_(PyTextual):
+                """
+                Parameter _name_ of value type str.
+                """
+                pass
+
+            class ChangeChildrenSettings(PyCommand):
+                """
+                Command ChangeChildrenSettings.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Copy(PyCommand):
+                """
+                Command Copy.
+
+                Parameters
+                ----------
+                Paths : list[str]
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class CreateChild(PyCommand):
+                """
+                Command CreateChild.
+
+                Parameters
+                ----------
+                ChildName : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Move(PyCommand):
+                """
+                Command Move.
+
+                Parameters
+                ----------
+                Paths : list[str]
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class ReFacet(PyCommand):
+                """
+                Command ReFacet.
+
+                Parameters
+                ----------
+                Deviation : float
+                NormalAngle : float
+                MaxSize : float
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class ReFacetNow(PyCommand):
+                """
+                Command ReFacetNow.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Rename(PyCommand):
+                """
+                Command Rename.
+
+                Parameters
+                ----------
+                NewName : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+        def __getitem__(self, key: str) -> _AssemblyNode:
+            return super().__getitem__(key)
+
+    class Node(PyNamedObjectContainer):
+        """
+        .
+        """
+        class _Node(PyMenu):
+            """
+            Singleton _Node.
+            """
+            def __init__(self, service, rules, path):
+                self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+                self.Context = self.__class__.Context(service, rules, path + [("Context", "")])
+                self.KeyId = self.__class__.KeyId(service, rules, path + [("KeyId", "")])
+                self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+                self.ObjectSetting = self.__class__.ObjectSetting(service, rules, path + [("ObjectSetting", "")])
+                self.Parent = self.__class__.Parent(service, rules, path + [("Parent", "")])
+                self.RefacetOperation = self.__class__.RefacetOperation(service, rules, path + [("RefacetOperation", "")])
+                self.Transformations = self.__class__.Transformations(service, rules, path + [("Transformations", "")])
+                self.Updated = self.__class__.Updated(service, rules, path + [("Updated", "")])
+                self._name_ = self.__class__._name_(service, rules, path + [("_name_", "")])
+                self.Copy = self.__class__.Copy(service, rules, "Copy", path)
+                self.CreateChild = self.__class__.CreateChild(service, rules, "CreateChild", path)
+                self.Move = self.__class__.Move(service, rules, "Move", path)
+                self.Rename = self.__class__.Rename(service, rules, "Rename", path)
+                super().__init__(service, rules, path)
+
+            class Children(PyTextual):
+                """
+                Parameter Children of value type list[str].
+                """
+                pass
+
+            class Context(PyNumerical):
+                """
+                Parameter Context of value type int.
+                """
+                pass
+
+            class KeyId(PyNumerical):
+                """
+                Parameter KeyId of value type int.
+                """
+                pass
+
+            class Name(PyTextual):
+                """
+                Parameter Name of value type str.
+                """
+                pass
+
+            class ObjectSetting(PyTextual):
+                """
+                Parameter ObjectSetting of value type str.
+                """
+                pass
+
+            class Parent(PyTextual):
+                """
+                Parameter Parent of value type str.
+                """
+                pass
+
+            class RefacetOperation(PyTextual):
+                """
+                Parameter RefacetOperation of value type str.
+                """
+                pass
+
+            class Transformations(PyTextual):
+                """
+                Parameter Transformations of value type list[str].
+                """
+                pass
+
+            class Updated(PyParameter):
+                """
+                Parameter Updated of value type bool.
+                """
+                pass
+
+            class _name_(PyTextual):
+                """
+                Parameter _name_ of value type str.
+                """
+                pass
+
+            class Copy(PyCommand):
+                """
+                Command Copy.
+
+                Parameters
+                ----------
+                Paths : list[str]
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class CreateChild(PyCommand):
+                """
+                Command CreateChild.
+
+                Parameters
+                ----------
+                ChildName : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Move(PyCommand):
+                """
+                Command Move.
+
+                Parameters
+                ----------
+                Paths : list[str]
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Rename(PyCommand):
+                """
+                Command Rename.
+
+                Parameters
+                ----------
+                NewName : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+        def __getitem__(self, key: str) -> _Node:
+            return super().__getitem__(key)
+
+    class ObjectSetting(PyNamedObjectContainer):
+        """
+        .
+        """
+        class _ObjectSetting(PyMenu):
+            """
+            Singleton _ObjectSetting.
+            """
+            def __init__(self, service, rules, path):
+                self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+                self.Context = self.__class__.Context(service, rules, path + [("Context", "")])
+                self.EdgeExtraction = self.__class__.EdgeExtraction(service, rules, path + [("EdgeExtraction", "")])
+                self.FeatureAngle = self.__class__.FeatureAngle(service, rules, path + [("FeatureAngle", "")])
+                self.MergeChildren = self.__class__.MergeChildren(service, rules, path + [("MergeChildren", "")])
+                self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+                self.OneZonePer = self.__class__.OneZonePer(service, rules, path + [("OneZonePer", "")])
+                self.PrefixObjectName = self.__class__.PrefixObjectName(service, rules, path + [("PrefixObjectName", "")])
+                self._name_ = self.__class__._name_(service, rules, path + [("_name_", "")])
+                self.Rename = self.__class__.Rename(service, rules, "Rename", path)
+                super().__init__(service, rules, path)
+
+            class Children(PyTextual):
+                """
+                Parameter Children of value type list[str].
+                """
+                pass
+
+            class Context(PyNumerical):
+                """
+                Parameter Context of value type int.
+                """
+                pass
+
+            class EdgeExtraction(PyTextual):
+                """
+                Parameter EdgeExtraction of value type str.
+                """
+                pass
+
+            class FeatureAngle(PyNumerical):
+                """
+                Parameter FeatureAngle of value type float.
+                """
+                pass
+
+            class MergeChildren(PyParameter):
+                """
+                Parameter MergeChildren of value type bool.
+                """
+                pass
+
+            class Name(PyTextual):
+                """
+                Parameter Name of value type str.
+                """
+                pass
+
+            class OneZonePer(PyTextual):
+                """
+                Parameter OneZonePer of value type str.
+                """
+                pass
+
+            class PrefixObjectName(PyParameter):
+                """
+                Parameter PrefixObjectName of value type bool.
+                """
+                pass
+
+            class _name_(PyTextual):
+                """
+                Parameter _name_ of value type str.
+                """
+                pass
+
+            class Rename(PyCommand):
+                """
+                Command Rename.
+
+                Parameters
+                ----------
+                NewName : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+        def __getitem__(self, key: str) -> _ObjectSetting:
+            return super().__getitem__(key)
+
+    class Refaceting(PyNamedObjectContainer):
+        """
+        .
+        """
+        class _Refaceting(PyMenu):
+            """
+            Singleton _Refaceting.
+            """
+            def __init__(self, service, rules, path):
+                self.Applied = self.__class__.Applied(service, rules, path + [("Applied", "")])
+                self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+                self.Context = self.__class__.Context(service, rules, path + [("Context", "")])
+                self.Deviation = self.__class__.Deviation(service, rules, path + [("Deviation", "")])
+                self.MaxSize = self.__class__.MaxSize(service, rules, path + [("MaxSize", "")])
+                self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+                self.NormalAngle = self.__class__.NormalAngle(service, rules, path + [("NormalAngle", "")])
+                self._name_ = self.__class__._name_(service, rules, path + [("_name_", "")])
+                self.Apply = self.__class__.Apply(service, rules, "Apply", path)
+                self.Delete = self.__class__.Delete(service, rules, "Delete", path)
+                self.Edit = self.__class__.Edit(service, rules, "Edit", path)
+                self.Rename = self.__class__.Rename(service, rules, "Rename", path)
+                super().__init__(service, rules, path)
+
+            class Applied(PyParameter):
+                """
+                Parameter Applied of value type bool.
+                """
+                pass
+
+            class Children(PyTextual):
+                """
+                Parameter Children of value type list[str].
+                """
+                pass
+
+            class Context(PyNumerical):
+                """
+                Parameter Context of value type int.
+                """
+                pass
+
+            class Deviation(PyNumerical):
+                """
+                Parameter Deviation of value type float.
+                """
+                pass
+
+            class MaxSize(PyNumerical):
+                """
+                Parameter MaxSize of value type float.
+                """
+                pass
+
+            class Name(PyTextual):
+                """
+                Parameter Name of value type str.
+                """
+                pass
+
+            class NormalAngle(PyNumerical):
+                """
+                Parameter NormalAngle of value type float.
+                """
+                pass
+
+            class _name_(PyTextual):
+                """
+                Parameter _name_ of value type str.
+                """
+                pass
+
+            class Apply(PyCommand):
+                """
+                Command Apply.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Delete(PyCommand):
+                """
+                Command Delete.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Edit(PyCommand):
+                """
+                Command Edit.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Rename(PyCommand):
+                """
+                Command Rename.
+
+                Parameters
+                ----------
+                NewName : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+        def __getitem__(self, key: str) -> _Refaceting:
+            return super().__getitem__(key)
+
+    class Transform(PyNamedObjectContainer):
+        """
+        .
+        """
+        class _Transform(PyMenu):
+            """
+            Singleton _Transform.
+            """
+            def __init__(self, service, rules, path):
+                self.Applied = self.__class__.Applied(service, rules, path + [("Applied", "")])
+                self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+                self.Context = self.__class__.Context(service, rules, path + [("Context", "")])
+                self.Global = self.__class__.Global(service, rules, path + [("Global", "")])
+                self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+                self.RotateX = self.__class__.RotateX(service, rules, path + [("RotateX", "")])
+                self.RotateY = self.__class__.RotateY(service, rules, path + [("RotateY", "")])
+                self.RotateZ = self.__class__.RotateZ(service, rules, path + [("RotateZ", "")])
+                self.TranslateX = self.__class__.TranslateX(service, rules, path + [("TranslateX", "")])
+                self.TranslateY = self.__class__.TranslateY(service, rules, path + [("TranslateY", "")])
+                self.TranslateZ = self.__class__.TranslateZ(service, rules, path + [("TranslateZ", "")])
+                self.Type = self.__class__.Type(service, rules, path + [("Type", "")])
+                self._name_ = self.__class__._name_(service, rules, path + [("_name_", "")])
+                self.Apply = self.__class__.Apply(service, rules, "Apply", path)
+                self.Delete = self.__class__.Delete(service, rules, "Delete", path)
+                self.Rename = self.__class__.Rename(service, rules, "Rename", path)
+                self.Undo = self.__class__.Undo(service, rules, "Undo", path)
+                self.Update = self.__class__.Update(service, rules, "Update", path)
+                super().__init__(service, rules, path)
+
+            class Applied(PyParameter):
+                """
+                Parameter Applied of value type bool.
+                """
+                pass
+
+            class Children(PyTextual):
+                """
+                Parameter Children of value type list[str].
+                """
+                pass
+
+            class Context(PyNumerical):
+                """
+                Parameter Context of value type int.
+                """
+                pass
+
+            class Global(PyTextual):
+                """
+                Parameter Global of value type str.
+                """
+                pass
+
+            class Name(PyTextual):
+                """
+                Parameter Name of value type str.
+                """
+                pass
+
+            class RotateX(PyNumerical):
+                """
+                Parameter RotateX of value type float.
+                """
+                pass
+
+            class RotateY(PyNumerical):
+                """
+                Parameter RotateY of value type float.
+                """
+                pass
+
+            class RotateZ(PyNumerical):
+                """
+                Parameter RotateZ of value type float.
+                """
+                pass
+
+            class TranslateX(PyNumerical):
+                """
+                Parameter TranslateX of value type float.
+                """
+                pass
+
+            class TranslateY(PyNumerical):
+                """
+                Parameter TranslateY of value type float.
+                """
+                pass
+
+            class TranslateZ(PyNumerical):
+                """
+                Parameter TranslateZ of value type float.
+                """
+                pass
+
+            class Type(PyTextual):
+                """
+                Parameter Type of value type str.
+                """
+                pass
+
+            class _name_(PyTextual):
+                """
+                Parameter _name_ of value type str.
+                """
+                pass
+
+            class Apply(PyCommand):
+                """
+                Command Apply.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Delete(PyCommand):
+                """
+                Command Delete.
+
+                Parameters
+                ----------
+                Path : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Rename(PyCommand):
+                """
+                Command Rename.
+
+                Parameters
+                ----------
+                NewName : str
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Undo(PyCommand):
+                """
+                Command Undo.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+            class Update(PyCommand):
+                """
+                Command Update.
+
+
+                Returns
+                -------
+                bool
+                """
+                pass
+
+        def __getitem__(self, key: str) -> _Transform:
+            return super().__getitem__(key)
+
+    class GlobalSettings(PyMenu):
+        """
+        Singleton GlobalSettings.
+        """
+        def __init__(self, service, rules, path):
+            self.CurrentContext = self.__class__.CurrentContext(service, rules, path + [("CurrentContext", "")])
+            self.CurrentNode = self.__class__.CurrentNode(service, rules, path + [("CurrentNode", "")])
+            self.LengthUnit = self.__class__.LengthUnit(service, rules, path + [("LengthUnit", "")])
+            super().__init__(service, rules, path)
+
+        class CurrentContext(PyNumerical):
+            """
+            Parameter CurrentContext of value type int.
+            """
+            pass
+
+        class CurrentNode(PyTextual):
+            """
+            Parameter CurrentNode of value type str.
+            """
+            pass
+
+        class LengthUnit(PyTextual):
+            """
+            Parameter LengthUnit of value type str.
+            """
+            pass
+
+    class MeshingOperations(PyMenu):
+        """
+        Singleton MeshingOperations.
+        """
+        def __init__(self, service, rules, path):
+            self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+            self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+            self.DeleteAllOperations = self.__class__.DeleteAllOperations(service, rules, "DeleteAllOperations", path)
+            self.UpdateAllOperations = self.__class__.UpdateAllOperations(service, rules, "UpdateAllOperations", path)
+            super().__init__(service, rules, path)
+
+        class Children(PyTextual):
+            """
+            Parameter Children of value type list[str].
+            """
+            pass
+
+        class Name(PyTextual):
+            """
+            Parameter Name of value type str.
+            """
+            pass
+
+        class DeleteAllOperations(PyCommand):
+            """
+            Command DeleteAllOperations.
+
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class UpdateAllOperations(PyCommand):
+            """
+            Command UpdateAllOperations.
+
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+    class ObjectSettingOperations(PyMenu):
+        """
+        Singleton ObjectSettingOperations.
+        """
+        def __init__(self, service, rules, path):
+            self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+            self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+            self.CreateObjectSetting = self.__class__.CreateObjectSetting(service, rules, "CreateObjectSetting", path)
+            self.DeleteAllObjectSetting = self.__class__.DeleteAllObjectSetting(service, rules, "DeleteAllObjectSetting", path)
+            self.DeleteObjectSetting = self.__class__.DeleteObjectSetting(service, rules, "DeleteObjectSetting", path)
+            super().__init__(service, rules, path)
+
+        class Children(PyTextual):
+            """
+            Parameter Children of value type list[str].
+            """
+            pass
+
+        class Name(PyTextual):
+            """
+            Parameter Name of value type str.
+            """
+            pass
+
+        class CreateObjectSetting(PyCommand):
+            """
+            Command CreateObjectSetting.
+
+            Parameters
+            ----------
+            Paths : list[str]
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class DeleteAllObjectSetting(PyCommand):
+            """
+            Command DeleteAllObjectSetting.
+
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class DeleteObjectSetting(PyCommand):
+            """
+            Command DeleteObjectSetting.
+
+            Parameters
+            ----------
+            Paths : list[str]
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+    class RefacetingOperations(PyMenu):
+        """
+        Singleton RefacetingOperations.
+        """
+        def __init__(self, service, rules, path):
+            self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+            self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+            self.CreateRefacet = self.__class__.CreateRefacet(service, rules, "CreateRefacet", path)
+            self.DeleteAllRefacets = self.__class__.DeleteAllRefacets(service, rules, "DeleteAllRefacets", path)
+            self.DeleteRefacet = self.__class__.DeleteRefacet(service, rules, "DeleteRefacet", path)
+            self.UpdateAllRefacets = self.__class__.UpdateAllRefacets(service, rules, "UpdateAllRefacets", path)
+            super().__init__(service, rules, path)
+
+        class Children(PyTextual):
+            """
+            Parameter Children of value type list[str].
+            """
+            pass
+
+        class Name(PyTextual):
+            """
+            Parameter Name of value type str.
+            """
+            pass
+
+        class CreateRefacet(PyCommand):
+            """
+            Command CreateRefacet.
+
+            Parameters
+            ----------
+            Paths : list[str]
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class DeleteAllRefacets(PyCommand):
+            """
+            Command DeleteAllRefacets.
+
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class DeleteRefacet(PyCommand):
+            """
+            Command DeleteRefacet.
+
+            Parameters
+            ----------
+            Paths : list[str]
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class UpdateAllRefacets(PyCommand):
+            """
+            Command UpdateAllRefacets.
+
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+    class TransformOperations(PyMenu):
+        """
+        Singleton TransformOperations.
+        """
+        def __init__(self, service, rules, path):
+            self.Children = self.__class__.Children(service, rules, path + [("Children", "")])
+            self.Name = self.__class__.Name(service, rules, path + [("Name", "")])
+            self.CreateTransform = self.__class__.CreateTransform(service, rules, "CreateTransform", path)
+            self.DeleteAllTransforms = self.__class__.DeleteAllTransforms(service, rules, "DeleteAllTransforms", path)
+            self.DeleteTransform = self.__class__.DeleteTransform(service, rules, "DeleteTransform", path)
+            self.UpdateAllTransforms = self.__class__.UpdateAllTransforms(service, rules, "UpdateAllTransforms", path)
+            super().__init__(service, rules, path)
+
+        class Children(PyTextual):
+            """
+            Parameter Children of value type list[str].
+            """
+            pass
+
+        class Name(PyTextual):
+            """
+            Parameter Name of value type str.
+            """
+            pass
+
+        class CreateTransform(PyCommand):
+            """
+            Command CreateTransform.
+
+            Parameters
+            ----------
+            Paths : list[str]
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class DeleteAllTransforms(PyCommand):
+            """
+            Command DeleteAllTransforms.
+
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class DeleteTransform(PyCommand):
+            """
+            Command DeleteTransform.
+
+            Parameters
+            ----------
+            Paths : list[str]
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+        class UpdateAllTransforms(PyCommand):
+            """
+            Command UpdateAllTransforms.
+
+
+            Returns
+            -------
+            bool
+            """
+            pass
+
+    class AppendFmdFiles(PyCommand):
+        """
+        Command AppendFmdFiles.
+
+        Parameters
+        ----------
+        FilePath : list[str]
+        AssemblyParentNode : int
+        FileUnit : str
+        Route : str
+        JtLOD : str
+        PartPerBody : bool
+        IgnoreSolidNamesAppend : bool
+        Options : dict[str, Any]
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class ChangeFileLengthUnit(PyCommand):
+        """
+        Command ChangeFileLengthUnit.
+
+        Parameters
+        ----------
+        LengthUnit : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class ChangeLengthUnit(PyCommand):
+        """
+        Command ChangeLengthUnit.
+
+        Parameters
+        ----------
+        LengthUnit : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class CreateObjForEachPart(PyCommand):
+        """
+        Command CreateObjForEachPart.
+
+        Parameters
+        ----------
+        Paths : list[str]
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class CreateObjects(PyCommand):
+        """
+        Command CreateObjects.
+
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class Delete(PyCommand):
+        """
+        Command Delete.
+
+        Parameters
+        ----------
+        Path : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class DeletePaths(PyCommand):
+        """
+        Command DeletePaths.
+
+        Parameters
+        ----------
+        Paths : list[str]
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class InitializeTemplate(PyCommand):
+        """
+        Command InitializeTemplate.
+
+        Parameters
+        ----------
+        templateType : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class InputFileChanged(PyCommand):
+        """
+        Command InputFileChanged.
+
+        Parameters
+        ----------
+        FilePath : str
+        PartPerBody : bool
+        IgnoreSolidNames : bool
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class ListMeshingOperations(PyCommand):
+        """
+        Command ListMeshingOperations.
+
+        Parameters
+        ----------
+        Path : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class LoadFmdFile(PyCommand):
+        """
+        Command LoadFmdFile.
+
+        Parameters
+        ----------
+        FilePath : str
+        FileUnit : str
+        Route : str
+        JtLOD : str
+        PartPerBody : bool
+        IgnoreSolidNames : bool
+        Options : dict[str, Any]
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class LoadTemplate(PyCommand):
+        """
+        Command LoadTemplate.
+
+        Parameters
+        ----------
+        FilePath : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class MoveCADComponentsToNewObject(PyCommand):
+        """
+        Command MoveCADComponentsToNewObject.
+
+        Parameters
+        ----------
+        Paths : list[str]
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class MoveToObject(PyCommand):
+        """
+        Command MoveToObject.
+
+        Parameters
+        ----------
+        Paths : list[str]
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class RedoAllTransforms(PyCommand):
+        """
+        Command RedoAllTransforms.
+
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class ResetTemplate(PyCommand):
+        """
+        Command ResetTemplate.
+
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class SaveFmdFile(PyCommand):
+        """
+        Command SaveFmdFile.
+
+        Parameters
+        ----------
+        FilePath : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class SaveTemplate(PyCommand):
+        """
+        Command SaveTemplate.
+
+        Parameters
+        ----------
+        FilePath : str
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
+    class UndoAllTransforms(PyCommand):
+        """
+        Command UndoAllTransforms.
+
+
+        Returns
+        -------
+        bool
+        """
+        pass
+
