@@ -1,0 +1,136 @@
+name: Deploy Multi-Language Documentation to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      deploy_branch:
+        description: 'Deploy from branch (for testing)'
+        required: false
+        default: 'main'
+        type: string
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: '3.11'
+  
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install sphinx sphinx-rtd-theme sphinx-autobuild
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f docs-requirements.txt ]; then pip install -r docs-requirements.txt; fi
+        
+    - name: Make scripts executable
+      run: |
+        chmod +x scripts/manage_docs.sh
+        
+    - name: Generate API Documentation for English
+      run: |
+        sphinx-apidoc -o docs/en/api portfolio_toolkit/
+        
+    - name: Generate API Documentation for Spanish
+      run: |
+        sphinx-apidoc -o docs/es/api portfolio_toolkit/
+
+    - name: Build English Documentation
+      run: |
+        echo "Building English documentation..."
+        ./scripts/manage_docs.sh build en
+        echo "English documentation build completed."
+        
+    - name: Build Spanish Documentation
+      run: |
+        echo "Building Spanish documentation..."
+        ./scripts/manage_docs.sh build es
+        echo "Spanish documentation build completed."
+        
+    - name: Create site structure
+      run: |
+        mkdir -p _site
+        echo "Setting up site structure with English as default..."
+        echo "English documentation will be available at root /"
+        echo "Spanish documentation will be available at /es/"
+        
+    - name: Verify documentation builds
+      run: |
+        echo "Verifying documentation builds..."
+        if [ ! -d "docs/en/_build/html" ]; then
+          echo "Error: English documentation build not found!"
+          exit 1
+        fi
+        if [ ! -d "docs/es/_build/html" ]; then
+          echo "Error: Spanish documentation build not found!"
+          exit 1
+        fi
+        echo "Both documentation builds verified successfully."
+        
+    - name: Copy documentation builds to site
+      run: |
+        echo "Copying English documentation to site root..."
+        cp -r docs/en/_build/html/* _site/
+        echo "Copying Spanish documentation to /es/ subdirectory..."
+        cp -r docs/es/_build/html _site/es
+        echo "Documentation builds copied successfully."
+        echo "Final site structure:"
+        echo "Root (English): $(ls _site/index.html 2>/dev/null && echo 'OK' || echo 'MISSING')"
+        echo "Spanish (/es/): $(ls _site/es/index.html 2>/dev/null && echo 'OK' || echo 'MISSING')"
+        echo "Sample files:"
+        find _site -type f -name "*.html" | head -10
+        
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: _site
+        
+  # Deployment job
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
