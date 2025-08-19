@@ -1,0 +1,2 @@
+class JoinFailed(Exception):
+    pass
