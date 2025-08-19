@@ -1,0 +1,46 @@
+# CPU-only Dockerfile for mircat-v2 (without seg dependencies)
+# Base image: Python 3.12 slim
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
+# Set build arg to exclude models
+ARG EXCLUDE_MODELS=true
+
+# Set working directory
+WORKDIR /app
+
+# Enable bytecode compilation for better performance
+ENV UV_COMPILE_BYTECODE=1
+# Use copy mode for Docker's bind mount caching
+ENV UV_LINK_MODE=copy
+# Disable python downloads
+ENV UV_PYTHON_DOWNLOADS=0
+# Configure PATH to use virtual environment
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Install dependencies
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-editable --no-install-project --no-dev --extra dicom --extra stats
+
+# Copy the entire project
+COPY . /app
+
+# Make the config file writable to anyone so they can change it
+RUN uv run mircat-v2-generate-config && chmod 666 /app/src/mircat_v2/configs/config.json
+# update the model configuration to copy to the container before deletion
+RUN uv run mircat-v2 models update
+# Remove models directory if EXCLUDE_MODELS is true
+RUN if [ "$EXCLUDE_MODELS" = "true" ]; then \
+        rm -rf /app/src/mircat_v2/segmentation/models/; \
+    fi
+
+# Install the project itself
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --extra dicom --extra stats
+
+FROM python:3.11-slim-bookworm
+COPY --from=builder --chown=app:app /app /app
+
+ENV PATH="/app/.venv/bin:$PATH"
+# Set the entrypoint to be /bin/bash so commands can be chained
+ENTRYPOINT ["/bin/bash"]
