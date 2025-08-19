@@ -1,0 +1,667 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>macsylib.database &mdash; MacSyLib 1.0.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../_static/_css/custom.css?v=b89f2dfc" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=1ed6394b"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            MacSyLib
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../user_guide/index.html">User Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modeler_guide/index.html">Modeller Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide/index.html">Developer Guide</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">MacSyLib</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">macsylib.database</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for macsylib.database</h1><div class="highlight"><pre>
+<span></span><span class="c1">#########################################################################</span>
+<span class="c1"># MacSyLib - Python library to detect macromolecular systems            #</span>
+<span class="c1">#            in prokaryotes protein dataset using systems modelling     #</span>
+<span class="c1">#            and similarity search.                                     #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># Authors: Sophie Abby, Bertrand Neron                                  #</span>
+<span class="c1"># Copyright (c) 2014-2025  Institut Pasteur (Paris) and CNRS.           #</span>
+<span class="c1"># See the COPYRIGHT file for details                                    #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># This file is part of MacSyLib package.                                #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is free software: you can redistribute it and/or modify      #</span>
+<span class="c1"># it under the terms of the GNU General Public License as published by  #</span>
+<span class="c1"># the Free Software Foundation, either version 3 of the License, or     #</span>
+<span class="c1"># (at your option) any later version.                                   #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is distributed in the hope that it will be useful,           #</span>
+<span class="c1"># but WITHOUT ANY WARRANTY; without even the implied warranty of        #</span>
+<span class="c1"># MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the          #</span>
+<span class="c1"># GNU General Public License for more details .                         #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># You should have received a copy of the GNU General Public License     #</span>
+<span class="c1"># along with MacSyLib (COPYING).                                        #</span>
+<span class="c1"># If not, see &lt;https://www.gnu.org/licenses/&gt;.                          #</span>
+<span class="c1">#########################################################################</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Module to handle sequences and their indexes</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">itertools</span><span class="w"> </span><span class="kn">import</span> <span class="n">groupby</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">namedtuple</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os.path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.error</span><span class="w"> </span><span class="kn">import</span> <span class="n">MacsylibError</span><span class="p">,</span> <span class="n">EmptyFileError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">open_compressed</span>
+
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TextIO</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
+
+<span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="n">Topology</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;linear&#39;</span><span class="p">,</span> <span class="s1">&#39;ciircular&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="fasta_iter">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.fasta_iter">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fasta_iter</span><span class="p">(</span><span class="n">fasta_file</span><span class="p">:</span> <span class="n">TextIO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    :param fasta_file: the file containing all input sequences in fasta format.</span>
+<span class="sd">    :author: http://biostar.stackexchange.com/users/36/brentp</span>
+<span class="sd">    :return: for a given fasta file, it returns an iterator which yields tuples</span>
+<span class="sd">             (string id, string comment, int sequence length)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># ditch the boolean (x[0]) and just keep the header or sequence since</span>
+    <span class="c1"># we know they alternate.</span>
+    <span class="n">faiter</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">groupby</span><span class="p">(</span><span class="n">fasta_file</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">line</span><span class="p">:</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;&gt;&quot;</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">faiter</span><span class="p">:</span>
+        <span class="c1"># drop the &quot;&gt;&quot;</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">header</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="n">_id</span> <span class="o">=</span> <span class="n">header</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">comment</span> <span class="o">=</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">seq</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">next</span><span class="p">(</span><span class="n">faiter</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+            <span class="c1"># the sequence was not start by &#39;&gt;&#39;</span>
+            <span class="c1"># bad fasta format</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error during sequence &#39;</span><span class="si">{</span><span class="n">fasta_file</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; parsing: Check the fasta format.&quot;</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">MacsylibError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+        <span class="k">yield</span> <span class="n">_id</span><span class="p">,</span> <span class="n">comment</span><span class="p">,</span> <span class="n">length</span></div>
+
+
+
+<div class="viewcode-block" id="Indexes">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.Indexes">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Indexes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handle the indexes for macsylib:</span>
+
+<span class="sd">     - find the indexes required by macsylib to compute some scores, or build them.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_field_separator</span> <span class="o">=</span> <span class="s2">&quot;^^&quot;</span>
+
+<div class="viewcode-block" id="Indexes.__init__">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.Indexes.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The constructor retrieves the file of indexes in the case they are not present</span>
+<span class="sd">        or the user asked for build indexes (--idx)</span>
+<span class="sd">        Launch the indexes building.</span>
+
+<span class="sd">        :param cfg: the configuration</span>
+<span class="sd">        :type cfg: :class:`macsylib.config.Config` object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span> <span class="o">=</span> <span class="n">cfg</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">sequence_db</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="Indexes.build">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.Indexes.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Build the indexes from the sequence data set in fasta format,</span>
+
+<span class="sd">        :param force: If True, force the index building even</span>
+<span class="sd">                      if the index files are present in the sequence data set folder</span>
+<span class="sd">        :return: the path to the index</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">my_indexes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_my_indexes</span><span class="p">()</span>  <span class="c1"># check read</span>
+
+        <span class="c1">###########################</span>
+        <span class="c1"># build indexes if needed #</span>
+        <span class="c1">###########################</span>
+        <span class="k">if</span> <span class="n">my_indexes</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">my_indexes</span><span class="p">)</span> <span class="k">as</span> <span class="n">idx</span><span class="p">:</span>
+                <span class="n">seq_path</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">first_item</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+                    <span class="c1"># there is only one line in file</span>
+                    <span class="n">first_item</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s1">&#39;;&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="c1"># there is no path in idx, it&#39;s an old index</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The &#39;</span><span class="si">{</span><span class="n">my_indexes</span><span class="si">}</span><span class="s2">&#39; index file is in old format. Force index building.&quot;</span><span class="p">)</span>
+                <span class="n">force</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">elif</span> <span class="n">seq_path</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span><span class="p">:</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The &#39;</span><span class="si">{</span><span class="n">my_indexes</span><span class="si">}</span><span class="s2">&#39; index file does not point to &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span><span class="si">}</span><span class="s2">&#39;. Force building&quot;</span><span class="p">)</span>
+                <span class="n">force</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">force</span> <span class="ow">and</span> <span class="n">first_item</span><span class="p">:</span>
+                <span class="c1"># the first line of idx is a valid path</span>
+                <span class="k">if</span> <span class="n">first_item</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_separator</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># the separator is different than the actual separator</span>
+                    <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The &#39;</span><span class="si">{</span><span class="n">my_indexes</span><span class="si">}</span><span class="s2">&#39; index file is in old format. Force index building.&quot;</span><span class="p">)</span>
+                    <span class="n">force</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># if fasta file is newer than idx</span>
+            <span class="n">stamp_fasta</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">getmtime</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span><span class="p">)</span>
+            <span class="n">stamp_idx</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">getmtime</span><span class="p">(</span><span class="n">my_indexes</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">stamp_idx</span> <span class="o">&lt;</span> <span class="n">stamp_fasta</span><span class="p">:</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;the sequence index is older than sequence file: rebuild the index.&quot;</span><span class="p">)</span>
+                <span class="n">force</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="n">force</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">my_indexes</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">index_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_dir</span><span class="p">(</span><span class="n">build</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># check build</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+            <span class="n">my_indexes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_my_indexes</span><span class="p">(</span><span class="n">index_dir</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">my_indexes</span></div>
+
+
+
+<div class="viewcode-block" id="Indexes.find_my_indexes">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.Indexes.find_my_indexes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">find_my_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :return: the file of macsylib indexes if it exists in the dataset folder, None otherwise.</span>
+<span class="sd">        :rtype: string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_dir</span><span class="p">(</span><span class="n">build</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">index_dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;.idx&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">path</span></div>
+
+
+
+<div class="viewcode-block" id="Indexes._index_dir">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.Indexes._index_dir">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_index_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">build</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        search where to store(build=True) read indexes</span>
+
+<span class="sd">        :param build: if check the index-dir permissions to write</span>
+<span class="sd">        :return: The directory where read or write the indexes</span>
+<span class="sd">        :raise ValueError: if the directory specify by --index-dir option does not exist</span>
+<span class="sd">                           or if build = True index-dir is not writable</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">index_dir</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">index_dir</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">index_dir</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No such directory: </span><span class="si">{</span><span class="n">index_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">build</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">index_dir</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">W_OK</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The &#39;</span><span class="si">{</span><span class="n">index_dir</span><span class="si">}</span><span class="s2">&#39; dir is not writable.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">index_dir</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># we need abspath because if user provide filename not path for sequence_db</span>
+            <span class="c1"># for instance my_seq.faste instead of ./my_seq.fasta</span>
+            <span class="c1"># then index_dir is empty string</span>
+            <span class="c1"># and os.access return False</span>
+            <span class="n">index_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">sequence_db</span><span class="p">()))</span>
+            <span class="k">if</span> <span class="n">build</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">index_dir</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">W_OK</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The &#39;</span><span class="si">{</span><span class="n">index_dir</span><span class="si">}</span><span class="s2">&#39; dir is not writable. Change rights or specify --index-dir.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">index_dir</span></div>
+
+
+
+<div class="viewcode-block" id="Indexes._build_my_indexes">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.Indexes._build_my_indexes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_my_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Build macsylib indexes. These indexes are stored in a file.</span>
+
+<span class="sd">        The file format is the following:</span>
+<span class="sd">         - the first line is the path of the sequence-db indexed</span>
+<span class="sd">         - one entry per line, with each line having this format:</span>
+<span class="sd">         - sequence id;sequence length;sequence rank</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">index_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">index_dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;.idx&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">open_compressed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span><span class="p">,</span> <span class="s1">&#39;rt&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fasta_file</span><span class="p">:</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">index_file</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">my_base</span><span class="p">:</span>
+                    <span class="n">my_base</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+                    <span class="n">f_iter</span> <span class="o">=</span> <span class="n">fasta_iter</span><span class="p">(</span><span class="n">fasta_file</span><span class="p">)</span>
+                    <span class="n">seq_nb</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="k">for</span> <span class="n">seq_id</span><span class="p">,</span> <span class="n">comment</span><span class="p">,</span> <span class="n">length</span> <span class="ow">in</span> <span class="n">f_iter</span><span class="p">:</span>
+                        <span class="n">seq_nb</span> <span class="o">+=</span> <span class="mi">1</span>
+                        <span class="n">my_base</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">seq_id</span><span class="si">}{</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_separator</span><span class="si">}{</span><span class="n">length</span><span class="si">:</span><span class="s2">d</span><span class="si">}{</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_separator</span><span class="si">}{</span><span class="n">seq_nb</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="n">my_base</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Cannot index &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">MacsylibError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;unable to index the sequence dataset: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">sequence_db</span><span class="p">()</span><span class="si">}</span><span class="s2"> : </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">MacsylibError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+        <span class="k">if</span> <span class="n">seq_nb</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">index_file</span><span class="p">)</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The sequence-db file &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_fasta_path</span><span class="si">}</span><span class="s2">&#39; does not contains sequences.&quot;</span>
+            <span class="k">raise</span> <span class="n">EmptyFileError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">index_file</span></div>
+
+
+
+<div class="viewcode-block" id="Indexes.__iter__">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.Indexes.__iter__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :raise MacsylibError: if the indexes are not buid</span>
+<span class="sd">        :return: an iterator on the indexes</span>
+
+<span class="sd">        To use it the index must be built.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_my_indexes</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MacsylibError</span><span class="p">(</span><span class="s2">&quot;Build index before to use it.&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">idx_file</span><span class="p">:</span>
+            <span class="c1"># The first line of index is the path to the data</span>
+            <span class="c1"># It is not an index</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">idx_file</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">idx_file</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">seq_id</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">_rank</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_field_separator</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">MacsylibError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;fail to parse database index </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> at line: </span><span class="si">{</span><span class="n">line</span><span class="si">}</span><span class="s2">.&quot;</span>
+                                       <span class="sa">f</span><span class="s2">&quot;Try to rebuild index with --idx option or remove file.&quot;</span>
+                                       <span class="sa">f</span><span class="s2">&quot;If error persist feel free to submit an issue at&quot;</span>
+                                       <span class="sa">f</span><span class="s2">&quot;https://github.com/gem-pasteur/macsylib/issues/new?assignees=&amp;labels=bug&amp;template=bug_report.md&amp;title=%5BBUG%5D &quot;</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+                <span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">length</span><span class="p">)</span>
+                <span class="n">_rank</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">_rank</span><span class="p">)</span>
+                <span class="k">yield</span> <span class="n">seq_id</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">_rank</span></div>
+</div>
+
+
+
+<span class="n">RepliconInfo</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s1">&#39;RepliconInfo&#39;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;topology&#39;</span><span class="p">,</span> <span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="s1">&#39;max&#39;</span><span class="p">,</span> <span class="s1">&#39;genes&#39;</span><span class="p">))</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">handle information about a replicon</span>
+
+<span class="sd">.. py:attribute:: topology</span>
+<span class="sd">    :noindex:</span>
+
+<span class="sd">    The type of replicon topology &#39;linear or &#39;circular&#39;</span>
+
+<span class="sd">.. py:attribute:: min</span>
+<span class="sd">    :noindex:</span>
+
+<span class="sd">    The position of the last gene of the replicon in the sequence dataset.</span>
+
+<span class="sd">.. py:attribute:: max</span>
+<span class="sd">    :noindex:</span>
+
+<span class="sd">    The position of the last gene of the replicon in the sequence dataset.</span>
+
+<span class="sd">.. py:attribute:: genes</span>
+<span class="sd">    :noindex:</span>
+
+<span class="sd">    A list of genes beloging to the replicon. Each genes is representing by a tuple (str seq_id, int length)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="RepliconDB">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RepliconDB</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Stores information (topology, min, max, [genes]) for all replicons in the sequence_db</span>
+<span class="sd">    the Replicon object must be instantiated only for sequence_db of type &#39;gembase&#39; or &#39;ordered_replicon&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="RepliconDB.__init__">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param cfg: The configuration object</span>
+<span class="sd">        :type cfg: :class:`macsylib.config.Config` object</span>
+
+<span class="sd">        .. note ::</span>
+<span class="sd">            This class can be instanced only if the db_type is &#39;gembase&#39; or &#39;ordered_replicon&#39;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span> <span class="o">=</span> <span class="n">cfg</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">db_type</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;gembase&#39;</span><span class="p">,</span> <span class="s1">&#39;ordered_replicon&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_idx</span> <span class="o">=</span> <span class="n">Indexes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">topology_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">topology_file</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology_file</span><span class="p">:</span>
+            <span class="n">topo_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fill_topology</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">topo_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">db_type</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;gembase&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fill_gembase_min_max</span><span class="p">(</span><span class="n">topo_dict</span><span class="p">,</span> <span class="n">default_topology</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">replicon_topology</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ordered_replicon_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">sequence_db</span><span class="p">()))[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fill_ordered_min_max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">replicon_topology</span><span class="p">())</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ordered_replicon_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ordered_replicon_name</span>
+
+<div class="viewcode-block" id="RepliconDB.guess_if_really_gembase">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.guess_if_really_gembase">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">guess_if_really_gembase</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Count the number of replicon with only on sequence</span>
+<span class="sd">        if this number is above a threshold may be it&#39;s not gembase. for instance the folowing sequence</span>
+<span class="sd">        have id compliant with the gembase id syntax but it&#39;s not it only contains one replicon (&#39;ordered replicon&#39;)</span>
+
+<span class="sd">        | &gt;1E10S0A0cP00_0010 D GTG TGA 483 2027 Valid dnaA 1545 _PA0001_NP_064721.1_ PA0001 1 483 2027</span>
+<span class="sd">        | MSVELWQQCVDLLRDELPSQQFNTWIRPLQVEAEGDELRVYAPNRFVLDW</span>
+<span class="sd">        | &gt;0200S001A0c_0P1E0 D ATG TAA 2056 3159 Valid dnaN 1104 _PA0002_NP_064722.1_ PA0002 1 2056 3159</span>
+<span class="sd">        | MHFTIQREALLKPLQLVAGVVERRQTLPVLSNVLLVVEGQQLSLTGTDLE</span>
+<span class="sd">        | &gt;0000310E00S0c_1PA D ATG TGA 3169 4278 Valid recF 1110 _PA0003_NP_064723.1_ PA0003 1 3169 4278</span>
+<span class="sd">        | MSLTRVSVTAVRNLHPVTLSPSPRINILYGDNGSGKTSVLEAIHLLGLAR</span>
+<span class="sd">        | &gt;c_01000A0PS00014E D ATG TGA 4275 6695 Valid gyrB 2421 _PA0004_NP_064724.1_ PA0004 1 4275 6695</span>
+<span class="sd">        | MSENNTYDSSSIKVLKGLDAVRKRPGMYIGDTDDGTGLHHMVFEVVDNSI</span>
+<span class="sd">        | &gt;07700ES100A0cP01_ C ATG TGA 91521 94826 Valid icmF1 3306 _PA0077_NP_248767.1_ PA0077 1 91521 94826</span>
+<span class="sd">        | MQSLAEVSAPDAASVAT</span>
+
+<span class="sd">        :return: False if most replicon contains only one sequence, True otherwise</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">all_len</span> <span class="o">=</span> <span class="p">[</span><span class="n">rep</span><span class="o">.</span><span class="n">max</span> <span class="o">-</span> <span class="n">rep</span><span class="o">.</span><span class="n">min</span> <span class="k">for</span> <span class="n">rep</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+        <span class="n">replicon_with_one_seq</span> <span class="o">=</span> <span class="n">all_len</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">replicon_with_one_seq</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_len</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.8</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="RepliconDB._fill_topology">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB._fill_topology">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fill_topology</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">:</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fill the internal dictionary with min and max positions for each replicon_name of the sequence_db</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">topo_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">topology_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">topo_f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">topo_f</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;#&#39;</span><span class="p">):</span>
+                    <span class="k">continue</span>
+                <span class="n">replicon_name</span><span class="p">,</span> <span class="n">topo</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
+                <span class="n">replicon_name</span> <span class="o">=</span> <span class="n">replicon_name</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                <span class="n">topo</span> <span class="o">=</span> <span class="n">topo</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+                <span class="n">topo_dict</span><span class="p">[</span><span class="n">replicon_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">topo</span>
+        <span class="k">return</span> <span class="n">topo_dict</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB._fill_ordered_min_max">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB._fill_ordered_min_max">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fill_ordered_min_max</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">default_topology</span><span class="p">:</span> <span class="n">Topology</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        For the replicon_name of the ordered_replicon sequence base, fill the internal dict with RepliconInfo</span>
+
+<span class="sd">        :param default_topology: the topology provided by config.replicon_topology</span>
+<span class="sd">        :type default_topology: string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_min</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">_max</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">genes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">seq_id</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">_rank</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_idx</span><span class="p">:</span>
+            <span class="n">genes</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">seq_id</span><span class="p">,</span> <span class="n">length</span><span class="p">))</span>
+            <span class="n">_max</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ordered_replicon_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">RepliconInfo</span><span class="p">(</span><span class="n">default_topology</span><span class="p">,</span> <span class="n">_min</span><span class="p">,</span> <span class="n">_max</span><span class="p">,</span> <span class="n">genes</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB._fill_gembase_min_max">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB._fill_gembase_min_max">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fill_gembase_min_max</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">topology</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">:</span> <span class="n">Topology</span><span class="p">],</span> <span class="n">default_topology</span><span class="p">:</span> <span class="n">Topology</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        For each replicon_name of a gembase dataset, it fills the internal dictionary with a namedtuple RepliconInfo</span>
+
+<span class="sd">        :param topology: the topologies for each replicon</span>
+<span class="sd">                         (parsed from the file specified with the option --topology-file)</span>
+<span class="sd">        :param default_topology: the topology provided by the config.replicon_topology</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">grp_replicon</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            in gembase the identifier of fasta sequence follows the following schema:</span>
+<span class="sd">            &lt;replicon-name&gt;_&lt;seq-name&gt; with eventually &#39;_&#39; inside the &lt;replicon_name&gt;</span>
+<span class="sd">            but not in the &lt;seq-name&gt;.</span>
+<span class="sd">            for draft genome the seqname is postfix with &#39;b&#39; if the sequence is border of the contig</span>
+<span class="sd">            or &#39;i&#39; if it is inside.</span>
+<span class="sd">            so grp_replicon allow to group sequences belonging to the same replicon.</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="k">return</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)[:</span> <span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;ib&#39;</span><span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">parse_seq_id</span><span class="p">(</span><span class="n">seq_id</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            parse a gembase sequence id (.idx)</span>
+<span class="sd">            seq_id has the following format &lt;replicon-name&gt;_&lt;seq-name&gt; with eventually &#39;_&#39; inside the &lt;replicon_name&gt;</span>
+<span class="sd">            but not in the &lt;seq-name&gt;.</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="o">*</span><span class="n">replicon_name</span><span class="p">,</span> <span class="n">seq_name</span> <span class="o">=</span> <span class="n">seq_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+            <span class="n">replicon_name</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">replicon_name</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">replicon_name</span><span class="p">,</span> <span class="n">seq_name</span>
+
+        <span class="n">replicons</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">groupby</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_idx</span><span class="p">,</span> <span class="n">grp_replicon</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">replicon</span> <span class="ow">in</span> <span class="n">replicons</span><span class="p">:</span>
+            <span class="n">genes</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">seq_id</span><span class="p">,</span> <span class="n">seq_length</span><span class="p">,</span> <span class="n">_min</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">replicon</span><span class="p">)</span>
+
+            <span class="n">replicon_name</span><span class="p">,</span> <span class="n">seq_name</span> <span class="o">=</span> <span class="n">parse_seq_id</span><span class="p">(</span><span class="n">seq_id</span><span class="p">)</span>
+            <span class="n">genes</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">seq_name</span><span class="p">,</span> <span class="n">seq_length</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">seq_id</span><span class="p">,</span> <span class="n">seq_length</span><span class="p">,</span> <span class="n">rank</span> <span class="ow">in</span> <span class="n">replicon</span><span class="p">:</span>
+                <span class="c1"># pass all sequence of the replicon until the last one</span>
+                <span class="n">_</span><span class="p">,</span> <span class="n">seq_name</span> <span class="o">=</span> <span class="n">parse_seq_id</span><span class="p">(</span><span class="n">seq_id</span><span class="p">)</span>
+                <span class="n">genes</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">seq_name</span><span class="p">,</span> <span class="n">seq_length</span><span class="p">))</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">seq_name</span> <span class="o">=</span> <span class="n">parse_seq_id</span><span class="p">(</span><span class="n">seq_id</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">_max</span> <span class="o">=</span> <span class="n">rank</span>
+            <span class="k">except</span> <span class="ne">UnboundLocalError</span><span class="p">:</span>
+                <span class="c1"># there is only one sequence for this replicon</span>
+                <span class="n">_max</span> <span class="o">=</span> <span class="n">_min</span>
+            <span class="n">genes</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">seq_name</span><span class="p">,</span> <span class="n">seq_length</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">replicon_name</span> <span class="ow">in</span> <span class="n">topology</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="p">[</span><span class="n">replicon_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">RepliconInfo</span><span class="p">(</span><span class="n">topology</span><span class="p">[</span><span class="n">replicon_name</span><span class="p">],</span> <span class="n">_min</span><span class="p">,</span> <span class="n">_max</span><span class="p">,</span> <span class="n">genes</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="p">[</span><span class="n">replicon_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">RepliconInfo</span><span class="p">(</span><span class="n">default_topology</span><span class="p">,</span> <span class="n">_min</span><span class="p">,</span> <span class="n">_max</span><span class="p">,</span> <span class="n">genes</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB.__contains__">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.__contains__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">replicon_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param replicon_name: the name of the replicon</span>
+<span class="sd">        :returns: True if replicon_name is in the repliconDB, false otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">replicon_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB.__getitem__">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.__getitem__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">replicon_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RepliconInfo</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param replicon_name: the name of the replicon to get information on</span>
+<span class="sd">        :returns: the RepliconInfo for the provided replicon_name</span>
+<span class="sd">        :raise: KeyError if replicon_name is not in repliconDB</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="p">[</span><span class="n">replicon_name</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB.get">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.get">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">replicon_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RepliconInfo</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param replicon_name: the name of the replicon to get information</span>
+<span class="sd">        :param default: the value to return if the replicon_name is not in the RepliconDB</span>
+<span class="sd">        :returns: the RepliconInfo for replicon_name if replicon_name is in the repliconDB, else default.</span>
+<span class="sd">                  If default is not given, it is set to None, so that this method never raises a KeyError.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">replicon_name</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB.items">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.items">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">items</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">RepliconInfo</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :return: a copy of the RepliconDB as a list of (replicon_name, RepliconInfo) pairs</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="o">.</span><span class="n">items</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB.iteritems">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.iteritems">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iteritems</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">RepliconInfo</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :return: an iterator over the RepliconDB as a list (replicon_name, RepliconInfo) pairs</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="o">.</span><span class="n">items</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB.replicon_names">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.replicon_names">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">replicon_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :return: a copy of the RepliconDB as a list of replicon_names</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="RepliconDB.replicon_infos">
+<a class="viewcode-back" href="../../developer_guide/api/database.html#macsylib.database.RepliconDB.replicon_infos">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">replicon_infos</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">RepliconInfo</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :return: a copy of the RepliconDB as list of replicons info</span>
+<span class="sd">        :rtype: RepliconInfo instance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_DB</span><span class="o">.</span><span class="n">values</span><span class="p">())</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2014-2025, Bertrand Néron, Sophie Abby.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+  
+
+<div class="licensing">
+  <p>
+    This documentation is licensed under <a href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+      <img src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png">.
+    </a>
+  </p>
+</div>
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+<a class="github" href="https://github.com/gem-pasteur/macsylib">
+    <img style="position: absolute; top: 0; right: 0; border: 0;"
+         src="https://raw.githubusercontent.com/gem-pasteur/macsylib/refs/heads/main/doc/source/_static/github-banner.svg"
+         alt="Fork me on GitHub" />
+</a>
+
+
+
+</body>
+</html>

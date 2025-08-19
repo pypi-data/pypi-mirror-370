@@ -1,0 +1,408 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>macsylib.solution &mdash; MacSyLib 1.0.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../_static/_css/custom.css?v=b89f2dfc" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=1ed6394b"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            MacSyLib
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../user_guide/index.html">User Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modeler_guide/index.html">Modeller Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide/index.html">Developer Guide</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">MacSyLib</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">macsylib.solution</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for macsylib.solution</h1><div class="highlight"><pre>
+<span></span><span class="c1">#########################################################################</span>
+<span class="c1"># MacSyLib - Python library to detect macromolecular systems            #</span>
+<span class="c1">#            in prokaryotes protein dataset using systems modelling     #</span>
+<span class="c1">#            and similarity search.                                     #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># Authors: Sophie Abby, Bertrand Neron                                  #</span>
+<span class="c1"># Copyright (c) 2014-2025  Institut Pasteur (Paris) and CNRS.           #</span>
+<span class="c1"># See the COPYRIGHT file for details                                    #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># This file is part of MacSyLib package.                                #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is free software: you can redistribute it and/or modify      #</span>
+<span class="c1"># it under the terms of the GNU General Public License as published by  #</span>
+<span class="c1"># the Free Software Foundation, either version 3 of the License, or     #</span>
+<span class="c1"># (at your option) any later version.                                   #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is distributed in the hope that it will be useful,           #</span>
+<span class="c1"># but WITHOUT ANY WARRANTY; without even the implied warranty of        #</span>
+<span class="c1"># MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the          #</span>
+<span class="c1"># GNU General Public License for more details .                         #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># You should have received a copy of the GNU General Public License     #</span>
+<span class="c1"># along with MacSyLib (COPYING).                                        #</span>
+<span class="c1"># If not, see &lt;https://www.gnu.org/licenses/&gt;.                          #</span>
+<span class="c1">#########################################################################</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Generator</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.system</span><span class="w"> </span><span class="kn">import</span> <span class="n">System</span><span class="p">,</span> <span class="n">RejectedCandidate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.cluster</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cluster</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.hit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Loner</span><span class="p">,</span> <span class="n">LonerMultiSystem</span>
+
+
+<div class="viewcode-block" id="Solution">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.Solution">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Solution</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handle Solution, a solution is a set of compatible Systems</span>
+
+<span class="sd">    when compare solutions we check the following criteria</span>
+
+<span class="sd">        1. The number of hits</span>
+<span class="sd">        2. The number of systems</span>
+<span class="sd">        3. The average of wholeness</span>
+<span class="sd">        4. The hits position (is used ti give predictable output for unit tests)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="Solution.__init__">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.Solution.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">systems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">System</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param systems: The list of system that composed this solution</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_systems</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sorted_systems</span><span class="p">(</span><span class="n">systems</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_score</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">syst</span><span class="o">.</span><span class="n">score</span> <span class="k">for</span> <span class="n">syst</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systems</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_average_woleness</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">sys</span><span class="o">.</span><span class="n">wholeness</span> <span class="k">for</span> <span class="n">sys</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systems</span><span class="p">])</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">systems</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_hits_number</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">syst</span><span class="o">.</span><span class="n">hits</span><span class="p">)</span> <span class="k">for</span> <span class="n">syst</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systems</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_hits_positions</span> <span class="o">=</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">position</span> <span class="k">for</span> <span class="n">syst</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systems</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">syst</span><span class="o">.</span><span class="n">hits</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="Solution._sorted_systems">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.Solution._sorted_systems">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sorted_systems</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">systems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">System</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">System</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        sort the systems following the positions of th hits that composed the systems</span>
+
+<span class="sd">        :param systems: the systems to sort</span>
+<span class="sd">        :type systems: list of :class:`mcsypy.system.System` objects</span>
+<span class="sd">        :return: a sorted copy of the *systems*</span>
+<span class="sd">        :rtype: list of :class:`mcsypy.system.System` objects</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sorted_sys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">systems</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">syst</span><span class="p">:</span> <span class="p">([</span><span class="n">h</span><span class="o">.</span><span class="n">position</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">syst</span><span class="o">.</span><span class="n">hits</span><span class="p">],</span>
+                                                       <span class="n">syst</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">fqn</span><span class="p">,</span>
+                                                       <span class="o">-</span> <span class="n">syst</span><span class="o">.</span><span class="n">score</span><span class="p">)</span>
+                            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">sorted_sys</span></div>
+
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">systems</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">System</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;&quot;a sorted list of the *systems* that composed the solution&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_systems</span><span class="p">[:]</span>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">score</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The score of this solution&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_score</span>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">average_wholeness</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The average of the systems wholeness&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_average_woleness</span>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hits_number</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The sum of the hits of each system in this solution&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hits_number</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hits_positions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The list of position of all hits of the solution&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hits_positions</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">systems</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Solution.__gt__">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.Solution.__gt__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hits_number</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">average_wholeness</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hits_positions</span><span class="p">)</span> <span class="o">&gt;</span> \
+               <span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">hits_number</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">other</span><span class="o">.</span><span class="n">average_wholeness</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">hits_positions</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="Solution.__lt__">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.Solution.__lt__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hits_number</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">average_wholeness</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hits_positions</span><span class="p">)</span> <span class="o">&lt;</span> \
+               <span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">hits_number</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">other</span><span class="o">.</span><span class="n">average_wholeness</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">hits_positions</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Solution.__eq__">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.Solution.__eq__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">hits_number</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">hits_number</span> <span class="ow">and</span> \
+               <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">other</span><span class="p">)</span> <span class="ow">and</span> \
+               <span class="bp">self</span><span class="o">.</span><span class="n">average_wholeness</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">average_wholeness</span> <span class="ow">and</span> \
+               <span class="bp">self</span><span class="o">.</span><span class="n">hits_positions</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">hits_positions</span></div>
+
+
+<div class="viewcode-block" id="Solution.__iter__">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.Solution.__iter__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Solution allow to iterate over the systems</span>
+
+<span class="sd">        :return: generator</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systems</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="find_best_solutions">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.find_best_solutions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">find_best_solutions</span><span class="p">(</span><span class="n">systems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">System</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Solution</span><span class="p">],</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Among the systems choose the combination of systems which does not share :class:`macsylib.hit.CoreHit`</span>
+<span class="sd">    and maximize the sum of systems scores</span>
+
+<span class="sd">    :param systems: the systems to analyse</span>
+<span class="sd">    :return: the list of :class:`macsylib.solution.Solution` which represent one best solution then it&#39;s score.</span>
+<span class="sd">    :rtype: tuple of 2 elements the best solutions and it&#39;s score</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">G</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
+    <span class="c1"># add nodes (vertices)</span>
+    <span class="n">G</span><span class="o">.</span><span class="n">add_nodes_from</span><span class="p">(</span><span class="n">systems</span><span class="p">)</span>
+    <span class="c1"># let&#39;s create an edges between compatible nodes</span>
+    <span class="k">for</span> <span class="n">sys_i</span><span class="p">,</span> <span class="n">sys_j</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">(</span><span class="n">systems</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">sys_i</span><span class="o">.</span><span class="n">is_compatible</span><span class="p">(</span><span class="n">sys_j</span><span class="p">):</span>
+            <span class="n">G</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">sys_i</span><span class="p">,</span> <span class="n">sys_j</span><span class="p">)</span>
+    <span class="c1"># find_cliques return a generator so the call to find cliques does not take time</span>
+    <span class="c1"># but each time I ask for next item (in the loop below for instance)</span>
+    <span class="c1"># nx compute the next clique so it can take time.</span>
+    <span class="c1"># the number of maximal clique grow exponentiamly with the number of node</span>
+    <span class="c1"># for instance for geneome  SYDY001.0321.00001.C001 ther is</span>
+    <span class="c1"># 261 nodes, 22566 edges</span>
+    <span class="c1"># 124 015 680 cliques</span>
+    <span class="n">cliques</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">algorithms</span><span class="o">.</span><span class="n">clique</span><span class="o">.</span><span class="n">find_cliques</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+    <span class="n">max_score</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cliques</span><span class="p">:</span>
+        <span class="c1"># it is important to sum the score of clusters</span>
+        <span class="c1"># and creat a solution object only for solution I want to keep</span>
+        <span class="c1"># because there could be lot of cliques</span>
+        <span class="c1"># but only few will be kept (less than 5)</span>
+        <span class="c1"># so the wide majority of these cliques will be thrown</span>
+        <span class="c1"># if I create a Solution object for each clique I spend lot if time and memory to</span>
+        <span class="c1"># instanciate new object to thrown them few line later :-(</span>
+        <span class="n">current_score</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">s</span><span class="o">.</span><span class="n">score</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">c</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">max_score</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">current_score</span> <span class="o">&gt;</span> <span class="n">max_score</span><span class="p">):</span>
+            <span class="n">max_score</span> <span class="o">=</span> <span class="n">current_score</span>
+            <span class="n">best_solutions</span> <span class="o">=</span> <span class="p">[</span><span class="n">Solution</span><span class="p">(</span><span class="n">c</span><span class="p">)]</span>  <span class="c1"># this solution is better start a new best_solutions</span>
+        <span class="k">elif</span> <span class="n">current_score</span> <span class="o">==</span> <span class="n">max_score</span><span class="p">:</span>
+            <span class="n">best_solutions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Solution</span><span class="p">(</span><span class="n">c</span><span class="p">))</span>
+    <span class="c1"># sort the solutions (cliques)</span>
+    <span class="n">solutions</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">best_solutions</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">solutions</span><span class="p">,</span> <span class="n">max_score</span></div>
+
+
+
+<div class="viewcode-block" id="combine_clusters">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.combine_clusters">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">combine_clusters</span><span class="p">(</span><span class="n">clusters</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Cluster</span><span class="p">],</span>
+                     <span class="n">true_loners</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">:</span> <span class="n">Loner</span> <span class="o">|</span> <span class="n">LonerMultiSystem</span><span class="p">],</span>
+                     <span class="n">multi_loci</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Cluster</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    generate the combinations of clusters, with loners and multi systems</span>
+
+<span class="sd">    :param clusters: the clusters to combines</span>
+<span class="sd">    :param true_loners: the multi-systems hits</span>
+<span class="sd">    :type true_loners: dict the name of the function code by hit gene_ref.alternate_of as key</span>
+<span class="sd">                              and 1 :class:`macsylib.cluster.Cluster` with the best a</span>
+<span class="sd">                              :class:`macsylib.hit.Loner` or</span>
+<span class="sd">                              :class:`macsylib.hit.LonerMultiSystem` hit  as value</span>
+<span class="sd">    :param multi_loci: True if the model is multi_loci false otherwise</span>
+<span class="sd">    :return: all available combination of clusters</span>
+<span class="sd">    :rtype: List of combination. a combination is a tuple of :class:`macsylib.cluster.Cluster` objects</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">clusters</span><span class="p">:</span>
+        <span class="n">cluster_combinations</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">elif</span> <span class="n">multi_loci</span><span class="p">:</span>
+        <span class="n">cluster_combinations</span> <span class="o">=</span> <span class="p">[</span><span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">(</span><span class="n">clusters</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">clusters</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+        <span class="n">cluster_combinations</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="o">*</span><span class="n">cluster_combinations</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">cluster_combinations</span> <span class="o">=</span> <span class="p">[(</span><span class="n">clst</span><span class="p">,)</span> <span class="k">for</span> <span class="n">clst</span> <span class="ow">in</span> <span class="n">clusters</span><span class="p">]</span>
+
+    <span class="c1"># add loners</span>
+    <span class="n">loners_combinations</span> <span class="o">=</span> <span class="n">true_loners</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="n">loners_combinations</span> <span class="o">=</span> <span class="p">[</span><span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">(</span><span class="n">loners_combinations</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span>
+                           <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">loners_combinations</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+    <span class="n">loners_combinations</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="o">*</span><span class="n">loners_combinations</span><span class="p">)</span>
+    <span class="n">combination_w_loners</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">loner_comb</span> <span class="ow">in</span> <span class="n">loners_combinations</span><span class="p">:</span>
+        <span class="n">loner_functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">loner_comb</span><span class="p">]</span>
+        <span class="n">loners</span> <span class="o">=</span> <span class="p">[</span><span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">loner_comb</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">cluster_combinations</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">one_combination</span> <span class="ow">in</span> <span class="n">cluster_combinations</span><span class="p">:</span>
+                <span class="n">to_add</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">for</span> <span class="n">clstr</span> <span class="ow">in</span> <span class="n">one_combination</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">clstr</span><span class="o">.</span><span class="n">fulfilled_function</span><span class="p">(</span><span class="o">*</span><span class="n">loner_functions</span><span class="p">):</span>
+                        <span class="n">to_add</span> <span class="o">=</span> <span class="kc">False</span>
+                        <span class="k">break</span>
+                <span class="k">if</span> <span class="n">to_add</span><span class="p">:</span>
+                    <span class="n">combination_w_loners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">one_combination</span><span class="p">)</span> <span class="o">+</span> <span class="n">loners</span><span class="p">))</span>
+        <span class="c1"># we always add the loner</span>
+        <span class="c1"># in case definition may contain only loners</span>
+        <span class="c1"># or min_gene_required = 1 with one Loner</span>
+        <span class="n">combination_w_loners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">loners</span><span class="p">))</span>
+
+    <span class="n">cluster_combinations</span> <span class="o">+=</span> <span class="n">combination_w_loners</span>
+
+    <span class="k">return</span> <span class="n">cluster_combinations</span></div>
+
+
+
+<div class="viewcode-block" id="combine_multisystems">
+<a class="viewcode-back" href="../../developer_guide/api/solution.html#macsylib.solution.combine_multisystems">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">combine_multisystems</span><span class="p">(</span><span class="n">rejected_candidates</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">RejectedCandidate</span><span class="p">],</span> <span class="n">multi_systems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Cluster</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">    :param rejected_candidates:</span>
+<span class="sd">    :param multi_systems: sequence of :class:`macsylib.cluster.Cluster`</span>
+<span class="sd">                          each cluster must be composed of only one :class:`macsylib.hit.MultiSystem` object</span>
+<span class="sd">    :return: list of cluster combination with the multisystem</span>
+<span class="sd">    :rtype: [(:class:`macsylib.cluster.Cluster` cluster1, cluster2, ...),</span>
+<span class="sd">             (:class:`macsylib.cluster.Cluster` cluster3, cluster4, ...)]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># instead as clusters with loners</span>
+    <span class="c1"># we have not to take in account rejected_cluster in new_comb</span>
+    <span class="c1"># as they already have been challenged and rejected</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rejected_candidates</span><span class="p">,</span> <span class="n">RejectedCandidate</span><span class="p">):</span>
+        <span class="n">rejected_candidates</span> <span class="o">=</span> <span class="p">[</span><span class="n">rejected_candidates</span><span class="p">]</span>
+    <span class="n">new_comb</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">ms_combinations</span> <span class="o">=</span> <span class="p">[</span><span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">(</span><span class="n">multi_systems</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">multi_systems</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+    <span class="n">ms_combinations</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="o">*</span><span class="n">ms_combinations</span><span class="p">))</span>  <span class="c1"># tuple of MultiSystem</span>
+    <span class="k">for</span> <span class="n">rej_cand</span> <span class="ow">in</span> <span class="n">rejected_candidates</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">one_ms_combination</span> <span class="ow">in</span> <span class="n">ms_combinations</span><span class="p">:</span>
+            <span class="n">combination_hits</span> <span class="o">=</span> <span class="p">{</span><span class="n">h</span> <span class="k">for</span> <span class="n">clst</span> <span class="ow">in</span> <span class="n">one_ms_combination</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">clst</span><span class="o">.</span><span class="n">hits</span><span class="p">}</span>
+            <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">gene_ref</span><span class="o">.</span><span class="n">alternate_of</span><span class="p">()</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">combination_hits</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">rej_cand</span><span class="o">.</span><span class="n">fulfilled_function</span><span class="p">(</span><span class="o">*</span><span class="n">functions</span><span class="p">):</span>
+                <span class="n">new_comb</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">rej_cand</span><span class="o">.</span><span class="n">clusters</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">one_ms_combination</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">new_comb</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2014-2025, Bertrand Néron, Sophie Abby.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+  
+
+<div class="licensing">
+  <p>
+    This documentation is licensed under <a href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+      <img src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png">.
+    </a>
+  </p>
+</div>
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+<a class="github" href="https://github.com/gem-pasteur/macsylib">
+    <img style="position: absolute; top: 0; right: 0; border: 0;"
+         src="https://raw.githubusercontent.com/gem-pasteur/macsylib/refs/heads/main/doc/source/_static/github-banner.svg"
+         alt="Fork me on GitHub" />
+</a>
+
+
+
+</body>
+</html>

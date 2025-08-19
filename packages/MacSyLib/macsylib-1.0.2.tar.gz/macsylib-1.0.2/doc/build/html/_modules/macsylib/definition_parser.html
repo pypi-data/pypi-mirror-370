@@ -1,0 +1,594 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>macsylib.definition_parser &mdash; MacSyLib 1.0.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../_static/_css/custom.css?v=b89f2dfc" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=1ed6394b"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            MacSyLib
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../user_guide/index.html">User Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modeler_guide/index.html">Modeller Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide/index.html">Developer Guide</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">MacSyLib</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">macsylib.definition_parser</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for macsylib.definition_parser</h1><div class="highlight"><pre>
+<span></span><span class="c1">#########################################################################</span>
+<span class="c1"># MacSyLib - Python library to detect macromolecular systems            #</span>
+<span class="c1">#            in prokaryotes protein dataset using systems modelling     #</span>
+<span class="c1">#            and similarity search.                                     #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># Authors: Sophie Abby, Bertrand Neron                                  #</span>
+<span class="c1"># Copyright (c) 2014-2025  Institut Pasteur (Paris) and CNRS.           #</span>
+<span class="c1"># See the COPYRIGHT file for details                                    #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># This file is part of MacSyLib package.                                #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is free software: you can redistribute it and/or modify      #</span>
+<span class="c1"># it under the terms of the GNU General Public License as published by  #</span>
+<span class="c1"># the Free Software Foundation, either version 3 of the License, or     #</span>
+<span class="c1"># (at your option) any later version.                                   #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is distributed in the hope that it will be useful,           #</span>
+<span class="c1"># but WITHOUT ANY WARRANTY; without even the implied warranty of        #</span>
+<span class="c1"># MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the          #</span>
+<span class="c1"># GNU General Public License for more details .                         #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># You should have received a copy of the GNU General Public License     #</span>
+<span class="c1"># along with MacSyLib (COPYING).                                        #</span>
+<span class="c1"># If not, see &lt;https://www.gnu.org/licenses/&gt;.                          #</span>
+<span class="c1">#########################################################################</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Module use to parse XML model defintion and create a python Model and Genes, ...</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os.path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">xml.etree.ElementTree</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">Et</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.model</span><span class="w"> </span><span class="kn">import</span> <span class="n">Model</span><span class="p">,</span> <span class="n">ModelBank</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.gene</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelGene</span><span class="p">,</span> <span class="n">GeneBank</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.gene</span><span class="w"> </span><span class="kn">import</span> <span class="n">Exchangeable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.error</span><span class="w"> </span><span class="kn">import</span> <span class="n">MacsylibError</span><span class="p">,</span> <span class="n">ModelInconsistencyError</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">NoneConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.registries</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelRegistry</span><span class="p">,</span> <span class="n">DefinitionLocation</span><span class="p">,</span> <span class="n">ModelLocation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.profile</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProfileFactory</span>
+
+<span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="DefinitionParser">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DefinitionParser</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build a Model instance from the corresponding model definition described in the XML file.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="DefinitionParser.__init__">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span> <span class="o">|</span> <span class="n">NoneConfig</span><span class="p">,</span>
+                 <span class="n">model_bank</span><span class="p">:</span> <span class="n">ModelBank</span><span class="p">,</span>
+                 <span class="n">gene_bank</span><span class="p">:</span> <span class="n">GeneBank</span><span class="p">,</span>
+                 <span class="n">model_registry</span><span class="p">:</span> <span class="n">ModelRegistry</span><span class="p">,</span>
+                 <span class="n">profile_factory</span><span class="p">:</span> <span class="n">ProfileFactory</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param cfg: the configuration object of this run</span>
+<span class="sd">        :param model_bank: the model factory</span>
+<span class="sd">        :param gene_bank: the gene factory</span>
+<span class="sd">        :param model_registry: The registry with all model location</span>
+<span class="sd">        :param profile_factory: The profile factory</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span> <span class="o">=</span> <span class="n">cfg</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_bank</span> <span class="o">=</span> <span class="n">model_bank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gene_bank</span> <span class="o">=</span> <span class="n">gene_bank</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_registry</span> <span class="o">=</span> <span class="n">model_registry</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">profile_factory</span> <span class="o">=</span> <span class="n">profile_factory</span></div>
+
+
+
+<div class="viewcode-block" id="DefinitionParser.parse">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser.parse">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">models_2_detect</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">DefinitionLocation</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parse models definition in XML format to build the corresponding Model objects,</span>
+<span class="sd">        and add them to the model factory after checking its consistency.</span>
+<span class="sd">        To get the model ask it to model_bank</span>
+
+<span class="sd">        :param models_2_detect: a list of model definition to parse.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">models_2_check</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Parsing Models: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">_def</span><span class="o">.</span><span class="n">name</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">_def</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">models_2_detect</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">def_loc</span> <span class="ow">in</span> <span class="n">models_2_detect</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">def_loc</span><span class="o">.</span><span class="n">path</span>
+            <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">MacsylibError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: No such model definitions&quot;</span><span class="p">)</span>
+            <span class="n">model_location</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_registry</span><span class="p">[</span><span class="n">def_loc</span><span class="o">.</span><span class="n">root_name</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">)]</span>
+            <span class="n">model_node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_model_node</span><span class="p">(</span><span class="n">def_loc</span><span class="p">)</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_model</span><span class="p">(</span><span class="n">def_loc</span><span class="p">,</span> <span class="n">model_node</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model_bank</span><span class="o">.</span><span class="n">add_model</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fill_gene_bank</span><span class="p">(</span><span class="n">model_node</span><span class="p">,</span> <span class="n">model_location</span><span class="p">,</span> <span class="n">def_loc</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_parse_genes</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">model_node</span><span class="p">)</span>
+            <span class="n">models_2_check</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">check_consistency</span><span class="p">(</span><span class="n">models_2_check</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DefinitionParser._get_model_node">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser._get_model_node">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_model_node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">def_loc</span><span class="p">:</span> <span class="n">DefinitionLocation</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Et</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param def_loc: a definition location to parse.</span>
+<span class="sd">        :type def_loc: return the node corresponding to the &#39;model&#39; tag</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">def_loc</span><span class="o">.</span><span class="n">path</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">tree</span> <span class="o">=</span> <span class="n">Et</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">model_node</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">getroot</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_check_syntax</span><span class="p">(</span><span class="n">model_node</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;unable to parse model definition &#39;</span><span class="si">{</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&#39; : </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">MacsylibError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+        <span class="k">return</span> <span class="n">model_node</span></div>
+
+
+
+<div class="viewcode-block" id="DefinitionParser._check_syntax">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser._check_syntax">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_syntax</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_node</span><span class="p">:</span> <span class="n">Et</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check if the definition does not contain logical error which is allowed by syntax</span>
+<span class="sd">        and absence of explicit grammar.</span>
+
+<span class="sd">        :param model_node: the node corresponding to the model</span>
+<span class="sd">        :param path: the path of the definition.</span>
+<span class="sd">        :raises ModelInconsistencyError: if an error is encountered in the document.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">vers</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;vers&#39;</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">vers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The model definition </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not versioned. &quot;</span> \
+                  <span class="sa">f</span><span class="s2">&quot;Please update your model.&quot;</span>
+        <span class="k">elif</span> <span class="n">vers</span> <span class="o">!=</span> <span class="s1">&#39;2.0&#39;</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The model definition </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2"> has not the right version. &quot;</span> \
+                  <span class="sa">f</span><span class="s2">&quot;version supported is &#39;2.0&#39;. Please update your model.&quot;</span>
+            <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">model_node</span><span class="o">.</span><span class="n">tag</span> <span class="o">==</span> <span class="s1">&#39;system&#39;</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The model definition </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2"> is obsolete. Please update your model.&quot;</span>
+
+        <span class="k">if</span> <span class="n">msg</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="c1"># get all genes which are define in an other model</span>
+        <span class="c1"># and add these models to the list of models to parse</span>
+        <span class="n">sys_ref</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;.//gene[@system_ref]&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sys_ref</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The model definition </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2"> is obsolete. Please update your model.&quot;</span>
+            <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="c1"># Since ElementTree from stdlib provides only limited xpath support,</span>
+        <span class="c1"># you can use | xpath OR operator only if you are using lxml</span>
+        <span class="k">if</span> <span class="n">model_node</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;.//homologs&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="n">model_node</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;.//analogs&quot;</span><span class="p">):</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The model definition </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2"> is obsolete. Please update your model.&quot;</span>
+            <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="n">model_allowed_attributes</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;inter_gene_max_space&#39;</span><span class="p">,</span>
+                                    <span class="s1">&#39;min_mandatory_genes_required&#39;</span><span class="p">,</span>
+                                    <span class="s1">&#39;min_genes_required&#39;</span><span class="p">,</span>
+                                    <span class="s1">&#39;max_nb_genes&#39;</span><span class="p">,</span>
+                                    <span class="s1">&#39;multi_loci&#39;</span><span class="p">,</span>
+                                    <span class="s1">&#39;vers&#39;</span><span class="p">}</span>
+        <span class="n">model_all_attributes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">model_node</span><span class="o">.</span><span class="n">attrib</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">model_unallowed_attribute</span> <span class="o">=</span> <span class="n">model_all_attributes</span> <span class="o">-</span> <span class="n">model_allowed_attributes</span>
+        <span class="k">if</span> <span class="n">model_unallowed_attribute</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The model definition </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2"> has an unknow attribute &quot;</span> \
+                  <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">model_unallowed_attribute</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39;. Please fix the definition.&quot;</span>
+            <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="n">gene_allowed_attributes</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">,</span> <span class="s1">&#39;presence&#39;</span><span class="p">,</span> <span class="s1">&#39;loner&#39;</span><span class="p">,</span> <span class="s1">&#39;multi_system&#39;</span><span class="p">,</span> <span class="s1">&#39;multi_model&#39;</span><span class="p">,</span> <span class="s1">&#39;inter_gene_max_space&#39;</span><span class="p">}</span>
+        <span class="n">gene_all_attributes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">gene</span> <span class="ow">in</span> <span class="n">model_node</span><span class="o">.</span><span class="n">iter</span><span class="p">(</span><span class="s1">&#39;gene&#39;</span><span class="p">):</span>
+            <span class="n">gene_all_attributes</span> <span class="o">|=</span> <span class="nb">set</span><span class="p">(</span><span class="n">gene</span><span class="o">.</span><span class="n">attrib</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">gene_unallowed_attribute</span> <span class="o">=</span> <span class="n">gene_all_attributes</span> <span class="o">-</span> <span class="n">gene_allowed_attributes</span>
+        <span class="k">if</span> <span class="n">gene_unallowed_attribute</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The model definition </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2"> has an unknown attribute &quot;</span> \
+                  <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">gene_unallowed_attribute</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39; for a gene.&quot;</span> \
+                  <span class="sa">f</span><span class="s2">&quot; Please fix the definition.&quot;</span>
+            <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DefinitionParser._create_model">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser._create_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">def_loc</span><span class="p">:</span> <span class="n">DefinitionLocation</span><span class="p">,</span> <span class="n">model_node</span><span class="p">:</span> <span class="n">Et</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Model</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param def_loc: the definition location to parse.</span>
+<span class="sd">        :param model_node: the node corresponding to the model.</span>
+<span class="sd">        :return: the model corresponding to the definition location.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">inter_gene_max_space</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;inter_gene_max_space&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">inter_gene_max_space</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition (</span><span class="si">{</span><span class="n">def_loc</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">): inter_gene_max_space must be defined&quot;</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">inter_gene_max_space</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">inter_gene_max_space</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition (</span><span class="si">{</span><span class="n">def_loc</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">): &quot;</span> \
+                  <span class="sa">f</span><span class="s2">&quot;inter_gene_max_space must be an integer: </span><span class="si">{</span><span class="n">inter_gene_max_space</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+        <span class="n">min_mandatory_genes_required</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;min_mandatory_genes_required&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">min_mandatory_genes_required</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">min_mandatory_genes_required</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">min_mandatory_genes_required</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition (</span><span class="si">{</span><span class="n">def_loc</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">): &quot;</span> \
+                      <span class="sa">f</span><span class="s2">&quot;min_mandatory_genes_required must be an integer: </span><span class="si">{</span><span class="n">min_mandatory_genes_required</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+
+        <span class="n">min_genes_required</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;min_genes_required&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">min_genes_required</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">min_genes_required</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">min_genes_required</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition (</span><span class="si">{</span><span class="n">def_loc</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">):</span><span class="se">\</span>
+<span class="s2"> min_genes_required must be an integer: </span><span class="si">{</span><span class="n">min_genes_required</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+
+        <span class="n">cfg_max_nb_genes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_nb_genes</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg_max_nb_genes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">max_nb_genes</span> <span class="o">=</span> <span class="n">cfg_max_nb_genes</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">max_nb_genes</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;max_nb_genes&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">max_nb_genes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">max_nb_genes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_nb_genes</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition (</span><span class="si">{</span><span class="n">def_loc</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">): max_nb_genes must be an integer: </span><span class="si">{</span><span class="n">max_nb_genes</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+        <span class="n">multi_loci</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;multi_loci&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">multi_loci</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">multi_loci</span> <span class="o">=</span> <span class="n">multi_loci</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;1&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">multi_loci</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># overload value get from xml</span>
+        <span class="c1"># by these read from configuration (file or command line)</span>
+        <span class="n">cfg_inter_gene_max_space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">inter_gene_max_space</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg_inter_gene_max_space</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">inter_gene_max_space</span> <span class="o">=</span> <span class="n">cfg_inter_gene_max_space</span>
+
+        <span class="n">cfg_min_mandatory_genes_required</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">min_mandatory_genes_required</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg_min_mandatory_genes_required</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">min_mandatory_genes_required</span> <span class="o">=</span> <span class="n">cfg_min_mandatory_genes_required</span>
+
+        <span class="n">cfg_min_genes_required</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">min_genes_required</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg_min_genes_required</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">min_genes_required</span> <span class="o">=</span> <span class="n">cfg_min_genes_required</span>
+
+        <span class="n">cfg_max_nb_genes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_nb_genes</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg_max_nb_genes</span><span class="p">:</span>
+            <span class="n">max_nb_genes</span> <span class="o">=</span> <span class="n">cfg_max_nb_genes</span>
+
+        <span class="n">cfg_multi_loci</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cfg</span><span class="o">.</span><span class="n">multi_loci</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg_multi_loci</span><span class="p">:</span>
+            <span class="n">multi_loci</span> <span class="o">=</span> <span class="n">cfg_multi_loci</span>
+
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="p">,</span>
+                      <span class="n">inter_gene_max_space</span><span class="p">,</span>
+                      <span class="n">min_mandatory_genes_required</span><span class="o">=</span><span class="n">min_mandatory_genes_required</span><span class="p">,</span>
+                      <span class="n">min_genes_required</span><span class="o">=</span><span class="n">min_genes_required</span><span class="p">,</span>
+                      <span class="n">max_nb_genes</span><span class="o">=</span><span class="n">max_nb_genes</span><span class="p">,</span>
+                      <span class="n">multi_loci</span><span class="o">=</span><span class="n">multi_loci</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">model</span></div>
+
+
+
+<div class="viewcode-block" id="DefinitionParser._fill_gene_bank">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser._fill_gene_bank">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fill_gene_bank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                        <span class="n">model_node</span><span class="p">:</span> <span class="n">Et</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">,</span>
+                        <span class="n">model_location</span><span class="p">:</span> <span class="n">ModelLocation</span><span class="p">,</span>
+                        <span class="n">def_loc</span><span class="p">:</span> <span class="n">DefinitionLocation</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        find all gene node and add them to the gene_bank</span>
+
+<span class="sd">        :param model_node: the node corresponding to the model.</span>
+<span class="sd">        :param model_location:</span>
+<span class="sd">        :param def_loc: a definition location corresponding to the &#39;model&#39; to parse.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">gene_nodes</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;.//gene&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">gene_node</span> <span class="ow">in</span> <span class="n">gene_nodes</span><span class="p">:</span>
+            <span class="n">gene_name</span> <span class="o">=</span> <span class="n">gene_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">gene_name</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition &#39;</span><span class="si">{</span><span class="n">def_loc</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&#39;: gene without name&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="c1"># self.gene_bank.add_new_gene if we add twice same (model_location, gene_name)</span>
+            <span class="c1"># the second time is NOOP</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gene_bank</span><span class="o">.</span><span class="n">add_new_gene</span><span class="p">(</span><span class="n">model_location</span><span class="p">,</span> <span class="n">gene_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">profile_factory</span><span class="p">)</span></div>
+
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parse_gene_attrs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gene_node</span><span class="p">:</span> <span class="n">Et</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">:</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">attrs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;loner&#39;</span><span class="p">,</span> <span class="s1">&#39;multi_system&#39;</span><span class="p">,</span> <span class="s1">&#39;multi_model&#39;</span><span class="p">):</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="n">gene_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">val</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;1&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">,</span> <span class="s2">&quot;True&quot;</span><span class="p">):</span>
+                <span class="n">val</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">elif</span> <span class="n">val</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="s2">&quot;false&quot;</span><span class="p">,</span> <span class="s2">&quot;False&quot;</span><span class="p">):</span>
+                <span class="n">val</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">attrs</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+        <span class="n">inter_gene_max_space</span> <span class="o">=</span> <span class="n">gene_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;inter_gene_max_space&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">inter_gene_max_space</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">inter_gene_max_space</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;inter_gene_max_space must be an integer: </span><span class="si">{</span><span class="n">inter_gene_max_space</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="c1"># no attribute inter_gene_max_space</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;inter_gene_max_space&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">inter_gene_max_space</span>
+        <span class="k">return</span> <span class="n">attrs</span>
+
+
+<div class="viewcode-block" id="DefinitionParser._parse_genes">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser._parse_genes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parse_genes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Model</span><span class="p">,</span> <span class="n">model_node</span><span class="p">:</span> <span class="n">Et</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create genes belonging to the models.</span>
+<span class="sd">        Each gene is directly added to the model in its right category (&#39;mandatory, accessory, ...)</span>
+
+<span class="sd">        :param model: the Model currently parsing</span>
+<span class="sd">        :param model_node: the element &#39;model&#39;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">gene_nodes</span> <span class="o">=</span> <span class="n">model_node</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;./gene&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">gene_node</span> <span class="ow">in</span> <span class="n">gene_nodes</span><span class="p">:</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">gene_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">attrs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parse_gene_attrs</span><span class="p">(</span><span class="n">gene_node</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">SyntaxError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition &#39;</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="n">new_gene</span> <span class="o">=</span> <span class="n">ModelGene</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gene_bank</span><span class="p">[(</span><span class="n">model</span><span class="o">.</span><span class="n">family_name</span><span class="p">,</span> <span class="n">name</span><span class="p">)],</span> <span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">attrs</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">exchangeable_node</span> <span class="ow">in</span> <span class="n">gene_node</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s2">&quot;exchangeables/gene&quot;</span><span class="p">):</span>
+                <span class="n">ex</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parse_exchangeable</span><span class="p">(</span><span class="n">exchangeable_node</span><span class="p">,</span> <span class="n">new_gene</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+                <span class="n">new_gene</span><span class="o">.</span><span class="n">add_exchangeable</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span>
+
+            <span class="n">presence</span> <span class="o">=</span> <span class="n">gene_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;presence&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">presence</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition &#39;</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&#39;: gene &#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; without presence&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">presence</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">gene_category</span><span class="p">:</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;add_</span><span class="si">{</span><span class="n">presence</span><span class="si">}</span><span class="s1">_gene&#39;</span><span class="p">)(</span><span class="n">new_gene</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model &#39;</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&#39; definition: presence value must be either: &quot;</span> \
+                      <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s2">&quot;&#39;</span><span class="si">{}</span><span class="s2">&#39;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">model</span><span class="o">.</span><span class="n">gene_category</span><span class="p">])</span><span class="si">}</span><span class="s2"> not </span><span class="si">{</span><span class="n">presence</span><span class="si">}</span><span class="s2">&quot;&quot;&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DefinitionParser._parse_exchangeable">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser._parse_exchangeable">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parse_exchangeable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gene_node</span><span class="p">:</span> <span class="n">Et</span><span class="o">.</span><span class="n">ElementTree</span><span class="p">,</span> <span class="n">gene_ref</span><span class="p">:</span> <span class="n">ModelGene</span><span class="p">,</span> <span class="n">curr_model</span><span class="p">:</span> <span class="n">Model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Exchangeable</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parse a xml element gene child of exchangeable and build the corresponding object</span>
+
+<span class="sd">        :param gene_node: a &quot;node&quot; corresponding to the gene element in the XML hierarchy</span>
+<span class="sd">        :param gene_ref: the gene which this gene is homolog to</span>
+<span class="sd">        :param curr_model: the model being parsed .</span>
+<span class="sd">        :return: the gene object corresponding to the node</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">gene_node</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+        <span class="n">family_name</span> <span class="o">=</span> <span class="n">curr_model</span><span class="o">.</span><span class="n">family_name</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">attrs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parse_gene_attrs</span><span class="p">(</span><span class="n">gene_node</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">SyntaxError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid model definition &#39;</span><span class="si">{</span><span class="n">curr_model</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">SyntaxError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">family_name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="c1"># It cannot fail</span>
+        <span class="c1"># all genes in the xml are created and insert in GeneBank before this step</span>
+        <span class="n">c_gene</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gene_bank</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="n">ex</span> <span class="o">=</span> <span class="n">Exchangeable</span><span class="p">(</span><span class="n">c_gene</span><span class="p">,</span> <span class="n">gene_ref</span><span class="p">,</span> <span class="o">**</span><span class="n">attrs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ex</span></div>
+
+
+
+<div class="viewcode-block" id="DefinitionParser.check_consistency">
+<a class="viewcode-back" href="../../developer_guide/api/definition_parser.html#macsylib.definition_parser.DefinitionParser.check_consistency">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">models</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Model</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check the consistency of the co-localization features between the different values given as an input:</span>
+<span class="sd">        between XML definitions, configuration file, and command-line options.</span>
+
+<span class="sd">        :param models: the list of models to check</span>
+<span class="sd">        :raise: :class:`macsylib.error.ModelInconsistencyError` if one test fails</span>
+
+<span class="sd">        (see `feature &lt;https://projets.pasteur.fr/issues/1850&gt;`_)</span>
+
+<span class="sd">        In the different possible situations, different requirements need to be fulfilled</span>
+<span class="sd">        (&quot;mandatory_genes&quot; and &quot;accessory_genes&quot; consist of lists of genes defined as such in the model definition):</span>
+
+<span class="sd">          - **If:** min_mandatory_genes_required = None  ; min_genes_required = None</span>
+<span class="sd">          - **Then:** min_mandatory_genes_required = min_genes_required = len(mandatory_genes)</span>
+
+<span class="sd">          *always True by Models design*</span>
+
+<span class="sd">          - **If:** min_mandatory_genes_required = value  ; min_genes_required = None</span>
+<span class="sd">          - **Then:** min_mandatory_genes_required &lt;= len(mandatory_genes)</span>
+<span class="sd">          - AND min_genes_required = min_mandatory_genes_required</span>
+
+<span class="sd">          *always True by design*</span>
+
+<span class="sd">          - **If:** min_mandatory_genes_required =  None ; min_genes_required = Value</span>
+<span class="sd">          - **Then:** min_mandatory_genes_required = len(mandatory_genes)</span>
+<span class="sd">          - AND min_genes_required &gt;= min_mandatory_genes_required</span>
+<span class="sd">          - AND min_genes_required &lt;= len(mandatory_genes+accessory_genes)</span>
+
+<span class="sd">          *to be checked*</span>
+
+<span class="sd">          - **If:** min_mandatory_genes_required =  Value ; min_genes_required = Value</span>
+<span class="sd">          - **Then:** min_genes_required &lt;= len(accessory_genes+mandatory_genes)</span>
+<span class="sd">          - AND min_genes_required &gt;= min_mandatory_genes_required</span>
+<span class="sd">          - AND min_mandatory_genes_required &lt;= len(mandatory_genes)</span>
+
+<span class="sd">          *to be checked*</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
+            <span class="n">len_accessory_genes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">accessory_genes</span><span class="p">)</span>
+            <span class="n">len_mandatory_genes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">mandatory_genes</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">min_genes_required</span> <span class="o">&lt;=</span> <span class="p">(</span><span class="n">len_accessory_genes</span> <span class="o">+</span> <span class="n">len_mandatory_genes</span><span class="p">)):</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;model &#39;</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; is not consistent: min_genes_required </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">min_genes_required</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2"> &quot;</span> \
+                      <span class="sa">f</span><span class="s2">&quot;must be lesser or equal than the number of </span><span class="se">\&quot;</span><span class="s2">accessory</span><span class="se">\&quot;</span><span class="s2"> and </span><span class="se">\&quot;</span><span class="s2">mandatory</span><span class="se">\&quot;</span><span class="s2"> components &quot;</span> \
+                      <span class="sa">f</span><span class="s2">&quot;in the model: </span><span class="si">{</span><span class="n">len_accessory_genes</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">len_mandatory_genes</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">min_mandatory_genes_required</span> <span class="o">&lt;=</span> <span class="n">len_mandatory_genes</span><span class="p">):</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;model &#39;</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; is not consistent: &#39;min_mandatory_genes_required&#39;:&quot;</span> \
+                      <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">min_mandatory_genes_required</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2"> must be lesser or equal than the number of &quot;</span> \
+                      <span class="sa">f</span><span class="s2">&quot;&#39;mandatory&#39; components in the model: </span><span class="si">{</span><span class="n">len_mandatory_genes</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="c1"># the following test</span>
+            <span class="c1"># model.min_mandatory_genes_required &lt;= model.min_genes_required</span>
+            <span class="c1"># is done during the model.__init__</span>
+
+            <span class="k">if</span> <span class="n">len_mandatory_genes</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">len_accessory_genes</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;model &#39;</span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; is not consistent: there is only one gene in your model. &quot;</span> \
+                      <span class="sa">f</span><span class="s2">&quot;So its status should be &#39;mandatory&#39;.&quot;</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="n">ModelInconsistencyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2014-2025, Bertrand Néron, Sophie Abby.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+  
+
+<div class="licensing">
+  <p>
+    This documentation is licensed under <a href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+      <img src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png">.
+    </a>
+  </p>
+</div>
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+<a class="github" href="https://github.com/gem-pasteur/macsylib">
+    <img style="position: absolute; top: 0; right: 0; border: 0;"
+         src="https://raw.githubusercontent.com/gem-pasteur/macsylib/refs/heads/main/doc/source/_static/github-banner.svg"
+         alt="Fork me on GitHub" />
+</a>
+
+
+
+</body>
+</html>

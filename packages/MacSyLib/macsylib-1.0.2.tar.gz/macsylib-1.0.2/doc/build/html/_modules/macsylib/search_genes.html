@@ -1,0 +1,307 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>macsylib.search_genes &mdash; MacSyLib 1.0.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../_static/_css/custom.css?v=b89f2dfc" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=1ed6394b"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            MacSyLib
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../user_guide/index.html">User Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modeler_guide/index.html">Modeller Guide</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide/index.html">Developer Guide</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">MacSyLib</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">macsylib.search_genes</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for macsylib.search_genes</h1><div class="highlight"><pre>
+<span></span><span class="c1">#########################################################################</span>
+<span class="c1"># MacSyLib - Python library to detect macromolecular systems            #</span>
+<span class="c1">#            in prokaryotes protein dataset using systems modelling     #</span>
+<span class="c1">#            and similarity search.                                     #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># Authors: Sophie Abby, Bertrand Neron                                  #</span>
+<span class="c1"># Copyright (c) 2014-2025  Institut Pasteur (Paris) and CNRS.           #</span>
+<span class="c1"># See the COPYRIGHT file for details                                    #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># This file is part of MacSyLib package.                                #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is free software: you can redistribute it and/or modify      #</span>
+<span class="c1"># it under the terms of the GNU General Public License as published by  #</span>
+<span class="c1"># the Free Software Foundation, either version 3 of the License, or     #</span>
+<span class="c1"># (at your option) any later version.                                   #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># MacSyLib is distributed in the hope that it will be useful,           #</span>
+<span class="c1"># but WITHOUT ANY WARRANTY; without even the implied warranty of        #</span>
+<span class="c1"># MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the          #</span>
+<span class="c1"># GNU General Public License for more details .                         #</span>
+<span class="c1">#                                                                       #</span>
+<span class="c1"># You should have received a copy of the GNU General Public License     #</span>
+<span class="c1"># along with MacSyLib (COPYING).                                        #</span>
+<span class="c1"># If not, see &lt;https://www.gnu.org/licenses/&gt;.                          #</span>
+<span class="c1">#########################################################################</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Manage the hmm step (hmmsearch or recover results from previous run) in parallele</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">concurrent.futures</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">signal</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os.path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.report</span><span class="w"> </span><span class="kn">import</span> <span class="n">GembaseHMMReport</span><span class="p">,</span> <span class="n">GeneralHMMReport</span><span class="p">,</span> <span class="n">OrderedHMMReport</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">threads_available</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.database</span><span class="w"> </span><span class="kn">import</span> <span class="n">Indexes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.gene</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelGene</span><span class="p">,</span> <span class="n">CoreGene</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.report</span><span class="w"> </span><span class="kn">import</span> <span class="n">HMMReport</span>
+
+<span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="worker_cpu">
+<a class="viewcode-back" href="../../developer_guide/api/search_genes.html#macsylib.search_genes.worker_cpu">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">worker_cpu</span><span class="p">(</span><span class="n">genes_nb</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute the optimum number of worker and cpu per worker</span>
+<span class="sd">    The number of worker is set by the user (1 by default 0 means all worker available)</span>
+
+<span class="sd">    we use one worker per gene</span>
+<span class="sd">    if number of workers is greater than number of genes then several cpu can be use by</span>
+<span class="sd">    hmsearch to speed up the search step</span>
+
+<span class="sd">    :param genes_nb: the number of genes to search</span>
+<span class="sd">    :param cfg: The macsylib configuration</span>
+<span class="sd">    :return: the number of worker and cpu_per_worker to use</span>
+<span class="sd">    :rtype: tuple (int worker_nb, int cpu_per_worker)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">worker_nb</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">worker</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">worker_nb</span><span class="p">:</span>
+        <span class="n">worker_nb</span> <span class="o">=</span> <span class="n">threads_available</span><span class="p">()</span>
+    <span class="n">cpu_per_worker</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">worker_nb</span> <span class="o">/</span> <span class="n">genes_nb</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">worker_nb</span><span class="p">,</span> <span class="n">cpu_per_worker</span></div>
+
+
+
+<div class="viewcode-block" id="search_genes">
+<a class="viewcode-back" href="../../developer_guide/api/search_genes.html#macsylib.search_genes.search_genes">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">search_genes</span><span class="p">(</span><span class="n">genes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ModelGene</span><span class="p">],</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">HMMReport</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For each gene of the list, use the corresponding profile to perform an Hmmer search, and parse the output</span>
+<span class="sd">    to generate a HMMReport that is saved in a file after CoreHit filtering.</span>
+<span class="sd">    These tasks are performed in parallel using threads.</span>
+<span class="sd">    The number of workers can be limited by worker_nb directive in the config object or</span>
+<span class="sd">    in the command-line with the &quot;-w&quot; option.</span>
+
+<span class="sd">    :param genes: the genes to search in the input sequence dataset</span>
+<span class="sd">    :param cfg: the configuration object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">worker_nb</span><span class="p">,</span> <span class="n">cpu_per_worker</span> <span class="o">=</span> <span class="n">worker_cpu</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">genes</span><span class="p">),</span> <span class="n">cfg</span><span class="p">)</span>
+    <span class="n">_log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;worker_nb = </span><span class="si">{</span><span class="n">worker_nb</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="se">\t</span><span class="s2">cpu per worker = </span><span class="si">{</span><span class="n">cpu_per_worker</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">all_reports</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="n">signum</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;stop the main process, its threads and subprocesses&quot;&quot;&quot;</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s1">&#39;KILL all Processes&#39;</span><span class="p">)</span>
+        <span class="n">proc_grp_id</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpgid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">killpg</span><span class="p">(</span><span class="n">proc_grp_id</span><span class="p">,</span> <span class="n">signum</span><span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">signum</span><span class="p">)</span>
+
+    <span class="c1"># store the original SIGTERM signal handler to restore it</span>
+    <span class="c1"># once search systems is over</span>
+    <span class="n">default_signal_handler</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">search</span><span class="p">(</span><span class="n">gene</span><span class="p">:</span> <span class="n">CoreGene</span><span class="p">,</span> <span class="n">cpu</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HMMReport</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Search gene in the database built from the input sequence file (execute \&quot;hmmsearch\&quot;), and produce a HMMReport</span>
+
+<span class="sd">        :param gene: the gene to search</span>
+<span class="sd">        :param cpu: the number of cpu to use (per worker)</span>
+<span class="sd">        :return: an HMMReport</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;search gene </span><span class="si">{</span><span class="n">gene</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">profile</span> <span class="o">=</span> <span class="n">gene</span><span class="o">.</span><span class="n">profile</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">report</span> <span class="o">=</span> <span class="n">profile</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">cpu</span><span class="o">=</span><span class="n">cpu</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+            <span class="n">stop</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGKILL</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">report</span><span class="p">:</span>
+                <span class="n">report</span><span class="o">.</span><span class="n">extract</span><span class="p">()</span>
+                <span class="n">report</span><span class="o">.</span><span class="n">save_extract</span><span class="p">()</span>
+                <span class="k">return</span> <span class="n">report</span>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">recover</span><span class="p">(</span><span class="n">gene</span><span class="p">:</span> <span class="n">CoreGene</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HMMReport</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Recover Hmmer output from a previous run, and produce a report</span>
+
+<span class="sd">        :param gene: the gene to search</span>
+<span class="sd">        :param cfg: the configuration</span>
+<span class="sd">        :return: the list of all HMMReports (derived class depending on the input dataset type)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">hmm_old_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">previous_run</span><span class="p">(),</span> <span class="n">cfg</span><span class="o">.</span><span class="n">hmmer_dir</span><span class="p">(),</span> <span class="n">gene</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="n">cfg</span><span class="o">.</span><span class="n">res_search_suffix</span><span class="p">())</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;recover hmm </span><span class="si">{</span><span class="n">hmm_old_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">hmm_new_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">working_dir</span><span class="p">(),</span> <span class="n">cfg</span><span class="o">.</span><span class="n">hmmer_dir</span><span class="p">(),</span> <span class="n">gene</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="n">cfg</span><span class="o">.</span><span class="n">res_search_suffix</span><span class="p">())</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">hmm_old_path</span><span class="p">,</span> <span class="n">hmm_new_path</span><span class="p">)</span>
+        <span class="n">gene</span><span class="o">.</span><span class="n">profile</span><span class="o">.</span><span class="n">hmm_raw_output</span> <span class="o">=</span> <span class="n">hmm_new_path</span>
+        <span class="n">db_type</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">db_type</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">db_type</span> <span class="o">==</span> <span class="s1">&#39;gembase&#39;</span><span class="p">:</span>
+            <span class="n">report</span> <span class="o">=</span> <span class="n">GembaseHMMReport</span><span class="p">(</span><span class="n">gene</span><span class="p">,</span> <span class="n">hmm_new_path</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">db_type</span> <span class="o">==</span> <span class="s1">&#39;ordered_replicon&#39;</span><span class="p">:</span>
+            <span class="n">report</span> <span class="o">=</span> <span class="n">OrderedHMMReport</span><span class="p">(</span><span class="n">gene</span><span class="p">,</span> <span class="n">hmm_new_path</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">report</span> <span class="o">=</span> <span class="n">GeneralHMMReport</span><span class="p">(</span><span class="n">gene</span><span class="p">,</span> <span class="n">hmm_new_path</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">report</span><span class="p">:</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">extract</span><span class="p">()</span>
+            <span class="n">report</span><span class="o">.</span><span class="n">save_extract</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">report</span>
+
+    <span class="c1"># there is only one instance of gene per name but the same instance can be</span>
+    <span class="c1"># in all genes several times</span>
+    <span class="c1"># hmmsearch and extract should be executed ONLY ONCE per run</span>
+    <span class="c1"># so I uniquify the list of gene (use CoreGene and set)</span>
+    <span class="n">genes</span> <span class="o">=</span> <span class="p">{</span><span class="n">mg</span><span class="o">.</span><span class="n">core_gene</span> <span class="k">for</span> <span class="n">mg</span> <span class="ow">in</span> <span class="n">genes</span><span class="p">}</span>
+    <span class="n">_log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;start searching genes&quot;</span><span class="p">)</span>
+
+    <span class="n">hmmer_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">working_dir</span><span class="p">(),</span> <span class="n">cfg</span><span class="o">.</span><span class="n">hmmer_dir</span><span class="p">())</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">hmmer_dir</span><span class="p">):</span>
+        <span class="c1"># it works because mkdir is an atomic operation</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">hmmer_dir</span><span class="p">)</span>
+
+    <span class="c1"># ensure that the indexes is build only once</span>
+    <span class="c1"># So threads just have to read</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">Indexes</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+    <span class="n">idx</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+    <span class="n">previous_run</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">previous_run</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">worker_nb</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+        <span class="n">future_search</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">gene</span> <span class="ow">in</span> <span class="n">genes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">previous_run</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">previous_run</span><span class="p">,</span> <span class="n">cfg</span><span class="o">.</span><span class="n">hmmer_dir</span><span class="p">(),</span>
+                                                            <span class="n">gene</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="n">cfg</span><span class="o">.</span><span class="n">res_search_suffix</span><span class="p">())):</span>
+                <span class="n">future_search</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">recover</span><span class="p">,</span> <span class="n">gene</span><span class="p">,</span> <span class="n">cfg</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">future_search</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">search</span><span class="p">,</span> <span class="n">gene</span><span class="p">,</span> <span class="n">cpu_per_worker</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">as_completed</span><span class="p">(</span><span class="n">future_search</span><span class="p">):</span>
+            <span class="n">report</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">report</span><span class="p">:</span>
+                <span class="n">all_reports</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">report</span><span class="p">)</span>
+    <span class="n">_log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;end searching genes&quot;</span><span class="p">)</span>
+
+    <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">default_signal_handler</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">all_reports</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2014-2025, Bertrand Néron, Sophie Abby.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+  
+
+<div class="licensing">
+  <p>
+    This documentation is licensed under <a href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+      <img src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png">.
+    </a>
+  </p>
+</div>
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+<a class="github" href="https://github.com/gem-pasteur/macsylib">
+    <img style="position: absolute; top: 0; right: 0; border: 0;"
+         src="https://raw.githubusercontent.com/gem-pasteur/macsylib/refs/heads/main/doc/source/_static/github-banner.svg"
+         alt="Fork me on GitHub" />
+</a>
+
+
+
+</body>
+</html>
