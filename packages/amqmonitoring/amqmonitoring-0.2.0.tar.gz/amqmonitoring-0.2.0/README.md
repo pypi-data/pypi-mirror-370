@@ -1,0 +1,80 @@
+# Advanced Message Queuing Monitoring
+
+A ver simple and silly tool to monitor queues messages received by our fantastic AMQP.
+
+The tool is designed to work reading the **traces** queue, to enable those traces
+I recommend following [this guide](https://github.com/MarcialRosales/rabbitmq-tracing-guide).
+
+Once you have a queue to receive the messages you want to track, then you can run `amqmonitoring` command to
+start monitoring.
+
+## Configurations
+
+A brief summary how to configure this tool to connect to your AMQP.
+
+### Environment variables
+
+Good method to configure the tool as a daemon process or run by some background process. 
+
+| key               | Description                                     | Default   |
+|-------------------|-------------------------------------------------|-----------|
+| RABBITMQ_HOST     | RabbitMQ **server host** to be connected.       | localhost |
+| RABBITMQ_PORT     | RabbitMQ **server port** to be connected.       | 5672      |
+| RABBITMQ_USER     | RabbitMQ **client user** to be logged with.     | guest     |
+| RABBITMQ_PASSWORD | RabbitMQ **client password** to be logged with. | guest     |
+
+And you can run it as `RABBITMQ_USER=MyUser amqmonitoring` for example,
+try to avoid saving password on your terminal history.
+
+### Commandline arguments
+
+A rapid method to configure is via arguments. Easiest way to start with this is running
+the help command.
+
+```bash
+$ amqmonitoring amqmonitoring --help
+
+usage: amqmonitoring [-h] [-f INSTRUCTIONS_PATH] [-s STORE] [-q QUEUE]
+
+Monitor AMQP traces
+
+options:
+  -h, --help            show this help message and exit
+  -f INSTRUCTIONS_PATH, --find-by-dict INSTRUCTIONS_PATH
+                        Path to the json instructions
+  -s STORE, --store STORE
+                        Path where the JSON messages outputs will be stored
+  -q QUEUE, --queue QUEUE
+                        Name of the queue to listen
+```
+
+And you can run it as `amqmonitoring -f examples/instructions_file.json` for example,
+try to avoid saving password on your terminal history.
+
+## Development
+
+Use UV to prepare your environment using `uv sync`. This will make the venv folder with the python and required
+dependencies to start the development.
+
+### Run local AMQP
+
+I have prepared a `docker-compose.yml` ready to run a server for development purposes. Run `docker compose up -d`
+and it will be listening on port 5672 on your machine with the default settings as this tool has.
+
+### Mock messages
+
+To help developing this cool you can run `.venv/bin/python examples/message_sender.py` to mock them.
+
+### Enable AMQP traces
+
+Run this `docker compose exec rabbitmq rabbitmqctl trace_on` and it will be activated,
+then go to http://localhost:15672/ and setup the traces to the right queue.
+
+### Build
+
+First make sure you are increasing the version number in the `pyproject.toml`. Then use `uv build` and you will
+see a folder named `dist` with the package inside.
+
+### Publish
+
+Also using `uv publish` with your own credentials, using token is highly recommended.
