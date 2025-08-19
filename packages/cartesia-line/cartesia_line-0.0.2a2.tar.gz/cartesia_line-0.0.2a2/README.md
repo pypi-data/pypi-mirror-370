@@ -1,0 +1,49 @@
+# Cartesia Line SDK
+
+Build intelligent, low-latency voice agents with background reasoning.
+
+**With Line you can,**
+- **Create** your first voice agent from scratch, **deploy**, and **talk to it in under 5 minutes**.
+- **Turn any existing chatbot** or text agent you've already built into a low-latency voice agent.
+- **Spin up common use cases** for support or scheduling from **ready-made templates**.
+- **Deploy production-ready systems** with auto-scaling, telephony integration, metrics, and call analytics.
+
+**Why Line?**
+
+- 🔗 **Event-driven design** to easily define multi-agent architectures with powerful background reasoning.
+- ⚡ **State-of-the-art voice models** using Sonic TTS and Ink STT deliver the lowest latency voice experience.
+- 📋 **Pre-built templates** for common use cases like customer support, sales agents, form filling, and more.
+- 🔌 **Easy integrations** with tools, MCPs, and other frameworks out of the box.
+- 🤝 **Support for handoffs** between agents and humans.
+- 🧠 **Reasoning agnostic** works with any LLM, text agent, or chatbot code.
+- 🚀 **Instant deployment** so you can build, deploy, and start talking in minutes with no infrastructure setup.
+
+## Quickstart (< 5 minutes)
+
+The Line SDK is designed to be used with the Cartesia [Line platform](https://cartesia.ai/line).
+- Create a [Cartesia account](https://play.cartesia.ai).
+- Follow the [quickstart guide](https://docs.cartesia.ai/).
+
+And you'll be able to make your first voice call in a few minutes.
+
+## Install the SDK
+
+```zsh
+pip install cartesia-line
+```
+
+
+## Common Use Cases
+
+| Use Case | Example |
+|----------|---------|
+| **Basic chat** | [examples/basic_chat/](examples/basic_chat/) |
+| **Form filling** | [examples/form-filling/](examples/form-filling/) |
+| **Background reasoning** | [examples/sales_with_leads/](examples/sales_with_leads/) |
+| **Support** | [examples/personal_banking_handoffs/](examples/personal_banking_handoffs/) |
+
+## Going Deeper
+
+- **More examples**: [examples/](examples/) - See all available examples and patterns
+- **Full API reference**: [docs.cartesia.ai/line](https://docs.cartesia.ai/)
+- **Get help**: [Discord community](https://discord.gg/cartesia)
