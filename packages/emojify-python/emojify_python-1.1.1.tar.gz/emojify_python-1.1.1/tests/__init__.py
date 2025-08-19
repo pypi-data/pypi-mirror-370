@@ -1,0 +1,1 @@
+"""Tests for emojify-python package."""
