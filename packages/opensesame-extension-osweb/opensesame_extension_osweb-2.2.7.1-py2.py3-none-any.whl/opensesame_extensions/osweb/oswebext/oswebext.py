@@ -1,0 +1,443 @@
+#-*- coding:utf-8 -*-
+
+"""
+This file is part of OpenSesame.
+
+OpenSesame is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+OpenSesame is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with OpenSesame.  If not, see <http://www.gnu.org/licenses/>.
+"""
+from libopensesame.py3compat import *
+import webbrowser
+import os
+from pathlib import Path
+from libopensesame.exceptions import UserAborted
+from libqtopensesame.extensions import BaseExtension
+from libqtopensesame.misc.translate import translation_context
+from libqtopensesame.misc.config import cfg
+from libqtopensesame.items.experiment import Experiment
+from . import osweb_linter as linter
+from osweb.oswebexceptions import PythonToJavaScriptError, \
+    OSWebCompatibilityError, ListRemoteError, UnsupportedJZIP, \
+    JZIPDownloadError
+from openexp import backend
+from qtpy.QtWidgets import QFileDialog, QMessageBox, QApplication, \
+    QProgressDialog
+from qtpy.QtCore import Qt
+from pyqt_code_editor.widgets import QuickOpenDialog
+_ = translation_context('oswebext', category='extension')
+
+
+def decorate_backend_info(fnc):
+    """Wraps around the backend_info() function to add the OSWeb backend."""
+    def inner():
+        backend_info = fnc()
+        backend_info['osweb'] = {'description': 'In a browser with OSWeb',
+                                 'canvas': 'osweb',
+                                 'keyboard': 'osweb',
+                                 'mouse': 'osweb',
+                                 'sampler': 'osweb',
+                                 'color': 'osweb',
+                                 'clock': 'osweb',
+                                 'log': 'osweb',
+                                 'icon': 'applications-internet',
+                                 'settings': False}
+        return backend_info
+    return inner
+    
+    
+class OpenJATOSDialog(QuickOpenDialog):
+    def __init__(self, parent, items):
+        super().__init__(parent, items, title=_("Open experiment"))
+
+    def on_item_selected(self, item_dict: dict):
+        item_dict['fnc'](item_dict['remote_exp'])
+
+
+class Oswebext(BaseExtension):
+    
+    preferences_ui = 'extensions.oswebext.preferences'
+
+    def event_startup(self):
+        cfg.oswebext_jatos_ignore_conflicts = False
+        self._control_panel = None
+        self._experiment_name = None
+        self._experiment_path = None
+        backend.backend_info = decorate_backend_info(backend.backend_info)
+        file_menu = self.get_submenu('file')
+        if cfg.oswebext_jatos_url == 'https://jatos.mindprobe.eu':
+            open_title = _('Open from MindProbe')
+            publish_title = _('Save and publish to MindProbe')
+        else:
+            open_title = _('Open from JATOS')
+            publish_title = _('Save and publish to JATOS')
+        action_open_jatos = self.qaction('document-open',
+                                         open_title,
+                                         self.event_osweb_open_jatos)
+        action_publish_jatos = self.qaction('document-save',
+                                            publish_title,
+                                            self.event_osweb_publish_jatos)
+        self.add_action(file_menu, action_open_jatos, -4, False, False)
+        self.add_action(file_menu, action_publish_jatos, -4, False, True)
+        
+    def provide_runner(self):
+        if self.experiment.var.canvas_backend == 'osweb':
+            from .osweb_runner import OSWebRunner
+            return OSWebRunner
+        
+    def provide_item_supported(self, experiment, item_type):
+        if self.experiment.var.canvas_backend != 'osweb':
+            return None
+        return linter.item_type_supported(item_type)
+        
+    def _suggested_path(self, suffix):
+        folder = os.path.dirname(cfg.file_dialog_path)
+        name = self.experiment.syntax.sanitize(
+            self.experiment.var.title, strict=True, allow_vars=False) + suffix
+        return os.path.join(folder, name)
+        
+    def event_osweb_export_html(self):
+        from osweb import convert
+        path = QFileDialog.getSaveFileName(
+            self.main_window, _('Save as…'),
+            directory=self._suggested_path('.html'),
+            filter='HMTL files (.html)')
+        # In PyQt5, the QFileDialog.getOpenFileName returns a tuple instead of
+        # a string, of which the first position contains the path.
+        if isinstance(path, tuple):
+            path = path[0]
+        if not path:
+            return
+        if not path.lower().endswith('.html'):
+            path += '.html'
+        try:
+            if not cfg.oswebext_bypass_linter:
+                errors = linter.check_compatibility(
+                    self.experiment, fullscreen=cfg.oswebext_fullscreen)
+                if errors:
+                    raise OSWebCompatibilityError(errors)
+            convert.exp_to_html(
+                self.experiment,
+                index_path=path,
+                subject=str(cfg.oswebext_subject_nrs),
+                logfile='osweb-data.json',
+                fullscreen=cfg.oswebext_fullscreen,
+                welcome_text=cfg.oswebext_welcome_text,
+                external_js=self._external_js(),
+                intro_click=cfg.oswebext_intro_click)
+        except (OSWebCompatibilityError, PythonToJavaScriptError) as e:
+            self.report_exception(e)
+            return
+        self._refresh_control_panel()
+
+    def event_osweb_export_jzip(self):
+        from osweb import convert
+        path = QFileDialog.getSaveFileName(
+            self.main_window, _('Save as…'),
+            directory=self._suggested_path('.jzip'),
+            filter='JATOS Study Archive (*.jzip)')
+        # In PyQt5, the QFileDialog.getOpenFileName returns a tuple instead of
+        # a string, of which the first position contains the path.
+        if isinstance(path, tuple):
+            path = path[0]
+        if not path:
+            return
+        if not path.lower().endswith('.jzip'):
+            path += '.jzip'
+        convert.exp_to_jzip(
+            self.experiment,
+            jzip_path=path,
+            subject=str(cfg.oswebext_subject_nrs),
+            fullscreen=cfg.oswebext_fullscreen,
+            full_background_color=cfg.oswebext_full_background_color,
+            welcome_text=cfg.oswebext_welcome_text,
+            external_js=self._external_js(),
+            intro_click=cfg.oswebext_intro_click)
+        self._refresh_control_panel()
+        
+    def event_osweb_import_jzip(self):
+        path = QFileDialog.getOpenFileName(
+            self.main_window, _('Open'),
+            directory=os.path.dirname(cfg.file_dialog_path),
+            filter='JATOS Study Archive (*.jzip)')
+        # In PyQt5, the QFileDialog.getOpenFileName returns a tuple instead of
+        # a string, of which the first position contains the path.
+        if isinstance(path, tuple):
+            path = path[0]
+        if not path:
+            return
+        self._open_jzip(path)
+
+    def event_osweb_open_jatos(self):
+        from osweb import sync
+        if not self._jatos_configured():
+            return
+        self.main_window.set_busy(True)
+        try:
+            remote_exp_list = sync.list_remote(self._jatos_info())
+        except ListRemoteError as e:
+            self.report_exception(e)
+            return
+        finally:
+            self.main_window.set_busy(False)
+        haystack = []
+        for remote_exp in remote_exp_list:
+            haystack.append({
+                'name' : remote_exp['title'],
+                'remote_exp': remote_exp,
+                'fnc': self._select_remote_experiment
+            })
+        OpenJATOSDialog(self.main_window, haystack).exec()
+        
+    def _select_remote_experiment(self, remote_exp):
+        from osweb import sync
+        self.main_window.set_busy(True)
+        self._progress_dialog = QProgressDialog(
+            _('Downloading …'), _('Hide'), 0, 100, self.main_window)
+        self._progress_dialog.setWindowModality(Qt.WindowModal)
+        self._progress_dialog.show()
+        self._progress_dialog.setWindowTitle(_('Please wait …'))
+        try:
+            jzip_path = sync.download_jzip(remote_exp['uuid'],
+                                           self._jatos_info(),
+                                           callback=self._progress_callback)
+        except JZIPDownloadError as e:
+            self.report_exception(e)
+        else:
+            self._open_jzip(jzip_path)
+        finally:
+            self.main_window.set_busy(False)
+            
+    def _progress_callback(self, transferred, total):
+        progress_percentage = int((transferred / total) * 100)
+        self._progress_dialog.setValue(progress_percentage)
+        QApplication.processEvents()
+    
+    def event_osweb_publish_jatos(self):
+        from osweb import sync
+        if not self._jatos_configured():
+            return
+        self.main_window.set_busy(True)
+        self.main_window.save_file()
+        self._progress_dialog = QProgressDialog(
+            _('Uploading …'), _('Hide'), 0, 100, self.main_window)
+        self._progress_dialog.setWindowModality(Qt.WindowModal)
+        self._progress_dialog.show()
+        self._progress_dialog.setWindowTitle(_('Please wait …'))
+        try:
+            sync.upload(
+                self.experiment,
+                self._jatos_info(),
+                subject=str(cfg.oswebext_subject_nrs),
+                fullscreen=cfg.oswebext_fullscreen,
+                full_background_color=cfg.oswebext_full_background_color,
+                welcome_text=cfg.oswebext_welcome_text,
+                external_js=self._external_js(),
+                intro_click=cfg.oswebext_intro_click,
+                ignore_conflicts=cfg.oswebext_jatos_ignore_conflicts,
+                callback=self._progress_callback)
+        except Exception as e:
+            self.report_exception(e)
+        else:
+            self.main_window.save_file()            
+            self.extension_manager.fire(
+                'notify',
+                message=_('Experiment has been published to JATOS'),
+                always_show=True)
+        finally:
+            self.main_window.set_busy(False)
+        # Automatically reset this option to avoid accidental force uploads in
+        # the future
+        cfg.oswebext_jatos_ignore_conflicts = False
+        self.extension_manager.fire('setting_changed',
+                                    setting='oswebext_jatos_ignore_conflicts',
+                                    value=False)
+        self._refresh_control_panel()
+    
+    def event_osweb_convert_results(self):
+        from osweb import results
+        from datamatrix import io
+
+        results_path = QFileDialog.getOpenFileName(
+            self.main_window, _('Select OSWeb results file…'),
+            filter='OSWeb results (*.*)')
+        if isinstance(results_path, tuple):
+            results_path = results_path[0]
+        if not results_path:
+            return
+        results_path = Path(results_path)
+        self.main_window.set_busy(True)
+        try:
+            dm = results.parse_results(
+                results_path, include_context=cfg.oswebext_include_context)
+        except Exception as e:
+            self.report_exception(e)
+            return
+        finally:
+            self.main_window.set_busy(False)
+        export_path = QFileDialog.getSaveFileName(
+            self.main_window, _('Save as…'),
+            filter='Excel (*.xlsx);;CSV (*.csv)')
+        if isinstance(export_path, tuple):
+            export_path = export_path[0]
+        if not export_path:
+            return
+        export_path = Path(export_path)
+        if export_path.suffix.lower() not in ('.csv', '.xlsx'):
+            export_path = export_path.with_suffix('.xlsx')
+        if export_path.suffix.lower().endswith('.xlsx'):
+            io.writexlsx(dm, export_path)
+        else:
+            io.writetxt(dm, export_path)
+        
+    def event_osweb_run(self, fullscreen=False, subject_nr=0,
+                        logfile='quickrun.csv'):
+        from osweb import convert
+        if not cfg.oswebext_bypass_linter:
+            errors = linter.check_compatibility(
+                self.experiment, fullscreen=cfg.oswebext_fullscreen)
+            if errors:
+                return OSWebCompatibilityError(errors)
+        # Replace the csv extension by a json extension
+        if logfile.lower().endswith('.csv'):
+            logfile = logfile[:-4] + '.json'
+        self.main_window.get_ready()
+        try:
+            index_path = convert.exp_to_html(
+                self.experiment,
+                subject=str(subject_nr),
+                logfile=logfile,
+                fullscreen=fullscreen,
+                full_background_color=cfg.oswebext_full_background_color,
+                welcome_text=cfg.oswebext_welcome_text,
+                external_js=self._external_js(),
+                intro_click=cfg.oswebext_intro_click)
+        except (OSWebCompatibilityError, PythonToJavaScriptError) as e:
+            return e
+        else:
+            webbrowser.open('file://{}'.format(index_path))
+            # The UserAborted exception will result in a notification, rather
+            # than # in a full-screen tab saying that the experiment has
+            # finished.
+            return UserAborted(_('Experiment started in external browser'))
+        finally:
+            self._refresh_control_panel()
+            
+    def event_prepare_change_experiment(self):
+        self._experiment_name = self.experiment.var.title
+    
+    def event_change_experiment(self):
+        """When the experiment title changes, we offer to reset the JATOS
+        UUID.
+        """
+        if not self.experiment.var.has('jatos_uuid'):
+            return
+        if self._experiment_name == self.experiment.var.title:
+            return
+        resp = QMessageBox.question(
+            self.main_window,
+            _('Unlink from JATOS'),
+            _('You have changed the name of the experiment. Do you also want to unlink the experiment from JATOS (by resetting the UUID) so that you can create a new remote experiment?'),
+            QMessageBox.Yes,
+            QMessageBox.No
+        )
+        if resp == QMessageBox.No:
+            return
+        # Delete the JATOS uuid and close all other tabs so that we don't have
+        # to update the preferences or control panel
+        del self.experiment.var.jatos_uuid
+        self.tabwidget.close_other()
+        
+    def event_save_experiment(self, path=None):
+        """If an experiment is saved under a different name, we offer to reset
+        the JATOS UUID.
+        """
+        if self.experiment.var.has('jatos_uuid') and \
+                self._experiment_path is not None and \
+                self._experiment_path != path:
+            resp = QMessageBox.question(
+                self.main_window,
+                _('Unlink from JATOS'),
+                _('You have saved the experiment under a different file name. Do you also want to unlink the experiment from JATOS (by resetting the UUID) so that you can create a new remote experiment?'),
+                QMessageBox.Yes,
+                QMessageBox.No
+            )
+            if resp == QMessageBox.Yes:
+                # Delete the JATOS uuid and close all other tabs so that we don't have
+                # to update the preferences or control panel
+                del self.experiment.var.jatos_uuid
+                self.tabwidget.close_other()
+        self._experiment_path = path
+    
+    def event_open_experiment(self, path=None):
+        self._experiment_path = path
+        
+    def activate(self):
+        self._show_controls()
+        
+    def settings_widget(self):
+        widget = super().settings_widget()
+        widget.ui.button_clear_jatos_uuid.clicked.connect(
+            lambda: self._clear_jatos_uuid(widget))
+        widget.ui.edit_end_redirect_url.textEdited.connect(
+            self._update_end_redirect_url)
+        return widget
+    
+    def _update_end_redirect_url(self, text):
+        self.experiment.var.jatos_end_redirect_url = text
+        
+    def _clear_jatos_uuid(self, widget):
+        del self.experiment.var.jatos_uuid
+        widget.ui.edit_uuid.setText('')
+
+    def _show_controls(self, jatos_configured=True):
+        from .osweb_control_panel import OSWebControlPanel
+        if self._control_panel is None:
+            self._control_panel = OSWebControlPanel(self.main_window,
+                                                    self.settings_widget())
+        self.tabwidget.add(self._control_panel, self.icon(), self.label())
+        self._control_panel.set_jatos_configured(jatos_configured)
+        
+    def _external_js(self):
+        return [url.strip() for url in cfg.oswebext_external_js.splitlines()]
+
+    def _jatos_configured(self):
+        if isinstance(cfg.oswebext_jatos_url, str) and \
+                cfg.oswebext_jatos_url.startswith('http') and \
+                isinstance(cfg.oswebext_jatos_api_token, str) and \
+                cfg.oswebext_jatos_api_token.startswith('jap_'):
+            return True
+        self._show_controls(jatos_configured=False)
+        return False
+
+    def _jatos_info(self):
+        from osweb import sync
+        return sync.JatosInfo(cfg.oswebext_jatos_url,
+                              cfg.oswebext_jatos_api_token)
+
+    def _refresh_control_panel(self):
+        if self._control_panel is None:
+            return
+        self._control_panel.refresh()
+
+    def _open_jzip(self, jzip_path):
+        from osweb import convert
+        try:
+            exp = convert.jzip_to_exp(
+                jzip_path,
+                factory=lambda string: Experiment(self.main_window,
+                                                  string=string))
+        except UnsupportedJZIP as e:
+            self.report_exception(e)
+        else:
+            self.main_window.ui.tabwidget.close_all(avoid_empty=False)
+            self.main_window.open_experiment(exp)
