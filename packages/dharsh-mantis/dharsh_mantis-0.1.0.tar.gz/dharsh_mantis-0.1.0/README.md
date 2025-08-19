@@ -1,0 +1,91 @@
+# 🦗 terminal-mantis
+
+Bring the mystical **Praying Mantis** to your terminal!
+This animated mantis will gracefully scroll across your screen.
+
+---
+
+## ✨ Features
+
+- 🕺 Terminal animation of the Praying Mantis
+- ⚙️ Adjustable speed and loop count
+- 📁 Support for custom animation files
+
+---
+
+## 📦 Installation
+
+Install directly from [PyPI](https://pypi.org/project/dharsh-mantis/):
+
+```bash
+pip install dharsh-mantis
+```
+
+After installing, run:
+
+```bash
+dharshmantis
+```
+
+---
+
+## 🔧 Command-line Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--delay` | Delay between frames (in seconds) | 0.1 |
+| `--loops` | Number of times to loop animation | -1 (infinite loop) |
+| `--animation` | Path to custom .animation file | animations/mantis.animation |
+
+---
+
+## 🧪 Examples
+
+```bash
+# Basic usage - infinite scrolling mantis
+dharshmantis
+
+# Slower animation with 3 loops
+dharshmantis --delay 0.2 --loops 3
+
+# Fast mantis for when you need speed
+dharshmantis --delay 0.05
+
+# Use custom animation file
+dharshmantis --animation my_custom.animation
+```
+
+---
+
+## 🎨 Animation Format
+
+Create your own animations using the following format:
+
+```
+Your ASCII art frame 1
+!--FRAME--!
+Your ASCII art frame 2
+!--FRAME--!
+```
+
+Each frame should be separated by `!--FRAME--!` markers.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to:
+- Add new animations
+- Improve scrolling effects
+- Fix bugs
+- Add features
+
+---
+
+## 📄 License
+
+MIT License - feel free to use this in your projects!
+
+---
+
+**Enjoy your zen terminal mantis! 🦗✨**
