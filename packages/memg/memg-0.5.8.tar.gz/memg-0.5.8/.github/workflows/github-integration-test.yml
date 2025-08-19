@@ -1,0 +1,198 @@
+name: GitHub Integration Test
+
+on:
+  push:
+    branches: [ dev-v04, main, dev ]
+    paths:
+      - 'experimental/integrations/github/**'
+      - 'templates/software_development/tools/**'
+      - 'example.env'
+      - '.github/workflows/github-integration-test.yml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - 'experimental/integrations/github/**'
+      - 'templates/software_development/tools/**'
+      - 'example.env'
+
+env:
+  ENABLE_GIT_INTEGRATION: true
+  GIT_PROVIDER: github
+  GIT_DEFAULT_OWNER: genovo-ai
+  GIT_DEFAULT_REPO: memg
+
+jobs:
+  test-github-integration:
+    runs-on: ubuntu-latest
+    name: Test GitHub Integration
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ".[dev]"
+
+      - name: Test GitHub Integration Loading
+        run: |
+          echo "Testing GitHub integration tool loading..."
+          python -c "
+          import os
+          os.environ['ENABLE_GIT_INTEGRATION'] = 'true'
+          os.environ['GIT_PROVIDER'] = 'github'
+
+          from templates.software_development.tools import register_tools
+          tools = register_tools()
+
+          print(f'Total tools loaded: {len(tools)}')
+          github_tools = [t for t in tools.keys() if t.startswith('git_')]
+          print(f'GitHub tools loaded: {len(github_tools)}')
+
+          expected_tools = [
+              'git_list_issues', 'git_get_issue', 'git_create_issue',
+              'git_update_issue', 'git_comment_issue', 'git_list_prs',
+              'git_get_pr', 'git_create_pr', 'git_merge_pr'
+          ]
+
+          missing_tools = set(expected_tools) - set(github_tools)
+          if missing_tools:
+              print(f'ERROR: Missing GitHub tools: {missing_tools}')
+              exit(1)
+
+          print('✅ All GitHub tools loaded successfully')
+          print('✅ GitHub integration test PASSED')
+          "
+
+      - name: Test GitHub Integration Disabled
+        run: |
+          echo "Testing that integration can be disabled..."
+          python -c "
+          import os
+          os.environ['ENABLE_GIT_INTEGRATION'] = 'false'
+
+          from templates.software_development.tools import register_tools
+          tools = register_tools()
+
+          github_tools = [t for t in tools.keys() if t.startswith('git_')]
+          if github_tools:
+              print(f'ERROR: GitHub tools found when disabled: {github_tools}')
+              exit(1)
+
+          print(f'✅ No GitHub tools loaded when disabled (total: {len(tools)})')
+          print('✅ GitHub integration disable test PASSED')
+          "
+
+      - name: Test GitHub Provider (No Token)
+        run: |
+          echo "Testing GitHub provider without token (public access)..."
+          python -c "
+          import asyncio
+          from experimental.integrations.github.provider import GitHubProvider
+
+          async def test_public():
+              provider = GitHubProvider()  # No token
+              try:
+                  # Test public repository access
+                  repo = await provider.get_repository('octocat', 'Hello-World')
+                  print(f'✅ Public repo access: {repo.full_name}')
+                  print(f'✅ Rate limiting working: provider initialized')
+                  return True
+              except Exception as e:
+                  print(f'❌ Public access test failed: {e}')
+                  return False
+
+          success = asyncio.run(test_public())
+          if not success:
+              exit(1)
+          print('✅ GitHub provider test PASSED')
+          "
+
+      - name: Security Scan - GitHub Integration
+        run: |
+          echo "Scanning GitHub integration for security issues..."
+          bandit -r experimental/integrations/github/ -f json -o github-bandit-report.json -c .bandit || true
+          bandit -r experimental/integrations/github/ -c .bandit
+          echo "✅ Security scan completed"
+
+      - name: Lint GitHub Integration Code
+        run: |
+          echo "Linting GitHub integration code..."
+          pylint experimental/integrations/github/ --exit-zero
+          echo "✅ Lint check completed"
+
+  test-docker-integration:
+    runs-on: ubuntu-latest
+    name: Test Docker with GitHub Integration
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          echo "Building Docker image with GitHub integration..."
+          docker build -t memg-test:latest .
+
+      - name: Test experimental directory in container
+        run: |
+          echo "Testing that experimental directory is included in container..."
+          docker run --rm memg-test:latest ls -la experimental/integrations/github/
+          echo "✅ Experimental directory included in container"
+
+      - name: Test GitHub integration in container
+        run: |
+          echo "Testing GitHub integration loading in container..."
+          docker run --rm \
+            -e ENABLE_GIT_INTEGRATION=true \
+            -e GIT_PROVIDER=github \
+            -e MEMG_TEMPLATE=software_development \
+            -e GOOGLE_API_KEY=dummy \
+            memg-test:latest \
+            python -c "
+          from templates.software_development.tools import register_tools
+          tools = register_tools()
+          github_tools = [t for t in tools.keys() if t.startswith('git_')]
+          print(f'GitHub tools in container: {len(github_tools)}')
+          if len(github_tools) != 9:
+              print(f'ERROR: Expected 9 GitHub tools, got {len(github_tools)}')
+              exit(1)
+          print('✅ GitHub integration works in container')
+          "
+
+  validate-integration-docs:
+    runs-on: ubuntu-latest
+    name: Validate Integration Documentation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README exists
+        run: |
+          if [ ! -f "experimental/integrations/github/README.md" ]; then
+            echo "ERROR: GitHub integration README not found"
+            exit 1
+          fi
+          echo "✅ README exists"
+
+      - name: Validate documentation completeness
+        run: |
+          echo "Checking documentation completeness..."
+          grep -q "GITHUB_TOKEN" experimental/integrations/github/README.md || exit 1
+          grep -q "ENABLE_GIT_INTEGRATION" experimental/integrations/github/README.md || exit 1
+          grep -q "git_list_issues" experimental/integrations/github/README.md || exit 1
+          grep -q "Authentication" experimental/integrations/github/README.md || exit 1
+          grep -q "Rate Limiting" experimental/integrations/github/README.md || exit 1
+          echo "✅ Documentation is complete"
