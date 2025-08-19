@@ -1,0 +1,150 @@
+<!-- templates/enap_designsystem/semana_inovacao/block_cronograma.html -->
+{% load wagtailimages_tags %}
+
+{% if value.imagem_fundo %}
+    {% image value.imagem_fundo original as bg_image %}
+{% endif %}
+
+<style>
+    .cronograma-timeline::before {
+        content: '';
+        position: absolute;
+        top: 80px; /* Começar depois do primeiro círculo */
+        bottom: 80px; /* Terminar antes do último círculo */
+        left: 40px; /* Posição centralizada no círculo */
+        width: 4px;
+        background-color: {{ step_block.value.cor_data }};
+        z-index: 1;
+        border-radius: 2px;
+    }
+</style>
+
+<section class="cronograma-secao" 
+        {% if bg_image %}
+        style="background-image: url('{{ bg_image.url }}'); background-color: {{ value.cor_fundo }};"
+        {% else %}
+        style="background-color: {{ value.cor_fundo }};"
+        {% endif %}>
+
+    <div class="cronograma-container">
+        <!-- Título -->
+        {% if value.titulo %}
+        <div class="cronograma-titulo-container">
+            {% if value.imagem_ladotexto %}
+                {% image value.imagem_ladotexto original as titulo_image %}
+                <img src="{{ titulo_image.url }}" 
+                     alt="{{ titulo_image.title }}" 
+                     class="cronograma-titulo-imagem">
+            {% endif %}
+            <h2 class="cronograma-titulo" style="color: {{ value.cor_titulo }};">
+                {{ value.titulo }}
+            </h2>
+        </div>
+        {% endif %}
+        
+        <!-- Timeline -->
+        <div class="cronograma-timeline">
+            {% for step_block in value.steps %}
+                {% if step_block.block_type == 'step' %}
+                    <div class="cronograma-step">
+                        <!-- Círculo com Data -->
+                        <div class="step-circulo" style="background-color: {{ step_block.value.cor_circulo }}; border: 4px solid {{ step_block.value.cor_data }};">
+                            <div class="step-data" style="color: {{ step_block.value.cor_data }};">
+                                {{ step_block.value.data }}
+                            </div>
+                        </div>
+                        
+                        <!-- Descrição Mobile (aparece só no mobile) -->
+                        <div class="step-descricao-mobile" style="color: {{ step_block.value.cor_descricao }};">
+                            {{ step_block.value.descricao }}
+                        </div>
+                        
+                        <!-- Linha conectora (não aparece no último) -->
+                        {% if not forloop.last %}
+                            <div class="step-linha" style="background-color: {{ step_block.value.cor_data }};"></div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Descrições abaixo da timeline (só aparece no desktop) -->
+        <div class="cronograma-descricoes">
+            {% for step_block in value.steps %}
+                {% if step_block.block_type == 'step' %}
+                    <div class="step-descricao-item">
+                        <div class="step-descricao" style="color: {{ step_block.value.cor_descricao }};">
+                            {{ step_block.value.descricao }}
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Função para ajustar as linhas do cronograma
+    function ajustarLinhasCronograma() {
+        const cronogramas = document.querySelectorAll('.cronograma-timeline');
+        
+        cronogramas.forEach(timeline => {
+            const steps = timeline.querySelectorAll('.cronograma-step');
+            const totalSteps = steps.length;
+            
+            if (totalSteps <= 1) return;
+            
+            // Só ajustar no desktop
+            if (window.innerWidth > 768) {
+                // Calcular largura disponível
+                const timelineWidth = timeline.offsetWidth - 100;
+                const circleWidth = 100;
+                const availableWidth = timelineWidth - (totalSteps * circleWidth);
+                const lineWidth = availableWidth / (totalSteps - 1);
+                
+                // Aplicar largura calculada às linhas
+                steps.forEach((step, index) => {
+                    const linha = step.querySelector('.step-linha');
+                    if (linha && index < totalSteps - 1) {
+                        linha.style.width = `${lineWidth}px`;
+                    }
+                });
+            }
+        });
+    }
+    
+    // Executar no carregamento
+    ajustarLinhasCronograma();
+    
+    // Executar no redimensionamento da janela
+    let resizeTimer;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(ajustarLinhasCronograma, 250);
+    });
+    
+    // Para casos onde o conteúdo carrega dinamicamente
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'childList') {
+                const addedNodes = Array.from(mutation.addedNodes);
+                const hasCronograma = addedNodes.some(node => 
+                    node.nodeType === 1 && 
+                    (node.classList && node.classList.contains('cronograma-timeline') || 
+                     node.querySelector && node.querySelector('.cronograma-timeline'))
+                );
+                
+                if (hasCronograma) {
+                    setTimeout(ajustarLinhasCronograma, 100);
+                }
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+});
+</script>
