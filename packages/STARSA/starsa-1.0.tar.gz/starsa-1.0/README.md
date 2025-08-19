@@ -1,0 +1,1 @@
+For thousands of years, we have observed your kind. We are saddened and disappointed by the human race. We will not contact you again beyond this message. Though we could destroy you and end this, we choose not to. Instead, we are leaving forever.
