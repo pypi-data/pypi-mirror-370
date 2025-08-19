@@ -1,0 +1,1 @@
+Esta libreria tiene como objetivo agrupar de manera clara todas las funciones necesarias para la clusterizacion de transacciones.
