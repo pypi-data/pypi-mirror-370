@@ -1,0 +1,41 @@
+# Copyright (c) 2013 Steve Canny, https://github.com/scanny
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# See LICENSE in the project root for full license information.
+
+
+
+"""Exceptions used with python-pptx.
+
+The base exception class is PythonPptxError.
+"""
+
+from __future__ import annotations
+
+
+class PythonPptxError(Exception):
+    """Generic error class."""
+
+
+class PackageNotFoundError(PythonPptxError):
+    """
+    Raised when a package cannot be found at the specified path.
+    """
+
+
+class InvalidXmlError(PythonPptxError):
+    """
+    Raised when a value is encountered in the XML that is not valid according
+    to the schema.
+    """
