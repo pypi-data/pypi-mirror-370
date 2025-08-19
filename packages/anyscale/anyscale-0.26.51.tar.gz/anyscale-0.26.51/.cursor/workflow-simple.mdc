@@ -1,0 +1,178 @@
+---
+type: manual
+description: Quick workflow guide for CLI development
+---
+
+# Quick Development Workflow
+
+## Adding a New Feature - Step by Step
+
+### 1. Extend AnyscaleClient (if needed)
+
+```python
+# anyscale/_private/anyscale_client/common.py
+@abstractmethod
+def new_api_method(self, *, param: str) -> dict:
+    raise NotImplementedError
+
+# anyscale/_private/anyscale_client/anyscale_client.py
+@handle_api_exceptions
+def new_api_method(self, *, param: str) -> dict:
+    return self._api.endpoint(param=param)
+
+# anyscale/_private/anyscale_client/fake_anyscale_client.py
+def new_api_method(self, *, param: str) -> dict:
+    return {"fake": "response"}
+```
+
+### 2. Create SDK Function
+
+```python
+# anyscale/myfeature/commands.py
+from anyscale._private.sdk import sdk_command
+
+@sdk_command(
+    "myfeature_sdk",
+    PrivateMyFeatureSDK,
+    doc_py_example="example code",
+    arg_docstrings={"param": "Description"}
+)
+def create_thing(
+    name: str,
+    *,
+    config: Optional[dict] = None,
+    _private_sdk: Optional[PrivateMyFeatureSDK] = None
+) -> ThingModel:
+    """Create a thing."""
+    return _private_sdk.create(name, config)
+```
+
+### 3. Add CLI Command
+
+```python
+# anyscale/commands/myfeature_commands.py
+@click.group()
+def myfeature():
+    """Manage my features."""
+    pass
+
+@myfeature.command()
+@click.option("--name", required=True)
+@click.option("--config", type=click.Path())
+def create(name: str, config: Optional[str]):
+    """Create a new thing."""
+    config_dict = None
+    if config:
+        with open(config) as f:
+            config_dict = yaml.safe_load(f)
+
+    try:
+        result = sdk.create_thing(name, config=config_dict)
+        click.echo(f"Created: {result.id}")
+    except Exception as e:
+        raise click.ClickException(str(e))
+
+# Register in scripts.py
+cli.add_command(myfeature_cli)
+```
+
+### 4. Test Locally
+
+```bash
+# Install in development mode
+pip install -e .
+
+# Test your command
+anyscale myfeature create --name test
+
+# Debug mode
+export ANYSCALE_DEBUG=1
+anyscale myfeature create --name test
+```
+
+### 5. Write Tests
+
+```python
+# tests/unit/test_myfeature_sdk.py
+def test_create_thing():
+    mock_sdk = Mock()
+    mock_sdk.create.return_value = ThingModel(id="123")
+
+    with patch("anyscale.myfeature.commands._private_sdk", mock_sdk):
+        result = create_thing("test")
+        assert result.id == "123"
+
+# tests/unit/test_myfeature_cli.py
+def test_create_command():
+    runner = CliRunner()
+    with patch("anyscale.myfeature.commands.create_thing") as mock:
+        mock.return_value = Mock(id="123")
+        result = runner.invoke(cli, ["create", "--name", "test"])
+        assert result.exit_code == 0
+        assert "123" in result.output
+```
+
+### 6. Run Tests
+
+```bash
+bazelisk test //frontend/cli/tests/unit:test_myfeature_sdk
+bazelisk test //frontend/cli/tests/unit:test_myfeature_cli
+```
+
+## Common Patterns
+
+### List with Pagination
+```python
+def list_things(*, max_items: Optional[int] = None) -> ResultIterator[Thing]:
+    def fetch_page(token):
+        return client.list_api(page_token=token)
+
+    return ResultIterator(
+        fetch_page=fetch_page,
+        parse_fn=lambda x: Thing(**x),
+        max_items=max_items
+    )
+```
+
+### Wait for Status
+```python
+def deploy_and_wait(name: str, timeout: int = 300):
+    deployment = deploy(name)
+
+    start = time.time()
+    while time.time() - start < timeout:
+        status = get_status(deployment.id)
+        if status == "READY":
+            return deployment
+        if status == "FAILED":
+            raise Exception("Deployment failed")
+        time.sleep(5)
+
+    raise TimeoutError("Deployment timed out")
+```
+
+## Key Rules
+
+1. **Never access `_internal_api_client` or `_external_api_client` directly in SDK**
+2. **Always use typed parameters in AnyscaleClient interface**
+3. **SDK functions must be at module level for docgen**
+4. **Test locally with `pip install -e .` first**
+5. **All new client methods need fake implementation**
+
+## Troubleshooting
+
+```bash
+# Regenerate API clients
+cd frontend/web && npm run build-api
+
+# Check imports
+python -c "from anyscale.myfeature.commands import create_thing"
+
+# Run with debug
+export ANYSCALE_DEBUG=1
+anyscale myfeature create --name test
+
+# Test specific function
+bazelisk test //frontend/cli/tests/unit:test_myfeature \
+  --test_arg="-k test_create"
+```

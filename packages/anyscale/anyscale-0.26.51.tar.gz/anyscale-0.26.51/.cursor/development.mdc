@@ -1,0 +1,152 @@
+---
+type: auto-attached
+globs:
+  - "**/anyscale/commands/*.py"
+  - "**/anyscale/*/commands.py"
+  - "**/anyscale/*/_private/*_sdk.py"
+  - "**/scripts.py"
+description: Development workflow and patterns for adding CLI features
+---
+
+# Development Guide
+
+## Adding a New Feature
+
+### 1. SDK Implementation
+```python
+# anyscale/<module>/commands.py
+from anyscale._private.sdk import sdk_command
+
+@sdk_command(
+    singleton_key="module_sdk",
+    sdk_class=PrivateModuleSDK,
+    doc_py_example=EXAMPLE,
+    arg_docstrings=ARG_DOCS,
+)
+def create_resource(
+    name: str,
+    *,  # Force keyword-only args
+    config: Optional[dict] = None,
+    wait: bool = False,
+    _private_sdk: Optional[PrivateModuleSDK] = None
+) -> ResourceModel:
+    """Create a resource."""
+    return _private_sdk.create(name, config, wait)
+```
+
+### 2. CLI Command
+```python
+# anyscale/commands/<module>_commands.py
+@click.command()
+@click.option("--name", required=True)
+@click.option("--config", type=click.Path(exists=True))
+@click.option("--wait/--no-wait", default=False)
+def create(name: str, config: Optional[str], wait: bool):
+    """Create a new resource."""
+    config_dict = None
+    if config:
+        with open(config) as f:
+            config_dict = yaml.safe_load(f)
+
+    try:
+        resource = sdk.create_resource(name, config=config_dict, wait=wait)
+        click.echo(f"Created: {resource.id}")
+    except Exception as e:
+        raise click.ClickException(str(e))
+```
+
+### 3. Add Tests
+```python
+# tests/unit/test_<module>.py
+def test_create_resource():
+    with patch("anyscale.<module>.commands._private_sdk") as mock_sdk:
+        mock_sdk.create.return_value = ResourceModel(id="res_123")
+        result = create_resource("test")
+        assert result.id == "res_123"
+```
+
+## Common Patterns
+
+### Progress Indicators
+```python
+from anyscale.cli_logger import BlockLogger
+
+with BlockLogger("Creating service..."):
+    service = create_service(name)
+    with BlockLogger("Waiting for ready..."):
+        wait_for_ready(service.id)
+```
+
+### Formatting Output
+```python
+# JSON output
+if json_output:
+    click.echo(json.dumps(result.dict()))
+else:
+    # Table output
+    from anyscale.utils.formatting import format_table
+    headers = ["ID", "Name", "Status"]
+    rows = [[r.id, r.name, r.status] for r in results]
+    format_table(headers, rows)
+```
+
+### Environment Variables
+```python
+# Standard vars used by CLI
+ANYSCALE_CLI_TOKEN = os.getenv("ANYSCALE_CLI_TOKEN")
+ANYSCALE_HOST = os.getenv("ANYSCALE_HOST", "https://console.anyscale.com")
+ANYSCALE_DEBUG = os.getenv("ANYSCALE_DEBUG") == "1"
+ANYSCALE_CLOUD = os.getenv("ANYSCALE_CLOUD_NAME")
+```
+
+### Backward Compatibility
+```python
+# Adding optional params is safe
+def operation(name: str, new_param: Optional[str] = None):  # OK
+    pass
+
+# Deprecation pattern
+@click.option("--old-flag", hidden=True)
+@click.option("--new-flag")
+def command(old_flag, new_flag):
+    if old_flag:
+        click.echo("Warning: --old-flag is deprecated", err=True)
+        new_flag = old_flag
+```
+
+### Performance Tips
+```python
+# Lazy imports for heavy dependencies
+def command_needing_pandas():
+    import pandas as pd  # Import only when needed
+    return pd.DataFrame(data)
+
+# Caching expensive lookups
+from functools import lru_cache
+
+@lru_cache(maxsize=128)
+def expensive_lookup(key: str) -> str:
+    return fetch_from_api(key)
+```
+
+## Testing
+
+```bash
+# Run all unit tests
+bazelisk test //frontend/cli/tests/unit/... --test_output=all
+
+# Run specific test
+bazelisk test //frontend/cli/tests/unit:test_service_cli --test_output=all
+
+# Debug mode
+export ANYSCALE_DEBUG=1
+```
+
+## Checklist
+
+- [ ] SDK function with type hints
+- [ ] CLI command with error handling
+- [ ] Unit tests for both SDK and CLI
+- [ ] Update docgen if public API
+- [ ] Run Bazelisk tests
+- [ ] No breaking changes

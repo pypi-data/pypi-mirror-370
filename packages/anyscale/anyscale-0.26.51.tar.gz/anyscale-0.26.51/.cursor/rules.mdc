@@ -1,0 +1,72 @@
+---
+type: always
+description: Main rules and quick reference for Anyscale CLI development
+---
+
+# Anyscale CLI Rules
+
+## Task → Documentation Map
+
+| Task | Primary Doc | Secondary Docs |
+|------|------------|----------------|
+| **Add new feature** | `workflow-simple.mdc` | `development.mdc`, `testing-guide.mdc` |
+| **Fix API errors** | `error-handling.mdc` | `api-client.mdc` |
+| **Write tests** | `testing.mdc` | `testing-guide.mdc` |
+| **Debug auth issues** | `authentication.mdc` | `error-handling.mdc` |
+| **Add telemetry** | `telemetry.mdc` | - |
+| **Work with clouds** | `cloud-providers.mdc` | - |
+| **Code style questions** | `style-guide.mdc` | - |
+| **System design** | `architecture.mdc` | - |
+
+## Quick Commands
+```bash
+# Test
+bazelisk test //frontend/cli/tests/unit/... --test_output=all
+
+# Regenerate API clients (after backend changes)
+cd frontend/web && npm run build-api
+
+# Debug
+export ANYSCALE_DEBUG=1
+```
+
+## Core Principles
+
+1. **SDK-first**: Business logic in SDK, CLI is thin wrapper
+2. **Type safety**: Always use type hints
+3. **No breaking changes**: Add optional params, deprecate carefully
+4. **User experience**: Clear errors, no stack traces
+5. **Test everything**: Unit tests required for all features
+
+## Common Mistakes to Avoid
+
+❌ **DON'T**: Access `client._internal_api_client` or `client._external_api_client` in SDK
+✅ **DO**: Use typed interface methods like `client.create_resource(name="test")`
+
+❌ **DON'T**: Edit generated code in `openapi_client/`
+✅ **DO**: Regenerate with `npm run build-api`
+
+❌ **DON'T**: Put business logic in CLI layer
+✅ **DO**: Put logic in SDK, keep CLI as thin wrapper
+
+❌ **DON'T**: Use raw dicts in interfaces
+✅ **DO**: Use typed parameters and Pydantic models
+
+## Architecture
+
+```
+User → CLI (Click) → SDK → AnyscaleClient → OpenAPI → Backend
+```
+
+- **CLI**: `anyscale/commands/*_commands.py` - User interface
+- **SDK**: `anyscale/*/commands.py` - Business logic
+- **Client**: `anyscale/_private/anyscale_client/` - API wrapper
+- **Models**: `anyscale/*/models.py` - Pydantic schemas
+
+## Development Flow
+
+1. Implement in SDK (`anyscale/<module>/commands.py`)
+2. Wrap in CLI (`anyscale/commands/<module>_commands.py`)
+3. Extend client if needed (`anyscale_client.py`)
+4. Add tests (`tests/unit/test_<module>.py`)
+5. Run: `bazelisk test //frontend/cli/tests/unit/...`

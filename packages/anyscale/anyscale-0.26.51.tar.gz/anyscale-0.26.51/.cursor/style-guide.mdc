@@ -1,0 +1,236 @@
+---
+type: auto-attached
+globs:
+  - "**/*.py"
+description: Code style and naming conventions
+---
+
+# Style Guide
+
+## Python Conventions
+
+### Naming
+```python
+# Classes - PascalCase
+class ServiceController:
+    pass
+
+# Functions - snake_case
+def create_service():
+    pass
+
+# Constants - UPPER_SNAKE_CASE
+MAX_RETRIES = 3
+
+# Private - leading underscore
+def _internal_helper():
+    pass
+```
+
+### Imports
+```python
+# Standard library
+import os
+from typing import Optional, List
+
+# Third party
+import click
+from pydantic import BaseModel
+
+# Local - absolute imports
+from anyscale.service.models import ServiceConfig
+from anyscale._private.sdk import sdk_command
+```
+
+### Type Hints
+```python
+# Always use type hints
+def process(
+    items: List[str],
+    transform: Optional[Callable[[str], str]] = None
+) -> List[str]:
+    """Process items with optional transform."""
+    pass
+```
+
+## CLI Conventions
+
+### Command Structure
+```bash
+anyscale <resource> <action> [options]
+anyscale service deploy --name my-app
+anyscale job list --project prod
+```
+
+### Flag Patterns
+```python
+# Required options
+@click.option("--name", required=True, help="Resource name")
+
+# Path options
+@click.option("--config", type=click.Path(exists=True))
+
+# Boolean flags
+@click.option("--wait/--no-wait", default=False)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+
+# Output format
+@click.option("--json", is_flag=True, help="Output as JSON")
+@click.option("--format", type=click.Choice(["table", "json", "yaml"]))
+```
+
+## SDK Patterns
+
+### SDK Decorator
+```python
+@sdk_command(
+    singleton_key="service_sdk",
+    sdk_class=PrivateServiceSDK,
+    doc_py_example=EXAMPLE_CODE,
+    arg_docstrings=ARG_DESCRIPTIONS,
+)
+def deploy(
+    config: ServiceConfig,
+    *,  # Force keyword-only args
+    wait: bool = False,
+    _private_sdk: Optional[PrivateServiceSDK] = None
+) -> str:
+    """Deploy a service."""
+    return _private_sdk.deploy(config, wait)
+```
+
+### Model Definition
+```python
+from pydantic import BaseModel, Field
+
+class ServiceConfig(BaseModel):
+    """Service configuration."""
+
+    name: str = Field(..., description="Service name")
+    replicas: int = Field(1, ge=1, le=100, description="Number of replicas")
+
+    class Config:
+        extra = "forbid"  # Reject unknown fields
+```
+
+## Error Messages
+
+### Good ✅
+```python
+# Specific and actionable
+"Service 'my-app' not found. List services: anyscale service list"
+"Cannot delete running service. Stop first: anyscale service stop my-app"
+```
+
+### Bad ❌
+```python
+# Vague or technical
+"Error: 404"
+"Operation failed"
+"KeyError: 'id'"
+```
+
+## Documentation
+
+### Docstrings for Public APIs
+```python
+def public_sdk_function(
+    resource: str,
+    options: Optional[dict] = None
+) -> ResultModel:
+    """
+    Perform a complex operation on a resource.
+
+    Detailed explanation for external users.
+
+    Args:
+        resource: The resource identifier
+        options: Optional configuration dict
+
+    Returns:
+        The operation result
+
+    Raises:
+        ValueError: If resource is invalid
+        APIError: If the API call fails
+
+    Examples:
+        >>> result = public_sdk_function("my-resource")
+        >>> print(result.status)
+        'success'
+    """
+    pass
+```
+
+### Internal Comments
+```python
+# ✅ GOOD: Explains WHY, not WHAT
+def process_data(items):
+    # Skip first item as it contains headers from legacy format
+    items = items[1:]
+
+    # Use batch size of 100 to avoid API rate limits
+    for batch in chunks(items, 100):
+        api.process_batch(batch)
+
+# ❌ BAD: States the obvious
+def process_data(items):
+    # Remove first item
+    items = items[1:]
+
+    # Process in batches
+    for batch in chunks(items, 100):
+        api.process_batch(batch)
+```
+
+### Comments to Avoid
+```python
+# ❌ DON'T: Comment for diffs
+# Added in PR #1234
+# TODO: Remove after migration
+# FIXME: Temporary workaround
+def new_feature():
+    pass
+
+# ❌ DON'T: Version tracking in comments
+# v2: Updated to use new API
+# Changed on 2024-01-15
+def api_call():
+    pass
+
+# ✅ DO: Use git for history, tickets for tracking
+def clean_function():
+    """Function does X and Y."""
+    # Only add comments that help understand the code
+    pass
+```
+
+### CLI Help Text
+```python
+@click.command()
+@click.option(
+    "--replicas",
+    type=int,
+    help="Number of replicas to deploy (1-100)"
+)
+def deploy(replicas: int):
+    """Deploy a service with the specified configuration.
+
+    Examples:
+        anyscale service deploy --name my-app
+        anyscale service deploy --config service.yaml --wait
+    """
+    pass
+```
+
+## Best Practices
+
+1. **Type everything** - No untyped functions
+2. **Keyword-only args** - Use `*` separator for clarity
+3. **Descriptive names** - Avoid abbreviations
+4. **Early validation** - Check inputs before API calls
+5. **Consistent patterns** - Follow existing code style
+6. **Clear help text** - Include examples in CLI commands
+7. **Value-add comments** - Explain WHY, not WHAT
+8. **Clean docstrings** - Comprehensive for public APIs, minimal for internal
+9. **No diff artifacts** - Use git for history, not comments
