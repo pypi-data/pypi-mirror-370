@@ -1,0 +1,119 @@
+# Medical LLM Fine-tuning Configuration
+# CUDA GPU Optimized Version
+
+# Model Configuration
+model:
+  name: "Qwen/Qwen3-4B-Thinking-2507"
+  cache_dir: "./model_cache"
+  trust_remote_code: true
+  torch_dtype: "bfloat16"  # Better for CUDA
+  device_map: "auto"  # CUDA supports auto device mapping
+
+# Fine-tuning Configuration
+training:
+  # LoRA Configuration - CUDA Optimized
+  lora:
+    r: 32  # Higher rank for better performance
+    alpha: 64
+    dropout: 0.05
+    target_modules: 
+      - "q_proj"
+      - "k_proj" 
+      - "v_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+    bias: "none"
+    task_type: "CAUSAL_LM"
+  
+  # QLoRA Quantization Configuration
+  quantization:
+    load_in_4bit: true  # Enable for memory efficiency
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_compute_dtype: "bfloat16"
+  
+  # Training Parameters - CUDA Optimized
+  parameters:
+    num_train_epochs: 3
+    per_device_train_batch_size: 4  # Higher batch size for CUDA
+    per_device_eval_batch_size: 4
+    gradient_accumulation_steps: 2
+    learning_rate: 2.0e-4
+    warmup_steps: 100
+    max_length: 4096  # Full context length
+    
+  # Optimizer and Scheduler
+  optimizer:
+    type: "adamw_8bit"  # Memory efficient
+    weight_decay: 0.01
+    
+  scheduler:
+    type: "cosine"
+    warmup_ratio: 0.03
+
+# Data Configuration
+data:
+  input_file: "output.json"
+  processed_dir: "processed_data"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  max_samples: 5000  # Higher for CUDA
+  augmentation:
+    enabled: true  # Enable data augmentation
+
+# RAG Configuration
+rag:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  vector_db_path: "./vector_db"
+  top_k: 5
+  similarity_threshold: 0.7
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - "precision"
+    - "recall" 
+    - "f1"
+    - "accuracy"
+  entity_types:
+    - "Bacteria"
+    - "Disease"
+    - "Evidence"
+  relation_types:
+    - "is_a"
+    - "biomarker_for"
+    - "correlated_with"
+    - "has_relationship"
+
+# Output Configuration
+output:
+  model_dir: "./medical_llm_output"
+  results_dir: "./evaluation_results"
+  logs_dir: "./logs"
+  save_steps: 500
+  eval_steps: 500
+  logging_steps: 50
+
+# Hardware Configuration - CUDA Optimized
+hardware:
+  use_gpu: true
+  mixed_precision: "bf16"  # Better for CUDA
+  gradient_checkpointing: true
+  dataloader_num_workers: 4  # Higher for CUDA
+  pin_memory: true
+
+# Wandb Configuration
+wandb:
+  project: "medical-llm-finetune-cuda"
+  entity: null
+  tags: 
+    - "qwen3"
+    - "thinking-model"
+    - "medical-ner"
+    - "relation-extraction"
+    - "cuda"
+    - "gpu"
+  notes: "Medical entity and relation extraction with Qwen3-4B-Thinking-2507 on CUDA GPU"

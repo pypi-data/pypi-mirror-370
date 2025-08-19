@@ -1,0 +1,109 @@
+# Medical LLM Fine-tuning Configuration
+# CPU Only Version (Fallback Configuration)
+
+# Model Configuration
+model:
+  name: "Qwen/Qwen3-4B-Thinking-2507"
+  cache_dir: "./model_cache"
+  trust_remote_code: true
+  torch_dtype: "float32"  # More stable for CPU
+  device_map: null
+
+# Fine-tuning Configuration
+training:
+  # LoRA Configuration - CPU Optimized (Minimal)
+  lora:
+    r: 8  # Very low rank for CPU
+    alpha: 16
+    dropout: 0.1
+    target_modules: 
+      - "q_proj"
+      - "v_proj"  # Minimal modules for CPU
+    bias: "none"
+    task_type: "CAUSAL_LM"
+  
+  # QLoRA Quantization Configuration
+  quantization:
+    load_in_4bit: false  # Disable for CPU
+    bnb_4bit_use_double_quant: false
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_compute_dtype: "float32"
+  
+  # Training Parameters - CPU Optimized
+  parameters:
+    num_train_epochs: 1  # Reduced for CPU
+    per_device_train_batch_size: 1
+    per_device_eval_batch_size: 1
+    gradient_accumulation_steps: 16  # Higher to compensate
+    learning_rate: 1.0e-4  # Lower learning rate
+    warmup_steps: 10
+    max_length: 512  # Much reduced for CPU
+    
+  # Optimizer and Scheduler
+  optimizer:
+    type: "adamw_torch"
+    weight_decay: 0.01
+    
+  scheduler:
+    type: "linear"
+    warmup_ratio: 0.1
+
+# Data Configuration
+data:
+  input_file: "output.json"
+  processed_dir: "processed_data"
+  train_ratio: 0.8  # More training data
+  val_ratio: 0.1
+  test_ratio: 0.1
+  max_samples: 100  # Very limited for CPU
+  augmentation:
+    enabled: false  # Disable to save time
+
+# RAG Configuration
+rag:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  vector_db_path: "./vector_db"
+  top_k: 3
+  similarity_threshold: 0.8
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - "f1"  # Minimal metrics
+    - "accuracy"
+  entity_types:
+    - "Bacteria"
+    - "Disease"
+    - "Evidence"
+  relation_types:
+    - "is_a"
+    - "correlated_with"
+
+# Output Configuration
+output:
+  model_dir: "./medical_llm_output"
+  results_dir: "./evaluation_results"
+  logs_dir: "./logs"
+  save_steps: 50  # Frequent saves
+  eval_steps: 50
+  logging_steps: 5
+
+# Hardware Configuration - CPU Only
+hardware:
+  use_gpu: false
+  mixed_precision: "no"  # Disable for CPU
+  gradient_checkpointing: true
+  dataloader_num_workers: 1  # Minimal
+  pin_memory: false
+
+# Wandb Configuration
+wandb:
+  project: "medical-llm-finetune-cpu"
+  entity: null
+  tags: 
+    - "qwen3"
+    - "thinking-model"
+    - "medical-ner"
+    - "cpu"
+    - "minimal"
+  notes: "Medical entity and relation extraction with Qwen3-4B-Thinking-2507 on CPU (minimal configuration)"
