@@ -1,0 +1,85 @@
+# ---------------------------------------------------------
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# ---------------------------------------------------------
+
+augmentation_library_name: albumentations 
+
+train:
+  # # Current set of augmentations for OD and IS in dnn-vision
+  # 1. Random crop around bounding boxes / expand (prob 0.5)
+  # 2. horizontal flip (with prob 0.5)
+  # 3. resize
+  # 4. normalisation using channel wise mean and std. 
+
+  - ToFloat:
+      p: 1
+      always_apply: True
+
+  - OneOf:
+      p: 1
+      transforms:
+        - BBoxSafeRandomCrop:
+            p: 0.5
+        - RandomExpand:
+            p: 0.5
+
+  - HorizontalFlip:
+      p: 0.5
+
+  - Normalize:
+      mean: [0.485, 0.456, 0.406] # will be overwritten with values from model preprocessing config
+      # Range of mean and std is [0,1]. In case of MMDetection, if it is more than 1, divide
+      # the values by 255.
+      std: [0.229, 0.224, 0.225] # will be overwritten with values from model preprocessing config
+      max_pixel_value: 1.0
+      always_apply: True
+      p: 1
+
+  - ConstraintResize:
+      img_scale: [600, 800] # will be overwritten with "img_scale" from model preprocessing config file
+      always_apply: True
+      p: 1
+
+  - PadIfNeeded:
+      min_height: null
+      min_width: null
+      pad_height_divisor: 32
+      pad_width_divisor: 32
+      border_mode: 0 # cv2.BORDER_CONSTANT
+      value: 0      # Value to be used for padding the image
+      mask_value: 0 # Value to be used for padding the mask
+      position: top_left # Pad towards the bottom of the image. Postion of the image is top left.
+      always_apply: True
+      p: 1
+
+
+validation:
+  - ToFloat:
+      p: 1
+      always_apply: True
+
+  - Normalize:
+      mean: [0.485, 0.456, 0.406] # will be overwritten with values from model preprocessing config 
+      # Range of mean and std is [0,1]. In case of MMDetection, if it is more than 1, divide
+      # the values by 255.
+      std: [0.229, 0.224, 0.225] # will be overwritten with values from model preprocessing config
+      max_pixel_value: 1.0
+      always_apply: True
+      p: 1
+
+  - ConstraintResize:
+      img_scale: [600, 800] # will be overwritten with "height" from preprocess_config.json from HF
+      always_apply: True
+      p: 1
+
+  - PadIfNeeded:
+      min_height: null
+      min_width: null
+      pad_height_divisor: 32
+      pad_width_divisor: 32
+      border_mode: 0 # cv2.BORDER_CONSTANT
+      value: 0      # Value to be used for padding the image
+      mask_value: 0 # Value to be used for padding the mask
+      position: top_left # Pad towards the bottom of the image. Postion of the image is top left.
+      always_apply: True
+      p: 1
