@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  {% block meta %}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark">
+  {% endblock meta %}
+
+  {% block title %}<title>{{ title }}</title>{% endblock title %}
+
+  {% block social_meta %}
+  {% if social_meta %}
+  <!-- Open Graph meta tags -->
+  <meta property="og:title" content="{{ social_meta.title or title }}" />
+  {% if social_meta.description %}
+  <meta property="og:description" content="{{ social_meta.description }}" />
+  {% endif %}
+  {% if social_meta.image %}
+  <meta property="og:image" content="{{ social_meta.image }}" />
+  {% endif %}
+  {% if social_meta.url %}
+  <meta property="og:url" content="{{ social_meta.url }}" />
+  {% endif %}
+  <meta property="og:type" content="{{ social_meta.type or 'website' }}" />
+  {% if social_meta.site_name %}
+  <meta property="og:site_name" content="{{ social_meta.site_name }}" />
+  {% endif %}
+  <!-- Twitter Card meta tags -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{ social_meta.title or title }}" />
+  {% if social_meta.description %}
+  <meta name="twitter:description" content="{{ social_meta.description }}" />
+  {% endif %}
+  {% if social_meta.image %}
+  <meta name="twitter:image" content="{{ social_meta.image }}" />
+  {% endif %}
+  {% if social_meta.twitter_handle %}
+  <meta name="twitter:site" content="@{{ social_meta.twitter_handle }}" />
+  {% endif %}
+  {% endif %}
+  {% endblock social_meta %}
+
+  {% block dark_mode_script %}
+  <script>
+    // Set theme before body renders to prevent flash of unstyled content
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      localStorage.setItem('theme', theme);
+    }
+
+    // If theme toggle is enabled, respect stored preference or system preference.
+    // Otherwise default to light mode.
+    {% if enable_themes %}
+    const storedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = storedTheme || (systemPrefersDark ? 'dark' : 'light');
+    {% else %}
+    const initialTheme = 'light';
+    {% endif %}
+    applyTheme(initialTheme);
+  </script>
+  {% endblock dark_mode_script %}
+
+  {% block head_basic %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
+  {# TODO: Add web link to Hack Nerd Font and/or my new custom B612 with Nerd Font support. #}
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-400-normal.woff2" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-700-normal.woff2" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-400-italic.woff2" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-700-italic.woff2" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="https://cdn.jsdelivr.net/fontsource/fonts/source-sans-3:vf@latest/latin-wght-normal.woff2" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="https://cdn.jsdelivr.net/fontsource/fonts/source-sans-3:vf@latest/latin-wght-italic.woff2" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js" defer></script>
+  {% endblock head_basic %}
+
+  {% block head_extra %}{% endblock head_extra %}
+
+  <style>
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      transition: background 0.4s ease-in-out, color 0.4s ease-in-out;
+    }
+
+    .button {
+      color: var(--color-hint-strong);
+      background: var(--color-bg);
+      border: none;
+      padding: 0;
+      border-radius: 0.3rem;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.2rem;
+      height: 2.2rem;
+      
+      /* Separate transitions for theme vs interaction */
+      transition: background-color 0.4s ease-in-out, 
+                  color 0.4s ease-in-out,
+                  transform 0.2s ease-in-out,
+                  box-shadow 0.2s ease-in-out;
+    }
+
+    .button:hover {
+      background: var(--color-hover-bg);
+      color: var(--color-primary);
+      transition: background-color 0.4s ease-in-out, color 0.4s ease-in-out;
+    }
+
+    .button svg {
+      width: 1.2rem;
+      height: 1.2rem;
+      transition: background-color 0.4s ease-in-out, color 0.4s ease-in-out;
+    }
+
+
+    /* Positioning class for fixed buttons */
+    .fixed-button {
+      position: fixed;
+      top: 1rem;
+    }
+
+    .floating-button {
+      border: 1px solid var(--color-hint-gentle);
+      background: var(--color-bg-alt);
+    }
+
+    /* Specific positioning and z-index for theme toggle */
+    .theme-toggle {
+      right: 1rem;
+      z-index: 100;
+    }
+
+    {% block font_faces %}
+    /* https://fontsource.org/fonts/pt-serif/cdn */
+    /* pt-serif-latin-400-normal */
+    @font-face {
+      font-family: 'PT Serif';
+      font-style: normal;
+      font-display: block;
+      font-weight: 400;
+      src: url(https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-400-normal.woff2) format('woff2');
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    /* pt-serif-latin-700-normal */
+    @font-face {
+      font-family: 'PT Serif';
+      font-style: normal;
+      font-display: block;
+      font-weight: 700;
+      src: url(https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-700-normal.woff2) format('woff2');
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    /* pt-serif-latin-400-italic */
+    @font-face {
+      font-family: 'PT Serif';
+      font-style: italic;
+      font-display: block;
+      font-weight: 400;
+      src: url(https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-400-italic.woff2) format('woff2');
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    /* pt-serif-latin-700-italic */
+    @font-face {
+      font-family: 'PT Serif';
+      font-style: italic;
+      font-display: block;
+      font-weight: 700;
+      src: url(https://cdn.jsdelivr.net/fontsource/fonts/pt-serif@latest/latin-700-italic.woff2) format('woff2');
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    /* PT Serif has a known bug with quote alignment that can look quite ugly.
+     * https://nedbatchelder.com/blog/201809/fixing_pt_serif.html?utm_source=chatgpt.com
+     * So we use a workaround to use punctuation from a different local font.
+     * After trying a few, it seems Georgia is workable for quote marks an non-oriented ASCII quotes. */
+    @font-face {
+      font-family: 'LocalPunct';
+      src: local('Georgia');
+      unicode-range: 
+        U+0022, U+0027,                  /* " ' */
+        U+2018, U+2019, U+201C, U+201D;  /* ‘ ’ “ ” */
+    }
+    /* https://fontsource.org/fonts/source-sans-3/cdn */
+    /* source-sans-3-latin-wght-normal */
+    @font-face {
+      font-family: 'Source Sans 3 Variable';
+      font-style: normal;
+      font-display: block;
+      font-weight: 200 900;
+      src: url(https://cdn.jsdelivr.net/fontsource/fonts/source-sans-3:vf@latest/latin-wght-normal.woff2) format('woff2-variations');
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    /* source-sans-3-latin-wght-normal */
+    @font-face {
+      font-family: 'Source Sans 3 Variable';
+      font-style: italic;
+      font-display: block;
+      font-weight: 200 900;
+      src: url(https://cdn.jsdelivr.net/fontsource/fonts/source-sans-3:vf@latest/latin-wght-italic.woff2) format('woff2-variations');
+      unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+    }
+    {# Other decent sans serif options: Work Sans Variable, Nunito Sans Variable #}
+    {% endblock font_faces %}
+
+    {% block base_styles %}
+    {% include "base_styles.css.jinja" %}
+    {% endblock base_styles %}
+    
+    {% block content_styles %}
+    {% include "content_styles.css.jinja" %}
+    {% endblock content_styles %}
+    
+    {% block custom_styles %}{% endblock custom_styles %}
+  </style>
+</head>
+
+<body>
+  {% block theme_toggle %}
+  {% if show_theme_toggle %}
+  <button class="button fixed-button theme-toggle" aria-label="toggle dark mode">
+    <i data-feather="moon"></i>
+  </button>
+  {% endif %}
+  {% endblock theme_toggle %}
+  
+  {% block body_header %}{% endblock body_header %}
+  
+  {% block main_content %}
+  {{ content|safe }}
+  {% endblock main_content %}
+  
+  {% block body_footer %}{% endblock body_footer %}
+
+  {% block scripts %}
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Add copy buttons to code blocks
+      document.querySelectorAll('pre').forEach(pre => {
+        // Skip if already has a copy button (check parent for wrapper)
+        if (pre.parentElement.classList.contains('code-block-wrapper')) {
+          return;
+        }
+        
+        // Create wrapper div
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+        
+        // Insert wrapper before pre and move pre inside it
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(pre);
+        
+        // Create copy button
+        const copyButton = document.createElement('button');
+        copyButton.className = 'code-copy-button';
+        copyButton.setAttribute('aria-label', 'Copy code');
+        
+        const copyIcon = typeof feather !== 'undefined' ? feather.icons.copy.toSvg() : '<i data-feather="copy"></i>';
+        const checkIcon = typeof feather !== 'undefined' ? feather.icons.check.toSvg() : '<i data-feather="check"></i>';
+        
+        copyButton.innerHTML = copyIcon;
+        copyButton.addEventListener('click', async () => {
+          const codeElement = pre.querySelector('code') || pre;
+          const textToCopy = (codeElement.textContent || codeElement.innerText).trim();
+          
+          // Works on modern browsers.
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            copyButton.innerHTML = checkIcon;
+            copyButton.classList.add('copied');
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+              copyButton.innerHTML = copyIcon;
+              copyButton.classList.remove('copied');
+            }, 2000);
+          }).catch(err => {
+            console.error('Failed to copy text: ', err);
+          });
+        });
+        
+        // Add button to wrapper, not to pre
+        wrapper.appendChild(copyButton);
+      });
+      
+      // Theme toggle (if present on page)
+      const themeToggleButton = document.querySelector('.theme-toggle');
+      if (themeToggleButton) {
+        themeToggleButton.addEventListener('click', () => {
+          const currentTheme = document.documentElement.dataset.theme;
+          const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+          applyTheme(newTheme);
+        });
+      }
+      
+      // Send messages to the parent window, in case we are in a viewport where that matters
+      // (e.g. an iframe tooltip).
+      // Request a resize of the parent viewport. This iframe size message format isn't
+      // standardized by ResizeObserver, but is common. It is supported by Kerm.
+      const content = document.body;
+      console.log("Suggesting resize to parent:", content.offsetWidth, content.offsetHeight);
+
+      window.parent.postMessage({
+        type: 'resize',
+        width: Math.max(content.offsetWidth, 600),
+        height: Math.max(content.offsetHeight, 100)
+      }, '*');
+
+      // Wrap tables within the main content area for horizontal scrolling.
+      const containers = [];
+      document.querySelectorAll('.long-text').forEach(el => {
+        const pane = el.querySelector('.tab-pane');
+        containers.push(pane || el);
+      });
+      containers.forEach(container => {
+        // Find all tables within the container.
+        const tables = Array.from(container.querySelectorAll('table'));
+        tables.forEach(table => {
+          // Skip tables already in table-container divs
+          if (table.parentNode.classList.contains('table-container')) {
+            return;
+          }
+          try {
+            // Create the wrapper.
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-container';
+            // Get the parent and insert the wrapper where the table is, then move the table into the wrapper.
+            const parent = table.parentNode;
+            parent.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+          } catch (e) {
+            console.error("Error wrapping table:", e);
+          }
+        });
+      });
+      
+      // Initialize Feather icons once at the end, after all DOM manipulation.
+      if (typeof feather !== 'undefined') {
+        feather.replace();
+      }
+    });
+
+    // Double-click to expand (e.g. expand tooltip to popover).
+    document.addEventListener('dblclick', () => {
+      console.log("Sending expand message to parent");
+      window.parent.postMessage({
+        type: 'expand'
+      }, '*');
+    });
+
+    // Escape to close tooltip or popover.
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        console.log("Sending close message to parent");
+        window.parent.postMessage({
+          type: 'close'
+        }, '*');
+      }
+    });
+
+
+  </script>
+  {% block scripts_extra %}{% endblock scripts_extra %}
+  {% endblock scripts %}
+  
+  {% block analytics %}{% endblock analytics %}
+</body>
+
+</html>

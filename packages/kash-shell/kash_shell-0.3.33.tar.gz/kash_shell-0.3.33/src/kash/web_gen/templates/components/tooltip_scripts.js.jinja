@@ -1,0 +1,1067 @@
+/* -----------------------------------------------------------------------------
+   Core tooltip functionality and utilities
+   ----------------------------------------------------------------------------- */
+
+// Tooltip configuration constants
+const TOOLTIP_CONFIG = {
+  // Timing delays (in milliseconds)
+  delays: {
+    show: 500,           // Delay before showing tooltip
+    hide: 2500,          // Default delay before hiding tooltip
+    hideWideRight: 4000, // Delay for wide-right tooltips (farther away)
+    hideMovingToward: 500, // Shorter delay when mouse moving toward tooltip
+    hideLinkClick: 300,  // Delay after clicking a link in tooltip
+  },
+  
+  // Spacing and sizing (in pixels)
+  spacing: {
+    viewportMargin: 10,  // Minimum distance from viewport edges
+    tooltipGap: 10,      // Gap between trigger and tooltip
+    wideRightMargin: 16, // Margin for wide-right positioning (1rem)
+    mouseTrackMargin: 20, // Margin for mouse movement detection
+    mobileTopMargin: 20,  // Top margin for mobile positioning
+  },
+  
+  // Default dimensions
+  dimensions: {
+    defaultWidth: 320,   // Fallback tooltip width
+    defaultHeight: 200,  // Fallback tooltip height
+    minWideRightWidth: 320, // Minimum space needed for wide-right
+    mobileMaxWidth: 768, // Maximum width for mobile tooltips (48rem = 768px at 16px base)
+  },
+  
+  // Breakpoints (match CSS breakpoints)
+  breakpoints: {
+    mobile: 640,         // Mobile breakpoint (actual mobile devices)
+    tablet: 768,         // Tablet breakpoint
+    wide: 1200,          // Wide screen breakpoint
+  },
+  
+  // Content limits
+  content: {
+    maxFootnoteLength: 400, // Maximum characters for footnote tooltips
+    minFootnoteLength: 5,   // Minimum characters to show tooltip
+    maxInternalLinkLength: 1000, // Maximum characters for internal link tooltips
+    minInternalLinkLength: 10,  // Minimum characters to show tooltip
+  }
+};
+
+// Tooltip utility functions
+const TooltipUtils = {
+  // Sanitize text content for safe HTML attribute usage
+  sanitizeText(text) {
+    return text
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .trim()
+      .replace(/"/g, '&quot;')  // Escape quotes
+      .replace(/</g, '&lt;')    // Escape HTML
+      .replace(/>/g, '&gt;');
+  },
+  
+  // Extract clean content from an element
+  extractContent(element, html = false) {
+    // Clone the element to avoid modifying the original
+    const clone = element.cloneNode(true);
+    
+    // Remove unwanted elements (like the footnote back-link)
+    const backLinks = clone.querySelectorAll('.footnote');
+    backLinks.forEach(link => link.remove());
+    
+    // Return HTML or text content
+    return html ? (clone.innerHTML || '') : (clone.textContent || clone.innerText || '');
+  },
+  
+  // Extract clean text content from an element
+  extractTextContent(element) {
+    return this.extractContent(element, false);
+  },
+  
+  // Extract clean HTML content from an element (preserving links)
+  extractHtmlContent(element) {
+    return this.extractContent(element, true);
+  },
+  
+  // Add footnote navigation button to tooltip content
+  addFootnoteNavigationButton(content, footnoteId) {
+    const navButton = `<span class="footnote-nav-container">
+      <a href="#${footnoteId}" class="footnote" data-footnote-id="${footnoteId}" title="Go to footnote">&nbsp;↓&nbsp;</a>
+    </span>`;
+    return content + navButton;
+  },
+  
+  // Determine optimal tooltip position based on element location and screen size
+  getOptimalPosition(element) {
+    const viewportWidth = window.innerWidth;
+    
+    // Check if element is inside a table - if so, always use bottom-right positioning
+    // Tables often bleed to the right edge, making wide-right positioning problematic
+    if (element.closest('table')) {
+      return 'bottom-right';
+    }
+    
+    // On wide screens, try to use the sidebar on the right of the main content
+    if (viewportWidth >= TOOLTIP_CONFIG.breakpoints.wide) {
+      const mainContent = document.getElementById('main-content');
+      if (mainContent) {
+        const contentRect = mainContent.getBoundingClientRect();
+        const available = viewportWidth - contentRect.right - TOOLTIP_CONFIG.spacing.wideRightMargin;
+        if (available >= TOOLTIP_CONFIG.dimensions.minWideRightWidth) {
+          return 'wide-right';
+        }
+      }
+    }
+    
+    // For medium and small screens, always start with bottom-right
+    return 'bottom-right';
+  }
+};
+
+/* -----------------------------------------------------------------------------
+   Mobile tap-outside-to-close functionality
+   ----------------------------------------------------------------------------- */
+
+// Mobile interaction manager
+const MobileInteractionManager = {
+  isActive: false,
+  
+  // Initialize mobile interaction handling
+  init() {
+    if (this.isActive) return;
+    
+    // Only activate on mobile screens
+    if (window.innerWidth <= TOOLTIP_CONFIG.breakpoints.mobile) {
+      this.activate();
+    }
+    
+    // Listen for resize events to activate/deactivate
+    window.addEventListener('resize', () => {
+      if (window.innerWidth <= TOOLTIP_CONFIG.breakpoints.mobile) {
+        this.activate();
+      } else {
+        this.deactivate();
+      }
+    });
+  },
+  
+  // Activate mobile interaction handling
+  activate() {
+    if (this.isActive) return;
+    this.isActive = true;
+    document.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+    console.debug('Mobile interaction manager activated');
+  },
+  
+  // Deactivate mobile interaction handling
+  deactivate() {
+    if (!this.isActive) return;
+    this.isActive = false;
+    document.removeEventListener('touchstart', this.handleTouchStart.bind(this));
+    console.debug('Mobile interaction manager deactivated');
+  },
+  
+  // Handle touch start events
+  handleTouchStart(event) {
+    // Check if any tooltip is visible
+    const hasVisibleTooltips = Array.from(TooltipManager.activeTooltips.values())
+      .some(state => state.isVisible);
+    
+    if (!hasVisibleTooltips) return;
+    
+    // Check if touch is outside all tooltips
+    const touchedElement = event.target;
+    const isInsideTooltip = touchedElement.closest('.tooltip-element');
+    const isTooltipTrigger = touchedElement.closest('[data-tooltip-trigger]');
+    
+    if (!isInsideTooltip && !isTooltipTrigger) {
+      // Close all tooltips
+      TooltipManager.closeAllTooltips();
+    }
+  }
+};
+
+/* -----------------------------------------------------------------------------
+   Generic tooltip creation and management functions
+   ----------------------------------------------------------------------------- */
+
+// Advanced tooltip manager with real DOM elements
+const TooltipManager = {
+  activeTooltips: new Map(), // Track active tooltip states
+  
+  // Add tooltip to any element with HTML content
+  addTooltip(element, htmlContent, position = 'auto', options = {}) {
+    if (!element || !htmlContent) return;
+    
+    // Check if tooltip already exists for this element
+    if (this.activeTooltips.has(element)) {
+      console.debug('Tooltip already exists for element, skipping creation');
+      return;
+    }
+    
+    const actualPosition = position === 'auto' ? 
+      TooltipUtils.getOptimalPosition(element) : position;
+    
+    // Create real DOM tooltip element
+    const tooltipElement = this.createTooltipElement(htmlContent, actualPosition, options);
+    
+    // Mark the trigger element
+    element.setAttribute('data-tooltip-trigger', 'true');
+    
+    // Determine if we should append to body
+    const viewportWidth = window.innerWidth;
+    const shouldAppendToBody = actualPosition === 'wide-right' || 
+                              viewportWidth <= TOOLTIP_CONFIG.breakpoints.mobile;
+    
+    // Append tooltip to appropriate parent
+    if (shouldAppendToBody) {
+      document.body.appendChild(tooltipElement);
+      element._bodyTooltip = tooltipElement; // Store reference for cleanup
+    } else {
+      element.appendChild(tooltipElement);
+    }
+    
+    // Set up enhanced hover behavior
+    this.setupAdvancedHover(element, tooltipElement, actualPosition, options);
+  },
+  
+  // Create a real DOM tooltip element
+  createTooltipElement(htmlContent, position, options = {}) {
+    const tooltip = document.createElement('div');
+    tooltip.className = `tooltip-element tooltip-${position}`;
+    
+    // Add footnote-specific class if content contains footnote or links
+    if (htmlContent.includes('footnote') || htmlContent.includes('<a') || options.isFootnote) {
+      tooltip.classList.add('footnote-element');
+    }
+    
+    tooltip.innerHTML = htmlContent;
+    
+    // Set up footnote navigation button if present
+    if (options.isFootnote) {
+      this.setupFootnoteNavigation(tooltip, options.footnoteId);
+    }
+    
+    return tooltip;
+  },
+  
+  // Set up footnote navigation link functionality
+  setupFootnoteNavigation(tooltipElement, footnoteId) {
+    const navLink = tooltipElement.querySelector('.footnote-nav-container .footnote');
+    if (navLink) {
+      navLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Navigate to the footnote
+        const footnoteElement = document.getElementById(footnoteId);
+        if (footnoteElement) {
+          footnoteElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // Close tooltip after navigation
+          setTimeout(() => {
+            const tooltipState = Array.from(this.activeTooltips.values())
+              .find(state => state.tooltipElement === tooltipElement);
+            if (tooltipState) {
+              this.hideTooltip(tooltipState);
+            }
+          }, TOOLTIP_CONFIG.delays.hideLinkClick);
+        }
+      });
+    }
+  },
+  
+  // Set up advanced hover behavior with delays and mouse tracking
+  setupAdvancedHover(triggerElement, tooltipElement, position, options = {}) {
+    const tooltipState = {
+      triggerElement,
+      tooltipElement,
+      position,
+      options,
+      showTimeout: null,
+      hideTimeout: null,
+      isVisible: false
+    };
+    
+    this.activeTooltips.set(triggerElement, tooltipState);
+    
+    // Event handlers
+    const handlers = {
+      triggerEnter: (e) => this.handleTriggerEnter(tooltipState, e),
+      triggerLeave: (e) => this.handleTriggerLeave(tooltipState, e),
+      triggerTouch: (e) => this.handleTriggerTouch(tooltipState, e),
+      tooltipEnter: () => this.handleTooltipEnter(tooltipState),
+      tooltipLeave: () => this.handleTooltipLeave(tooltipState),
+      tooltipClick: (e) => this.handleTooltipClick(tooltipState, e)
+    };
+    
+    // Add event listeners
+    triggerElement.addEventListener('mouseenter', handlers.triggerEnter);
+    triggerElement.addEventListener('mouseleave', handlers.triggerLeave);
+    triggerElement.addEventListener('touchstart', handlers.triggerTouch, { passive: false });
+    tooltipElement.addEventListener('mouseenter', handlers.tooltipEnter);
+    tooltipElement.addEventListener('mouseleave', handlers.tooltipLeave);
+    tooltipElement.addEventListener('click', handlers.tooltipClick);
+    
+    // Store cleanup function
+    tooltipState.cleanupListeners = () => {
+      triggerElement.removeEventListener('mouseenter', handlers.triggerEnter);
+      triggerElement.removeEventListener('mouseleave', handlers.triggerLeave);
+      triggerElement.removeEventListener('touchstart', handlers.triggerTouch);
+      tooltipElement.removeEventListener('mouseenter', handlers.tooltipEnter);
+      tooltipElement.removeEventListener('mouseleave', handlers.tooltipLeave);
+      tooltipElement.removeEventListener('click', handlers.tooltipClick);
+    };
+  },
+  
+  // Handle trigger element mouse enter
+  handleTriggerEnter(tooltipState, event) {
+    // Cancel any pending hide
+    this.clearTimeout(tooltipState, 'hideTimeout');
+    
+    // Start show timer
+    if (!tooltipState.isVisible && !tooltipState.showTimeout) {
+      tooltipState.showTimeout = setTimeout(() => {
+        tooltipState.showTimeout = null;
+        this.showTooltip(tooltipState, event);
+      }, TOOLTIP_CONFIG.delays.show);
+    }
+  },
+  
+  // Handle trigger element mouse leave
+  handleTriggerLeave(tooltipState, event) {
+    // Cancel any pending show
+    this.clearTimeout(tooltipState, 'showTimeout');
+    
+    // Start hide timer if tooltip is visible
+    if (tooltipState.isVisible) {
+      this.startHideTimer(tooltipState, event);
+    }
+  },
+  
+  // Handle touch events on trigger elements (mobile)
+  handleTriggerTouch(tooltipState, event) {
+    // Prevent default to avoid triggering mouse events and navigation
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // If tooltip is already visible, hide it
+    if (tooltipState.isVisible) {
+      this.hideTooltip(tooltipState);
+      return;
+    }
+    
+    // Cancel any pending timers
+    this.clearTimeout(tooltipState, 'hideTimeout');
+    this.clearTimeout(tooltipState, 'showTimeout');
+    
+    // Show tooltip immediately on touch (no delay like hover)
+    this.showTooltip(tooltipState, event);
+  },
+  
+  // Handle tooltip mouse enter
+  handleTooltipEnter(tooltipState) {
+    this.clearTimeout(tooltipState, 'hideTimeout');
+  },
+  
+  // Handle tooltip mouse leave
+  handleTooltipLeave(tooltipState) {
+    if (tooltipState.isVisible) {
+      this.startHideTimer(tooltipState);
+    }
+  },
+  
+  // Handle clicks within tooltip
+  handleTooltipClick(tooltipState, event) {
+    // Allow clicks on all links and buttons within tooltips
+    if (event.target.tagName === 'A' || event.target.tagName === 'BUTTON' || 
+        event.target.closest('a') || event.target.closest('button')) {
+      event.stopPropagation();
+      // Keep tooltip open briefly after clicking a link (except footnote nav link)
+      if (!event.target.closest('.footnote-nav-container')) {
+        this.clearTimeout(tooltipState, 'hideTimeout');
+        tooltipState.hideTimeout = setTimeout(() => {
+          this.hideTooltip(tooltipState);
+        }, TOOLTIP_CONFIG.delays.hideLinkClick);
+      }
+    }
+  },
+  
+  // Clear a specific timeout
+  clearTimeout(tooltipState, timeoutName) {
+    if (tooltipState[timeoutName]) {
+      clearTimeout(tooltipState[timeoutName]);
+      tooltipState[timeoutName] = null;
+    }
+  },
+  
+  // Show tooltip with coordination of other tooltips
+  showTooltip(tooltipState, event = null) {
+    // Close any other open tooltips immediately when showing a new one
+    this.closeAllTooltips(tooltipState.triggerElement);
+    
+    // Clear hide timeout and check if already visible
+    this.clearTimeout(tooltipState, 'hideTimeout');
+    if (tooltipState.isVisible) return;
+    
+    // Prepare tooltip for positioning
+    this.prepareTooltipForDisplay(tooltipState.tooltipElement);
+    
+    // Position tooltip based on type
+    if (tooltipState.position === 'wide-right') {
+      this.positionWideRightTooltip(tooltipState.tooltipElement, tooltipState.triggerElement);
+    } else {
+      this.ensureTooltipWithinBounds(tooltipState.tooltipElement, tooltipState.triggerElement, tooltipState.position);
+    }
+    
+    // Make tooltip visible after positioning
+    this.makeTooltipVisible(tooltipState);
+  },
+  
+  // Prepare tooltip element for display
+  prepareTooltipForDisplay(tooltipElement) {
+    tooltipElement.style.opacity = '0';
+    tooltipElement.style.visibility = 'hidden';
+    tooltipElement.classList.remove('tooltip-visible');
+  },
+  
+  // Make tooltip visible with proper timing
+  makeTooltipVisible(tooltipState) {
+    // Double requestAnimationFrame to ensure layout is complete
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        tooltipState.tooltipElement.style.opacity = '';
+        tooltipState.tooltipElement.style.visibility = '';
+        tooltipState.tooltipElement.classList.add('tooltip-visible');
+        tooltipState.isVisible = true;
+      });
+    });
+  },
+  
+  // Position wide-right tooltips
+  positionWideRightTooltip(tooltipElement, triggerElement) {
+    const triggerRect = triggerElement.getBoundingClientRect();
+    const mainContent = document.getElementById('main-content');
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    if (!mainContent) return;
+    
+    const contentRect = mainContent.getBoundingClientRect();
+    const tooltipWidth = tooltipElement.offsetWidth || TOOLTIP_CONFIG.dimensions.defaultWidth;
+    const tooltipHeight = tooltipElement.offsetHeight || TOOLTIP_CONFIG.dimensions.defaultHeight;
+    
+    // Calculate horizontal position
+    let leftPosition = contentRect.right + TOOLTIP_CONFIG.spacing.wideRightMargin;
+    const maxWidth = viewportWidth - leftPosition - TOOLTIP_CONFIG.spacing.wideRightMargin;
+    
+    if (tooltipWidth > maxWidth) {
+      tooltipElement.style.maxWidth = `${maxWidth}px`;
+    }
+    
+    const finalWidth = Math.min(tooltipWidth, maxWidth);
+    if (leftPosition + finalWidth + TOOLTIP_CONFIG.spacing.wideRightMargin > viewportWidth) {
+      leftPosition = viewportWidth - finalWidth - TOOLTIP_CONFIG.spacing.wideRightMargin;
+    }
+    
+    // Calculate vertical position (centered on trigger)
+    let topPosition = triggerRect.top + (triggerRect.height / 2) - (tooltipHeight / 2);
+    const minTop = TOOLTIP_CONFIG.spacing.mobileTopMargin;
+    const maxTop = viewportHeight - tooltipHeight - TOOLTIP_CONFIG.spacing.mobileTopMargin;
+    topPosition = Math.max(minTop, Math.min(topPosition, maxTop));
+    
+    // Apply positioning
+    tooltipElement.style.left = `${leftPosition}px`;
+    tooltipElement.style.top = `${topPosition}px`;
+  },
+  
+  // Ensure standard tooltips stay within viewport bounds
+  ensureTooltipWithinBounds(tooltipElement, triggerElement, position) {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Skip for wide screens (they use wide-right positioning)
+    if (viewportWidth >= TOOLTIP_CONFIG.breakpoints.wide) return;
+    
+    // Get dimensions
+    const dimensions = this.measureTooltip(tooltipElement);
+    const triggerRect = triggerElement.getBoundingClientRect();
+    
+    // Use bottom-centered positioning for narrow screens
+    if (viewportWidth <= TOOLTIP_CONFIG.breakpoints.mobile) {
+      this.positionBottomCenteredTooltip(tooltipElement, dimensions.width, viewportWidth);
+    } else {
+      this.positionMediumTooltip(tooltipElement, triggerRect, dimensions, viewportWidth, viewportHeight);
+    }
+  },
+  
+  // Measure tooltip dimensions
+  measureTooltip(tooltipElement) {
+    // Temporarily make visible but transparent to measure
+    const originalStyles = {
+      opacity: tooltipElement.style.opacity,
+      pointerEvents: tooltipElement.style.pointerEvents,
+      display: tooltipElement.style.display
+    };
+    
+    tooltipElement.style.opacity = '0';
+    tooltipElement.style.pointerEvents = 'none';
+    tooltipElement.style.display = 'block';
+    
+    const rect = tooltipElement.getBoundingClientRect();
+    const dimensions = {
+      width: rect.width || tooltipElement.offsetWidth || TOOLTIP_CONFIG.dimensions.defaultWidth,
+      height: rect.height || tooltipElement.offsetHeight || TOOLTIP_CONFIG.dimensions.defaultHeight
+    };
+    
+    // Restore original styles
+    Object.assign(tooltipElement.style, originalStyles);
+    
+    return dimensions;
+  },
+  
+  // Position tooltip at bottom center for narrow screens
+  positionBottomCenteredTooltip(tooltipElement, tooltipWidth, viewportWidth) {
+    // Simple approach: full viewport width minus margins
+    const margin = 16; // 1rem margin on all sides
+    
+    // Set tooltip to use viewport width minus margins
+    tooltipElement.style.width = `calc(100vw - ${2 * margin}px)`;
+    tooltipElement.style.maxWidth = 'none';
+    
+    // Apply positioning - 1rem from left and bottom
+    Object.assign(tooltipElement.style, {
+      position: 'fixed',
+      left: `${margin}px`,
+      right: 'auto',
+      bottom: `${margin}px`,
+      top: 'auto',
+      transform: 'none'
+    });
+    
+    // Update classes
+    this.updatePositionClasses(tooltipElement, 'mobile-bottom');
+    
+    // Remove arrow for mobile
+    this.removeArrowStyles(tooltipElement);
+  },
+  
+  // Position tooltip for medium screens
+  positionMediumTooltip(tooltipElement, triggerRect, dimensions, viewportWidth, viewportHeight) {
+    const margin = TOOLTIP_CONFIG.spacing.viewportMargin;
+    const gap = TOOLTIP_CONFIG.spacing.tooltipGap;
+    
+    // Try bottom-right first
+    let idealLeft = triggerRect.left;
+    let idealTop = triggerRect.bottom + gap;
+    
+    // Check if it fits below
+    const fitsBelow = (idealTop + dimensions.height + margin) <= viewportHeight;
+    if (!fitsBelow) {
+      idealTop = triggerRect.top - dimensions.height - gap;
+    }
+    
+    // Constrain to viewport
+    const finalLeft = Math.max(margin, Math.min(idealLeft, viewportWidth - dimensions.width - margin));
+    const finalTop = Math.max(margin, Math.min(idealTop, viewportHeight - dimensions.height - margin));
+    
+    // Apply positioning
+    Object.assign(tooltipElement.style, {
+      position: 'fixed',
+      left: `${finalLeft}px`,
+      top: `${finalTop}px`,
+      right: 'auto',
+      bottom: 'auto',
+      transform: 'none'
+    });
+    
+    // Update classes and arrow
+    const actualPosition = fitsBelow ? 'bottom-right' : 'top-right';
+    this.updatePositionClasses(tooltipElement, actualPosition);
+    this.updateArrowPosition(tooltipElement, triggerRect, finalLeft, finalTop, dimensions.width, dimensions.height, actualPosition);
+  },
+  
+  // Update position classes on tooltip element
+  updatePositionClasses(tooltipElement, newPosition) {
+    const positionClasses = ['bottom-right', 'top-right', 'bottom-left', 'top-left', 'bottom', 'top', 'left', 'right', 'mobile-bottom'];
+    positionClasses.forEach(cls => tooltipElement.classList.remove(`tooltip-${cls}`));
+    tooltipElement.classList.add(`tooltip-${newPosition}`);
+  },
+  
+  // Remove arrow styles
+  removeArrowStyles(tooltipElement) {
+    const existingStyle = tooltipElement.querySelector('style');
+    if (existingStyle) existingStyle.remove();
+  },
+  
+  // Update arrow position to point to trigger
+  updateArrowPosition(tooltipElement, triggerRect, tooltipLeft, tooltipTop, tooltipWidth, tooltipHeight, position) {
+    // Create unique ID for this tooltip
+    const tooltipId = `tooltip-${Math.random().toString(36).substr(2, 9)}`;
+    tooltipElement.setAttribute('data-tooltip-id', tooltipId);
+    
+    // Remove existing arrow style
+    this.removeArrowStyles(tooltipElement);
+    
+    // Calculate arrow position
+    const triggerCenterX = triggerRect.left + (triggerRect.width / 2);
+    const arrowX = triggerCenterX - tooltipLeft;
+    const arrowXPercent = (arrowX / tooltipWidth) * 100;
+    const clampedPercent = Math.max(10, Math.min(90, arrowXPercent));
+    
+    // Generate arrow style based on position
+    const arrowStyle = this.generateArrowStyle(tooltipId, position, clampedPercent);
+    
+    // Apply arrow style
+    if (arrowStyle) {
+      const styleElement = document.createElement('style');
+      styleElement.textContent = arrowStyle;
+      tooltipElement.appendChild(styleElement);
+    }
+  },
+  
+  // Generate CSS for arrow positioning
+  generateArrowStyle(tooltipId, position, xPercent) {
+    const baseStyle = `
+      [data-tooltip-id="${tooltipId}"]::after {
+        left: ${xPercent}% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+    `;
+    
+    if (position === 'bottom-right' || position === 'bottom-left') {
+      return baseStyle + `
+        bottom: 100% !important;
+        top: auto !important;
+        border-bottom-color: var(--color-border-hint) !important;
+        border-top-color: transparent !important;
+        border-left-color: transparent !important;
+        border-right-color: transparent !important;
+        margin-bottom: -5px !important;
+      }`;
+    } else if (position === 'top-right' || position === 'top-left') {
+      return baseStyle + `
+        top: 100% !important;
+        bottom: auto !important;
+        border-top-color: var(--color-border-hint) !important;
+        border-bottom-color: transparent !important;
+        border-left-color: transparent !important;
+        border-right-color: transparent !important;
+        margin-top: -5px !important;
+      }`;
+    }
+    return null;
+  },
+  
+  // Start the hide timer with appropriate delay
+  startHideTimer(tooltipState, event = null) {
+    const isWideRight = tooltipState.position === 'wide-right';
+    let delay = isWideRight ? TOOLTIP_CONFIG.delays.hideWideRight : TOOLTIP_CONFIG.delays.hide;
+    
+    // Check if mouse is moving toward tooltip (for non-wide-right)
+    if (event && !isWideRight) {
+      const rect = tooltipState.triggerElement.getBoundingClientRect();
+      if (this.isMouseMovingTowardTooltip(rect, event.clientX, event.clientY, tooltipState.position)) {
+        delay = TOOLTIP_CONFIG.delays.hideMovingToward;
+      }
+    }
+    
+    tooltipState.hideTimeout = setTimeout(() => {
+      this.hideTooltip(tooltipState);
+    }, delay);
+  },
+  
+  // Hide tooltip
+  hideTooltip(tooltipState) {
+    this.clearTimeout(tooltipState, 'showTimeout');
+    tooltipState.tooltipElement.classList.remove('tooltip-visible');
+    tooltipState.isVisible = false;
+    tooltipState.hideTimeout = null;
+  },
+  
+  // Close all tooltips immediately (for cleanup)
+  closeAllTooltips(exceptElement = null) {
+    this.activeTooltips.forEach((tooltipState, element) => {
+      if (element !== exceptElement && tooltipState.isVisible) {
+        this.clearTimeout(tooltipState, 'hideTimeout');
+        this.clearTimeout(tooltipState, 'showTimeout');
+        this.hideTooltip(tooltipState);
+      }
+    });
+  },
+  
+  // Close all tooltips with delay when showing a new one
+  closeAllTooltipsWithDelay(exceptElement = null) {
+    this.activeTooltips.forEach((tooltipState, element) => {
+      if (element !== exceptElement) {
+        this.clearTimeout(tooltipState, 'showTimeout');
+        
+        if (tooltipState.isVisible && !tooltipState.hideTimeout) {
+          tooltipState.hideTimeout = setTimeout(() => {
+            this.hideTooltip(tooltipState);
+          }, TOOLTIP_CONFIG.delays.show);
+        }
+      }
+    });
+  },
+  
+  // Check if mouse is moving toward tooltip area
+  isMouseMovingTowardTooltip(elementRect, mouseX, mouseY, position) {
+    if (position === 'wide-right' || position === 'mobile-bottom') return false;
+    
+    const margin = TOOLTIP_CONFIG.spacing.mouseTrackMargin;
+    
+    if (position === 'bottom-right' || position === 'bottom-left') {
+      return mouseY > elementRect.bottom && 
+             mouseX >= elementRect.left - margin && 
+             mouseX <= elementRect.right + margin;
+    } else if (position === 'top-right' || position === 'top-left') {
+      return mouseY < elementRect.top && 
+             mouseX >= elementRect.left - margin && 
+             mouseX <= elementRect.right + margin;
+    }
+    
+    return false;
+  },
+  
+  // Remove tooltip from element
+  removeTooltip(element) {
+    if (!element) return;
+    
+    const tooltipState = this.activeTooltips.get(element);
+    if (!tooltipState) return;
+    
+    // Clear all timeouts
+    this.clearTimeout(tooltipState, 'hideTimeout');
+    this.clearTimeout(tooltipState, 'showTimeout');
+    
+    // Remove tooltip element
+    if (tooltipState.tooltipElement?.parentNode) {
+      tooltipState.tooltipElement.parentNode.removeChild(tooltipState.tooltipElement);
+    }
+    
+    // Remove tooltip reference
+    if (element._bodyTooltip?.parentNode) {
+      element._bodyTooltip.parentNode.removeChild(element._bodyTooltip);
+      delete element._bodyTooltip;
+    }
+    
+    // Cleanup listeners
+    if (tooltipState.cleanupListeners) {
+      tooltipState.cleanupListeners();
+    }
+    
+    // Clean up tracking
+    this.activeTooltips.delete(element);
+    element.removeAttribute('data-tooltip');
+    element.removeAttribute('data-tooltip-position');
+    element.removeAttribute('data-tooltip-trigger');
+  },
+  
+  // Handle window resize to reposition tooltips
+  handleResize() {
+    this.activeTooltips.forEach((tooltipState, element) => {
+      const shouldBeWideRight = TooltipUtils.getOptimalPosition(element) === 'wide-right';
+      const isWideRight = tooltipState.position === 'wide-right';
+      
+      if (shouldBeWideRight !== isWideRight) {
+        const htmlContent = tooltipState.tooltipElement.innerHTML;
+        const options = tooltipState.options;
+        this.removeTooltip(element);
+        this.addTooltip(element, htmlContent, 'auto', options);
+      }
+    });
+  }
+};
+
+// Handle window resize events
+window.addEventListener('resize', () => {
+  TooltipManager.handleResize();
+});
+
+/* -----------------------------------------------------------------------------
+   Automatic footnote detection and tooltip creation
+   ----------------------------------------------------------------------------- */
+
+// Initialize footnote tooltips
+function initFootnoteTooltips() {
+  console.debug('Initializing footnote tooltips...');
+  
+  const footnoteRefs = document.querySelectorAll('.footnote-ref a[href^="#fn-"]');
+  let tooltipsAdded = 0;
+  
+  footnoteRefs.forEach(refLink => {
+    try {
+      const href = refLink.getAttribute('href');
+      if (!href || !href.startsWith('#fn-')) return;
+      
+      const footnoteId = href.substring(1);
+      const footnoteElement = document.getElementById(footnoteId);
+      if (!footnoteElement) {
+        console.debug(`Footnote element not found for ID: ${footnoteId}`);
+        return;
+      }
+      
+      // Prevent default action immediately for all footnote reference links
+      refLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      // Also prevent default on touch events for mobile
+      refLink.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        return false;
+      });
+      
+      // Extract and validate content
+      const footnoteHtml = TooltipUtils.extractHtmlContent(footnoteElement);
+      const footnoteText = TooltipUtils.extractTextContent(footnoteElement);
+      
+      if (!footnoteText || footnoteText.length < TOOLTIP_CONFIG.content.minFootnoteLength) {
+        console.debug(`Footnote text too short or empty for ID: ${footnoteId}`);
+        return;
+      }
+      
+      // Truncate if needed
+      let displayContent = truncateFootnoteContent(footnoteHtml, footnoteText);
+      
+      // Add footnote navigation button
+      displayContent = TooltipUtils.addFootnoteNavigationButton(displayContent, footnoteId);
+      
+      // Add tooltip with footnote options
+      TooltipManager.addTooltip(refLink, displayContent, 'auto', {
+        isFootnote: true,
+        footnoteId: footnoteId
+      });
+      tooltipsAdded++;
+      
+      console.debug(`Added tooltip for footnote ${footnoteId}: "${footnoteText.substring(0, 50)}..."`);
+    } catch (error) {
+      console.error('Error processing footnote reference:', refLink, error);
+    }
+  });
+  
+  console.debug(`Footnote tooltips initialized: ${tooltipsAdded} tooltips added`);
+  return tooltipsAdded;
+}
+
+// Truncate footnote content if too long
+function truncateFootnoteContent(html, text) {
+  if (text.length <= TOOLTIP_CONFIG.content.maxFootnoteLength) {
+    return html;
+  }
+  
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  const textContent = tempDiv.textContent || tempDiv.innerText || '';
+  
+  if (textContent.length > TOOLTIP_CONFIG.content.maxFootnoteLength) {
+    tempDiv.textContent = textContent.substring(0, TOOLTIP_CONFIG.content.maxFootnoteLength) + '...';
+  }
+  
+  return tempDiv.innerHTML;
+}
+
+/* -----------------------------------------------------------------------------
+   Automatic internal link detection and tooltip creation
+   ----------------------------------------------------------------------------- */
+
+// Initialize internal link tooltips
+function initInternalLinkTooltips() {
+  console.debug('Initializing internal link tooltips...');
+  
+  // Find all internal links (href starting with #, but not footnotes)
+  // Note: :not() cannot contain complex selectors like descendant selectors
+  const allInternalLinks = document.querySelectorAll('a[href^="#"]:not(.footnote)');
+  const internalLinks = Array.from(allInternalLinks).filter(link => {
+    // Skip if it's inside a footnote-ref
+    if (link.closest('.footnote-ref')) return false;
+    
+    const href = link.getAttribute('href');
+    // Skip empty or footnote links
+    return href && href !== '#' && !href.startsWith('#fn-');
+  });
+  
+  let tooltipsAdded = 0;
+  
+  internalLinks.forEach(link => {
+    try {
+      const href = link.getAttribute('href');
+      if (!href || href === '#' || href.startsWith('#fn-')) return; // Skip empty or footnote links
+      
+      const targetId = href.substring(1);
+      const targetElement = document.getElementById(targetId);
+      if (!targetElement) {
+        console.debug(`Target element not found for ID: ${targetId}`);
+        return;
+      }
+      
+      // Extract meaningful content based on element type
+      let tooltipContent = '';
+      let tooltipText = '';
+      
+      // Check if it's a heading
+      if (targetElement.matches('h1, h2, h3, h4, h5, h6')) {
+        const headingLevel = targetElement.tagName.substring(1);
+        const headingText = TooltipUtils.extractTextContent(targetElement);
+        tooltipText = headingText;
+        
+        // Format based on heading level
+        if (headingLevel === '1' || headingLevel === '2') {
+          tooltipContent = `<strong>Section:</strong> ${TooltipUtils.sanitizeText(headingText)}`;
+        } else {
+          tooltipContent = `<strong>Subsection:</strong> ${TooltipUtils.sanitizeText(headingText)}`;
+        }
+        
+        // Try to get first paragraph after heading for context
+        let nextElement = targetElement.nextElementSibling;
+        while (nextElement && !nextElement.matches('p') && !nextElement.matches('h1, h2, h3, h4, h5, h6')) {
+          nextElement = nextElement.nextElementSibling;
+        }
+        
+        if (nextElement && nextElement.matches('p')) {
+          const paragraphText = TooltipUtils.extractTextContent(nextElement);
+          if (paragraphText && paragraphText.length > 0) {
+            const truncatedPara = truncateInternalLinkContent(paragraphText, 150);
+            tooltipContent += `<br><br>${TooltipUtils.sanitizeText(truncatedPara)}`;
+          }
+        }
+      }
+      // Check if it's a figure, table, or other special content
+      else if (targetElement.matches('figure, .figure')) {
+        const caption = targetElement.querySelector('figcaption, .caption');
+        if (caption) {
+          tooltipText = TooltipUtils.extractTextContent(caption);
+          tooltipContent = `<strong>Figure:</strong> ${TooltipUtils.sanitizeText(tooltipText)}`;
+        } else {
+          tooltipText = 'Figure';
+          tooltipContent = '<strong>Figure</strong>';
+        }
+      }
+      else if (targetElement.matches('table, .table-container')) {
+        const caption = targetElement.querySelector('caption');
+        const firstHeader = targetElement.querySelector('th');
+        if (caption) {
+          tooltipText = TooltipUtils.extractTextContent(caption);
+          tooltipContent = `<strong>Table:</strong> ${TooltipUtils.sanitizeText(tooltipText)}`;
+        } else if (firstHeader) {
+          tooltipText = TooltipUtils.extractTextContent(firstHeader);
+          tooltipContent = `<strong>Table:</strong> ${TooltipUtils.sanitizeText(tooltipText)}...`;
+        } else {
+          tooltipText = 'Table';
+          tooltipContent = '<strong>Table</strong>';
+        }
+      }
+      // Check if it's a code block
+      else if (targetElement.matches('pre, .code-block-wrapper')) {
+        const codeElement = targetElement.querySelector('code') || targetElement;
+        const codeText = TooltipUtils.extractTextContent(codeElement);
+        const firstLine = codeText.split('\n')[0];
+        tooltipText = firstLine;
+        tooltipContent = `<strong>Code:</strong> <code>${TooltipUtils.sanitizeText(truncateInternalLinkContent(firstLine, 100))}</code>`;
+      }
+      // Check if it's a details/summary element
+      else if (targetElement.matches('details')) {
+        const summary = targetElement.querySelector('summary');
+        if (summary) {
+          tooltipText = TooltipUtils.extractTextContent(summary);
+          tooltipContent = `<strong>Details:</strong> ${TooltipUtils.sanitizeText(tooltipText)}`;
+        } else {
+          return; // Skip if no summary
+        }
+      }
+      // Default: extract text content from the element
+      else {
+        tooltipText = TooltipUtils.extractTextContent(targetElement);
+        
+        // Check if the element has a meaningful tag name for context
+        const tagName = targetElement.tagName.toLowerCase();
+        if (tagName === 'section' || tagName === 'article') {
+          // Try to find a heading within it
+          const heading = targetElement.querySelector('h1, h2, h3, h4, h5, h6');
+          if (heading) {
+            const headingText = TooltipUtils.extractTextContent(heading);
+            tooltipContent = `<strong>Section:</strong> ${TooltipUtils.sanitizeText(headingText)}`;
+            // Get first paragraph if available
+            const firstPara = targetElement.querySelector('p');
+            if (firstPara) {
+              const paraText = TooltipUtils.extractTextContent(firstPara);
+              const truncatedPara = truncateInternalLinkContent(paraText, 150);
+              tooltipContent += `<br><br>${TooltipUtils.sanitizeText(truncatedPara)}`;
+            }
+          } else {
+            tooltipContent = TooltipUtils.sanitizeText(truncateInternalLinkContent(tooltipText, TOOLTIP_CONFIG.content.maxInternalLinkLength));
+          }
+        } else {
+          // Just show the content
+          tooltipContent = TooltipUtils.sanitizeText(truncateInternalLinkContent(tooltipText, TOOLTIP_CONFIG.content.maxInternalLinkLength));
+        }
+      }
+      
+      // Skip if content is too short or empty
+      if (!tooltipText || tooltipText.length < TOOLTIP_CONFIG.content.minInternalLinkLength) {
+        console.debug(`Content too short or empty for internal link to: ${targetId}`);
+        return;
+      }
+      
+      // Add the tooltip
+      TooltipManager.addTooltip(link, tooltipContent, 'auto', {
+        isInternalLink: true,
+        targetId: targetId
+      });
+      tooltipsAdded++;
+      
+      console.debug(`Added tooltip for internal link to ${targetId}: "${tooltipText.substring(0, 50)}..."`);
+    } catch (error) {
+      console.error('Error processing internal link:', link, error);
+    }
+  });
+  
+  console.debug(`Internal link tooltips initialized: ${tooltipsAdded} tooltips added`);
+  return tooltipsAdded;
+}
+
+// Truncate internal link content if too long
+function truncateInternalLinkContent(text, maxLength = TOOLTIP_CONFIG.content.maxInternalLinkLength) {
+  if (!text) return '';
+  
+  const trimmedText = text.trim();
+  if (trimmedText.length <= maxLength) {
+    return trimmedText;
+  }
+  
+  // Try to truncate at a word boundary
+  const truncated = trimmedText.substring(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  
+  if (lastSpace > maxLength * 0.8) {
+    // If we have a reasonable word boundary, use it
+    return truncated.substring(0, lastSpace) + '…';
+  } else {
+    // Otherwise just truncate at the max length
+    return truncated + '…';
+  }
+}
+
+// Initialize all tooltips
+function initTooltips() {
+  console.debug('Starting tooltip initialization...');
+  
+  try {
+    // Initialize mobile interaction manager
+    MobileInteractionManager.init();
+    
+    const footnoteCount = initFootnoteTooltips();
+    const internalLinkCount = initInternalLinkTooltips();
+    
+    console.debug(`Tooltip initialization complete. Footnote tooltips: ${footnoteCount}, Internal link tooltips: ${internalLinkCount}`);
+  } catch (error) {
+    console.error('Error during tooltip initialization:', error);
+  }
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initTooltips);
+} else {
+  initTooltips();
+} 
