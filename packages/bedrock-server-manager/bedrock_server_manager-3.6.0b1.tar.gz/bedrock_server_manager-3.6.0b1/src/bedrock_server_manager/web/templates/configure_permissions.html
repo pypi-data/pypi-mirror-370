@@ -1,0 +1,206 @@
+<!-- bedrock_server_manager//web/templates/configure_permissions.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ super() }} - Configure Permissions: {{ server_name }}{% endblock %}
+
+{% block head_scripts %}
+<script src="{{ request.url_for('static', path='js/utils.js') }}" defer></script>
+<script src="{{ request.url_for('static', path='js/install_config.js') }}" defer></script> {# Contains savePermissions #}
+{% endblock %}
+
+{% block content %}
+<h2>Configure Player Permissions</h2>
+<p style="margin-bottom: 15px;" data-server-name="{{ server_name | e }}">
+    Server: <strong>{{ server_name }}</strong>
+    {% if new_install %}
+    <br><span class="step-indicator">(Step 3 of 4 for New Installation)</span>
+    {% endif %}
+</p>
+
+<div id="status-message-area" class="message-box" style="opacity: 0; transition: opacity 0.5s ease-out;"></div>
+<div id="validation-error-area" class="message-box message-error" style="margin-bottom: 15px; display: none;"></div>
+
+<div id="permissions-loader" class="loader-container">
+    <div class="spinner"></div>
+    <p>Loading permissions data...</p>
+</div>
+
+<section id="permissions-form-section" class="permissions-config-section" style="display:none;">
+    <p>Set the permission level for each known player found in the global player list or existing permissions file.</p>
+    {# The following div was used in a previous version of this template. The current one uses a table. #}
+    {# <div id="permissions-list" class="form-grid permissions-grid">
+        #}
+        <!-- Player permission rows will be dynamically inserted here by JavaScript -->
+        {#
+    </div> #}
+
+    <div class="table-responsive-wrapper">
+        <table class="server-table">
+            <thead>
+                <tr>
+                    <th scope="col">Player Name</th>
+                    <th scope="col">XUID</th>
+                    <th scope="col" style="min-width: 150px;">Permission Level</th>
+                </tr>
+            </thead>
+            <tbody id="permissions-table-body">
+                {# Initial loader row, will be replaced by JS #}
+                <tr>
+                    <td colspan="3">
+                        <div id="permissions-loader-inline" class="loader-container-small" style="display:none;">
+                            {# Initially hidden, shown by JS if needed #}
+                            <div class="spinner"></div>
+                            <p>Loading player and permission data...</p>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <template id="player-row-template">
+        <tr>
+            <td data-label="Player Name" class="player-name">PlayerName</td>
+            <td data-label="XUID" class="player-xuid">PlayerXUID</td>
+            <td data-label="Permission Level">
+                <select name="player-xuid" class="form-input permission-select">
+                    <option value="visitor">Visitor</option>
+                    <option value="member" selected>Member</option> {# Default to member #}
+                    <option value="operator">Operator</option>
+                </select>
+                <div class="validation-error inline-error"></div>
+            </td>
+        </tr>
+    </template>
+    <template id="no-players-row-template">
+        <tr class="no-servers-row">
+            {# Use consistent class if desired #}
+            <td colspan="3" class="no-servers">
+                No players found in the global player database or this server's permissions file. Add players via CLI or ensure server logs are scanned.
+            </td>
+        </tr>
+    </template>
+
+    <div class="form-actions">
+        <button type="button" onclick="savePermissions(this, '{{ server_name | e }}', {{ new_install | tojson }})" class="action-button start-button" id="save-permissions-btn">
+            Save Permissions
+        </button>
+        {% if new_install %}
+        <a href="{{ request.url_for('configure_service_page', server_name=server_name) ~ ('?new_install=true' if new_install else '') if request else '#' }}" class="action-link">
+            Skip & Go to Service Config »
+        </a>
+        <a href="{{ request.url_for('configure_allowlist_page', server_name=server_name) ~ ('?new_install=true' if new_install else '') if request else '#' }}" class="action-link">
+            « Back to Allowlist
+        </a>
+        {% else %}
+        <a href="{{ request.url_for('index') if request else '/' }}" class="action-link">
+            « Back to Dashboard
+        </a>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const serverName = document.querySelector('[data-server-name]').dataset.serverName;
+        const tableBody = document.getElementById('permissions-table-body');
+        const saveButton = document.getElementById('save-permissions-btn');
+        const playerRowTemplate = document.getElementById('player-row-template');
+        const noPlayersRowTemplate = document.getElementById('no-players-row-template');
+        const mainLoader = document.getElementById('permissions-loader');
+        const formSection = document.getElementById('permissions-form-section');
+        const inlineLoaderRow = tableBody.querySelector('tr'); // The initial loader row in the table
+
+        saveButton.disabled = true; // Disable save button initially
+        saveButton.title = "Loading player data...";
+        if (inlineLoaderRow) inlineLoaderRow.style.display = 'table-row'; // Show inline loader
+
+        try {
+            console.log("Fetching global players and server permissions in parallel...");
+            // Fetch both global players and server-specific permissions
+            const [allPlayersResponse, serverPermissionsResponse] = await Promise.all([
+                window.sendServerActionRequest(null, '/api/players/get', 'GET', null, null),
+                window.sendServerActionRequest(serverName, 'permissions/get', 'GET', null, null)
+            ]);
+
+            // Validate global players response
+            if (!allPlayersResponse || allPlayersResponse.status !== 'success') {
+                throw new Error(allPlayersResponse?.message || 'Failed to load global players list.');
+            }
+            // Validate server permissions response
+            if (!serverPermissionsResponse || serverPermissionsResponse.status !== 'success') {
+                throw new Error(serverPermissionsResponse?.message || 'Failed to load server permissions.');
+            }
+
+            let globalPlayers = allPlayersResponse.players || [];
+            // Correctly access nested permissions array based on OpenAPI doc
+            const serverPermissions = serverPermissionsResponse.data?.permissions || [];
+            console.log(`Loaded ${globalPlayers.length} global players and ${serverPermissions.length} server permissions.`);
+
+            const permissionsMap = new Map(serverPermissions.map(p => [String(p.xuid), p.permission_level]));
+            const globalPlayerXuids = new Set(globalPlayers.map(p => String(p.xuid)));
+
+            // Add players from server permissions if they are not in the global list
+            serverPermissions.forEach(p => {
+                const xuidStr = String(p.xuid);
+                if (!globalPlayerXuids.has(xuidStr)) {
+                    // Add this player to the globalPlayers list to be displayed
+                    // It's important that globalPlayers is an array that can be pushed to.
+                    globalPlayers.push({
+                        xuid: xuidStr,
+                        name: p.name || `Unknown (XUID: ${xuidStr})` // Use name from permission if available, else mark unknown
+                    });
+                    console.log(`Found permission for player ${xuidStr} (not in global list), adding to display list.`);
+                }
+            });
+
+            // Sort all players to be displayed by name
+            globalPlayers.sort((a, b) => (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+
+            if (inlineLoaderRow) inlineLoaderRow.remove(); // Remove initial loader row
+
+            if (globalPlayers.length > 0) {
+                const fragment = document.createDocumentFragment();
+                globalPlayers.forEach(player => {
+                    const rowClone = playerRowTemplate.content.cloneNode(true);
+                    const select = rowClone.querySelector('.permission-select');
+                    const xuidStr = String(player.xuid);
+
+                    rowClone.querySelector('.player-name').textContent = player.name || 'N/A';
+                    rowClone.querySelector('.player-xuid').textContent = xuidStr;
+                    select.name = xuidStr; // Used by savePermissions
+                    select.dataset.xuid = xuidStr; // Also useful for identification
+
+                    // Set permission level from server's permissions, default to 'member'
+                    select.value = permissionsMap.get(xuidStr) || 'member';
+
+                    // If validation errors need to be linked:
+                    // const validationErrorDiv = rowClone.querySelector('.validation-error');
+                    // if (validationErrorDiv) validationErrorDiv.dataset.field = xuidStr;
+
+                    fragment.appendChild(rowClone);
+                });
+                tableBody.appendChild(fragment);
+                saveButton.disabled = false;
+                saveButton.title = "Save all player permissions";
+            } else {
+                tableBody.appendChild(noPlayersRowTemplate.content.cloneNode(true));
+                saveButton.title = "No players to configure"; // Keep disabled (default)
+            }
+
+        } catch (error) {
+            console.error('Failed to load permissions page data:', error);
+            if (inlineLoaderRow) inlineLoaderRow.remove();
+            showStatusMessage(`Error loading page data: ${error.message}`, 'error');
+            tableBody.innerHTML = ''; // Clear any partial content
+            tableBody.appendChild(noPlayersRowTemplate.content.cloneNode(true)); // Show no players message
+            saveButton.title = "Could not load data"; // Keep save button disabled
+        } finally {
+            mainLoader.style.display = 'none';
+            formSection.style.display = 'block';
+        }
+    });
+</script>
+{% endblock %}
