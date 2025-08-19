@@ -1,0 +1,206 @@
+from __future__ import annotations
+
+import enum
+import logging
+import time
+from abc import abstractmethod
+from typing import Any, Generic, Optional, Protocol, TypeVar, Union
+
+from modelon.impact.client import exceptions
+
+logger = logging.getLogger(__name__)
+Entity = TypeVar("Entity")
+
+
+class EntityFromOperation(Protocol[Entity]):
+    def __call__(self, operation: BaseOperation[Entity], **kwargs: Any) -> Entity:
+        ...
+
+
+@enum.unique
+class Status(enum.Enum):
+    """Class representing an enumeration for the possible operation states."""
+
+    PENDING = "pending"
+    """Status for an operation that is pending."""
+
+    RUNNING = "running"
+    """Status for an operation that is running."""
+
+    STOPPING = "stopping"
+    """Status for an operation that has been cancelled and is stopping."""
+
+    CANCELLED = "cancelled"
+    """Status for an operation that has been cancelled."""
+
+    DONE = "done"
+    """Status for an operation that has been completed."""
+
+
+@enum.unique
+class AsyncOperationStatus(enum.Enum):
+    """Defines all states for import."""
+
+    RUNNING = "running"
+    """Status for an async operation that is running."""
+
+    READY = "ready"
+    """Status for an async operation that is ready."""
+
+    ERROR = "error"
+    """Status for an async operation that has errors."""
+
+    def done(self) -> bool:
+        return self in [AsyncOperationStatus.READY, AsyncOperationStatus.ERROR]
+
+
+class BaseOperation(Generic[Entity]):
+    """Abstract base operation class."""
+
+    def __init__(self, create_entity: EntityFromOperation):
+        self._create_entity = create_entity
+
+    @abstractmethod
+    def data(self) -> Entity:
+        """Returns the Entity class."""
+        pass
+
+    @property
+    @abstractmethod
+    def status(self) -> Any:
+        """Returns the operation status as an enumeration."""
+        pass
+
+    @abstractmethod
+    def cancel(self) -> Any:
+        """Terminates the operation."""
+        pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Name of the operation."""
+        pass
+
+    @abstractmethod
+    def wait(self, timeout: Optional[float]) -> Entity:
+        """Waits for the operation to finish."""
+        pass
+
+
+class AsyncOperation(BaseOperation[Entity]):
+    """File operation class containing base functionality."""
+
+    def wait(self, timeout: Optional[float] = None) -> Entity:
+        """Waits until the operation completes. Returns the operation class instance if
+        operation completes.
+
+        Args:
+            timeout: Time to wait in seconds for achieving the status. By default
+                the timeout is set to 'None', which signifies an infinite time
+                to wait until the status is achieved.
+
+        Returns:
+
+            Entity class instance if operation completes.
+
+        Raises:
+            OperationTimeOutError if time exceeds set timeout.
+
+        Example::
+
+            workspace.upload_result('A.mat').wait(timeout = 120)
+
+        """
+        start_t = time.time()
+        while True:
+            logger.info(f"{self.name} in progress! Status : {self.status.name}")
+            if self.status.done():
+                logger.info(f"{self.name} completed! Status : {self.status.name}")
+                return self.data()
+
+            current_t = time.time()
+            if timeout and current_t - start_t > timeout:
+                raise exceptions.OperationTimeOutError(
+                    current_status_name=self.status.name, timeout=timeout
+                )
+
+            time.sleep(0.5)
+
+    def cancel(self) -> None:
+        raise NotImplementedError("Cancel is not supported for this operation")
+
+
+class ExecutionOperation(BaseOperation[Entity]):
+    """Execution operation class containing base functionality."""
+
+    def is_complete(self) -> bool:
+        """Returns True if the operation has completed.
+
+        Returns:
+            True, if operation has completed.False, if operation has
+            not completed.
+
+        Example::
+
+           model.compile(options).is_complete()
+           workspace.execute(definition).is_complete()
+
+        """
+        return self.status == Status.DONE
+
+    def wait(
+        self,
+        timeout: Optional[float] = None,
+        status: Union[Status, tuple[Status, ...]] = (Status.DONE, Status.CANCELLED),
+    ) -> Entity:
+        """Waits until the operation achieves the set status. Returns the operation
+        class instance if the set status is achieved.
+
+        Args:
+            timeout: Time to wait in seconds for achieving the status. By default
+                the timeout is set to 'None', which signifies an infinite time
+                to wait until the status is achieved.
+
+            status:
+                Operation status to be achieved.
+                Default: Status.DONE
+
+        Returns:
+
+            Entity class instance if the set status is achieved.
+
+        Raises:
+            OperationTimeOutError if time exceeds set timeout.
+
+        Example::
+
+            model.compile(compile_options).wait(
+                timeout = 120,
+                status = Status.CANCELLED
+                )
+            workspace.execute(experiment_definition).wait(timeout = 120)
+
+        """
+        start_t = time.time()
+        status_tuple = status if isinstance(status, tuple) else (status,)
+
+        try:
+            while True:
+                logger.info(f"{self.name} in progress! Status : {self.status.name}")
+                if self.status in status_tuple:
+                    logger.info(f"{self.name} completed! Status : {self.status.name}")
+                    return self.data()
+
+                current_t = time.time()
+                if timeout and current_t - start_t > timeout:
+                    raise exceptions.OperationTimeOutError(
+                        timeout=timeout,
+                        current_status_name=self.status.name,
+                    )
+
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            logger.info("Execution cancelled!")
+            self.cancel()
+            raise
