@@ -1,0 +1,67 @@
+# Configuration file for LogWatch
+
+# Section for LLM provider configuration
+# NOTE: The model names provided below are examples. 
+# Please replace them with the actual models you intend to use.
+llm_providers:
+  ollama:
+    type: "ollama"
+    api_url: "http://localhost:11434/api/generate"
+    model: "llama3.2:latest" # Example model
+    timeout: 120 # Request timeout in seconds
+
+  gemma:
+    type: "gemma"
+    # The URL for Gemma-3-27b-it. Change it if you want to use another model.
+    api_url: "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent"
+    # The API key will be read from the environment variable specified here.
+    api_key_env: "GEMINI_API_KEY"
+    timeout: 60 # Request timeout in seconds
+
+  gemini:
+    type: "gemini"
+    # The URL for Gemini 1.5 Flash. Change it if you want to use another model.
+    api_url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    # The API key will be read from the environment variable specified here.
+    api_key_env: "GEMINI_API_KEY"
+    timeout: 60 # Request timeout in seconds
+
+  openrouter:
+    type: "openrouter"
+    api_url: "https://openrouter.ai/api/v1/"
+    # You can change the model here. Examples: "google/gemma-2-9b-it", "anthropic/claude-3-haiku"
+    model: "qwen/qwen-2.5-coder-32b-instruct:free" # Example model
+    #model: "deepseek/deepseek-chat-v3-0324:free"
+    #model: "openai/gpt-oss-20b:free"
+    api_key_env: "OPENROUTER_API_KEY"
+    timeout: 60 # Request timeout in seconds
+
+# Choose which LLM provider to use from the ones defined above.
+active_llm_provider: "ollama"
+
+
+# Definition of log analysis tasks
+logs:
+  - name: "SSH Failed Logins"
+    command: "journalctl -u sshd -p err -o json --no-pager --since '1 day ago'"
+    parser: "ssh_parser"
+    # Filters to ignore irrelevant logs (examples)
+    filters:
+      - "pam_unix(sshd:auth): authentication failure" # Often redundant if you only look at "Failed password"
+
+  - name: "Sudo Usage"
+    command: "journalctl /usr/bin/sudo -o json --no-pager --since '1 day ago'"
+    parser: "llm_parser"
+    filters:
+      - "pam_unix(sudo:session): session opened for user root"
+      - "pam_unix(sudo:session): session closed for user root"
+
+  - name: "Kernel Errors"
+    command: "journalctl -k -p err -o json --no-pager --since '1 day ago'"
+    parser: "kernel_parser"
+    filters: []
+
+  - name: "General System Analysis"
+    command: "journalctl -p err -o json --no-pager --since '1 hour ago'"
+    parser: "llm_parser"
+    filters: []
