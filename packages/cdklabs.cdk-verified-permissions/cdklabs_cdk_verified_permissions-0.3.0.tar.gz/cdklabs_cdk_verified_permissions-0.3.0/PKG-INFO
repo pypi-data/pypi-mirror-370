@@ -1,0 +1,469 @@
+Metadata-Version: 2.1
+Name: cdklabs.cdk-verified-permissions
+Version: 0.3.0
+Summary: L2 AWS CDK Constructs for Amazon Verified Permissions
+Home-page: https://github.com/cdklabs/cdk-verified-permissions.git
+Author: Amazon Web Services<aws-cdk-dev@amazon.com>
+License: Apache-2.0
+Project-URL: Source, https://github.com/cdklabs/cdk-verified-permissions.git
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: JavaScript
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Typing :: Typed
+Classifier: Development Status :: 4 - Beta
+Classifier: License :: OSI Approved
+Requires-Python: ~=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: NOTICE
+Requires-Dist: aws-cdk-lib<3.0.0,>=2.198.0
+Requires-Dist: constructs<11.0.0,>=10.0.5
+Requires-Dist: jsii<2.0.0,>=1.113.0
+Requires-Dist: publication>=0.0.3
+Requires-Dist: typeguard<4.3.0,>=2.13.3
+
+# Amazon Verified Permissions L2 CDK Construct
+
+This repo contains the implementation of an L2 CDK Construct for Amazon Verified Permissions
+
+# Project Stability
+
+This construct is still versioned with alpha/v0 major version and we could introduce breaking changes even without a major version bump. Our goal is to keep the API stable & backwards compatible as much as possible but we currently cannot guarantee that. Once we'll publish v1.0.0 the breaking changes will be introduced via major version bumps.
+
+# Getting Started
+
+## Policy Store
+
+Define a Policy Store with defaults (No description, No schema & Validation Settings Mode set to OFF):
+
+```python
+test = PolicyStore(scope, "PolicyStore")
+```
+
+Define a Policy Store without Schema definition (Validation Settings Mode must be set to OFF):
+
+```python
+validation_settings_off = {
+    "mode": ValidationSettingsMode.OFF
+}
+test = PolicyStore(scope, "PolicyStore",
+    validation_settings=validation_settings_off
+)
+```
+
+Define a Policy Store with Description and Schema definition (a STRICT Validation Settings Mode is strongly suggested for Policy Stores with schemas):
+
+```python
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+cedar_json_schema = {
+    "PhotoApp": {
+        "entity_types": {
+            "User": {},
+            "Photo": {}
+        },
+        "actions": {
+            "view_photo": {
+                "applies_to": {
+                    "principal_types": ["User"],
+                    "resource_types": ["Photo"]
+                }
+            }
+        }
+    }
+}
+cedar_schema = {
+    "cedar_json": JSON.stringify(cedar_json_schema)
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    schema=cedar_schema,
+    validation_settings=validation_settings_strict,
+    description="PolicyStore description"
+)
+```
+
+Define a Policy Store with Validation Settings to OFF and Deletion Protection enabled:
+
+```python
+validation_settings_off = {
+    "mode": ValidationSettingsMode.OFF
+}
+test = PolicyStore(scope, "PolicyStore",
+    validation_settings=validation_settings_off,
+    deletion_protection=DeletionProtectionMode.ENABLED
+)
+```
+
+## Schemas
+
+If you want to have type safety when defining a schema, you can accomplish this **<ins>only</ins>** in typescript. Simply use the `Schema` type exported by the `@cedar-policy/cedar-wasm`.
+
+You can also generate simple schemas using the static functions `schemaFromOpenApiSpec` or `schemaFromRestApi` in the PolicyStore construct. This functionality replicates what you can find in the AWS Verified Permissions console.
+
+Generate a schema from an OpenAPI spec:
+
+```python
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+cedar_json_schema = PolicyStore.schema_from_open_api_spec("path/to/swaggerfile.json", "UserGroup")
+cedar_schema = {
+    "cedar_json": JSON.stringify(cedar_json_schema)
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    schema=cedar_schema,
+    validation_settings=validation_settings_strict,
+    description="Policy store with schema generated from API Gateway"
+)
+```
+
+Generate a schema from a RestApi construct:
+
+```python
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+cedar_json_schema = PolicyStore.schema_from_rest_api(
+    RestApi(scope, "RestApi"), "UserGroup")
+cedar_schema = {
+    "cedar_json": JSON.stringify(cedar_json_schema)
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    schema=cedar_schema,
+    validation_settings=validation_settings_strict,
+    description="Policy store with schema generated from RestApi construct"
+)
+```
+
+## Identity Source
+
+Define Identity Source with Cognito Configuration and required properties:
+
+```python
+user_pool = UserPool(scope, "UserPool") # Creating a new Cognito UserPool
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+cedar_json_schema = {
+    "PhotoApp": {
+        "entity_types": {
+            "User": {},
+            "Photo": {}
+        },
+        "actions": {
+            "view_photo": {
+                "applies_to": {
+                    "principal_types": ["User"],
+                    "resource_types": ["Photo"]
+                }
+            }
+        }
+    }
+}
+cedar_schema = {
+    "cedar_json": JSON.stringify(cedar_json_schema)
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    schema=cedar_schema,
+    validation_settings=validation_settings_strict
+)
+IdentitySource(scope, "IdentitySource",
+    configuration=IdentitySourceConfiguration(
+        cognito_user_pool_configuration=CognitoUserPoolConfiguration(
+            user_pool=user_pool
+        )
+    ),
+    policy_store=policy_store
+)
+```
+
+Define Identity Source with Cognito Configuration and all properties:
+
+```python
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+cedar_json_schema = {
+    "PhotoApp": {
+        "entity_types": {
+            "User": {},
+            "Photo": {}
+        },
+        "actions": {
+            "view_photo": {
+                "applies_to": {
+                    "principal_types": ["User"],
+                    "resource_types": ["Photo"]
+                }
+            }
+        }
+    }
+}
+cedar_schema = {
+    "cedar_json": JSON.stringify(cedar_json_schema)
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    schema=cedar_schema,
+    validation_settings=validation_settings_strict
+)
+cognito_group_entity_type = "test"
+user_pool = UserPool(scope, "UserPool") # Creating a new Cognito UserPool
+IdentitySource(scope, "IdentitySource",
+    configuration=IdentitySourceConfiguration(
+        cognito_user_pool_configuration=CognitoUserPoolConfiguration(
+            client_ids=["&ExampleCogClientId;"],
+            user_pool=user_pool,
+            group_configuration=CognitoGroupConfiguration(
+                group_entity_type=cognito_group_entity_type
+            )
+        )
+    ),
+    policy_store=policy_store,
+    principal_entity_type="PETEXAMPLEabcdefg111111"
+)
+```
+
+Define Identity Source with OIDC Configuration and Access Token selection config:
+
+```python
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+cedar_json_schema = {
+    "PhotoApp": {
+        "entity_types": {
+            "User": {},
+            "Photo": {}
+        },
+        "actions": {
+            "view_photo": {
+                "applies_to": {
+                    "principal_types": ["User"],
+                    "resource_types": ["Photo"]
+                }
+            }
+        }
+    }
+}
+cedar_schema = {
+    "cedar_json": JSON.stringify(cedar_json_schema)
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    schema=cedar_schema,
+    validation_settings=validation_settings_strict
+)
+issuer = "https://iamanidp.com"
+principal_id_claim = "sub"
+entity_id_prefix = "prefix"
+group_claim = "group"
+group_entity_type = "GroupType"
+IdentitySource(scope, "IdentitySource",
+    configuration=IdentitySourceConfiguration(
+        open_id_connect_configuration=OpenIdConnectConfiguration(
+            issuer=issuer,
+            entity_id_prefix=entity_id_prefix,
+            group_configuration=OpenIdConnectGroupConfiguration(
+                group_claim=group_claim,
+                group_entity_type=group_entity_type
+            ),
+            access_token_only=OpenIdConnectAccessTokenConfiguration(
+                audiences=["testAudience"],
+                principal_id_claim=principal_id_claim
+            )
+        )
+    ),
+    policy_store=policy_store,
+    principal_entity_type="TestType"
+)
+```
+
+Define Identity Source with OIDC Configuration and Identity Token selection config:
+
+```python
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+cedar_json_schema = {
+    "PhotoApp": {
+        "entity_types": {
+            "User": {},
+            "Photo": {}
+        },
+        "actions": {
+            "view_photo": {
+                "applies_to": {
+                    "principal_types": ["User"],
+                    "resource_types": ["Photo"]
+                }
+            }
+        }
+    }
+}
+cedar_schema = {
+    "cedar_json": JSON.stringify(cedar_json_schema)
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    schema=cedar_schema,
+    validation_settings=validation_settings_strict
+)
+issuer = "https://iamanidp.com"
+entity_id_prefix = "prefix"
+group_claim = "group"
+group_entity_type = "UserGroup"
+principal_id_claim = "sub"
+IdentitySource(scope, "IdentitySource",
+    configuration=IdentitySourceConfiguration(
+        open_id_connect_configuration=OpenIdConnectConfiguration(
+            issuer=issuer,
+            entity_id_prefix=entity_id_prefix,
+            group_configuration=OpenIdConnectGroupConfiguration(
+                group_claim=group_claim,
+                group_entity_type=group_entity_type
+            ),
+            identity_token_only=OpenIdConnectIdentityTokenConfiguration(
+                client_ids=[],
+                principal_id_claim=principal_id_claim
+            )
+        )
+    ),
+    policy_store=policy_store
+)
+```
+
+## Policy
+
+Load all the `.cedar` files in a given folder and define Policy objects for each of them. All policies will be associated with the same policy store.
+**PLEASE NOTE:** this method internally uses the `Policy.fromFile` so the same rules applies.
+
+```python
+validation_settings_strict = {
+    "mode": ValidationSettingsMode.STRICT
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    validation_settings=validation_settings_strict
+)
+policy_store.add_policies_from_path("/path/to/my-policies")
+```
+
+Define a Policy and add it to a specific Policy Store:
+
+```python
+statement = """permit(
+    principal,
+    action in [MyFirstApp::Action::"Read"],
+    resource
+) when {
+    true
+};"""
+
+description = "Test policy assigned to the test store"
+validation_settings_off = {
+    "mode": ValidationSettingsMode.OFF
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    validation_settings=validation_settings_off
+)
+
+# Create a policy and add it to the policy store
+policy = Policy(scope, "MyTestPolicy",
+    definition=PolicyDefinitionProperty(
+        static=StaticPolicyDefinitionProperty(
+            statement=statement,
+            description=description
+        )
+    ),
+    policy_store=policy_store
+)
+```
+
+Define a policy with a template linked definition:
+
+```python
+validation_settings_off = {
+    "mode": ValidationSettingsMode.OFF
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    validation_settings=validation_settings_off
+)
+policy_template_statement = """
+permit (
+  principal == ?principal,
+  action in [TinyTodo::Action::"ReadList", TinyTodo::Action::"ListTasks"],
+  resource == ?resource
+);"""
+template = PolicyTemplate(scope, "PolicyTemplate",
+    statement=policy_template_statement,
+    policy_store=policy_store
+)
+
+policy = Policy(scope, "MyTestPolicy",
+    definition=PolicyDefinitionProperty(
+        template_linked=TemplateLinkedPolicyDefinitionProperty(
+            policy_template=template,
+            principal=EntityIdentifierProperty(
+                entity_id="exampleId",
+                entity_type="exampleType"
+            ),
+            resource=EntityIdentifierProperty(
+                entity_id="exampleId",
+                entity_type="exampleType"
+            )
+        )
+    ),
+    policy_store=policy_store
+)
+```
+
+Define a Policy with a statement from file:
+**PLEASE NOTE:**
+
+* The `Policy.fromFile` static method supports multiple Cedar policies per file. Every Policy must follow the standard Cedar rules. This means that every Policy must be terminated with a `;` char.
+* You can specify the id of the Policy directly inside the Policy file through Cedar Annotations, using the annotation `@cdkId`. The id defined in the annotation will have priority with respect to the one passed in the `Policy.fromFile` method. In case no annotation is defined, the id passed in the `Policy.fromFile` method will be used. Since the `Policy.fromFile` method supports multiple Cedar policies per file, it is strongly suggested to define policy ids through the annotation, in order to avoid having many Policy Constructs with the same id (which will result in a CDK runtime error).
+* You can specify the description of the policy directly inside the Policy file, using the annotation `@cdkDescription`. The description defined in the annotation will have priority with respect to the one passed in the properties object of the `Policy.fromFile` method.
+
+```python
+description = "Test policy assigned to the test store"
+validation_settings_off = {
+    "mode": ValidationSettingsMode.OFF
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    validation_settings=validation_settings_off
+)
+
+# Create a policy and add it to the policy store
+policy_from_file_props = {
+    "policy_store": policy_store,
+    "path": "/path/to/policy-statement.cedar",
+    "description": "the policy description"
+}
+policy = Policy.from_file(scope, "MyTestPolicy", policy_from_file_props)
+```
+
+## Policy Template
+
+Define a Policy Template referring to a Cedar Statement in local file:
+
+```python
+validation_settings_off = {
+    "mode": ValidationSettingsMode.OFF
+}
+policy_store = PolicyStore(scope, "PolicyStore",
+    validation_settings=validation_settings_off
+)
+template_from_file_props = {
+    "policy_store": policy_store,
+    "path": "/path/to/template-statement.cedar",
+    "description": "Allows sharing photos in full access mode"
+}
+template = PolicyTemplate.from_file(scope, "PolicyTemplate", template_from_file_props)
+```
+
+# Notes
+
+* This project is following the AWS CDK Official Design Guidelines (see https://github.com/aws/aws-cdk/blob/main/docs/DESIGN_GUIDELINES.md) and the AWS CDK New Constructs Creation Guide (see here https://github.com/aws/aws-cdk/blob/main/docs/NEW_CONSTRUCTS_GUIDE.md).
+* Feedback is a gift: if you find something wrong or you've ideas to improve please open an issue or a pull request
