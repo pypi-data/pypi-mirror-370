@@ -1,0 +1,83 @@
+#!/usr/bin/env python
+
+import warnings
+
+import numpy as np
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    try:
+        import pyfftw
+    except ImportError:
+        pyfftwpresent = False
+    else:
+        pyfftwpresent = True
+
+from scipy import fftpack, signal
+
+if pyfftwpresent:
+    fftpack = pyfftw.interfaces.scipy_fftpack
+    pyfftw.interfaces.cache.enable()
+
+
+def complexupsample(inputcplx, debug=False):
+    fftdata = fftpack.fft(inputcplx)
+    conjdata = np.roll(np.conjugate(fftdata[::-1]), 1)
+    conjdata[0] = 0.0
+    concatfft = np.concatenate([fftdata, conjdata])
+    if debug:
+        print(f"{inputcplx.shape=}")
+        print(f"{fftdata.shape=}")
+    return fftpack.ifft(concatfft)
+
+
+def dumparray(thearray, ascomplex=False, showlen=False):
+    thelen = thearray.shape[0]
+    if showlen:
+        print(f"array len: {thelen}")
+    for i in range(thelen):
+        if ascomplex:
+            print(f"{i}\t{thearray[i]}")
+        else:
+            print(f"{thearray[i].real}\t{thearray[i].imag}")
+
+
+def main():
+    evenlen = 100
+    oddlen = 101
+    Fs = 10.0
+    totaltime = 100.0
+    wavefreq = 1.0
+    ascomplex = False
+    showlen = True
+    debug = False
+
+    oddxaxis = np.linspace(0.0, totaltime, num=oddlen, endpoint=True) / Fs
+    oddarray = np.cos(2.0 * np.pi * wavefreq * oddxaxis) + 1j * np.sin(
+        2.0 * np.pi * wavefreq * oddxaxis
+    )
+    oddreal = oddarray.real
+    oddimag = oddarray.imag
+    # print("Odd array:")
+    # dumparray(oddarray, ascomplex=ascomplex, showlen=showlen)
+    print("\n")
+    oddupsampled = complexupsample(oddarray, debug=debug)
+    print("Odd upsampled:")
+    dumparray(oddupsampled, ascomplex=ascomplex, showlen=showlen)
+
+    evenxaxis = np.linspace(0.0, totaltime, num=evenlen, endpoint=True) / Fs
+    evenarray = np.cos(2.0 * np.pi * wavefreq * evenxaxis) + 1j * np.sin(
+        2.0 * np.pi * wavefreq * evenxaxis
+    )
+    evenreal = evenarray.real
+    evenimag = evenarray.imag
+    # print("Even array:")
+    # dumparray(evenarray, ascomplex=ascomplex, showlen=showlen)
+    print("\n")
+    evenupsampled = complexupsample(evenarray, debug=debug)
+    print("Even upsampled:")
+    dumparray(evenupsampled, ascomplex=ascomplex, showlen=showlen)
+
+
+if __name__ == "__main__":
+    main()
