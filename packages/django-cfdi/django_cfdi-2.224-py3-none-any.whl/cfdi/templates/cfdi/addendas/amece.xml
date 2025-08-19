@@ -1,0 +1,138 @@
+{% load cfdi_tags %}<cfdi:Addenda>
+	<requestForPayment 
+		DeliveryDate="{{ fecha }}" 
+		contentVersion="1.3.1" 
+		documentStatus="ORIGINAL" 
+		documentStructureVersion="AMC7.1" 
+		type="SimpleInvoiceType"
+	>
+		<requestForPaymentIdentification>
+			<entityType>INVOICE</entityType>
+			<uniqueCreatorIdentification>{{ folioserie }}</uniqueCreatorIdentification>
+		</requestForPaymentIdentification>
+		
+		{% if dias_condicion %}
+			<specialInstruction code="AAB">
+				<text>PAGO A {{ dias_condicion }} DIAS</text>
+			</specialInstruction>
+		{% endif %}
+		
+		<specialInstruction code="PUR">
+			<text>PRONTO PAGO GENERA DESCUENTO</text>
+		</specialInstruction>
+		
+		<specialInstruction code="ZZZ">
+			<text>{{ cantidad_letra }}</text>
+		</specialInstruction>
+
+		<orderIdentification>
+			<referenceIdentification type="ON">{{ orden_compra }}</referenceIdentification>
+			<ReferenceDate>{{ fecha_referencia }}</ReferenceDate>
+		</orderIdentification>
+		<AdditionalInformation>
+		
+		<referenceIdentification type="IV">{{ folio }}</referenceIdentification>
+		
+		<referenceIdentification type="ATZ">1</referenceIdentification>
+		
+		</AdditionalInformation>
+
+		{% if numero_nota %}
+		<DeliveryNote>
+			<referenceIdentification>{{ numero_nota }}</referenceIdentification>
+		</DeliveryNote>
+		{% endif %}
+
+		<buyer>
+			<gln>{{ gln_comprador }}</gln>
+			{% if nombre_departamento %}
+				<contactInformation>
+					<personOrDepartmentName>
+						<text>{{ nombre_departamento }}</text>
+					</personOrDepartmentName>
+				</contactInformation>
+			{% endif %}
+		</buyer>
+		<seller>
+			<gln>{{ gln_vendedor|add:0|stringformat:"013d" }}</gln>
+			<alternatePartyIdentification type="SELLER_ASSIGNED_IDENTIFIER_FOR_A_PARTY">{{ gln_vendedor }}</alternatePartyIdentification>
+		</seller>
+		{% if gln_envio %}
+			<shipTo>
+				<gln>{{ gln_envio }}</gln>
+				<nameAndAddress>
+					<name>{{ nombre_envio }}</name>
+					<streetAddressOne>{{ calle_envio }}</streetAddressOne>
+					<city>{{ ciudad_envio }}</city>
+					{% if cp_envio %}
+						<postalCode>{{ cp_envio }}</postalCode>
+					{% else %}
+						<postalCode/>
+					{% endif %}
+				</nameAndAddress>
+			</shipTo>
+		{% endif %}
+		<currency currencyISOCode="{{ moneda }}">
+			<currencyFunction>BILLING_CURRENCY</currencyFunction>
+			<rateOfChange>{{ tipo_cambio }}</rateOfChange>
+		</currency>
+		{% if dias_condicion %}
+			<paymentTerms PaymentTermsRelationTime="REFERENCE_AFTER" paymentTermsEvent="EFFECTIVE_DATE">
+				<netPayment netPaymentTermsType="BASIC_NET">
+					<paymentTimePeriod>
+						<timePeriodDue timePeriod="DAYS">
+							<value>{{ dias_condicion }}</value>
+						</timePeriodDue>
+					</paymentTimePeriod>
+				</netPayment>
+			</paymentTerms>
+		{% endif %}
+
+		{% for concepto in conceptos %}
+			<lineItem number="{{ forloop.counter }}" type="SimpleInvoiceLineItemType">
+				<tradeItemIdentification>
+					<gtin>{{ concepto.codigo_barras }}</gtin>
+				</tradeItemIdentification>
+				<alternateTradeItemIdentification type="BUYER_ASSIGNED">{{ concepto.codigo }}</alternateTradeItemIdentification>
+				<tradeItemDescriptionInformation language="ES">
+					<longText>{{ concepto.descripcion }}</longText>
+				</tradeItemDescriptionInformation>
+				<invoicedQuantity unitOfMeasure="{{ concepto.unidad_medida }}">{{ concepto.cantidad }}</invoicedQuantity>
+				<grossPrice>
+					<Amount>{{ concepto.precio_unitario }}</Amount>
+				</grossPrice>
+				<netPrice>
+					<Amount>{{ concepto.precio_neto_amece|cur }}</Amount>
+				</netPrice>
+				<AdditionalInformation>
+					<referenceIdentification type="ON">{{ orden_compra }}</referenceIdentification>
+				</AdditionalInformation>
+				<totalLineAmount>
+					<grossAmount>
+						<Amount>{{ concepto.importe }}</Amount>
+					</grossAmount>
+					<netAmount>
+						<Amount>{{ concepto.total }}</Amount>
+					</netAmount>
+				</totalLineAmount>
+			</lineItem>
+		{% endfor %}
+
+		<totalAmount>
+			<Amount>{{ importe }}</Amount>
+		</totalAmount>
+		<baseAmount>
+			<Amount>{{ importe }}</Amount>
+		</baseAmount>
+		<tax type="VAT">
+			<taxPercentage>{{ porcentaje_iva }}</taxPercentage>
+			{% if monto_iva %}
+				<taxAmount>{{ monto_iva }}</taxAmount>
+				<taxCategory>TRANSFERIDO</taxCategory>
+			{% endif %}
+		</tax>
+		<payableAmount>
+			<Amount>{{ total }}</Amount>
+		</payableAmount>
+	</requestForPayment>
+</cfdi:Addenda>

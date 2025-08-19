@@ -1,0 +1,191 @@
+{% load cfdi_tags %}
+<nomina12:Nomina         
+    {% for xmlns in complemento.xmlns_list %}
+        {{ xmlns|safe }} 
+    {% endfor %}
+    Version="1.2"
+    TipoNomina="{{ complemento.TipoNomina }}"
+    FechaPago="{{ complemento.FechaPago|date:"Y-m-d" }}"
+    FechaInicialPago="{{ complemento.FechaInicialPago|date:"Y-m-d" }}"
+    FechaFinalPago="{{ complemento.FechaFinalPago|date:"Y-m-d" }}"
+    NumDiasPagados="{{ complemento.NumDiasPagados }}"
+    {% set_field 'TotalPercepciones' complemento.TotalPercepciones %}
+    {% set_field 'TotalDeducciones' complemento.TotalDeducciones %}
+    {% set_field 'TotalOtrosPagos' complemento.TotalOtrosPagos %}
+    >
+
+    <nomina12:Emisor
+        {% set_field 'Curp' complemento.Emisor.Curp %}
+        {% set_field 'RegistroPatronal'  complemento.Emisor.RegistroPatronal %}
+        {% set_field 'RfcPatronOrigen' complemento.Emisor.RfcPatronOrigen %}
+        >
+        {% if complemento.Emisor.EntidadSNCF %}
+            <nomina12:EntidadSNCF 
+                OrigenRecurso="{{ complemento.Emisor.EntidadSNCF.OrigenRecurso }}"
+                {% set_field 'MontoRecursoPropio' complemento.Emisor.EntidadSNCF.MontoRecursoPropio %}
+            />
+        {% endif %}
+    </nomina12:Emisor>
+
+    <nomina12:Receptor 
+        Curp="{{ complemento.Receptor.Curp }}"
+        {% set_field 'NumSeguridadSocial' complemento.Receptor.NumSeguridadSocial %}
+        {% set_field 'FechaInicioRelLaboral' complemento.Receptor.FechaInicioRelLaboral %}
+        {% set_field 'Antigüedad' complemento.Receptor.Antiguedad %}
+        {% set_field 'TipoContrato' complemento.Receptor.TipoContrato %}
+        {% set_field 'Sindicalizado' complemento.Receptor.Sindicalizado %}
+        {% set_field 'TipoJornada' complemento.Receptor.TipoJornada %}
+        {% set_field 'TipoRegimen' complemento.Receptor.TipoRegimen %}
+        {% set_field 'NumEmpleado' complemento.Receptor.NumEmpleado %}
+        {% set_field 'Departamento' complemento.Receptor.Departamento %}
+        {% set_field 'Puesto' complemento.Receptor.Puesto %}
+        {% set_field 'RiesgoPuesto' complemento.Receptor.RiesgoPuesto %}
+        {% set_field 'PeriodicidadPago' complemento.Receptor.PeriodicidadPago %}
+        {% set_field 'Banco' complemento.Receptor.Banco %}
+        {% set_field 'CuentaBancaria' complemento.Receptor.CuentaBancaria %}
+        {% set_field 'SalarioBaseCotApor' complemento.Receptor.SalarioBaseCotApor %}
+        {% set_field 'SalarioDiarioIntegrado' complemento.Receptor.SalarioDiarioIntegrado %}
+        {% set_field 'ClaveEntFed' complemento.Receptor.ClaveEntFed %}
+        >
+
+        {% if complemento.Receptor.SubContratacion %}
+            <nomina12:SubContratacion
+                RfcLabora="complemento.Receptor.SubContratacion.RfcLabora" 
+                PorcentajeTiempo="complemento.Receptor.SubContratacion.PorcentajeTiempo" 
+                />
+        {% endif %}
+
+    </nomina12:Receptor>
+
+    {% if complemento.Percepciones.percepciones %}
+        <nomina12:Percepciones
+            {% set_field 'TotalSueldos' complemento.Percepciones.TotalSueldos %}
+            {% set_field 'TotalSeparacionIndemnizacion' complemento.Percepciones.TotalSeparacionIndemnizacion|default:"" %}
+            {% set_field 'TotalJubilacionPensionRetiro' complemento.Percepciones.TotalJubilacionPensionRetiro|default:"" %}
+            TotalGravado="{{ complemento.Percepciones.TotalGravado }}" 
+            TotalExento="{{ complemento.Percepciones.TotalExento }}"
+        >
+
+        {% for percepcion in complemento.Percepciones.percepciones %}
+            <nomina12:Percepcion 
+                TipoPercepcion="{{ percepcion.TipoPercepcion }}"
+                Clave="{{ percepcion.Clave }}"
+                Concepto="{{ percepcion.Concepto }}"
+                ImporteGravado="{{ percepcion.ImporteGravado }}"
+                ImporteExento="{{ percepcion.ImporteExento }}"
+
+            {% if percepcion.AccionesOTitulos or percepcion.HorasExtra %}
+                >
+                {% if percepcion.AccionesOTitulos %}
+                    <AccionesOTitulos 
+                        ValorMercado="{{ percepcion.AccionesOTitulos.ValorMercado }}" 
+                        PrecioAlOtorgarse="{{ percepcion.AccionesOTitulos.PrecioAlOtorgarse }}" 
+                    />
+                {% endif %}   
+
+                {% for he in percepcion.HorasExtra %}
+                    <nomina12:HorasExtra 
+                        Dias="{{ he.Dias }}" 
+                        TipoHoras="{{ he.TipoHoras }}" 
+                        HorasExtra="{{ he.HorasExtra }}" 
+                        ImportePagado="{{ he.ImportePagado }}"
+                    />
+                {% endfor %}
+                </nomina12:Percepcion>
+            {% else %}
+                />
+            {% endif %}
+        {% endfor %}
+            
+
+        {% if complemento.Percepciones.JubilacionPensionRetiro %}
+            <nomina12:JubilacionPensionRetiro 
+
+                {% if complemento.Percepciones.JubilacionPensionRetiro.TotalUnaExhibicion %}
+                    TotalUnaExhibicion="{{ complemento.Percepciones.JubilacionPensionRetiro.TotalUnaExhibicion }}" 
+                {% endif %}
+
+                {% if complemento.Percepciones.JubilacionPensionRetiro.TotalParcialidad %}
+                    TotalParcialidad="{{ complemento.Percepciones.JubilacionPensionRetiro.TotalParcialidad }}" 
+                {% endif %}
+
+                {% if complemento.Percepciones.JubilacionPensionRetiro.MontoDiario %}
+                    MontoDiario="{{ complemento.Percepciones.JubilacionPensionRetiro.MontoDiario }}"
+                {% endif %}
+
+                IngresoAcumulable="{{ complemento.Percepciones.JubilacionPensionRetiro.IngresoAcumulable }}"
+                
+                IngresoNoAcumulable="{{ complemento.Percepciones.JubilacionPensionRetiro.IngresoNoAcumulable }}"
+                />
+        {% endif %}
+
+        {% if complemento.Percepciones.SeparacionIndemnizacion %}
+            <nomina12:SeparacionIndemnizacion 
+                TotalPagado="{{ complemento.Percepciones.SeparacionIndemnizacion.TotalPagado|stringformat:".2f" }}"
+                NumAñosServicio="{{ complemento.Percepciones.SeparacionIndemnizacion.NumAñosServicio }}" 
+                IngresoAcumulable="{{ complemento.Percepciones.SeparacionIndemnizacion.IngresoAcumulable|stringformat:".2f" }}"
+                IngresoNoAcumulable="{{ complemento.Percepciones.SeparacionIndemnizacion.IngresoNoAcumulable|stringformat:".2f" }}" 
+                UltimoSueldoMensOrd="{{ complemento.Percepciones.SeparacionIndemnizacion.UltimoSueldoMensOrd|stringformat:".2f" }}" 
+                />
+        {% endif %}
+        </nomina12:Percepciones>
+    {% endif %}
+
+
+    {% if complemento.Deducciones.deducciones %}
+        <nomina12:Deducciones 
+            {% set_field 'TotalOtrasDeducciones' complemento.Deducciones.TotalOtrasDeducciones|default:"" %}
+            {% set_field 'TotalImpuestosRetenidos' complemento.Deducciones.TotalImpuestosRetenidos|default:"" %}
+            >
+
+        {% for deduccion in complemento.Deducciones.deducciones %}
+            <nomina12:Deduccion 
+                TipoDeduccion="{{ deduccion.TipoDeduccion }}"
+                Clave="{{ deduccion.Clave }}"
+                Concepto="{{ deduccion.Concepto }}"
+                Importe="{{ deduccion.Importe }}"
+                />
+        {% endfor %}
+        </nomina12:Deducciones>
+    {% endif %}
+
+    {% if complemento.OtrosPagos.otrospagos %}
+        <nomina12:OtrosPagos>
+            {% for otropago in complemento.OtrosPagos.otrospagos %}
+                <nomina12:OtroPago
+                    TipoOtroPago="{{ otropago.TipoOtroPago }}" 
+                    Clave="{{ otropago.Clave }}" 
+                    Concepto="{{ otropago.Concepto }}" 
+                    Importe="{{ otropago.Importe }}" 
+                    >
+
+                {% if otropago.SubsidioAlEmpleo %}
+                    <nomina12:SubsidioAlEmpleo 
+                        SubsidioCausado="{{ otropago.SubsidioAlEmpleo.SubsidioCausado }}" 
+                        />
+                {% endif %}
+
+                {% if otropago.CompensacionSaldosAFavor %}
+                    <nomina12:CompensacionSaldosAFavor 
+                        SaldoAFavor="{{ otropago.CompensacionSaldosAFavor.SaldoAFavor }}" 
+                        Año="{{ otropago.CompensacionSaldosAFavor.Año }}" 
+                        RemanenteSalFav="{{ otropago.CompensacionSaldosAFavor.RemanenteSalFav }}"
+                        />
+                {% endif %}
+                </nomina12:OtroPago>
+            {% endfor %}
+        </nomina12:OtrosPagos>
+    {% endif %}
+
+    {% if complemento.Incapacidades %}
+        <nomina12:Incapacidades>
+        {% for incapacidad in complemento.Incapacidades.incapacidades %}
+            <nomina12:Incapacidad 
+                DiasIncapacidad="{{ incapacidad.DiasIncapacidad }}" 
+                TipoIncapacidad="{{ incapacidad.TipoIncapacidad }}" 
+                ImporteMonetario="{{ incapacidad.ImporteMonetario }}" 
+            />
+        {% endfor %}
+        </nomina12:Incapacidades>
+    {% endif %}
+</nomina12:Nomina>
