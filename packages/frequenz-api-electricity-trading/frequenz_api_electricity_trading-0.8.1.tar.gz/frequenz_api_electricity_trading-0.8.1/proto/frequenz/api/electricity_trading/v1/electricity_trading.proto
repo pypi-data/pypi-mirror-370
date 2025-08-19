@@ -1,0 +1,887 @@
+// Frequenz Electricity Trading API
+//
+// Specification for Electricity Trading API.
+//
+// Copyright:
+// Copyright 2023 Frequenz Energy-as-a-Service GmbH
+//
+// License:
+// MIT
+
+syntax = "proto3";
+
+package frequenz.api.electricity_trading.electricity_trading.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+import "frequenz/api/common/v1/grid/delivery_area.proto";
+import "frequenz/api/common/v1/grid/delivery_duration.proto";
+import "frequenz/api/common/v1/market/power.proto";
+import "frequenz/api/common/v1/market/price.proto";
+import "frequenz/api/common/v1/pagination/pagination_info.proto";
+import "frequenz/api/common/v1/pagination/pagination_params.proto";
+
+// Service providing operations related to order management.
+service ElectricityTradingService {
+  // Creates a new order for a given Gridpool.
+  rpc CreateGridpoolOrder(CreateGridpoolOrderRequest)
+      returns (CreateGridpoolOrderResponse);
+
+  // Updates an existing order for a given Gridpool.
+  rpc UpdateGridpoolOrder(UpdateGridpoolOrderRequest)
+      returns (UpdateGridpoolOrderResponse);
+
+  // Cancels an existing order for a given Gridpool.
+  rpc CancelGridpoolOrder(CancelGridpoolOrderRequest)
+      returns (CancelGridpoolOrderResponse);
+
+  // Cancels all open orders for a given Gridpool.
+  rpc CancelAllGridpoolOrders(CancelAllGridpoolOrdersRequest)
+      returns (CancelAllGridpoolOrdersResponse);
+
+  // Fetches the details of a specific order for a given Gridpool.
+  rpc GetGridpoolOrder(GetGridpoolOrderRequest)
+      returns (GetGridpoolOrderResponse);
+
+  // Lists all the orders for a given Gridpool.
+  rpc ListGridpoolOrders(ListGridpoolOrdersRequest)
+      returns (ListGridpoolOrdersResponse);
+
+  // Stream order updates for a given Gridpool.
+  rpc ReceiveGridpoolOrdersStream(ReceiveGridpoolOrdersStreamRequest)
+      returns (stream ReceiveGridpoolOrdersStreamResponse);
+
+  // Lists all trades for a given Gridpool.
+  rpc ListGridpoolTrades(ListGridpoolTradesRequest)
+      returns (ListGridpoolTradesResponse);
+
+  // Stream trades for a given Gridpool.
+  rpc ReceiveGridpoolTradesStream(ReceiveGridpoolTradesStreamRequest)
+      returns (stream ReceiveGridpoolTradesStreamResponse);
+
+  // This stream provides both historical and real-time public trade data.
+  //
+  // - If `start_time` is set, it retrieves trades from that timestamp onwards.
+  //   If omitted, it streams only new trades from the time the connection is
+  //   established.
+  // - If `end_time` is set, the stream stops after sending trades up to this
+  //   timestamp.
+  //   If omitted, it remains open and continues streaming new trades.
+  rpc ReceivePublicTradesStream(ReceivePublicTradesStreamRequest)
+      returns (stream ReceivePublicTradesStreamResponse);
+
+  // Stream public order book information.
+  rpc ReceivePublicOrderBookStream(ReceivePublicOrderBookStreamRequest)
+      returns (stream ReceivePublicOrderBookStreamResponse);
+}
+
+// OrderExecutionOption defines specific restriction behavior for the execution
+// of an order. These options provide control on how an order is handled in the
+// market.
+// If no OrderExecutionOption is set, the order remains open until it's fully
+// fulfilled, cancelled by the client, `valid_until` timestamp is reached, or
+// the end of the trading session.
+enum OrderExecutionOption {
+  // UNSPECIFIED: The order execution option has not been set.
+  ORDER_EXECUTION_OPTION_UNSPECIFIED = 0;
+
+  // All or None: Order must be executed in its entirety, or not executed at
+  // all.
+  ORDER_EXECUTION_OPTION_AON = 2;
+
+  // Fill or Kill: Order must be executed immediately in its entirety, or not at
+  // all.
+  ORDER_EXECUTION_OPTION_FOK = 3;
+
+  // Immediate or Cancel: Any portion of an order that cannot be filled
+  // immediately will be cancelled.
+  ORDER_EXECUTION_OPTION_IOC = 4;
+}
+
+// Enum for the order types that can be specified for an order.
+enum OrderType {
+  // UNSPECIFIED: The order type has not been set.
+  ORDER_TYPE_UNSPECIFIED = 0;
+
+  // LIMIT: Order to buy or sell at a specific price or better.
+  // It remains active until it is filled, cancelled, or expired.
+  ORDER_TYPE_LIMIT = 1;
+
+  // STOP_LIMIT: An order that will be executed at a specified price, or better,
+  // after a given stop price has been reached.
+  ORDER_TYPE_STOP_LIMIT = 2;
+
+  // ICEBERG: A large order divided into smaller lots to hide the actual order
+  // quantity. Only the visible part of the order is shown in the order book.
+  ORDER_TYPE_ICEBERG = 3;
+
+  // BLOCK: (Not yet supported) User defined block order, generally a large
+  // quantity order filled all at once.
+  ORDER_TYPE_BLOCK = 4;
+
+  // BALANCE: (Not yet supported) Balance order aims to balance supply and
+  // demand, usually at a specific location or within a system.
+  ORDER_TYPE_BALANCE = 5;
+
+  // PRE: (Not yet supported) On exchange prearranged trade, a trade that has
+  // been privately negotiated and then submitted to the exchange.
+  ORDER_TYPE_PREARRANGED = 6;
+
+  // PRIVATE: (Not yet supported) Private and confidential trade, not visible in
+  // the public order book and has no market impact.
+  ORDER_TYPE_PRIVATE = 7;
+}
+
+// Enum for the side of the market that the order is on.
+enum MarketSide {
+  // UNSPECIFIED: The side of the market has not been set.
+  MARKET_SIDE_UNSPECIFIED = 0;
+
+  // BUY: Order to purchase electricity. This is referred to as a 'bid' in the
+  // order book.
+  MARKET_SIDE_BUY = 1;
+
+  // SELL: Order to sell electricity. This is referred to as an 'ask' or 'offer'
+  // in the order book.
+  MARKET_SIDE_SELL = 2;
+}
+
+// Enum for the state of an order.
+enum OrderState {
+  // UNSPECIFIED: The order state is not known. This is usually the default
+  // state of a newly created order object before any operations have been
+  // applied. The order may be unfilled or partially filled.
+  ORDER_STATE_UNSPECIFIED = 0;
+
+  // PENDING: The order has been sent to the marketplace but has not yet been
+  // confirmed. This can be due to awaiting validation or system processing.
+  ORDER_STATE_PENDING = 1;
+
+  // ACTIVE: The order has been confirmed and is open in the market.
+  // It may be unfilled or partially filled.
+  ORDER_STATE_ACTIVE = 2;
+
+  // FILLED: The order has been completely filled and there are no remaining
+  // quantities on the order.
+  ORDER_STATE_FILLED = 3;
+
+  // CANCELED: The order has been cancelled. This can occur due to a
+  // cancellation request by the market participant, system, or market operator.
+  // The order may be unfilled or partially filled.
+  ORDER_STATE_CANCELED = 4;
+
+  // EXPIRED: The order has not been filled within the defined duration and has
+  // expired. It may be unfilled or partially filled.
+  ORDER_STATE_EXPIRED = 5;
+
+  // FAILED: The order submission failed and was unable to be placed on the
+  // order book, usually due to a validation error or system issue.
+  ORDER_STATE_FAILED = 6;
+
+  // HIBERNATE: The order has been entered into the system but is not currently
+  // exposed to the market. This could be due to certain conditions not yet
+  // being met. The order may be unfilled or partially filled.
+  ORDER_STATE_HIBERNATE = 7;
+
+}
+
+// Enum for the state of a trade.
+enum TradeState {
+  // UNSPECIFIED: The state is not known.
+  TRADE_STATE_UNSPECIFIED = 0;
+
+  // ACTIVE: The trade has been executed in the market.
+  TRADE_STATE_ACTIVE = 1;
+
+  // CANCEL_REQUESTED: A cancellation request for the trade has been submitted.
+  TRADE_STATE_CANCEL_REQUESTED = 2;
+
+  // CANCEL_REJECTED: The trade cancellation request was rejected.
+  TRADE_STATE_CANCEL_REJECTED = 3;
+
+  // CANCELED: The trade has been cancelled. This can occur due to a
+  // cancellation request by the market participant, system, or market operator.
+  TRADE_STATE_CANCELED = 4;
+
+  // RECALL: The trade has been recalled. This could be due to a system issue or
+  // a request from the market participant or market operator.
+  TRADE_STATE_RECALLED = 5;
+
+  // RECALL_REQUESTED: A recall request for the trade has been submitted.
+  TRADE_STATE_RECALL_REQUESTED = 6;
+
+  // RECALL_REJECTED: The trade recall request was rejected.
+  TRADE_STATE_RECALL_REJECTED = 7;
+
+  // APPROVAL: An approval has been requested.
+  TRADE_STATE_APPROVAL_REQUESTED = 8;
+}
+
+// Represents an order in the electricity market.
+message Order {
+  // The delivery area where the contract is to be delivered. The representation
+  // of the delivery area may vary by jurisdiction.
+  frequenz.api.common.v1.grid.DeliveryArea delivery_area = 2;
+
+  // The delivery period for the contract, specified as a start timestamp in UTC
+  // and a duration. It represents the period during which the contract is
+  // expected to be fulfilled.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 3;
+
+  // The type of order, such as LIMIT, STOP_LIMIT, ICEBERG etc.
+  // This determines how the order is to be executed in the market.
+  OrderType type = 4;
+
+  // Indicates if the order is on the Buy or Sell side of the market.
+  MarketSide side = 5;
+
+  // The limit price at which the contract is to be traded. This is the maximum
+  // price for a BUY order or the minimum price for a SELL order.
+  frequenz.api.common.v1.market.Price price = 6;
+
+  // The quantity of the contract being traded, specified in MW.
+  frequenz.api.common.v1.market.Power quantity = 7;
+
+  // Optional; Applicable for STOP_LIMIT orders. This is the stop price
+  // that triggers the limit order.
+  frequenz.api.common.v1.market.Price stop_price = 8;
+
+  // Optional; Applicable for ICEBERG orders.
+  // This is the price difference between the peak price and the limit price.
+  frequenz.api.common.v1.market.Price peak_price_delta = 9;
+
+  // Optional; Applicable for ICEBERG orders. This is the quantity
+  // of the order to be displayed in the order book.
+  frequenz.api.common.v1.market.Power display_quantity = 10;
+
+  // Optional execution options such as All or None, Fill or Kill, etc.
+  optional OrderExecutionOption execution_option = 11;
+
+  // Optional; Do not use if ExecutionOption is set to FOK or IOC.
+  // This is an optional UTC timestamp defining the time after which
+  // the order should be cancelled if not filled.
+  google.protobuf.Timestamp valid_until = 12;
+
+  // Optional user-defined payload individual to a specific order. This can be
+  // any data that needs to be associated with the order.
+  //
+  // The field can store e.g. JSON objects containing details involved in the
+  // order. This feature can simplify application development by eliminating the
+  // need for complicated state management to remember the specifics of each
+  // order.
+  //
+  // By embedding this "state" within the order itself, you can include
+  // specifics like which microgrids consume or provide how much power. This
+  // makes it easier to manage complex orders and can simplify the logic
+  // required in applications.
+  //
+  // Example JSON payload:
+  // {
+  //   "microgrids": [
+  //     {
+  //       "microgrid_id": "1",
+  //       "mw": 1.0
+  //     },
+  //     {
+  //       "microgrid_id": "2",
+  //       "mw": 0.5
+  //     }
+  //   ]
+  // }
+  //
+  // In this example, if the order is exectuted, these microgrids might consume
+  // the electricity mentioned in the example JSON payload.
+  google.protobuf.Struct payload = 13;
+
+  // Optional user-defined tag to group related orders.
+  optional string tag = 14;
+}
+
+// Represents an order with full details, including its ID, state and associated
+// UTC timestamps.
+message OrderDetail {
+  // Inner message providing details about the current state of the order.
+  message StateDetail {
+    // Enum describing the action that led to the state change.
+    enum StateReason {
+      STATE_REASON_UNSPECIFIED = 0;
+      STATE_REASON_ADD = 1;               // The order was added.
+      STATE_REASON_MODIFY = 2;            // The order was modified.
+      STATE_REASON_DELETE = 3;            // The order was deleted.
+      STATE_REASON_DEACTIVATE = 4;        // The order was deactivated.
+      STATE_REASON_REJECT = 5;            // The order was rejected.
+      STATE_REASON_FULL_EXECUTION = 6;    // The order was fully executed.
+      STATE_REASON_PARTIAL_EXECUTION = 7; // The order was partially executed.
+      STATE_REASON_ICEBERG_SLICE_ADD = 8; // An iceberg slice was added.
+      STATE_REASON_VALIDATION_FAIL = 9;   // The order failed validation.
+      STATE_REASON_UNKNOWN_STATE = 10;    // The state of the order is unknown.
+      STATE_REASON_QUOTE_ADD = 11;        // A quote was added.
+      STATE_REASON_QUOTE_FULL_EXECUTION = 12; // A quote was fully executed.
+      STATE_REASON_QUOTE_PARTIAL_EXECUTION =
+          13; // A quote was partially executed.
+    }
+
+    // Enum describing the actor responsible for an order state change.
+    enum MarketActor {
+      MARKET_ACTOR_UNSPECIFIED = 0;
+      MARKET_ACTOR_USER = 1;            // The user was the actor.
+      MARKET_ACTOR_MARKET_OPERATOR = 2; // The market operator was the actor.
+      MARKET_ACTOR_SYSTEM = 3;          // The system was the actor.
+    }
+
+    // Current state of the order.
+    OrderState state = 1;
+
+    // Reason for the current state.
+    StateReason state_reason = 2;
+
+    // Actor responsible for the current state.
+    MarketActor market_actor = 3;
+  }
+
+  // Unique identifier of the order.
+  uint64 order_id = 1;
+
+  // The details of the order.
+  Order order = 2;
+
+  // Details of the order's current state.
+  StateDetail state_detail = 3;
+
+  // Remaining open quantity for this order.
+  frequenz.api.common.v1.market.Power open_quantity = 4;
+
+  // Filled quantity for this order.
+  frequenz.api.common.v1.market.Power filled_quantity = 5;
+
+  // UTC Timestamp when the order was created.
+  google.protobuf.Timestamp create_time = 6;
+
+  // UTC Timestamp of the last update to the order.
+  google.protobuf.Timestamp modification_time = 7;
+}
+
+// Represents a private trade in the electricity market.
+//
+// !!! note
+//    This represents either the buy or sell side of a trade which is
+//    different to public trade information which always represents both
+//    sides of a market.
+message Trade {
+  // ID of the trade.
+  uint64 id = 1;
+
+  // ID of the order.
+  uint64 order_id = 2;
+
+  // Indicates if the trades order was on the Buy or Sell side of the market.
+  MarketSide side = 3;
+
+  // Delivery area of the trade.
+  frequenz.api.common.v1.grid.DeliveryArea delivery_area = 4;
+
+  // The delivery period for the contract.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 5;
+
+  // UTC Timestamp of the trades execution time.
+  google.protobuf.Timestamp execution_time = 6;
+
+  // The price at which the trade was executed.
+  frequenz.api.common.v1.market.Price price = 7;
+
+  // The executed quantity of the trade.
+  frequenz.api.common.v1.market.Power quantity = 8;
+
+  // Current state of the trade.
+  TradeState state = 9;
+}
+
+// Represents a public trade in the market.
+//
+// Each `trade` within this response message represents two orders that were
+// previously active in the public order book and matched, along with its key
+// attributes and final state.
+//
+// !!! note
+//      A `trade` refers to the event where a buy order and a sell order are
+//      matched and executed, representing the final state of those orders.
+//      While "executed" or "filled" orders pertain to the completion of
+//      individual buy or sell orders, a "trade" signifies the actual
+//      transaction where both types of orders (buy and sell) are successfully
+//      matched and carried out. This distinction is crucial, as a trade is the
+//      broader occurrence resulting from the execution of both sides of the
+//      transaction, although post-trade processes like settlement may still
+//      follow. The term 'trade' is sometimes used interchangeably with
+//      'executed order' in trading platforms, but it technically encompasses
+//      the completion of both a buy and a sell order.
+message PublicTrade {
+  // ID of the trade from the public order book.
+  uint64 id = 1;
+
+  // Delivery area code of the buy side.
+  frequenz.api.common.v1.grid.DeliveryArea buy_delivery_area = 2;
+
+  // Delivery area code of the sell side.
+  frequenz.api.common.v1.grid.DeliveryArea sell_delivery_area = 3;
+
+  // The delivery period for the contract.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 4;
+
+  // UTC Timestamp of the trades execution time.
+  google.protobuf.Timestamp execution_time = 5;
+
+  // The price at which the trade was executed.
+  frequenz.api.common.v1.market.Price price = 6;
+
+  // The executed quantity of the contract traded.
+  frequenz.api.common.v1.market.Power quantity = 7;
+
+  // Final state of the trade.
+  TradeState state = 8;
+}
+
+// Parameters for filtering Gridpool orders.
+//
+// !!! note
+//     Multiple filters can be used in combination to narrow down the returned
+//     results. For example, you can apply both state and side filters
+//     simultaneously to list only the open orders on the buy side of the
+//     market.
+message GridpoolOrderFilter {
+  // Optional filter for order state.
+  repeated OrderState states = 1;
+
+  // Optional filter for order side.
+  optional MarketSide side = 2;
+
+  // Optional filter for delivery period.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 3;
+
+  // Optional filter for delivery area.
+  frequenz.api.common.v1.grid.DeliveryArea delivery_area = 4;
+
+  // Optional filters the listed orders by their associated tag.
+  optional string tag = 5;
+
+  // Optional filter for the given order IDs.
+  repeated uint64 order_ids = 6;
+}
+
+// Parameters for filtering Gridpool trades.
+//
+// !!! note
+//     Multiple filters can be used in combination to narrow down the returned
+//     results. For example, you can apply both state and side filters
+//     simultaneously to list only the trades on the buy side of the
+//     market.
+message GridpoolTradeFilter {
+  // Optional filter for the trade state.
+  repeated TradeState states = 1;
+
+  // Optional filter for the given trade id´s.
+  repeated uint64 trade_ids = 2;
+
+  // Optional filter for the trades order side.
+  optional MarketSide side = 3;
+
+  // Optional filter for delivery period.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 4;
+
+  // Optional filter for delivery area.
+  frequenz.api.common.v1.grid.DeliveryArea delivery_area = 5;
+}
+
+// Parameters for filtering historic public trades.
+//
+// !!! note
+//     In some countries or regions the buy and sell delivery area can be
+//     different. This is usually referred to as cross bid.
+//
+// !!! note
+//     Multiple filters can be used in combination to narrow down the returned
+//     results. For example, you can apply both state and delivery area filters
+//     simultaneously to list only the trades that occurred at a certain time in
+//     a specific delivery area.
+message PublicTradeFilter {
+  // If set, only trades in this state are returned.
+  repeated TradeState states = 1;
+
+  // Optional; If set, only trades with this delivery period are returned.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 2;
+
+  // Optional; If set, only trades in this buy delivery area are returned.
+  frequenz.api.common.v1.grid.DeliveryArea buy_delivery_area = 3;
+
+  // Optional; If set, only trades in this sell delivery area are returned.
+  frequenz.api.common.v1.grid.DeliveryArea sell_delivery_area = 4;
+}
+
+// Represents a request to create a new order for a specific Gridpool.
+//
+// A Gridpool is a collection of microgrids that can span multiple delivery
+// areas. It's important to note that when submitting an order for a Gridpool,
+// you must group microgrids by their respective delivery areas. This means you
+// should submit separate orders for each delivery area within the Gridpool.
+// Failing to do so could lead to inaccuracies in the bidding process and may
+// not fully represent the capabilities or constraints of the microgrids in
+// different delivery areas. However, in most countries only one delivery area
+// exists, exceptions are countries like e.g. Australia, Germany and the US.
+//
+// !!! caution
+//      If a Gridpool contains microgrids in both Delivery Area A and Delivery
+//      Area B, you should submit one order for Delivery Area A and another for
+//      Delivery Area B, specifying the details for each.
+//
+message CreateGridpoolOrderRequest {
+  // Unique identifier for the Gridpool to which the bid belongs.
+  uint64 gridpool_id = 1;
+
+  // The details of the order being placed.
+  Order order = 2;
+}
+
+// Represents the server's response after a new order has been successfully
+// created for a specific Gridpool.
+//
+// This response provides essential details about the newly created order, such
+// as the unique order ID and the state of the order. By receiving this
+// response, users can be sure that their order has been placed successfully for
+// the designated Gridpool.
+message CreateGridpoolOrderResponse {
+  // ID of the gridpool the order belongs to.
+  uint64 gridpool_id = 1;
+
+  // Details of the newly created order.
+  OrderDetail order_detail = 2;
+}
+
+// Request to update an existing order for a given Gridpool.
+message UpdateGridpoolOrderRequest {
+  // Represents the order properties that can be updated after an order has been
+  // placed. At least one of the optional fields must be set for an update to
+  // take place.
+  message UpdateOrder {
+    // Optional; The updated limit price at which the contract is to be traded.
+    // This is the maximum price for a BUY order or the minimum price for a SELL
+    // order.
+    frequenz.api.common.v1.market.Price price = 2;
+
+    // Optional; The updated quantity of the contract being traded,
+    // specified in MW.
+    frequenz.api.common.v1.market.Power quantity = 3;
+
+    // Optional; Applicable for STOP_LIMIT orders. This is the updated
+    // stop price that triggers the limit order.
+    frequenz.api.common.v1.market.Price stop_price = 4;
+
+    // Optional; Applicable for ICEBERG orders. This is the updated price
+    // difference between the peak price and the limit price.
+    frequenz.api.common.v1.market.Price peak_price_delta = 5;
+
+    // Optional; Applicable for ICEBERG orders. This is the updated quantity
+    // of the order to be displayed in the order book.
+    frequenz.api.common.v1.market.Power display_quantity = 6;
+
+    // Optional; Updated execution options such as All or None,
+    // Fill or Kill, etc.
+    //
+    // !!! note "Update with FieldMask"
+    //     – not in `update_mask: leave unchanged,
+    //     – present in payload: set to new value,
+    //     – absent in payload: clear (unrestricted)
+    optional OrderExecutionOption execution_option = 7;
+
+    // Optional; This is an updated timestamp defining the time after
+    // which the order should be cancelled if not filled.
+    // The timestamp is in UTC.
+    google.protobuf.Timestamp valid_until = 8;
+
+    // Optional; Updated user-defined payload individual to a specific order.
+    // This can be any data that the user wants to associate with the order.
+    google.protobuf.Struct payload = 9;
+
+    // Optional; Updated user-defined tag to group related orders.
+    optional string tag = 10;
+  }
+
+  // ID of the Gridpool the order belongs to.
+  uint64 gridpool_id = 1;
+
+  // The order identifier
+  uint64 order_id = 2;
+
+  // Field mask specifying which fields should be updated
+  google.protobuf.FieldMask update_mask = 3;
+
+  // The fields that can be updated
+  UpdateOrder update_order_fields = 4;
+}
+
+// Response from updating an existing order for a given Gridpool.
+message UpdateGridpoolOrderResponse {
+  // ID of the Gridpool the order belongs to.
+  uint64 gridpool_id = 1;
+
+  // Details of the updated order.
+  OrderDetail order_detail = 2;
+}
+
+// Request to cancel an existing order for a given Gridpool.
+message CancelGridpoolOrderRequest {
+  // ID of the gridpool the order belongs to.
+  uint64 gridpool_id = 1;
+
+  // ID of the order to be cancelled.
+  uint64 order_id = 2;
+}
+
+// Response from canceling an existing order for a given Gridpool.
+message CancelGridpoolOrderResponse {
+  // ID of the gridpool the order belongs to.
+  uint64 gridpool_id = 1;
+
+  // Details of the cancelled order.
+  OrderDetail order_detail = 2;
+}
+
+// Request to cancel all currently open orders for a given Gridpool.
+message CancelAllGridpoolOrdersRequest {
+  // ID of the gridpool containing the orders to be cancelled.
+  uint64 gridpool_id = 1;
+}
+
+// Response to canceling all currently open orders for a given Gridpool.
+message CancelAllGridpoolOrdersResponse {
+  // ID of the gridpool to cancel the orders for.
+  uint64 gridpool_id = 1;
+}
+
+// Request to retrieve a single order for a given Gridpool.
+message GetGridpoolOrderRequest {
+  // ID of the gridpool containing the order to be retrieved.
+  uint64 gridpool_id = 1;
+
+  // ID of the order to be retrieved.
+  uint64 order_id = 2;
+}
+
+// Response from requesting order details for a specific order.
+message GetGridpoolOrderResponse {
+  // ID of the gridpool containing the retrieved order.
+  uint64 gridpool_id = 1;
+
+  // Details of the retrieved order.
+  OrderDetail order_detail = 2;
+}
+
+// Request to retrieve a list of orders for a specific Gridpool.
+message ListGridpoolOrdersRequest {
+  // The Gridpool to retrieve the orders for.
+  uint64 gridpool_id = 1;
+
+  // Optional Gridpool orders filter.
+  GridpoolOrderFilter filter = 2;
+
+  // Pagination parameters.
+  frequenz.api.common.v1.pagination.PaginationParams pagination_params = 3;
+}
+
+// Response from listing orders for a given Gridpool.
+message ListGridpoolOrdersResponse {
+  // List of all listed orders with their details.
+  repeated OrderDetail order_details = 1;
+
+  // Metadata for pagination, including token for next page to retrieve.
+  frequenz.api.common.v1.pagination.PaginationInfo pagination_info = 2;
+}
+
+// Subscribe to Gridpool order stream.
+// This method provides real-time updates on Gridpool orders, making it useful
+// for dynamic analytics and real-time decision-making.
+message ReceiveGridpoolOrdersStreamRequest {
+  // The gridpool to retrieve the orders for.
+  uint64 gridpool_id = 1;
+
+  // Optional public orders filter.
+  //
+  // !!! Important Note Regarding "DeliveryPeriod Filter"
+  //     Ensure that the specified DeliveryPeriod is set for a future timeframe.
+  //     If a past or present period is selected, the stream will automatically
+  //     close and return no entries.
+  GridpoolOrderFilter filter = 2;
+}
+
+// Response to a subscription request for a stream of Gridpool orders.
+// Real-time information on gridpool orders is pushed through this response.
+message ReceiveGridpoolOrdersStreamResponse {
+  // Order detail response.
+  OrderDetail order_detail = 1;
+}
+
+// Request to retrieve a list of trades for a specific Gridpool.
+message ListGridpoolTradesRequest {
+  // The Gridpool to retrieve the trades for.
+  uint64 gridpool_id = 1;
+
+  // Optional Gridpool trades filter.
+  GridpoolTradeFilter filter = 2;
+
+  // Pagination parameters.
+  frequenz.api.common.v1.pagination.PaginationParams pagination_params = 3;
+}
+
+// Response from listing trades for a given Gridpool.
+message ListGridpoolTradesResponse {
+  // List of all listed trades with their details.
+  repeated Trade trades = 1;
+
+  // Metadata for pagination, including token for next page to retrieve.
+  frequenz.api.common.v1.pagination.PaginationInfo pagination_info = 2;
+}
+
+// Subscribe to the stream of gridpool trades.
+// This method provides real-time updates on newly executed gridpool trades,
+// making it useful dynamic analytics and real-time decision-making.
+message ReceiveGridpoolTradesStreamRequest {
+  // The Gridpool to retrieve the trades for.
+  uint64 gridpool_id = 1;
+
+  // Optional filter to specify which trades should be included in the stream.
+  GridpoolTradeFilter filter = 2;
+}
+
+// Response to a subscription request for a stream of Gridpool trades.
+// Real-time information on trades is pushed through this response.
+message ReceiveGridpoolTradesStreamResponse {
+  // The trade that has been executed and is being broadcasted in
+  // real-time.
+  Trade trade = 1;
+}
+
+
+// Subscribe to the stream of public trades.
+// This method provides real-time updates on newly executed public trades,
+// making it useful dynamic analytics and real-time decision-making.
+message ReceivePublicTradesStreamRequest {
+  // Optional filter to specify which trades should be included in the stream.
+  PublicTradeFilter filter = 1;
+
+  // Optional; if set, retrieves trades executed at or after this timestamp.
+  // If omitted, streams only new trades from the time of connection.
+  google.protobuf.Timestamp start_time = 2;
+
+  // Optional; if set, the stream stops after sending trades up to this
+  // timestamp.
+  // If omitted, the stream continues to stream new trades as they occur.
+  google.protobuf.Timestamp end_time = 3;
+}
+
+// Response to a subscription request for a stream of public trades.
+// Real-time information on public trades is pushed through this response.
+message ReceivePublicTradesStreamResponse {
+  // The public trade that has been executed and is being broadcasted in
+  // real-time.
+  PublicTrade public_trade = 1;
+}
+
+// PublicOrderBookRecord represents a snapshot of an order book entry at
+// a specific point in time.
+//
+// Each record captures the state of an individual order when it is first
+// entered and subsequently updated.
+//
+// !!! note
+//     An order may generate multiple records over time, each corresponding to a
+// different update event on the order book.
+message PublicOrderBookRecord {
+  // The order book identifier.
+  uint64 id = 1;
+
+  // Frequenz Delivery area, using the common API type.
+  frequenz.api.common.v1.grid.DeliveryArea delivery_area = 2;
+
+  // Frequenz Delivery period, using the common API type.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 3;
+
+  // Optional: The type of order (e.g., LIMIT, STOP_LIMIT, ICEBERG).
+  //
+  // If not set, the order type is unknown (for example, if the source market
+  // does not expose the order type).
+  optional OrderType type = 4;
+
+  // Indicates if the order was on the Buy or Sell side.
+  MarketSide side = 5;
+
+  // Order price, using the common API definition for price.
+  frequenz.api.common.v1.market.Price price = 6;
+
+  // Open order quantity, using the common API definition for power.
+  frequenz.api.common.v1.market.Power quantity = 7;
+
+  // Execution option (e.g., AON).
+  optional OrderExecutionOption execution_option = 8;
+
+  // Timestamp when the order was created on the order book.
+  google.protobuf.Timestamp create_time = 9;
+
+  // Timestamp when this particular update event occurred.
+  // Each update to an order will have its own update_time reflecting
+  // the moment that specific change occurred.
+  google.protobuf.Timestamp update_time = 10;
+}
+
+// Parameters for filtering order book stream results.
+//
+// !!! note
+//     Multiple filters can be used in combination to narrow down the returned
+//     order book entries. For example, you can apply both delivery period and
+//     delivery area filters simultaneously to list only the order book entries
+//     for a specific time period in a given delivery area.
+message PublicOrderBookFilter {
+  // Optional; if set, only order book entries for this delivery period are
+  // returned.
+  frequenz.api.common.v1.grid.DeliveryPeriod delivery_period = 1;
+
+  // Optional; if set, only order book entries for this delivery area are
+  // returned.
+  frequenz.api.common.v1.grid.DeliveryArea delivery_area = 2;
+
+  // Optional; if set, only order book entries for this delivery period are
+  // returned.
+  optional MarketSide side = 3;
+}
+
+// Request to subscribe to the public order book stream.
+//
+// This RPC provides real-time updates on public order book entries for use in
+// live trading and backtesting. When a client application initially connects,
+// it may specify a start_time to retrieve historical order book updates.
+// For example, setting start_time to "now - X hours" causes the server to
+// replay all stored order book updates from that time onward. If start_time is
+// omitted, only new order book updates from the moment of connection will be
+// streamed. If an end_time is provided, it must be set to a timestamp in the
+// past. This ensures that the historical data window is complete, and no future
+// (incomplete) data is expected.
+message ReceivePublicOrderBookStreamRequest {
+  // Optional filter to narrow down the public order book entries returned.
+  PublicOrderBookFilter filter = 1;
+
+  // Optional; if set, retrieves order book updates executed at or after this
+  // timestamp. For example, setting this to "now - X hours" allows a client to
+  // receive historical updates covering the last X hours. If omitted, only new
+  // order book updates from the time of connection are streamed.
+  google.protobuf.Timestamp start_time = 2;
+
+  // Optional; if set, stops streaming order book updates after this timestamp.
+  // !!! note
+  //     end_time must be in the past.
+  google.protobuf.Timestamp end_time = 3;
+}
+
+// Response message for the public order book stream, returning multiple order
+// book records.
+message ReceivePublicOrderBookStreamResponse {
+  repeated PublicOrderBookRecord public_order_book_records = 1;
+}
