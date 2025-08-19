@@ -1,0 +1,501 @@
+{% include 'header.html' %}
+
+{% if error %}
+    <div class="error">{{ _(error) }}</div>
+{% endif %}
+{% if request.args.get('error') %}
+    <div class="error">{{ _(request.args.get('error')) }}</div>
+{% endif %}
+{% if message %}
+    <div class="message">{{ _(message) }}</div>
+{% endif %}
+
+<div class="breadcrumb" style="margin-bottom: 2rem;">
+    <a href="/dashboard" class="action">Dashboard</a> > {{ blog.title }}
+</div>
+
+<h1 class="centered" style="margin-bottom: 3rem;">
+    {% if g.mode == "multi" %}
+        {{ _('edit') }} blog: {{ blog.name }}
+    {% else %}
+        {{ _('edit') }} blog
+    {% endif %}
+</h1>
+
+<div class="edit-container">
+
+    <div class="settings-section" style="background: #2a2140; padding: 2rem; border-radius: 12px; margin-bottom: 3rem;">
+        <h2 style="margin-bottom: 2rem; color: #e9d4ce; font-family: 'Merriweather'; font-size: 24px;">{{ _('blog-settings') }}</h2>
+        
+        <form method="post" action="/dashboard/edit/{{ blog.name }}">
+            <div class="settings-grid" style="display: grid; grid-template-columns: 1fr auto; gap: 2rem; align-items: start;">
+                <div class="form-fields" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    
+                    <div class="field-group">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #e9d4ce;">{{ _('title') }}:</label>
+                        <input type="text" name="title" value="{{ blog.title }}" style="width: 100%; max-width: 400px;">
+                    </div>
+                    
+                    <div class="field-group">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #e9d4ce;">URL:</label>
+                        <div style="padding: 0.5rem; background: #1a1329; border-radius: 6px; color: #a0a0a0;">
+                            {% if g.mode == "multi" %}
+                                <a href="{% if blog.access == "path" %}https://{{ g.main_domain }}/b/{{ blog.name }}{% else %}https://{{ blog.name }}.{{ g.main_domain }}/{% endif %}" 
+                                   target="_blank" 
+                                   class="link">
+                                    {% if blog.access == "path" %}
+                                        https://{{ g.main_domain }}/b/{{ blog.name }}
+                                    {% else %}
+                                        https://{{ blog.name }}.{{ g.main_domain }}/
+                                    {% endif %}
+                                </a>
+                            {% else %}
+                                <a href="http://{{ g.main_domain }}" target="_blank" class="link">{{ g.main_domain }}</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="field-group" style="display: flex; gap: 2rem; align-items: center;">
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #e9d4ce;">{{ _('icon') }}:</label>
+                            <input name="icon" 
+                                   maxlength="1" 
+                                   data-native-emoji="true" 
+                                   value="{{ blog.favicon }}" 
+                                   type="text" 
+                                   style="width: 60px; height: 60px; font-size: 23px; text-align: center;" 
+                                   disabled="disabled">
+                        </div>
+                        
+                        <div style="flex: 1;">
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #e9d4ce;">{{ _('select_theme') }}:</label>
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <select name="theme" style="min-width: 14rem; min-height: 2.5rem; padding: 0.5rem; color: #fff; background: #211932; border: 1px solid #444; border-radius: 6px;">
+                                    {% for t in themes %}
+                                        <option value="{{ t }}" {% if blog.theme == t %}selected{% endif %}>{{ t }}</option>
+                                    {% endfor %}              
+                                </select>
+                                <a href="https://main.openwrite.io/available-themes" 
+                                   target="_blank" 
+                                   class="action" 
+                                   style="font-size: 14px;">
+                                    {{ _('see_themes') }}
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="advanced-options" style="margin-top: 2rem;">
+                        <h3 style="margin-bottom: 1rem; color: #d0c4e0; font-size: 18px;">{{ _('advanced-options') }}</h3>
+                        
+                        <div class="option-group" style="margin-bottom: 1.5rem; padding: 1rem; background: #1a1329; border-radius: 8px;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="customCssToggle" {% if blog.css %}checked{% endif %}> 
+                                <span style="font-weight: bold; color: #e9d4ce;">{{ _('custom_css') }}</span>
+                            </label>
+                            <div id="customCssSection" style="{% if not blog.css %}display: none;{% else %}display: block; margin-top: 1rem;{% endif %}">
+                                <i style="display: block; margin-bottom: 1rem; color: #f39c12; font-size: 14px;">{{ _('css_unsafe_info') }}</i>
+                                <textarea name="css" class="post_content" style="min-height: 120px; width: 100%; font-family: monospace; font-size: 14px;">{{ blog.css }}</textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="option-group" style="padding: 1rem; background: #1a1329; border-radius: 8px;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" name="customDescriptionToggle" id="customDescriptionToggle" {% if blog.fedi_description %}checked{% endif %}> 
+                                <span style="font-weight: bold; color: #e9d4ce;">{{ _('fedi-description') }}</span>
+                            </label>
+                            <div id="customFediDescriptionSection" style="{% if not blog.fedi_description %}display: none;{% else %}display: block; margin-top: 1rem;{% endif %}">
+                                <i style="display: block; margin-bottom: 1rem; color: #3498db; font-size: 14px;">{{ _('fedi-description-info') }}</i>
+                                <textarea name="fedi_description" class="post_content" style="min-height: 100px; width: 100%;">{{ blog.fedi_description }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="action-buttons" style="display: flex; flex-direction: column; gap: 1rem; min-width: 200px;">
+                    <a href="/dashboard/blog_preview" 
+                       target="_blank" 
+                       class="btn purple" 
+                       id="preview"
+                       style="text-align: center;">
+                        {{ _('preview') }}
+                    </a>
+                    <input type="submit" 
+                           id="submit" 
+                           value="{{ _('save') }}" 
+                           class="btn purple"
+                           style="cursor: pointer;">
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="management-section" style="background: #2a2140; padding: 2rem; border-radius: 12px; margin-bottom: 3rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2 style="color: #e9d4ce; font-family: 'Merriweather'; font-size: 24px; margin: 0;">{{ _('posts') }}</h2>
+            <div class="post-action-buttons" style="display: flex; gap: 1rem;">
+                <a href="/dashboard/post/{{ blog.name }}" class="btn purple">{{ _('new_post') }}</a>
+                <a href="/dashboard/export/{{ blog.name }}" class="btn purple">{{ _('export-posts') }}</a>
+            </div>
+        </div>
+        
+        <div style="overflow-x: auto; border-radius: 8px; border: 1px solid #444;">
+            <table class="table" style="width: 100%; border-collapse: collapse; background: #1a1329;">
+                <thead>
+                    <tr style="background: #2c2244;">
+                        <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('date') }}</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('title') }}</th>
+                        <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('draft') }}</th>
+                        <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('views') }}</th>
+                        <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for post in posts %}
+                    <tr style="border-bottom: 1px solid #333; {% if loop.index % 2 == 0 %}background: #2c2244;{% else %}background: #1a1329;{% endif %}">
+                        <td style="padding: 1rem; color: #a0a0a0; font-size: 14px;" class="datetime">{{ post.date }}</td>
+                        <td style="padding: 1rem;">
+                            <a href="{% if blog.access == "path" %}https://{{ g.main_domain }}/b/{{ blog.name }}/{% else %}https://{{ blog.name }}.{{ g.main_domain }}/{% endif %}{{ post.link }}" 
+                               class="action" 
+                               target="_blank"
+                               style="font-weight: 500; display: block;">
+                                {{ post.title }}
+                            </a>
+                        </td>
+                        <td style="padding: 1rem; text-align: center;">
+                            <span style="padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 12px; font-weight: bold; 
+                                         {% if post.isdraft == "1" %}background: #f39c12; color: white;{% else %}background: #27ae60; color: white;{% endif %}">
+                                {% if post.isdraft == "1" %}{{ _('yes') }}{% else %}{{ _('no') }}{% endif %}
+                            </span>
+                        </td>
+                        <td style="padding: 1rem; text-align: center; color: #a0a0a0; font-weight: bold;">{{ post.views }}</td>
+                        <td style="padding: 1rem; text-align: center;">
+                            <div class="action-buttons-table" style="display: flex; gap: 0.5rem; justify-content: center;">
+                                <a class="action" 
+                                   href="/dashboard/edit/{{ blog.name }}/{{ post.link }}"
+                                   style="padding: 0.5rem 1rem; background: #3498db; color: white; border-radius: 4px; text-decoration: none; font-size: 12px;">
+                                    {{ _('edit') }}
+                                </a>
+                                <a class="action" 
+                                   href="/dashboard/edit/{{ blog.name }}/{{ post.link }}/delete" 
+                                   onclick="return confirm('{{ _('are_you_sure_post') }} {{ post.title }}?\n{{ _('this_action_cannot_be_reverted') }}.')"
+                                   style="padding: 0.5rem 1rem; background: #e74c3c; color: white; border-radius: 4px; text-decoration: none; font-size: 12px;">
+                                    {{ _('delete') }}
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="management-section" style="background: #2a2140; padding: 2rem; border-radius: 12px; margin-bottom: 3rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2 style="color: #e9d4ce; font-family: 'Merriweather'; font-size: 24px; margin: 0;">{{ _('pages') }}</h2>
+            <a href="/dashboard/page/{{ blog.name }}" class="btn purple">{{ _('new-page') }}</a>
+        </div>
+        
+        <div style="overflow-x: auto; border-radius: 8px; border: 1px solid #444;">
+            <table class="table" style="width: 100%; border-collapse: collapse; background: #1a1329;">
+                <thead>
+                    <tr style="background: #2c2244;">
+                        <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">URL</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('name') }}</th>
+                        <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('show-in-header') }}</th>
+                        <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #444; color: #e9d4ce; font-weight: bold;">{{ _('actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page in pages %}
+                    <tr style="border-bottom: 1px solid #333; {% if loop.index % 2 == 0 %}background: #2c2244;{% else %}background: #1a1329;{% endif %}">
+                        <td style="padding: 1rem; color: #a0a0a0; font-family: monospace;">/{{ page.url }}</td>
+                        <td style="padding: 1rem;">
+                            <a href="{% if blog.access == "path" %}https://{{ g.main_domain }}/b/{{ blog.name }}/{% else %}https://{{ blog.name }}.{{ g.main_domain }}/{% endif %}{{ page.url }}" 
+                               class="action" 
+                               target="_blank"
+                               style="font-weight: 500;">
+                                {{ page.name }}
+                            </a>
+                        </td>
+                        <td style="padding: 1rem; text-align: center;">
+                            <span style="padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 12px; font-weight: bold; 
+                                         {% if page.show == "1" %}background: #27ae60; color: white;{% else %}background: #e74c3c; color: white;{% endif %}">
+                                {% if page.show == "1" %}{{ _('yes') }}{% else %}{{ _('no') }}{% endif %}
+                            </span>
+                        </td>
+                        <td style="padding: 1rem; text-align: center;">
+                            <div class="action-buttons-table" style="display: flex; gap: 0.5rem; justify-content: center;">
+                                <a class="action" 
+                                   href="/dashboard/page/{{ page.id }}/edit"
+                                   style="padding: 0.5rem 1rem; background: #3498db; color: white; border-radius: 4px; text-decoration: none; font-size: 12px;">
+                                    {{ _('edit') }}
+                                </a>
+                                {% if page.url != "" %}
+                                <a class="action" 
+                                   href="/dashboard/page/{{ page.id }}/delete" 
+                                   onclick="return confirm('{{ _('are-you-sure-page') }} {{ page.name }}?\n{{ _('this_action_cannot_be_reverted') }}.')"
+                                   style="padding: 0.5rem 1rem; background: #e74c3c; color: white; border-radius: 4px; text-decoration: none; font-size: 12px;">
+                                    {{ _('delete') }}
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+        
+        <div style="margin-top: 3rem; padding: 1.5rem; background: #3d1a1a; border: 2px solid #e74c3c; border-radius: 8px;">
+            <h3 style="color: #e74c3c; margin-bottom: 1rem; font-size: 18px;">{{ _('danger-zone') }}</h3>
+            <p style="color: #a0a0a0; margin-bottom: 1rem; font-size: 14px;">{{ _('delete-blog-warning') }}</p>
+            <a href="/dashboard/delete/{{ blog.name }}" 
+               class="btn red" 
+               onclick="return confirm('{{ _('are_you_sure_blog') }} {{ blog.name }}?\n{{ _('this_action_cannot_be_reverted') }}.')"
+               style="background: #e74c3c; border: none;">
+                {{ _('delete_blog') }}
+            </a>
+        </div>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='script/nativeEmoji.js') }}"></script>
+<style>
+    @media only screen and (max-width: 850px) {
+        .settings-grid {
+            grid-template-columns: 1fr !important;
+            gap: 1.5rem !important;
+        }
+        
+        .action-buttons {
+            min-width: unset !important;
+            flex-direction: row !important;
+            justify-content: space-between;
+        }
+        
+        .action-buttons .btn {
+            flex: 1;
+            margin: 0 0.5rem;
+        }
+        
+        .field-group {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+        
+        .field-group > div {
+            margin-bottom: 1rem;
+        }
+        
+        .management-section table {
+            font-size: 14px;
+        }
+        
+        .management-section th,
+        .management-section td {
+            padding: 0.5rem !important;
+        }
+        
+        .action-buttons-table {
+            flex-direction: column !important;
+            gap: 0.25rem !important;
+        }
+        
+        .action-buttons-table .action {
+            font-size: 11px !important;
+            padding: 0.25rem 0.5rem !important;
+        }
+        
+        .post-action-buttons {
+            flex-direction: column !important;
+            gap: 0.5rem !important;
+            align-items: stretch !important;
+        }
+        
+        .post-action-buttons .btn {
+            font-size: 14px !important;
+            padding: 0.75rem 1rem !important;
+            min-width: 120px;
+        }
+        
+        .management-section > div:first-child {
+            flex-direction: column !important;
+            gap: 1rem !important;
+            align-items: stretch !important;
+        }
+        
+        .management-section h2 {
+            text-align: center !important;
+        }
+        
+        .field-group input[type="text"] {
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+        
+        .field-group select {
+            min-width: 100% !important;
+            width: 100% !important;
+        }
+        
+        .post_content {
+            width: 100% !important;
+            font-size: 14px !important;
+        }
+        
+        .field-group > div {
+            width: 100% !important;
+        }
+        
+        .field-group > div > div {
+            flex-direction: column !important;
+            gap: 0.5rem !important;
+            align-items: stretch !important;
+        }
+        
+        .field-group .action {
+            text-align: center !important;
+            padding: 0.5rem !important;
+            background: #3498db !important;
+            color: white !important;
+            border-radius: 4px !important;
+            display: block !important;
+            font-size: 12px !important;
+        }
+        
+        .advanced-options {
+            margin-top: 1rem !important;
+        }
+        
+        .option-group {
+            margin-bottom: 1rem !important;
+        }
+        
+        .settings-section {
+            padding: 1rem !important;
+        }
+        
+        .management-section {
+            padding: 1rem !important;
+        }
+    }
+</style>
+<script nonce="{{ g.nonce }}">
+    document.getElementById('customCssToggle').addEventListener('change', function() {
+        const section = document.getElementById('customCssSection');
+        if (this.checked) {
+            section.style.display = 'block';
+            section.style.marginTop = '1rem';
+        } else {
+            section.style.display = 'none';
+        }
+    });
+
+    document.getElementById('customDescriptionToggle').addEventListener('change', function() {
+        const section = document.getElementById('customFediDescriptionSection');
+        if (this.checked) {
+            section.style.display = 'block';
+            section.style.marginTop = '1rem';
+        } else {
+            section.style.display = 'none';
+        }
+    });
+    
+    (() => {
+        new nativeEmoji();
+    })();
+
+    var converter = new showdown.Converter();
+    converter.setOption('emoji', true);
+    converter.setOption('noHeaderId', true);
+    converter.setOption('openLinksInNewWindow', true);
+    converter.setOption('tables', true);
+    converter.setOption('tasklists', true);
+    converter.setOption('strikethrough', true);
+    converter.setOption('parseImgDimensions', true);
+
+    document.getElementById('submit').addEventListener('click', function(e) {
+        e.preventDefault();
+
+        const form = document.querySelector('form');
+        const title = form.querySelector('input[name="title"]').value;
+        const css = form.querySelector('textarea[name="css"]').value;
+        const theme_sel = form.querySelector('select[name="theme"]');
+        const icon = form.querySelector('input[name="icon"]').value;
+        const fedi_description = form.querySelector('textarea[name="fedi_description"]').value;
+        var theme = theme_sel.options[theme_sel.selectedIndex].value;
+        const customCssToggle = document.getElementById('customCssToggle');
+        const customDescriptionToggle = document.getElementById('customDescriptionToggle');
+        
+        const tempForm = document.createElement('form');
+        tempForm.method = 'POST';
+        tempForm.action = '/dashboard/edit/{{ blog.name }}';
+        
+        const inputs = {
+            title: title,
+            css: css,
+            icon: icon,
+            fedi_description: fedi_description,
+            theme: theme
+        };
+
+        if (!customCssToggle.checked) {
+            inputs.css = '';
+        }
+        
+        if (!customDescriptionToggle.checked) {
+            inputs.fedi_description = '';
+        }
+
+        for (let key in inputs) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = inputs[key];
+            tempForm.appendChild(input);
+        }
+
+        document.body.appendChild(tempForm);
+        tempForm.submit();
+        document.body.removeChild(tempForm);
+    });
+
+    document.getElementById('preview').addEventListener('click', function(e) {
+        e.preventDefault();
+
+        const form = document.querySelector('form');
+        const title = form.querySelector('input[name="title"]').value;
+        const css = form.querySelector('textarea[name="css"]').value;
+        const theme_sel = form.querySelector('select[name="theme"]');
+        const icon = form.querySelector('input[name="icon"]').value;
+        var theme = theme_sel.options[theme_sel.selectedIndex].value;
+
+        const tempForm = document.createElement('form');
+        tempForm.method = 'POST';
+        tempForm.action = '/dashboard/blog_preview';
+        tempForm.target = '_blank';
+        
+        const inputs = {
+            title: title,
+            css: css,
+            icon: icon,
+            theme: theme
+        };
+
+        for (let key in inputs) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = inputs[key];
+            tempForm.appendChild(input);
+        }
+
+        document.body.appendChild(tempForm);
+        tempForm.submit();
+        document.body.removeChild(tempForm);
+    });
+</script>
+
+{% include 'footer.html' %}
