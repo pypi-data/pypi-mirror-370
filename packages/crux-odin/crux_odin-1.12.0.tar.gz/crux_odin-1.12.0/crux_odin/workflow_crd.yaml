@@ -1,0 +1,1934 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: workflows.domain.stable.cruxdata.com
+spec:
+  group: workflow.stable.cruxdata.com
+  names:
+    kind: Workflow
+    listKind: WorkflowList
+    plural: workflows
+    singular: workflow
+  scope: Namespaced
+  preserveUnknownFields: true
+  versions:
+    - name: v1.0.0
+      # v1.0.0 is our current version of YAML without a version ID in it. It is our first version.
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # This is currently in JSON Schema format since we haven't figured out how to validate
+          # using Kubernetes CRD format. There doesn't seem to be a library function we can call.
+          $id: https://cruxdata.com/airflow_yaml.json
+          $schema: https://json-schema.org/draft/2020-12/schema
+          title: AirflowYAML
+          description: Validates the syntax of the YAML and DAG configuration for Airflow.
+          type: object
+          properties:
+            id:
+              $comment: This internal ID must match the file name of the file but there is no way in JSON Schema to detect that
+              description: Internal ID used by Crux.
+              type: string
+              pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+            parent:
+              description: Relative path to the parent file with .yaml on the end
+              $comment: Currently parent paths have to end with .yaml. Don't know if we'll continue doing this.
+              type: string
+              pattern: '^(.*/)*[a-zA-Z_][a-zA-Z0-9_]*\.yaml$'
+            run_uber_step:
+              type: boolean
+            annotations:
+              type: object
+              properties:
+                ENV:
+                  type: string
+                  enum:
+                    - PRODUCTION
+                    - TEST
+                  description: Specifies the environment. Must be either PRODUCTION or TEST.
+              required:
+                - ENV
+              additionalProperties: false
+            global:
+              $ref: "#/$defs/outer_global"
+            pipelines:
+              type: array
+              items:
+                $ref: "#/$defs/pipeline_object"
+              minItems: 1
+          required: [id, pipelines]
+          $defs:
+            outer_global:
+              type: object
+              properties:
+                global:
+                  $ref: "#/$defs/steps_values"
+                extract:
+                  type: object
+                normalize:
+                  type: object
+                process:
+                  type: object
+            steps_values:
+              type: object
+              properties:
+                id: # Only used in the steps values, not global.
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                action_class:
+                  type: string
+                category:
+                  type: string
+                chunk_size:
+                  type: integer
+                conf:
+                  $ref: "#/$defs/steps_conf"
+                connection:
+                  type: object
+                connection_lib:
+                  type: string
+                delimiter:
+                  type: string
+                encoding:
+                  type: string
+                endpoint:
+                  type: string
+                error_bad_lines:
+                  type: boolean
+                escapechar:
+                  type: string
+                extractor_concurrency:
+                  type: integer
+                fetch_method:
+                  type: string
+                file_available_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_available_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_has_header:
+                  type: boolean
+                file_header_row_index:
+                  type: integer
+                file_optional:
+                  type: boolean
+                interim_line_ending:
+                  type: string
+                is_empty_file_ok:
+                  type: boolean
+                latest_only:
+                  type: boolean
+                metadata_fields:
+                  type: object
+                output_file_format:
+                  type: string
+                parquet_page_size:
+                  type: integer
+                parquet_row_group_size:
+                  type: integer
+                process_max_heap:
+                  type: integer
+                provenance_file_patterns:
+                  type: object
+                quotechar:
+                  type: string
+                remote_file_name:
+                  type: [string, array]
+                remote_path:
+                  type: string
+                schema_def:
+                  type: object
+                declared_schema_def:
+                  type: object
+                observed_schema_def:
+                  type: object
+                skip_footer:
+                  type: boolean
+                skip_rows:
+                  type: array
+                strip_trailing_delimiter:
+                  type: boolean
+                supplier_implied_date_regex:
+                  type: [string, array]
+                supplier_implied_date_var:
+                  type: string
+                timedelta:
+                  type: object
+                unzip_patterns:
+                  type: array
+                writer_queue_chunk_size:
+                  type: integer
+            pipeline_object:
+              type: object
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                global:
+                  $ref: "#/$defs/outer_global"
+                steps:
+                  type: array
+                  items:
+                    $ref: "#/$defs/steps_object"
+                  $comment: |-
+                    I want to enforce that there is only one steps property, but it isn't easy.
+                    See this answer: https://stackoverflow.com/a/77216098
+                    Better to enforce this with another validation tool.
+              additionalProperties: false
+              required: [id]
+            steps_object:
+              $ref: "#/$defs/steps_values"
+              required: [id]
+              minProperties: 1
+            steps_conf:
+                type: object
+                properties:
+                    quotechar:
+                      type: string
+                      pattern: '^.+$'
+    - name: v1.1.0
+      # v1.1.0 contains the dag section.
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # This is currently in JSON Schema format since we haven't figured out how to validate
+          # using Kubernetes CRD format. There doesn't seem to be a library function we can call.
+          $id: https://cruxdata.com/airflow_yaml.json
+          $schema: https://json-schema.org/draft/2020-12/schema
+          title: AirflowYAML
+          description: Validates the syntax of the YAML and DAG configuration for Airflow.
+          type: object
+          properties:
+            id:
+              $comment: This internal ID must match the file name of the file but there is no way in JSON Schema to detect that
+              description: Internal ID used by Crux.
+              type: string
+              pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+            parent:
+              description: Relative path to the parent file with .yaml on the end
+              $comment: Currently parent paths have to end with .yaml. Don't know if we'll continue doing this.
+              type: string
+              pattern: '^(.*/)*[a-zA-Z_][a-zA-Z0-9_]*\.yaml$'
+            run_uber_step:
+              type: boolean
+            annotations:
+              type: object
+              properties:
+                ENV:
+                  type: string
+                  enum:
+                    - PRODUCTION
+                    - TEST
+                  description: Specifies the environment. Must be either PRODUCTION or TEST.
+              required:
+                - ENV
+              additionalProperties: false
+            global:
+              $ref: "#/$defs/outer_global"
+            pipelines:
+              type: array
+              items:
+                $ref: "#/$defs/pipeline_object"
+              minItems: 1
+            catalog:
+              description: This contains all metadata related to catalog metadata
+              type: object
+              vendor_declarations:
+                $ref: "#/$defs/vendor_declarations"
+            dag:
+              $ref: "#/$defs/dag_object"
+            kubernetes:
+              type: object
+            crux_api_conf:
+              type: [string, object]
+            version:
+              type: string
+              pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+          required: [id, pipelines, dag, version, crux_api_conf]
+          $defs:
+            vendor_declarations:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  vendor_doc:
+                    type: string
+                  table_metadata:
+                    type: object
+                    properties:
+                      vendor_table_name:
+                        type: string
+                      vendor_table_desc:
+                        type: string
+                  schema_def:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        vendor_column_name:
+                          type: string
+                        vendor_type:
+                          type: string
+                        vendor_desc:
+                          type: string
+                        is_primary_key:
+                          type: boolean
+                        is_nullable:
+                          type: boolean
+                        page_number:
+                          type: integer
+                        column_number:
+                          type: integer
+            outer_global:
+              type: object
+              properties:
+                global:
+                  $ref: "#/$defs/steps_values"
+                extract:
+                  type: object
+                normalize:
+                  type: object
+                process:
+                  type: object
+            steps_values:
+              type: object
+              properties:
+                id: # Only used in the steps values, not global.
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                action_class:
+                  type: string
+                category:
+                  type: string
+                chunk_size:
+                  type: integer
+                conf:
+                  $ref: "#/$defs/steps_conf"
+                connection:
+                  type: object
+                connection_lib:
+                  type: string
+                delimiter:
+                  type: string
+                encoding:
+                  type: string
+                endpoint:
+                  type: string
+                error_bad_lines:
+                  type: boolean
+                escapechar:
+                  type: string
+                extractor_concurrency:
+                  type: integer
+                fetch_method:
+                  type: string
+                file_available_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_available_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_has_header:
+                  type: boolean
+                file_header_row_index:
+                  type: integer
+                file_optional:
+                  type: boolean
+                interim_line_ending:
+                  type: string
+                is_empty_file_ok:
+                  type: boolean
+                latest_only:
+                  type: boolean
+                metadata_fields:
+                  type: object
+                output_file_format:
+                  type: string
+                parquet_page_size:
+                  type: integer
+                parquet_row_group_size:
+                  type: integer
+                process_max_heap:
+                  type: integer
+                provenance_file_patterns:
+                  type: object
+                quotechar:
+                  type: string
+                remote_file_name:
+                  type: [string, array]
+                remote_path:
+                  type: string
+                schema_def:
+                  type: object
+                declared_schema_def:
+                  type: object
+                observed_schema_def:
+                  type: object
+                skip_footer:
+                  type: boolean
+                skip_rows:
+                  type: array
+                strip_trailing_delimiter:
+                  type: boolean
+                supplier_implied_date_regex:
+                  type: [string, array]
+                supplier_implied_date_var:
+                  type: string
+                timedelta:
+                  type: object
+                unzip_patterns:
+                  type: array
+                writer_queue_chunk_size:
+                  type: integer
+            pipeline_object:
+              type: object
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                global:
+                  $ref: "#/$defs/outer_global"
+                steps:
+                  type: array
+                  items:
+                    $ref: "#/$defs/steps_object"
+                  $comment: |-
+                    I want to enforce that there is only one steps property, but it isn't easy.
+                    See this answer: https://stackoverflow.com/a/77216098
+                    Better to enforce this with another validation tool.
+              additionalProperties: false
+              required: [id]
+            steps_object:
+              type: object
+              $comment: |-
+                Make id an enum with extract, normalize, process, extract_gcs, and parse later?
+                We must have at least the extract step, but I don't know how to enforce that the extract step exists (yet)
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+              required: [id]
+              minProperties: 1
+            dag_object:
+              type: object
+              properties:
+                max_active_runs:
+                  type: integer
+                owner:
+                  type: string
+                schedule_interval:
+                  type: [string, "null"]
+                priority_weight:
+                  type: integer
+                dag_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_catchup:
+                  type: boolean
+                enable_delivery_cache:
+                  type: boolean
+                queue:
+                  type: string
+                tags:
+                  type: array
+              $comment: |-
+                See this discussion on what is required for a DAG:
+                https://cruxinformatics.slack.com/archives/C01C1C7MBMW/p1717060210775299?thread_ts=1716998694.571799&cid=C01C1C7MBMW
+              required: [max_active_runs, owner, schedule_interval, priority_weight, dag_start_date, dag_catchup]
+            steps_conf:
+                type: object
+                properties:
+                    quotechar:
+                      type: string
+                      pattern: '^.+$'
+    - name: v1.2.0
+      # v1.2.0 adds the dataset id, data product id, and org id
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # This is currently in JSON Schema format since we haven't figured out how to validate
+          # using Kubernetes CRD format. There doesn't seem to be a library function we can call.
+          $id: https://cruxdata.com/airflow_yaml.json
+          $schema: https://json-schema.org/draft/2020-12/schema
+          title: AirflowYAML
+          description: Validates the syntax of the YAML and DAG configuration for Airflow.
+          type: object
+          properties:
+            id:
+              $comment: This internal ID must match the file name of the file but there is no way in JSON Schema to detect that
+              description: Internal ID used by Crux.
+              type: string
+              pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+            parent:
+              description: Relative path to the parent file with .yaml on the end
+              $comment: Currently parent paths have to end with .yaml. Don't know if we'll continue doing this.
+              type: string
+              pattern: '^(.*/)*[a-zA-Z_][a-zA-Z0-9_]*\.yaml$'
+            run_uber_step:
+              type: boolean
+            annotations:
+              type: object
+              properties:
+                ENV:
+                  type: string
+                  enum:
+                    - PRODUCTION
+                    - TEST
+                  description: Specifies the environment. Must be either PRODUCTION or TEST.
+              required:
+                - ENV
+              additionalProperties: false
+            global:
+              $ref: "#/$defs/outer_global"
+            pipelines:
+              type: array
+              items:
+                $ref: "#/$defs/pipeline_object"
+              minItems: 1
+            catalog:
+              description: This contains all metadata related to catalog metadata
+              type: object
+              vendor_declarations:
+                $ref: "#/$defs/vendor_declarations"
+            dag:
+              $ref: "#/$defs/dag_object"
+            kubernetes:
+              type: object
+            crux_api_conf:
+              type: [string, object]
+            version:
+              type: string
+              pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+            metadata:
+              type: object
+              properties:
+                dataset_id:
+                  type: string
+                data_product_id:
+                  type: string
+                org_id:
+                  type: string
+              required: [dataset_id, org_id]
+          required: [id, pipelines, dag, version, metadata, crux_api_conf]
+          $defs:
+            vendor_declarations:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  vendor_doc:
+                    type: string
+                  table_metadata:
+                    type: object
+                    properties:
+                      vendor_table_name:
+                        type: string
+                      vendor_table_desc:
+                        type: string
+                  schema_def:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        vendor_column_name:
+                          type: string
+                        vendor_type:
+                          type: string
+                        vendor_desc:
+                          type: string
+                        is_primary_key:
+                          type: boolean
+                        is_nullable:
+                          type: boolean
+                        page_number:
+                          type: integer
+                        column_number:
+                          type: integer
+            outer_global:
+              type: object
+              properties:
+                global:
+                  $ref: "#/$defs/steps_values"
+                extract:
+                  type: object
+                normalize:
+                  type: object
+                process:
+                  type: object
+            steps_values:
+              type: object
+              properties:
+                id: # Only used in the steps values, not global.
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                action_class:
+                  type: string
+                category:
+                  type: string
+                chunk_size:
+                  type: integer
+                conf:
+                  $ref: "#/$defs/steps_conf"
+                connection:
+                  type: object
+                connection_lib:
+                  type: string
+                delimiter:
+                  type: string
+                encoding:
+                  type: string
+                endpoint:
+                  type: string
+                error_bad_lines:
+                  type: boolean
+                escapechar:
+                  type: string
+                extractor_concurrency:
+                  type: integer
+                fetch_method:
+                  type: string
+                file_available_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_available_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_has_header:
+                  type: boolean
+                file_header_row_index:
+                  type: integer
+                file_optional:
+                  type: boolean
+                interim_line_ending:
+                  type: string
+                is_empty_file_ok:
+                  type: boolean
+                latest_only:
+                  type: boolean
+                metadata_fields:
+                  type: object
+                output_file_format:
+                  type: string
+                parquet_page_size:
+                  type: integer
+                parquet_row_group_size:
+                  type: integer
+                process_max_heap:
+                  type: integer
+                provenance_file_patterns:
+                  type: object
+                quotechar:
+                  type: string
+                remote_file_name:
+                  type: [string, array]
+                remote_path:
+                  type: string
+                schema_def:
+                  type: object
+                declared_schema_def:
+                  type: object
+                observed_schema_def:
+                  type: object
+                skip_footer:
+                  type: boolean
+                skip_rows:
+                  type: array
+                strip_trailing_delimiter:
+                  type: boolean
+                supplier_implied_date_regex:
+                  type: [string, array]
+                supplier_implied_date_var:
+                  type: string
+                timedelta:
+                  type: object
+                unzip_patterns:
+                  type: array
+                writer_queue_chunk_size:
+                  type: integer
+            pipeline_object:
+              type: object
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                global:
+                  $ref: "#/$defs/outer_global"
+                steps:
+                  type: array
+                  items:
+                    $ref: "#/$defs/steps_object"
+                  $comment: |-
+                    I want to enforce that there is only one steps property, but it isn't easy.
+                    See this answer: https://stackoverflow.com/a/77216098
+                    Better to enforce this with another validation tool.
+              additionalProperties: false
+              required: [id]
+            steps_object:
+              $ref: "#/$defs/steps_values"
+              required: [id]
+              minProperties: 1
+            dag_object:
+              type: object
+              properties:
+                max_active_runs:
+                  type: integer
+                owner:
+                  type: string
+                schedule_interval:
+                  type: [string, "null"]
+                priority_weight:
+                  type: integer
+                dag_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_catchup:
+                  type: boolean
+                enable_delivery_cache:
+                  type: boolean
+                queue:
+                  type: string
+                tags:
+                  type: array
+              $comment: |-
+                See this discussion on what is required for a DAG:
+                https://cruxinformatics.slack.com/archives/C01C1C7MBMW/p1717060210775299?thread_ts=1716998694.571799&cid=C01C1C7MBMW
+              required: [max_active_runs, owner, schedule_interval, priority_weight, dag_start_date, dag_catchup]
+            steps_conf:
+                type: object
+                properties:
+                    quotechar:
+                      type: string
+                      pattern: '^.+$'
+    - name: v1.3.0
+      # v1.3.0 removes the catalog section and adds observed and declared schema defs to pipeline objects
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # This is currently in JSON Schema format since we haven't figured out how to validate
+          # using Kubernetes CRD format. There doesn't seem to be a library function we can call.
+          $id: https://cruxdata.com/airflow_yaml.json
+          $schema: https://json-schema.org/draft/2020-12/schema
+          title: AirflowYAML
+          description: Validates the syntax of the YAML and DAG configuration for Airflow.
+          type: object
+          properties:
+            id:
+              $comment: This internal ID must match the file name of the file but there is no way in JSON Schema to detect that
+              description: Internal ID used by Crux.
+              type: string
+              pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+            parent:
+              description: Relative path to the parent file with .yaml on the end
+              $comment: Currently parent paths have to end with .yaml. Don't know if we'll continue doing this.
+              type: string
+              pattern: '^(.*/)*[a-zA-Z_][a-zA-Z0-9_]*\.yaml$'
+            run_uber_step:
+              type: boolean
+            annotations:
+              type: object
+              properties:
+                ENV:
+                  type: string
+                  enum:
+                    - PRODUCTION
+                    - TEST
+                  description: Specifies the environment. Must be either PRODUCTION or TEST.
+              required:
+                - ENV
+              additionalProperties: false
+            global:
+              $ref: "#/$defs/outer_global"
+            pipelines:
+              type: array
+              items:
+                $ref: "#/$defs/pipeline_object"
+              minItems: 1
+            dag:
+              $ref: "#/$defs/dag_object"
+            kubernetes:
+              type: object
+            crux_api_conf:
+              type: [string, object]
+            version:
+              type: string
+              pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+            metadata:
+              type: object
+              properties:
+                dataset_id:
+                  type: string
+                data_product_id:
+                  type: string
+                org_id:
+                  type: string
+              required: [dataset_id, org_id]
+          required: [id, pipelines, dag, version, metadata, crux_api_conf]
+          $defs:
+            vendor_table_metadata:
+              type: object
+              properties:
+                vendor_table_name:
+                  type: string
+                vendor_table_description:
+                  type: string
+                vendor_schedule:
+                  type: string
+            outer_global:
+              type: object
+              properties:
+                global:
+                  $ref: "#/$defs/steps_values"
+                extract:
+                  type: object
+                normalize:
+                  type: object
+                process:
+                  type: object
+            steps_values:
+              type: object
+              properties:
+                id: # Only used in the steps values, not global.
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                action_class:
+                  type: string
+                category:
+                  type: string
+                chunk_size:
+                  type: integer
+                conf:
+                  $ref: "#/$defs/steps_conf"
+                connection:
+                  type: object
+                connection_lib:
+                  type: string
+                delimiter:
+                  type: string
+                encoding:
+                  type: string
+                endpoint:
+                  type: string
+                error_bad_lines:
+                  type: boolean
+                escapechar:
+                  type: string
+                extractor_concurrency:
+                  type: integer
+                fetch_method:
+                  type: string
+                file_available_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_available_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_has_header:
+                  type: boolean
+                file_header_row_index:
+                  type: integer
+                file_optional:
+                  type: boolean
+                interim_line_ending:
+                  type: string
+                is_empty_file_ok:
+                  type: boolean
+                latest_only:
+                  type: boolean
+                metadata_fields:
+                  type: object
+                output_file_format:
+                  type: string
+                parquet_page_size:
+                  type: integer
+                parquet_row_group_size:
+                  type: integer
+                process_max_heap:
+                  type: integer
+                provenance_file_patterns:
+                  type: object
+                quotechar:
+                  type: string
+                remote_file_name:
+                  type: [string, array]
+                remote_path:
+                  type: string
+                schema_def:
+                  type: object
+                skip_footer:
+                  type: boolean
+                skip_rows:
+                  type: array
+                strip_trailing_delimiter:
+                  type: boolean
+                supplier_implied_date_regex:
+                  type: [string, array]
+                supplier_implied_date_var:
+                  type: string
+                timedelta:
+                  type: object
+                unzip_patterns:
+                  type: array
+                writer_queue_chunk_size:
+                  type: integer
+                declared_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    vendor_table_name:
+                      type: string
+                    vendor_table_description:
+                      type: string
+                    vendor_schedule:
+                      type: string
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+                          column_number:
+                            type: integer
+                          is_primary_key:
+                            type: boolean
+                          page_number:
+                            type: integer
+                          description:
+                            type: string
+                observed_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+            pipeline_object:
+              type: object
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                global:
+                  $ref: "#/$defs/outer_global"
+                steps:
+                  type: array
+                  items:
+                    $ref: "#/$defs/steps_object"
+                  $comment: |-
+                    I want to enforce that there is only one steps property, but it isn't easy.
+                    See this answer: https://stackoverflow.com/a/77216098
+                    Better to enforce this with another validation tool.
+                vendor_doc:
+                    type: string
+                    pattern: '^[a-zA-Z][a-zA-Z0-9+-.]*:[^\s]*$'
+              additionalProperties: false
+              required: [id]
+            steps_object:
+              $ref: "#/$defs/steps_values"
+              required: [id]
+              minProperties: 1
+            dag_object:
+              type: object
+              properties:
+                max_active_runs:
+                  type: integer
+                owner:
+                  type: string
+                schedule_interval:
+                  type: [string, "null"]
+                priority_weight:
+                  type: integer
+                dag_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_catchup:
+                  type: boolean
+                enable_delivery_cache:
+                  type: boolean
+                queue:
+                  type: string
+                tags:
+                  type: array
+              $comment: |-
+                See this discussion on what is required for a DAG:
+                https://cruxinformatics.slack.com/archives/C01C1C7MBMW/p1717060210775299?thread_ts=1716998694.571799&cid=C01C1C7MBMW
+              required: [max_active_runs, owner, schedule_interval, priority_weight, dag_start_date, dag_catchup]
+            steps_conf:
+                type: object
+                properties:
+                    quotechar:
+                      type: string
+                      pattern: '^.+$'
+    - name: v1.4.0
+      # v1.4.0 adds the availability deadline to the spec
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # This is currently in JSON Schema format since we haven't figured out how to validate
+          # using Kubernetes CRD format. There doesn't seem to be a library function we can call.
+          $id: https://cruxdata.com/airflow_yaml.json
+          $schema: https://json-schema.org/draft/2020-12/schema
+          title: AirflowYAML
+          description: Validates the syntax of the YAML and DAG configuration for Airflow.
+          type: object
+          properties:
+            id:
+              $comment: This internal ID must match the file name of the file but there is no way in JSON Schema to detect that
+              description: Internal ID used by Crux.
+              type: string
+              pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+            parent:
+              description: Relative path to the parent file with .yaml on the end
+              $comment: Currently parent paths have to end with .yaml. Don't know if we'll continue doing this.
+              type: string
+              pattern: '^(.*/)*[a-zA-Z_][a-zA-Z0-9_]*\.yaml$'
+            run_uber_step:
+              type: boolean
+            annotations:
+              type: object
+              properties:
+                ENV:
+                  type: string
+                  enum:
+                    - PRODUCTION
+                    - TEST
+                  description: Specifies the environment. Must be either PRODUCTION or TEST.
+              required:
+                - ENV
+              additionalProperties: false
+            global:
+              $ref: "#/$defs/outer_global"
+            availability_deadlines:
+              type: array
+              items:
+                $ref: "#/$defs/availability_deadline"
+            pipelines:
+              type: array
+              items:
+                $ref: "#/$defs/pipeline_object"
+              minItems: 1
+            dag:
+              $ref: "#/$defs/dag_object"
+            kubernetes:
+              type: object
+            crux_api_conf:
+              type: [string, object]
+            version:
+              type: string
+              pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+            metadata:
+              type: object
+              properties:
+                dataset_id:
+                  type: string
+                data_product_id:
+                  type: string
+                org_id:
+                  type: string
+              required: [dataset_id, org_id]
+          required: [id, pipelines, dag, version, metadata, crux_api_conf]
+          $defs:
+            availability_deadline:
+              type: object
+              properties:
+                deadline_minute:
+                  type: string
+                deadline_hour:
+                  type: string
+                deadline_day_of_month:
+                  type: string
+                deadline_month:
+                  type: string
+                deadline_day_of_week:
+                  type: string
+                deadline_year:
+                  type: [string, "integer"]
+                file_frequency:
+                  type: string
+                timezone:
+                  type: string
+            vendor_table_metadata:
+              type: object
+              properties:
+                vendor_table_name:
+                  type: string
+                vendor_table_description:
+                  type: string
+                vendor_schedule:
+                  type: string
+            outer_global:
+              type: object
+              properties:
+                global:
+                  $ref: "#/$defs/steps_values"
+                extract:
+                  type: object
+                normalize:
+                  type: object
+                process:
+                  type: object
+            steps_values:
+              type: object
+              properties:
+                id: # Only used in the steps values, not global.
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                action_class:
+                  type: string
+                category:
+                  type: string
+                chunk_size:
+                  type: integer
+                conf:
+                  $ref: "#/$defs/steps_conf"
+                connection:
+                  type: object
+                connection_lib:
+                  type: string
+                delimiter:
+                  type: string
+                encoding:
+                  type: string
+                endpoint:
+                  type: string
+                error_bad_lines:
+                  type: boolean
+                escapechar:
+                  type: string
+                extractor_concurrency:
+                  type: integer
+                fetch_method:
+                  type: string
+                file_available_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_available_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_has_header:
+                  type: boolean
+                file_header_row_index:
+                  type: integer
+                file_optional:
+                  type: boolean
+                interim_line_ending:
+                  type: string
+                is_empty_file_ok:
+                  type: boolean
+                latest_only:
+                  type: boolean
+                metadata_fields:
+                  type: object
+                output_file_format:
+                  type: string
+                parquet_page_size:
+                  type: integer
+                parquet_row_group_size:
+                  type: integer
+                process_max_heap:
+                  type: integer
+                provenance_file_patterns:
+                  type: object
+                quotechar:
+                  type: string
+                remote_file_name:
+                  type: [string, array]
+                remote_path:
+                  type: string
+                schema_def:
+                  type: object
+                skip_footer:
+                  type: boolean
+                skip_rows:
+                  type: array
+                strip_trailing_delimiter:
+                  type: boolean
+                supplier_implied_date_regex:
+                  type: [string, array]
+                supplier_implied_date_var:
+                  type: string
+                timedelta:
+                  type: object
+                unzip_patterns:
+                  type: array
+                writer_queue_chunk_size:
+                  type: integer
+                declared_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    vendor_table_name:
+                      type: string
+                    vendor_table_description:
+                      type: string
+                    vendor_schedule:
+                      type: string
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+                          column_number:
+                            type: integer
+                          is_primary_key:
+                            type: boolean
+                          page_number:
+                            type: integer
+                          description:
+                            type: string
+                observed_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+            pipeline_object:
+              type: object
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                global:
+                  $ref: "#/$defs/outer_global"
+                steps:
+                  type: array
+                  items:
+                    $ref: "#/$defs/steps_object"
+                  $comment: |-
+                    I want to enforce that there is only one steps property, but it isn't easy.
+                    See this answer: https://stackoverflow.com/a/77216098
+                    Better to enforce this with another validation tool.
+                vendor_doc:
+                    type: string
+                    pattern: '^[a-zA-Z][a-zA-Z0-9+-.]*:[^\s]*$'
+              additionalProperties: false
+              required: [id]
+            steps_object:
+              $ref: "#/$defs/steps_values"
+              required: [id]
+              minProperties: 1
+            dag_object:
+              type: object
+              properties:
+                max_active_runs:
+                  type: integer
+                owner:
+                  type: string
+                schedule_interval:
+                  type: [string, "null"]
+                priority_weight:
+                  type: integer
+                dag_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_catchup:
+                  type: boolean
+                enable_delivery_cache:
+                  type: boolean
+                queue:
+                  type: string
+                tags:
+                  type: array
+              $comment: |-
+                See this discussion on what is required for a DAG:
+                https://cruxinformatics.slack.com/archives/C01C1C7MBMW/p1717060210775299?thread_ts=1716998694.571799&cid=C01C1C7MBMW
+              required: [max_active_runs, owner, schedule_interval, priority_weight, dag_start_date, dag_catchup]
+            steps_conf:
+                type: object
+                properties:
+                    quotechar:
+                      type: string
+                      pattern: '^.+$'
+    - name: v1.5.0
+      # v1.5.0 adds destinations to the spec
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # This is currently in JSON Schema format since we haven't figured out how to validate
+          # using Kubernetes CRD format. There doesn't seem to be a library function we can call.
+          $id: https://cruxdata.com/airflow_yaml.json
+          $schema: https://json-schema.org/draft/2020-12/schema
+          title: AirflowYAML
+          description: Validates the syntax of the YAML and DAG configuration for Airflow.
+          type: object
+          properties:
+            id:
+              $comment: This internal ID must match the file name of the file but there is no way in JSON Schema to detect that
+              description: Internal ID used by Crux.
+              type: string
+              pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+            parent:
+              description: Relative path to the parent file with .yaml on the end
+              $comment: Currently parent paths have to end with .yaml. Don't know if we'll continue doing this.
+              type: string
+              pattern: '^(.*/)*[a-zA-Z_][a-zA-Z0-9_]*\.yaml$'
+            run_uber_step:
+              type: boolean
+            annotations:
+              type: object
+              properties:
+                ENV:
+                  type: string
+                  enum:
+                    - PRODUCTION
+                    - TEST
+                  description: Specifies the environment. Must be either PRODUCTION or TEST.
+              required:
+                - ENV
+              additionalProperties: false
+            global:
+              $ref: "#/$defs/outer_global"
+            availability_deadlines:
+              type: array
+              items:
+                $ref: "#/$defs/availability_deadline"
+            pipelines:
+              type: array
+              items:
+                $ref: "#/$defs/pipeline_object"
+              minItems: 1
+            dag:
+              $ref: "#/$defs/dag_object"
+            kubernetes:
+              type: object
+            crux_api_conf:
+              type: [string, object]
+            version:
+              type: string
+              pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+            metadata:
+              type: object
+              properties:
+                dataset_id:
+                  type: string
+                data_product_id:
+                  type: string
+                org_id:
+                  type: string
+              required: [dataset_id, org_id]
+            destinations:
+              description: List of delivery destinations for the workflow
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  destination_id:
+                    type: string
+                  name:
+                    type: string
+                required: [destination_id]
+          required: [id, pipelines, dag, version, metadata, crux_api_conf]
+          $defs:
+            availability_deadline:
+              type: object
+              properties:
+                deadline_minute:
+                  type: string
+                deadline_hour:
+                  type: string
+                deadline_day_of_month:
+                  type: string
+                deadline_month:
+                  type: string
+                deadline_day_of_week:
+                  type: string
+                deadline_year:
+                  type: [string, "integer"]
+                file_frequency:
+                  type: string
+                timezone:
+                  type: string
+            vendor_table_metadata:
+              type: object
+              properties:
+                vendor_table_name:
+                  type: string
+                vendor_table_description:
+                  type: string
+                vendor_schedule:
+                  type: string
+            outer_global:
+              type: object
+              properties:
+                global:
+                  $ref: "#/$defs/steps_values"
+                extract:
+                  type: object
+                normalize:
+                  type: object
+                process:
+                  type: object
+            steps_values:
+              type: object
+              properties:
+                id: # Only used in the steps values, not global.
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                action_class:
+                  type: string
+                category:
+                  type: string
+                chunk_size:
+                  type: integer
+                conf:
+                  $ref: "#/$defs/steps_conf"
+                connection:
+                  type: object
+                connection_lib:
+                  type: string
+                delimiter:
+                  type: string
+                encoding:
+                  type: string
+                endpoint:
+                  type: string
+                error_bad_lines:
+                  type: boolean
+                escapechar:
+                  type: string
+                extractor_concurrency:
+                  type: integer
+                fetch_method:
+                  type: string
+                file_available_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_available_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_has_header:
+                  type: boolean
+                file_header_row_index:
+                  type: integer
+                file_optional:
+                  type: boolean
+                interim_line_ending:
+                  type: string
+                is_empty_file_ok:
+                  type: boolean
+                latest_only:
+                  type: boolean
+                metadata_fields:
+                  type: object
+                output_file_format:
+                  type: string
+                parquet_page_size:
+                  type: integer
+                parquet_row_group_size:
+                  type: integer
+                process_max_heap:
+                  type: integer
+                provenance_file_patterns:
+                  type: object
+                quotechar:
+                  type: string
+                remote_file_name:
+                  type: [string, array]
+                remote_path:
+                  type: string
+                schema_def:
+                  type: object
+                skip_footer:
+                  type: boolean
+                skip_rows:
+                  type: array
+                strip_trailing_delimiter:
+                  type: boolean
+                supplier_implied_date_regex:
+                  type: [string, array]
+                supplier_implied_date_var:
+                  type: string
+                timedelta:
+                  type: object
+                unzip_patterns:
+                  type: array
+                writer_queue_chunk_size:
+                  type: integer
+                declared_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    vendor_table_name:
+                      type: string
+                    vendor_table_description:
+                      type: string
+                    vendor_schedule:
+                      type: string
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+                          column_number:
+                            type: integer
+                          is_primary_key:
+                            type: boolean
+                          page_number:
+                            type: integer
+                          description:
+                            type: string
+                observed_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+            pipeline_object:
+              type: object
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                global:
+                  $ref: "#/$defs/outer_global"
+                steps:
+                  type: array
+                  items:
+                    $ref: "#/$defs/steps_object"
+                  $comment: |-
+                    I want to enforce that there is only one steps property, but it isn't easy.
+                    See this answer: https://stackoverflow.com/a/77216098
+                    Better to enforce this with another validation tool.
+                vendor_doc:
+                    type: string
+                    pattern: '^[a-zA-Z][a-zA-Z0-9+-.]*:[^\s]*$'
+              additionalProperties: false
+              required: [id]
+            steps_object:
+              $ref: "#/$defs/steps_values"
+              required: [id]
+              minProperties: 1
+            dag_object:
+              type: object
+              properties:
+                max_active_runs:
+                  type: integer
+                owner:
+                  type: string
+                schedule_interval:
+                  type: [string, "null"]
+                priority_weight:
+                  type: integer
+                dag_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_catchup:
+                  type: boolean
+                enable_delivery_cache:
+                  type: boolean
+                queue:
+                  type: string
+                tags:
+                  type: array
+              $comment: |-
+                See this discussion on what is required for a DAG:
+                https://cruxinformatics.slack.com/archives/C01C1C7MBMW/p1717060210775299?thread_ts=1716998694.571799&cid=C01C1C7MBMW
+              required: [max_active_runs, owner, schedule_interval, priority_weight, dag_start_date, dag_catchup]
+            steps_conf:
+                type: object
+                properties:
+                    quotechar:
+                      type: string
+                      pattern: '^.+$'
+    - name: v1.6.0
+      # v1.6.0 require crux_api_conf at outer level
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          # This is currently in JSON Schema format since we haven't figured out how to validate
+          # using Kubernetes CRD format. There doesn't seem to be a library function we can call.
+          $id: https://cruxdata.com/airflow_yaml.json
+          $schema: https://json-schema.org/draft/2020-12/schema
+          title: AirflowYAML
+          description: Validates the syntax of the YAML and DAG configuration for Airflow.
+          type: object
+          properties:
+            id:
+              $comment: This internal ID must match the file name of the file but there is no way in JSON Schema to detect that
+              description: Internal ID used by Crux.
+              type: string
+              pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+            parent:
+              description: Relative path to the parent file with .yaml on the end
+              $comment: Currently parent paths have to end with .yaml. Don't know if we'll continue doing this.
+              type: string
+              pattern: '^(.*/)*[a-zA-Z_][a-zA-Z0-9_]*\.yaml$'
+            run_uber_step:
+              type: boolean
+            annotations:
+              type: object
+              properties:
+                ENV:
+                  type: string
+                  enum:
+                    - PRODUCTION
+                    - TEST
+                  description: Specifies the environment. Must be either PRODUCTION or TEST.
+              required:
+                - ENV
+              additionalProperties: false
+            global:
+              $ref: "#/$defs/outer_global"
+            availability_deadlines:
+              type: array
+              items:
+                $ref: "#/$defs/availability_deadline"
+            pipelines:
+              type: array
+              items:
+                $ref: "#/$defs/pipeline_object"
+              minItems: 1
+            dag:
+              $ref: "#/$defs/dag_object"
+            kubernetes:
+              type: object
+            crux_api_conf:
+              type: [string, object]
+            version:
+              type: string
+              pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+            metadata:
+              type: object
+              properties:
+                dataset_id:
+                  type: string
+                data_product_id:
+                  type: string
+                org_id:
+                  type: string
+              required: [dataset_id, org_id]
+            destinations:
+              description: List of delivery destinations for the workflow
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  destination_id:
+                    type: string
+                  name:
+                    type: string
+                required: [destination_id]
+          required: [id, pipelines, dag, version, metadata, crux_api_conf]
+          $defs:
+            availability_deadline:
+              type: object
+              properties:
+                deadline_minute:
+                  type: string
+                deadline_hour:
+                  type: string
+                deadline_day_of_month:
+                  type: string
+                deadline_month:
+                  type: string
+                deadline_day_of_week:
+                  type: string
+                deadline_year:
+                  type: [string, "integer"]
+                file_frequency:
+                  type: string
+                timezone:
+                  type: string
+            vendor_table_metadata:
+              type: object
+              properties:
+                vendor_table_name:
+                  type: string
+                vendor_table_description:
+                  type: string
+                vendor_schedule:
+                  type: string
+            outer_global:
+              type: object
+              properties:
+                global:
+                  $ref: "#/$defs/steps_values"
+                extract:
+                  type: object
+                normalize:
+                  type: object
+                process:
+                  type: object
+            steps_values:
+              type: object
+              properties:
+                id: # Only used in the steps values, not global.
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                action_class:
+                  type: string
+                category:
+                  type: string
+                chunk_size:
+                  type: integer
+                conf:
+                  $ref: "#/$defs/steps_conf"
+                connection:
+                  type: object
+                connection_lib:
+                  type: string
+                delimiter:
+                  type: string
+                encoding:
+                  type: string
+                endpoint:
+                  type: string
+                error_bad_lines:
+                  type: boolean
+                escapechar:
+                  type: string
+                extractor_concurrency:
+                  type: integer
+                fetch_method:
+                  type: string
+                file_available_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_available_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}[T\s]*(\d{2}:\d{2}:\d{2})?$'
+                file_has_header:
+                  type: boolean
+                file_header_row_index:
+                  type: integer
+                file_optional:
+                  type: boolean
+                interim_line_ending:
+                  type: string
+                is_empty_file_ok:
+                  type: boolean
+                latest_only:
+                  type: boolean
+                metadata_fields:
+                  type: object
+                output_file_format:
+                  type: string
+                parquet_page_size:
+                  type: integer
+                parquet_row_group_size:
+                  type: integer
+                process_max_heap:
+                  type: integer
+                provenance_file_patterns:
+                  type: object
+                quotechar:
+                  type: string
+                remote_file_name:
+                  type: [string, array]
+                remote_path:
+                  type: string
+                schema_def:
+                  type: object
+                skip_footer:
+                  type: boolean
+                skip_rows:
+                  type: array
+                strip_trailing_delimiter:
+                  type: boolean
+                supplier_implied_date_regex:
+                  type: [string, array]
+                supplier_implied_date_var:
+                  type: string
+                timedelta:
+                  type: object
+                unzip_patterns:
+                  type: array
+                writer_queue_chunk_size:
+                  type: integer
+                declared_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    vendor_table_name:
+                      type: string
+                    vendor_table_description:
+                      type: string
+                    vendor_schedule:
+                      type: string
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+                          column_number:
+                            type: integer
+                          is_primary_key:
+                            type: boolean
+                          page_number:
+                            type: integer
+                          description:
+                            type: string
+                observed_schema_def:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        properties:
+                          data_type:
+                            type: string
+                          name:
+                            type: string
+                          configured_data_type:
+                            type: string
+                          configured_name:
+                            type: string
+            pipeline_object:
+              type: object
+              properties:
+                id:
+                  type: string
+                  pattern: "^[a-zA-Z_]([a-zA-Z0-9_]*[a-zA-Z0-9])?$"
+                global:
+                  $ref: "#/$defs/outer_global"
+                steps:
+                  type: array
+                  items:
+                    $ref: "#/$defs/steps_object"
+                  $comment: |-
+                    I want to enforce that there is only one steps property, but it isn't easy.
+                    See this answer: https://stackoverflow.com/a/77216098
+                    Better to enforce this with another validation tool.
+                vendor_doc:
+                    type: string
+                    pattern: '^[a-zA-Z][a-zA-Z0-9+-.]*:[^\s]*$'
+              additionalProperties: false
+              required: [id]
+            steps_object:
+              $ref: "#/$defs/steps_values"
+              required: [id]
+              minProperties: 1
+            dag_object:
+              type: object
+              properties:
+                max_active_runs:
+                  type: integer
+                owner:
+                  type: string
+                schedule_interval:
+                  type: [string, "null"]
+                priority_weight:
+                  type: integer
+                dag_start_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_end_date:
+                  type: string
+                  pattern: '^\d{4}-\d{2}-\d{2}$'
+                dag_catchup:
+                  type: boolean
+                enable_delivery_cache:
+                  type: boolean
+                queue:
+                  type: string
+                tags:
+                  type: array
+              $comment: |-
+                See this discussion on what is required for a DAG:
+                https://cruxinformatics.slack.com/archives/C01C1C7MBMW/p1717060210775299?thread_ts=1716998694.571799&cid=C01C1C7MBMW
+              required: [max_active_runs, owner, schedule_interval, priority_weight, dag_start_date, dag_catchup]
+            steps_conf:
+                type: object
+                properties:
+                    quotechar:
+                      type: string
+                      pattern: '^.+$'
