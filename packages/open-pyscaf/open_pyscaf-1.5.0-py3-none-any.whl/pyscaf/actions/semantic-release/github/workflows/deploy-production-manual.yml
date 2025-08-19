@@ -1,0 +1,64 @@
+name: Manual Deploy to Production PyPI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Get latest release
+        id: latest_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the latest release tag
+          LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          echo "Found latest release: $LATEST_TAG"
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create dist directory
+          mkdir -p dist
+          
+          # Download release assets from latest release
+          echo "Downloading assets from release: ${{ steps.latest_release.outputs.tag }}"
+          gh release download ${{ steps.latest_release.outputs.tag }} --pattern "*.whl" --dir dist
+          gh release download ${{ steps.latest_release.outputs.tag }} --pattern "*.tar.gz" --dir dist
+          
+          # List downloaded files
+          echo "Downloaded files:"
+          ls -la dist/
+
+      - name: Verify artifacts
+        run: |
+          if [ -z "$(ls -A dist/)" ]; then
+            echo "Error: No distribution files found for release ${{ steps.latest_release.outputs.tag }}"
+            exit 1
+          fi
+          echo "Found distribution files for ${{ steps.latest_release.outputs.tag }}:"
+          ls -la dist/
+
+      - name: Publish package distributions to Production PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_PASSWORD }}
+          repository-url: 'https://upload.pypi.org/legacy/'
+          packages-dir: dist
+          print-hash: true
+          verbose: true 
