@@ -1,0 +1,106 @@
+Metadata-Version: 2.3
+Name: syncwave
+Version: 0.1.2
+Summary: Make your code reactive; Turn plain JSONs into a live data store, two-way synced with Python objects.
+Keywords: 
+Author: Lucas Iannitello
+Author-email: Lucas Iannitello <lucas.iannitello@protonmail.com>
+License: MIT License
+         
+         Copyright (c) 2025 Lucas Iannitello
+         
+         Permission is hereby granted, free of charge, to any person obtaining a copy
+         of this software and associated documentation files (the "Software"), to deal
+         in the Software without restriction, including without limitation the rights
+         to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+         copies of the Software, and to permit persons to whom the Software is
+         furnished to do so, subject to the following conditions:
+         
+         The above copyright notice and this permission notice shall be included in all
+         copies or substantial portions of the Software.
+         
+         THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+         IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+         FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+         AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+         LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+         OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+         SOFTWARE.
+Requires-Dist: pydantic>=2.11.7
+Requires-Dist: watchdog>=6.0.0
+Requires-Python: >=3.9
+Project-URL: Homepage, https://github.com/iannitello/syncwave
+Project-URL: Issues, https://github.com/iannitello/syncwave/issues
+Project-URL: Repository, https://github.com/iannitello/syncwave
+Description-Content-Type: text/markdown
+
+# Syncwave
+
+Make your code reactive; Turn plain JSONs into a live data store, two-way synced with Python objects.
+
+> ⚠️ **Warning**
+> 
+> Syncwave is under active development. Until version **1.0**, any minor release (`0.x`) may introduce breaking API changes. Pin the exact version to use in production.
+>
+> Version **1.0** will be released when the library is stable, feature-complete, and tested.
+
+## Getting Started
+
+Install from [PyPI](https://pypi.org/project/syncwave/):
+
+```shell
+# pip
+pip install syncwave
+
+# uv
+uv add syncwave
+```
+
+Bind a Pydantic model to a JSON file with `@syncwave.register`. Syncwave automatically synchronizes the file with your in-memory objects.
+
+```python
+from pydantic import BaseModel
+
+from syncwave import Syncwave
+
+# 1. Initialise Syncwave with a directory to hold the JSON files.
+syncwave = Syncwave(data_dir="data")
+
+
+# 2. Define and register a model
+# This also creates a JSON file at `data/customers.json` if it doesn't exist.
+# Otherwise, the data is loaded into the `syncwave` instance.
+@syncwave.register(name="customers", key="id")
+class Customer(BaseModel):
+    id: int
+    name: str
+    age: int
+
+
+# syncwave acts as a read-only dict with:
+#     keys   -> collection name (e.g. "customers")
+#     values -> corresponding SyncStore
+# A SyncStore also acts as a read-only dict:
+#     keys   -> model's key field (e.g. `id`)
+#     values -> live Pydantic model instances
+
+
+# 3. Create and mutate instances like you would with normal Pydantic objects.
+john = Customer(id=1, name="John Doe", age=30)  # Automatically inserted in JSON
+john.age = 31  # Automatically updated in JSON
+
+
+# 4. Delete instances with `SyncStore.delete(key)`.
+syncwave["customers"].delete(1)  # Removed from syncwave and JSON
+
+# 5. External edits propagate automatically.
+# First, let's add a new customer to populate the JSON file.
+Customer(id=2, name="Jane Doe", age=25)
+
+input("Now edit 'data/customers.json' and press Enter…")
+print(syncwave)
+```
+
+## License
+
+Syncwave is licensed under the MIT License.
