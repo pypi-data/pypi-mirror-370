@@ -1,0 +1,114 @@
+# ATC - Anthropic Tokens Counter
+
+A command-line tool to count tokens for Anthropic's Claude models before sending requests.
+
+## Features
+
+- Count tokens for various Claude models (Opus, Sonnet, Haiku)
+- Read input from files or stdin
+- Model management with short and full names
+- Configurable default model
+- Cross-platform XDG configuration support
+
+## Installation
+
+### From Source
+
+```bash
+git clone <repository-url>
+cd claude-count-tokens
+pip install .
+```
+
+### For Development
+
+```bash
+git clone <repository-url>
+cd claude-count-tokens
+pip install -e .
+```
+
+## Setup
+
+Before using ATC, you need to set your Anthropic API key:
+
+```bash
+export ANTHROPIC_API_KEY="your-api-key-here"
+```
+
+## Usage
+
+### Count Tokens
+
+Count tokens from stdin:
+```bash
+echo "hello world" | atc
+```
+
+Count tokens from a file:
+```bash
+atc CLAUDE.md
+atc ./CLAUDE.md
+atc ~/.claude/CLAUDE.md
+atc /Users/foo/.claude/CLAUDE.md
+```
+
+Count tokens with a specific model:
+```bash
+echo "hello world" | atc --model sonnet
+atc CLAUDE.md -m haiku
+```
+
+### Model Management
+
+List available models:
+```bash
+atc models
+```
+
+List models with full names:
+```bash
+atc models --verbose
+atc models -v
+```
+
+Set default model:
+```bash
+atc models set-default sonnet
+```
+
+## Available Models
+
+### Short Names
+- `opus` - Claude Opus 4.1 (default)
+- `opus-4`, `opus-4.1` - Claude Opus 4.1
+- `sonnet` - Claude Sonnet 4.1
+- `sonnet-4`, `sonnet-4.1` - Claude Sonnet 4.1
+- `sonnet-3.7` - Claude Sonnet 3.7
+- `haiku` - Claude Haiku 3.5
+- `haiku-3.5` - Claude Haiku 3.5
+- `haiku-3` - Claude Haiku 3
+
+### Full Names
+- `claude-opus-4-1-20250805`
+- `claude-sonnet-4-1-20250805`
+- `claude-sonnet-3-7-20240805`
+- `claude-haiku-3-5-20241022`
+- `claude-haiku-3-20240307`
+
+## Configuration
+
+ATC stores its configuration in `$XDG_STATE_HOME/atc/settings.json` (or `~/.local/state/atc/settings.json` if `XDG_STATE_HOME` is not set).
+
+The configuration file stores:
+- Default model selection
+
+## Requirements
+
+- Python 3.8+
+- `anthropic` Python library
+- Valid Anthropic API key
+
+## License
+
+MIT License
