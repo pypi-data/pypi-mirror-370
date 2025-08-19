@@ -1,0 +1,44 @@
+name: "Setup Python Environment"
+description: "Set up Python environment for the given Python version"
+
+inputs:
+  python-version:
+    description: "Python version to use"
+    required: true
+    default: "3.10"
+  resolution:
+    description: "Resolution strategy"
+    required: true
+    default: "frozen"
+  uv-version:
+    description: "uv version to use"
+    required: true
+    default: "0.8.11"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: ${{ inputs.uv-version }}
+        enable-cache: "true"
+        cache-suffix: ${{ inputs.python-version }}-${{ inputs.resolution }}
+
+      # Install eo-tides and all required dependencies.
+      # --all-extras installs all optional dependencies.
+      # If resolution method is "frozen", then use existing lockfile.
+      # Otherwise, pass resolution method to specify "highest"
+      # dependencies or "lowest-direct" dependencies
+    - name: Install Python dependencies
+      run: |
+        if [ "${{ inputs.resolution }}" == "frozen" ]; then
+        uv sync --frozen --all-extras
+        else
+        uv sync --all-extras --resolution ${{ inputs.resolution }}
+        fi
+      shell: bash
