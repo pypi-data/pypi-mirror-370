@@ -1,0 +1,95 @@
+#! /usr/bin/env python
+"""modsim_template documentation workflow
+
+Requires the following ``SConscript(..., exports={})``
+
+* ``env`` - The SCons construction environment with the following required keys
+
+  * ``SPHINX_BUILD`` - String path for the Sphinx build executable
+  * ``regression_alias`` - String for the alias collecting the regression workflow targets
+
+* ``project_variables`` - The project variables for use in Sphinx documentation parameters
+"""
+import pathlib
+
+
+# Inherit the parent construction environment
+Import(["env", "project_variables"])
+
+# Set empty alias return list
+alias_list = []
+
+# Perform variable substitution on Sphinx configuration file
+env.Substfile(
+    "conf.py.in",
+    SUBST_DICT=env.SubstitutionSyntax(project_variables),
+)
+
+# Copy project root files required by the documentation
+root_files = [
+    ("README.txt", "#/README.rst"),
+    ("environment.yml", "#/environment.yml"),
+]
+for target, source in root_files:
+    env.Command(
+        target=[target],
+        source=[source],
+        action=Copy("$TARGET", "$SOURCE", False),
+    )
+
+# Explicit Sphinx documentation dependency list
+documentation_files = [
+    "conf.py",
+    "api.rst",
+    "cli.rst",
+    "changelog.rst",
+    "devops.rst",
+    "glossary.rst",
+    "index.rst",
+    "mesh_convergence.rst",
+    "nominal.rst",
+    "release_philosophy.rst",
+    "external_resources.rst",
+    "simulation_summary.rst",
+    "user.rst",
+    "zreferences.rst",
+    # Found in conf.py, which is not scanned for implicit dependencies
+    "waves_logo_brandmark_smaller.png",
+    "targets.txt",
+    "_static/custom.css",
+]
+
+sphinx_options = "-W"
+
+targets = [
+    f"html/{pathlib.Path(source).with_suffix('.html')}" for source in documentation_files if source.endswith(".rst")
+]
+sources = documentation_files
+html = env.SphinxBuild(
+    target=targets,
+    source=sources,
+    options=sphinx_options,
+)
+env.Clean(html, [Dir("html")] + sources)
+env.Alias("html", html)
+
+targets = [f"latex/{project_variables['documentation_pdf']}"]
+sources = documentation_files
+latexpdf = env.SphinxPDF(
+    target=targets,
+    source=sources,
+    options=sphinx_options,
+)
+env.Clean(latexpdf, [Dir("latex")] + sources)
+env.Alias("latexpdf", latexpdf)
+
+# Collector alias to build all documentation
+env.Alias("documentation", html + latexpdf)
+env.Alias(env["regression_alias"], html + latexpdf)
+
+if not env["SPHINX_BUILD"]:
+    print("Program 'sphinx-build' was not found in construction environment. Ignoring Sphinx target(s)")
+    Ignore([".", "html", "html"], html)
+    Ignore([".", "latex", "latexpdf"], latexpdf)
+else:
+    env.Default(html)

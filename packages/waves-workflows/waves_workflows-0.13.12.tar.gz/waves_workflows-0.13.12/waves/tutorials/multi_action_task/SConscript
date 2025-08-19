@@ -1,0 +1,79 @@
+Import("env")
+
+# Write project builders for re-use in task definitions
+abaqus_journal = Builder(
+    action=[
+        (
+            "cd ${TARGET.dir.abspath} && ${abaqus_program} cae -noGui ${SOURCE.abspath} ${abaqus_options} "
+            "-- ${journal_options}"
+        )
+    ]
+)
+
+abaqus_solver = Builder(
+    action=[
+        (
+            "cd ${TARGET.dir.abspath} && ${abaqus_program} -job ${job} -input ${SOURCE.filebase} "
+            "${abaqus_options} -interactive -ask_delete no"
+        )
+    ]
+)
+
+# Add builders and pseudo-builders
+env.Append(
+    BUILDERS={
+        "AbaqusJournal": abaqus_journal,
+        "AbaqusSolver": abaqus_solver,
+    }
+)
+
+# Geometry, Partition, Mesh
+env.Command(
+    target=["rectangle_mesh.cae", "rectangle_mesh.inp"],
+    source=["rectangle_geometry.py", "rectangle_partition.py", "rectangle_mesh.py", "abaqus_utilities.py"],
+    action=[
+        (
+            "cd ${TARGET.dir.abspath} && ${abaqus_program} cae -noGui ${SOURCES[0].abspath} "
+            "${abaqus_options} -- --output-file ${TARGET.abspath}"
+        ),
+        (
+            "cd ${TARGET.dir.abspath} && ${abaqus_program} cae -noGui ${SOURCES[1].abspath} "
+            "${abaqus_options} -- --input-file ${TARGET.abspath} --output-file ${TARGET.abspath}"
+        ),
+        (
+            "cd ${TARGET.dir.abspath} && ${abaqus_program} cae -noGui ${SOURCES[2].abspath} "
+            "${abaqus_options} -- --input-file ${TARGET.abspath} --output-file ${TARGET.abspath}"
+        ),
+    ],
+    abaqus_program=env["ABAQUS_PROGRAM"],
+)
+
+# Abaqus Solve
+solve_sources = [
+    "rectangle_compression.inp",
+    "rectangle_mesh.inp",
+]
+
+solve_targets = [
+    "rectangle_compression.odb",
+    "rectangle_compression.dat",
+    "rectangle_compression.msg",
+    "rectangle_compression.com",
+    "rectangle_compression.prt",
+    "rectangle_compression.sta",
+]
+
+target = env.AbaqusSolver(
+    target=solve_targets,
+    source=solve_sources,
+    abaqus_program=env["ABAQUS_PROGRAM"],
+    job="rectangle_compression",
+    program_options="-double both",
+)
+
+# Collector alias named after the model simulation
+env.Alias("rectangle", target)
+
+if not env["unconditional_build"] and not env["ABAQUS_PROGRAM"]:
+    print(f"Program 'abaqus' was not found in construction environment. Ignoring 'rectangle' target(s)")
+    Ignore([".", "rectangle"], target)
