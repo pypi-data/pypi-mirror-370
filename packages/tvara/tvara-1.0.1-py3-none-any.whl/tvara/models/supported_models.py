@@ -1,0 +1,83 @@
+gemini_supported = ["gemini-1.0-pro-vision-latest",
+    "gemini-pro-vision",
+    "gemini-1.5-pro-latest",
+    "gemini-1.5-pro-002",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-flash-8b",
+    "gemini-1.5-flash-8b-001",
+    "gemini-1.5-flash-8b-latest",
+    "gemini-2.5-pro-preview-03-25",
+    "gemini-2.5-flash-preview-05-20",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite-preview-06-17",
+    "gemini-2.5-pro-preview-05-06",
+    "gemini-2.5-pro-preview-06-05",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash-exp",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-exp-image-generation",
+    "gemini-2.0-flash-lite-001",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash-preview-image-generation",
+    "gemini-2.0-flash-lite-preview-02-05",
+    "gemini-2.0-flash-lite-preview",
+    "gemini-2.0-pro-exp",
+    "gemini-2.0-pro-exp-02-05",
+    "gemini-exp-1206",
+    "gemini-2.0-flash-thinking-exp-01-21",
+    "gemini-2.0-flash-thinking-exp",
+    "gemini-2.0-flash-thinking-exp-1219",
+    "gemini-2.5-flash-preview-tts",
+    "gemini-2.5-pro-preview-tts",
+    "learnlm-2.0-flash-experimental",
+    "gemma-3-1b-it",
+    "gemma-3-4b-it",
+    "gemma-3-12b-it",
+    "gemma-3-27b-it",
+    "gemma-3n-e4b-it",
+    "gemma-3n-e2b-it",
+    "gemini-2.5-flash-lite"
+]
+
+openai_supported = [
+    "gpt-35-turbo",
+    "gpt-35-turbo-instruct",
+    "gpt-4",
+    "gpt-4o",
+    "gpt-4.5",
+    "o1-preview",
+    "o1-mini",
+    "o1",
+    "o1-pro",
+    "o3-mini",
+    "o3-mini-high",
+    "o3",
+    "o3-pro",
+    "o4-mini",
+    "gpt-oss-120b",
+    "gpt-oss-20b"
+]
+
+claude_supported = [
+    "claude-opus-4-1-20250805"
+    "claude-opus-4-1"
+    "claude-opus-4-20250514"
+    "claude-opus-4-0"
+    "claude-sonnet-4-20250514"
+    "claude-sonnet-4-0"
+    "claude-3-7-sonnet-20250219"
+    "claude-3-7-sonnet-latest"
+    "claude-3-5-haiku-20241022"
+    "claude-3-5-haiku-latest"
+    "claude-3-5-sonnet-20241022"
+    "claude-3-5-sonnet-latest"
+    "claude-3-5-sonnet-20240620"
+    "claude-3-opus-20240229"
+    "claude-3-opus-latest"
+    "claude-3-sonnet-20240229"
+    "claude-3-haiku-20240307"
+]
