@@ -1,0 +1,52 @@
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
+# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/#customizing-settings
+# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
+# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+# stages:
+# - test
+# sast:
+#   stage: test
+# include:
+# - template: Security/SAST.gitlab-ci.yml
+
+stages:
+  - format
+  - build
+
+black:
+    stage: format
+    tags:
+      - 8-core
+    script:
+        - apt update && apt install -y curl git python3.8 python3.8-venv python3-pip
+        - python3.8 -m venv .env
+        - . .env/bin/activate
+        - python3.8 -m pip install --upgrade pip
+        - pip install black==24.8.0
+        - black . --check --verbose --diff --color
+
+build:
+    stage: build
+    tags:
+        - 8-core
+    script:
+        - apt update && apt install -y curl git python3.8 python3.8-venv python3-pip
+        - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        - . "$HOME/.cargo/env"
+        - python3.8 -m venv .env
+        - . .env/bin/activate
+        - pip install --upgrade pip
+        - pip install build
+        - python3 -m build
+        - mv dist/tt_smi-*.whl .
+    artifacts:
+        name: smi-whl
+        untracked: false
+        when: on_success
+        expire_in: 7 days
+        paths:
+            - tt_smi-*.whl
+
