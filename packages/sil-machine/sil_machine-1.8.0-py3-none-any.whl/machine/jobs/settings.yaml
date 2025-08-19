@@ -1,0 +1,52 @@
+default:
+  data_dir: ~/machine
+  shared_file_uri: s3:/silnlp/
+  shared_file_folder: production
+  inference_batch_size: 1024
+  align_pretranslations: true
+  huggingface:
+    parent_model_name: facebook/nllb-200-distilled-1.3B
+    train_params:
+      do_train: true
+      optim: adamw_torch
+      warmup_steps: 1000
+      per_device_train_batch_size: 16
+      gradient_accumulation_steps: 4
+      label_smoothing_factor: 0.2
+      group_by_length: true
+      gradient_checkpointing: true
+      lr_scheduler_type: cosine
+      learning_rate: 0.0002
+      fp16: true
+      save_strategy: no
+      max_steps: 5000
+    generate_params:
+      device: 0
+      num_beams: 2
+      batch_size: 16
+      oom_batch_size_backoff_mult: 0.5
+    tokenizer:
+      add_unk_src_tokens: true
+      add_unk_trg_tokens: true
+    attn_implementation: sdpa
+  thot_mt:
+    word_alignment_model_type: hmm
+    tokenizer: latin
+  thot_align:
+    word_alignment_heuristic: grow-diag-final-and
+    model_type: hmm
+    tokenizer: latin
+development:
+  shared_file_folder: dev
+  huggingface:
+    parent_model_name: facebook/nllb-200-distilled-600M
+    generate_params:
+      num_beams: 1
+staging:
+  shared_file_folder: ext-qa
+  huggingface:
+    parent_model_name: hf-internal-testing/tiny-random-nllb
+    train_params:
+      max_steps: 10
+    generate_params:
+      num_beams: 1
