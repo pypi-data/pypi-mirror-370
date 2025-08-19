@@ -1,0 +1,88 @@
+function envoy_on_request(request_handle)
+  -- Lua code generated from `routing_filter.lua.j2` template.
+  -- This follows internet wisdom, most notably:
+  --   https://medium.com/gojekengineering/how-not-to-write-an-envoy-lua-filter-51eeec71e9f0
+  -- And from that, most notably:
+  --   * We never use global (= not-explicitly-`local`) variables.
+  --   * We operate only on headers, and avoid reading the whole body of the request.
+  --   * We log only in case of errors.
+  --   * We do not hold references to anything returned by the `request_handle`.
+  -- Follows the following hardcoded (generated) routing table.
+  local consensus_routing_map = {
+{% for application_id in consensuses | map(attribute='application_id') | unique %}
+    ["{{ application_id }}"] = {
+{% for consensus in consensuses | selectattr('application_id', 'equalto', application_id) %}
+        "{{ consensus.id }}",
+{% endfor %}
+    },
+{% endfor %}
+  }
+
+  {{ mangled_http_path_filter | indent(2) }}
+
+  local application_id = request_handle:headers():get("x-reboot-application-id")
+  if application_id == nil then
+     -- HTTP/2 mandate use of 'authority' header, but to be
+     -- conservative if it's not present we look for 'host'.
+     local authority = request_handle:headers():get(":authority")
+     if authority == nil then
+       authority = request_handle:headers():get(":host")
+     end
+
+     -- NOTE: relying on `split()` from 'mangled_http_path_filter'
+     -- which we embed above.
+     local values = split(authority, ".")
+
+     -- We expect an application ID as the prefix, but it's not easy
+     -- to determine if someone forgot to send it. At the very least
+     -- we error out if we get something like 'localhost' by ensuring
+     -- our `split()` returned at least two values.
+     if #values < 2 then
+        print("Unable to determine application ID from authority/host: " .. authority)
+        request_handle:respond(
+          {[":status"] = "400"},
+          "ERROR: Unable to determine application ID from authority/host")
+        return
+     end
+
+     application_id = values[1]
+     request_handle:headers():replace("x-reboot-application-id", application_id)
+  end
+
+  local application_consensuses = consensus_routing_map[application_id]
+  if application_consensuses == nil or #application_consensuses == 0 then
+    print("Unknown x-reboot-application-id: " .. application_id)
+    -- While it would make sense to return 404 here, in the context of Reboot
+    -- that's a bad idea: there are many situations where an application that
+    -- doesn't exist yet will exist the next moment, and we want clients to
+    -- retry. For example: our Fluent Bit sidecars will not retry 404s, but
+    -- they'll retry 503s. So we return 503 here.
+    request_handle:respond(
+      {[":status"] = "503"},
+      "ERROR: application with ID '" .. application_id ..
+      "' not found (but it may still be starting)")
+    return
+  end
+
+  -- For now, we only have one consensus per application, ever. So it doesn't
+  -- matter what service or state ID the request is for. We can blindly forward
+  -- the request to that consensus.
+  --
+  -- This won't always be the case. In the (near) future we'll support
+  -- partitioning, and the routing logic may look as follows:
+  --  * If we can identify the state ID from the request (e.g. via a header),
+  --    route to the appropriate consensus for that state.
+  --  * If we can't identify the state ID from the request (e.g. traffic for
+  --    legacy gRPC services), pick _any_ consensus. The consensus will then
+  --    either be able to handle the request, forward it, or return an error.
+  if #application_consensuses > 1 then
+    print("Too many consensuses for application " .. application_id)
+    request_handle:respond(
+      {[":status"] = "500"},
+      "ERROR: too many consensuses for application " .. application_id)
+    return
+  end
+
+  local consensus_id = application_consensuses[1]
+  request_handle:headers():replace("x-reboot-consensus-id", consensus_id)
+end
