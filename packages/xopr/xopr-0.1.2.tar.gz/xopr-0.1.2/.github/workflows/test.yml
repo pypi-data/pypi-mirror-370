@@ -1,0 +1,56 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request_target:
+    types: [assigned, opened, synchronize, reopened]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: ${{ matrix.python-version }}
+        environment-file: environment.yml
+        activate-environment: xopr-test
+    
+    - name: Install package
+      shell: bash -l {0}
+      run: |
+        pip install -e .
+    
+    - name: Run flake8
+      shell: bash -l {0}
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Run tests with pytest
+      shell: bash -l {0}
+      run: |
+        pytest --cov=xopr --cov-report=html --cov-report=xml --cov-report=term
+    
+    - name: Deploy coverage to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./htmlcov
+        destination_dir: coverage
+
+    - name: Coverage comment
+      uses: py-cov-action/python-coverage-comment-action@v3
+      if: github.event_name == 'pull_request_target'
+      with:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        COVERAGE_DATA_BRANCH: main
