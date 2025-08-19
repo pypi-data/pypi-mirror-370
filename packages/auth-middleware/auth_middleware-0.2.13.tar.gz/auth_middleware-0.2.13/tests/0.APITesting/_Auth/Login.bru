@@ -1,0 +1,48 @@
+meta {
+  name: Login
+  type: http
+  seq: 1
+}
+
+post {
+  url: https://cognito-idp.{{aws_region}}.amazonaws.com/
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/x-amz-json-1.1
+  X-Amz-Target: AWSCognitoIdentityProviderService.InitiateAuth
+}
+
+body:json {
+  {
+    "AuthParameters": {
+      "USERNAME": "{{login_username}}",
+      "PASSWORD": "{{login_password}}"
+    },
+    "AuthFlow": "USER_PASSWORD_AUTH",
+    "ClientId": "{{login_client_id}}"
+  }
+}
+
+body:form-urlencoded {
+  grant_type: password
+  client_id: {{aws_cognito_client_id}}
+  username: {{aws_cognito_user}}
+  password: {{aws_cognito_password}}
+  scope: aws.cognito.signin.user.admin+openid+profile
+}
+
+script:post-response {
+  // Extract the access_token from the response
+  let access_token = res.body.AccessToken;
+  let id_token = res.body.IdToken;
+  let refresh_token = res.body.RefreshToken;
+  
+  // Store the access_token in a variable
+  bru.setEnvVar("access_token", access_token);
+  bru.setEnvVar("id_token", id_token);
+  bru.setEnvVar("refresh_token", refresh_token);
+  
+}
