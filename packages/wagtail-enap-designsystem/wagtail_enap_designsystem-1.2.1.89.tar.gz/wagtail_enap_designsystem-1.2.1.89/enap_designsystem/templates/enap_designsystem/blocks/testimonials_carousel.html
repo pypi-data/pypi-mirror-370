@@ -1,0 +1,290 @@
+{% load wagtailimages_tags %}
+{% load wagtailcore_tags wagtailimages_tags static %}
+{% block content %}
+<section class="testimonials-section">
+    <div class="wrapper-text-testimonials">
+        <h2 class="testimonials-title">{{ value.title }}</h2>
+        {% if value.description %}
+            <h4 class="testimonials-subtitle">{{ value.description }}</h4>
+        {% endif %}
+    </div>
+
+    <div class="testimonial-carousel-wrapper">
+        <div class="wrapper-testimonial"><div class="testimonial-carousel-container">
+            <div class="testimonial-carousel-items" id="testimonials-carousel">
+                {% for testimonial in value.testimonials %}
+                <div class="testimonial-item-wrapper">
+                    <div class="testimonial-container">
+                        <div class="testimonial-image">
+                            {% if testimonial.image %}
+                                {% image testimonial.image fill-150x150 format-webp as person_img %}
+                                <img src="{{ person_img.url }}" alt="{{ testimonial.name }}">
+                            {% else %}
+                                <img src="https://via.placeholder.com/150" alt="{{ testimonial.name }}">
+                            {% endif %}
+                        </div>
+                        <div class="testimonial-card">
+                            <div class="testimonial-title">{{ testimonial.name }}</div>
+                            <div class="testimonial-description">{{ testimonial.testimonial }}</div>
+                            <div class="testimonial-position">{{ testimonial.position }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="testimonial-item-wrapper">
+                    <p>Nenhum depoimento disponível.</p>
+                </div>
+                {% endfor %}
+            </div>
+        
+        </div>
+        </div>
+        <button class="testimonial-control testimonial-control-prev" id="prev-button">
+            <img style="width: 40px; height: 40px;" src="{% static 'enap_designsystem/icons/iconleft.svg' %}" alt="Anterior">
+        </button>
+        <button class="testimonial-control testimonial-control-next" id="next-button">
+            <img style="width: 40px; height: 40px;" src="{% static 'enap_designsystem/icons/iconrig.svg' %}" alt="Próximo">
+        </button>
+    </div>
+</section>
+
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        function initCarousel() {
+            const carousel = document.getElementById('testimonials-carousel');
+            const prevButton = document.getElementById('prev-button');
+            const nextButton = document.getElementById('next-button');
+            const items = carousel.querySelectorAll('.testimonial-item-wrapper');
+            
+            if (items.length === 0) return;
+            
+            let currentIndex = 0;
+            let startX, moveX, initialPosition;
+            let isDragging = false;
+            
+            // Verifica se é dispositivo mobile
+            function isMobile() {
+                return window.innerWidth < 768;
+            }
+            
+            // Número de itens visíveis depende da largura da tela
+            function getVisibleItems() {
+                if (window.innerWidth < 768) return 1;
+                if (window.innerWidth < 992) return 1;
+                return 2;
+            }
+            
+            // Verifica se deve mostrar as setas
+            function shouldShowArrows() {
+                if (isMobile()) return false; // Sempre esconder no mobile
+                return items.length > getVisibleItems(); // Só mostrar se há mais itens que o visível
+            }
+            
+            // Esconde os botões quando necessário
+            function hideButtonsWhenNeeded() {
+                if (!shouldShowArrows()) {
+                    prevButton.style.setProperty('display', 'none', 'important');
+                    nextButton.style.setProperty('display', 'none', 'important');
+                } else {
+                    // Mostrar os botões no desktop quando há mais itens
+                    prevButton.style.removeProperty('display');
+                    nextButton.style.removeProperty('display');
+                }
+            }
+            
+            // Obtém a largura de um item considerando a viewport
+            function getItemWidth() {
+                // Em telas muito pequenas, use a largura da viewport menos padding
+                if (window.innerWidth < 480) {
+                    return Math.min(items[0].offsetWidth, window.innerWidth * 0.9);
+                }
+                return items[0].offsetWidth;
+            }
+            
+            function getItemGap() {
+                // Gap ajustável dependendo da tela
+                return window.innerWidth < 768 ? 15 : 25;
+            }
+            
+            // Calcula o índice máximo com base nos itens visíveis
+            function getMaxIndex() {
+                return Math.max(0, items.length - getVisibleItems());
+            }
+            
+            // Define quantos itens rolar por vez (1 no mobile, 1 no desktop)
+            function getScrollAmount() {
+                return 1; // Sempre 1 neste carrossel específico
+            }
+            
+            // Mostra os slides baseado no índice atual
+            function showSlide(index) {
+                currentIndex = Math.max(0, Math.min(index, getMaxIndex()));
+                const itemWidth = getItemWidth();
+                const itemGap = getItemGap();
+                const offset = currentIndex * (itemWidth + itemGap);
+                
+                carousel.style.transform = `translateX(-${offset}px)`;
+                updateNavigationButtons();
+            }
+            
+            // Atualiza a visibilidade dos botões de navegação
+            function updateNavigationButtons() {
+                // Se não deve mostrar setas, esconder ambos os botões
+                if (!shouldShowArrows()) {
+                    hideButtonsWhenNeeded();
+                    return;
+                }
+                
+                // No primeiro slide, ocultar o botão anterior
+                if (currentIndex === 0) {
+                    prevButton.style.opacity = '0';
+                    prevButton.style.pointerEvents = 'none';
+                } else {
+                    prevButton.style.opacity = '1';
+                    prevButton.style.pointerEvents = 'auto';
+                }
+                
+                // No último slide, ocultar o botão próximo
+                if (currentIndex >= getMaxIndex()) {
+                    nextButton.style.setProperty('opacity', '0');
+                    nextButton.style.setProperty('pointer-events', 'none');
+                } else {
+                    nextButton.style.setProperty('opacity', '1', 'important');
+                    nextButton.style.setProperty('display', 'flex', 'important');
+                    nextButton.style.setProperty('pointer-events', 'auto', 'important');
+                }
+            }
+            
+            // Eventos dos botões
+            prevButton.addEventListener('click', function() {
+                showSlide(currentIndex - getScrollAmount());
+            });
+            
+            nextButton.addEventListener('click', function() {
+                showSlide(currentIndex + getScrollAmount());
+            });
+            
+            // Eventos de arrastar
+            carousel.addEventListener('mousedown', handleStart);
+            carousel.addEventListener('touchstart', handleStart, { passive: true });
+            
+            carousel.addEventListener('mousemove', handleMove);
+            carousel.addEventListener('touchmove', handleMove, { passive: true });
+            
+            carousel.addEventListener('mouseup', handleEnd);
+            carousel.addEventListener('touchend', handleEnd);
+            carousel.addEventListener('mouseleave', handleEnd);
+            
+            function handleStart(e) {
+                isDragging = true;
+                startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+                initialPosition = currentIndex * (getItemWidth() + getItemGap());
+                carousel.style.transition = 'none';
+                
+                // Prevenir comportamento padrão para evitar scrolling da página
+                // mas apenas se for desktop
+                if (e.type !== 'touchstart') {
+                    e.preventDefault();
+                }
+            }
+            
+            function handleMove(e) {
+                if (!isDragging) return;
+                
+                // Atualizar a posição atual do toque/mouse
+                moveX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+                const diff = moveX - startX;
+                
+                // Limitar o arrasto para evitar exceder os limites
+                const maxDrag = getItemWidth() * (items.length - getVisibleItems());
+                let newPosition = diff - initialPosition;
+                
+                // Adicionar resistência ao arrastar além dos limites
+                if (newPosition > 0) {
+                    newPosition = newPosition * 0.3; // Resistência ao puxar para a direita no início
+                } else if (newPosition < -maxDrag) {
+                    const overDrag = newPosition + maxDrag;
+                    newPosition = -maxDrag + (overDrag * 0.3); // Resistência ao puxar para a esquerda no final
+                }
+                
+                carousel.style.transform = `translateX(${newPosition}px)`;
+                
+                // Prevenir comportamento padrão para evitar scrolling da página
+                // mas apenas se for desktop
+                if (e.type !== 'touchmove') {
+                    e.preventDefault();
+                }
+            }
+            
+            function handleEnd(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                
+                carousel.style.transition = 'transform 0.3s ease-in-out';
+                
+                if (!moveX) {
+                    // Se não houve movimento, apenas restore
+                    showSlide(currentIndex);
+                    return;
+                }
+                
+                const diff = moveX - startX;
+                const threshold = getItemWidth() / 3; // 1/3 da largura para mudar de slide
+                
+                if (diff > threshold) {
+                    showSlide(currentIndex - getScrollAmount());
+                } else if (diff < -threshold) {
+                    showSlide(currentIndex + getScrollAmount());
+                } else {
+                    showSlide(currentIndex);
+                }
+            }
+            
+            // Ajuste quando a tela é redimensionada
+            let resizeTimeout;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(function() {
+                    // Atualiza a visibilidade dos botões com base no novo tamanho da tela
+                    hideButtonsWhenNeeded();
+                    
+                    // Verifica se o índice atual ainda é válido com o novo tamanho
+                    if (currentIndex > getMaxIndex()) {
+                        currentIndex = getMaxIndex();
+                    }
+                    
+                    // Reajustar tamanhos baseados na nova largura da tela
+                    carousel.style.transition = 'none'; // Desativa transição para reposicionamento imediato
+                    showSlide(currentIndex);
+                    
+                    // Restaura a transição após o reposicionamento
+                    setTimeout(() => {
+                        carousel.style.transition = 'transform 0.3s ease-in-out';
+                    }, 50);
+                }, 200);
+            });
+            
+            // Inicializar o carrossel
+            showSlide(0);
+            
+            // Adiciona uma verificação adicional após carregamento completo
+            setTimeout(function() {
+                // Garante que os botões estejam configurados corretamente
+                hideButtonsWhenNeeded();
+                
+                // Verificar se deve mostrar as setas e configurar adequadamente
+                if (shouldShowArrows()) {
+                    updateNavigationButtons();
+                }
+                
+                // Verificar novamente se os elementos têm tamanho correto
+                showSlide(currentIndex);
+            }, 500);
+        }
+        
+        // Iniciar carrossel com um pequeno atraso para garantir que todos os elementos estejam carregados
+        setTimeout(initCarousel, 100);
+    });
+</script>
+{% endblock %}

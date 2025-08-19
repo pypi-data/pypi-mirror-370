@@ -1,0 +1,510 @@
+{% load wagtailimages_tags %}
+
+<section class="contato-secao" style="background-color: {{ value.cor_fundo }};">
+    <div class="contato-container">
+        <div class="contato-grid">
+            <!-- Lado Esquerdo: Imagem -->
+            <div class="contato-imagem">
+                <div class="form-cabecalho">
+                    {% if value.titulo_principal %}
+                        <h2 class="form-titulo" style="color: {{ value.cor_titulo_principal }};">
+                            {{ value.titulo_principal }}
+                        </h2>
+                    {% else %}
+                        <p>Título não definido</p>  <!-- Linha de depuração -->
+                    {% endif %}
+
+                    {% if value.subtitulo %}
+                        <h3 class="form-subtitulo" style="color: {{ value.cor_subtitulo }};">
+                            {{ value.subtitulo }}
+                        </h3>
+                    {% endif %}
+                </div>
+                
+                {% if value.imagem %}
+                    {% image value.imagem width-600 as contact_img %}
+                    <img src="{{ contact_img.url }}" 
+                         alt="{{ value.alt_imagem }}"
+                         class="imagem-contato">
+                {% endif %}
+                
+                <!-- Botões Adicionais -->
+                {% if value.botoes_adicionais %}
+                    <div class="material-apoio-botoes">
+                        {% for botao_block in value.botoes_adicionais %}
+                            {% if botao_block.block_type == 'botao' %}
+                                <a href="{{ botao_block.value.link }}" 
+                                   class="material-apoio-botao" 
+                                   target="_blank"
+                                   style="background-color: {{ botao_block.value.cor_fundo }}; color: {{ botao_block.value.cor_texto }};"
+                                   onmouseover="this.style.backgroundColor='{{ botao_block.value.cor_hover }}'"
+                                   onmouseout="this.style.backgroundColor='{{ botao_block.value.cor_fundo }}'">
+                                    {{ botao_block.value.texto }}
+                                </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- Lado Direito: Formulário Dinâmico -->
+            <div class="contato-formulario">
+                
+                <!-- Título do Formulário (se diferente do principal) -->
+                {% if value.formulario.titulo and value.formulario.titulo != value.titulo_principal %}
+                    <h3 class="titulo-formulario">{{ value.formulario.titulo }}</h3>
+                {% endif %}
+                
+                <!-- Descrição do Formulário -->
+                {% if value.formulario.descricao %}
+                    <div class="descricao-formulario">
+                        <p>{{ value.formulario.descricao }}</p>
+                    </div>
+                {% endif %}
+                
+                <!-- Formulário Dinâmico -->
+                <form class="form-contato" 
+                      id="{{ form_id }}" 
+                      onsubmit="enviarFormularioDinamico(event)"
+                      data-email-notificacao="{{ value.formulario.email_notificacao }}"
+                      data-mensagem-sucesso="{{ value.formulario.mensagem_sucesso }}">
+                    
+                    {% csrf_token %}
+                    
+                    <!-- Input hidden para identificar o formulário -->
+                    <input type="hidden" name="form_type" value="contato_dinamico">
+                    <input type="hidden" name="form_id" value="{{ form_id }}">
+                    <input type="hidden" name="page_id" value="{{ page.id }}">
+                    
+                    <!-- Campos Dinâmicos -->
+                    {% for campo in value.formulario.campos %}
+                        <div class="campo-grupo">
+                            <!-- Debug: mostrar tipo do campo -->
+                            <!-- Tipo: {{ campo.block_type }} -->
+                            
+                            <!-- Label primeiro (exceto para checkbox e radio) -->
+                            {% if campo.block_type != 'checkbox' and campo.block_type != 'radio' %}
+                                <label for="{{ campo.value.nome }}_{{ forloop.counter }}" class="form-label">
+                                    {{ campo.value.label }}
+                                    {% if campo.value.obrigatorio %}<span class="required">*</span>{% endif %}
+                                </label>
+                            {% endif %}
+                            
+                            <!-- Renderizar campo baseado no tipo -->
+                            {% if campo.block_type == 'texto' or campo.block_type == 'text' %}
+                                <input type="text" 
+                                       id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                       name="{{ campo.value.nome }}" 
+                                       placeholder="{{ campo.value.placeholder|default:campo.value.label }}"
+                                       class="form-input"
+                                       {% if campo.value.obrigatorio %}required{% endif %}>
+                                       
+                            {% elif campo.block_type == 'email' %}
+                                <input type="email" 
+                                       id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                       name="{{ campo.value.nome }}" 
+                                       placeholder="{{ campo.value.placeholder|default:campo.value.label }}"
+                                       class="form-input"
+                                       {% if campo.value.obrigatorio %}required{% endif %}>
+                                       
+                            {% elif campo.block_type == 'telefone' or campo.block_type == 'phone' %}
+                                <input type="tel" 
+                                       id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                       name="{{ campo.value.nome }}" 
+                                       placeholder="{{ campo.value.placeholder|default:campo.value.label }}"
+                                       class="form-input"
+                                       {% if campo.value.obrigatorio %}required{% endif %}>
+                                       
+                            {% elif campo.block_type == 'numero' or campo.block_type == 'number' %}
+                                <input type="number" 
+                                       id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                       name="{{ campo.value.nome }}" 
+                                       placeholder="{{ campo.value.placeholder|default:campo.value.label }}"
+                                       class="form-input"
+                                       {% if campo.value.min %}min="{{ campo.value.min }}"{% endif %}
+                                       {% if campo.value.max %}max="{{ campo.value.max }}"{% endif %}
+                                       {% if campo.value.obrigatorio %}required{% endif %}>
+                                       
+                            {% elif campo.block_type == 'textarea' %}
+                                <textarea id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                          name="{{ campo.value.nome }}" 
+                                          placeholder="{{ campo.value.placeholder|default:campo.value.label }}"
+                                          class="form-textarea"
+                                          rows="{{ campo.value.linhas|default:5 }}"
+                                          {% if campo.value.obrigatorio %}required{% endif %}></textarea>
+                                          
+                            {% elif campo.block_type == 'select' %}
+                                <select id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                        name="{{ campo.value.nome }}" 
+                                        class="form-select"
+                                        {% if campo.value.obrigatorio %}required{% endif %}>
+                                    <option value="">{{ campo.value.placeholder|default:"Selecione uma opção" }}</option>
+                                    {% for opcao in campo.value.opcoes %}
+                                        <option value="{{ opcao.value }}">{{ opcao.label }}</option>
+                                    {% endfor %}
+                                </select>
+                                
+                            {% elif campo.block_type == 'checkbox' %}
+                                <div class="checkbox-group">
+                                    <input type="checkbox" 
+                                           id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                           name="{{ campo.value.nome }}" 
+                                           value="true"
+                                           class="form-checkbox"
+                                           {% if campo.value.obrigatorio %}required{% endif %}>
+                                    <label for="{{ campo.value.nome }}_{{ forloop.counter }}" class="checkbox-label">
+                                        {{ campo.value.label }}
+                                        {% if campo.value.obrigatorio %}<span class="required">*</span>{% endif %}
+                                    </label>
+                                </div>
+                                
+                            {% elif campo.block_type == 'radio' %}
+                                <fieldset class="radio-group">
+                                    <legend class="radio-legend">
+                                        {{ campo.value.label }}
+                                        {% if campo.value.obrigatorio %}<span class="required">*</span>{% endif %}
+                                    </legend>
+                                    {% for opcao in campo.value.opcoes %}
+                                        <div class="radio-item">
+                                            <input type="radio" 
+                                                   id="{{ campo.value.nome }}_{{ forloop.counter }}_{{ forloop.counter0 }}"
+                                                   name="{{ campo.value.nome }}" 
+                                                   value="{{ opcao.value }}"
+                                                   class="form-radio"
+                                                   {% if campo.value.obrigatorio %}required{% endif %}>
+                                            <label for="{{ campo.value.nome }}_{{ forloop.counter }}_{{ forloop.counter0 }}" class="radio-label">
+                                                {{ opcao.label }}
+                                            </label>
+                                        </div>
+                                    {% endfor %}
+                                </fieldset>
+                                
+                            {% elif campo.block_type == 'data' or campo.block_type == 'date' %}
+                                <input type="date" 
+                                       id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                       name="{{ campo.value.nome }}" 
+                                       class="form-input"
+                                       {% if campo.value.obrigatorio %}required{% endif %}>
+                                       
+                            {% elif campo.block_type == 'arquivo' or campo.block_type == 'file' %}
+                                <input type="file" 
+                                       id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                       name="{{ campo.value.nome }}" 
+                                       class="form-file"
+                                       {% if campo.value.tipos_aceitos %}accept="{{ campo.value.tipos_aceitos }}"{% endif %}
+                                       {% if campo.value.obrigatorio %}required{% endif %}>
+                            
+                            {% else %}
+                                <input type="text" 
+                                       id="{{ campo.value.nome }}_{{ forloop.counter }}"
+                                       name="{{ campo.value.nome }}" 
+                                       placeholder="{{ campo.value.label }}"
+                                       class="form-input">
+                            {% endif %}
+                            
+                            <!-- Texto de ajuda -->
+                            {% if campo.value.ajuda %}
+                                <small class="form-help">{{ campo.value.ajuda }}</small>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <!-- Debug: se não há campos -->
+                        <div class="debug-info">
+                            <p>Nenhum campo encontrado no formulário.</p>
+                            <p>Dados do formulário: {{ value.formulario }}</p>
+                        </div>
+                    {% endfor %}
+                    
+                    <!-- Botão de Envio -->
+                    <button type="submit" 
+                            class="form-botao" 
+                            style="background-color: {{ value.formulario.cor_botao }}; color: {{ value.formulario.cor_texto_botao }};"
+                            onmouseover="this.style.backgroundColor='{{ value.formulario.cor_hover_botao }}'"
+                            onmouseout="this.style.backgroundColor='{{ value.formulario.cor_botao }}'">
+                        {{ value.formulario.texto_botao }}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+/* Manter seus estilos existentes + adicionar novos para campos dinâmicos */
+.contato-secao {
+    padding: 4rem 0;
+}
+
+.contato-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+.contato-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    align-items: start;
+}
+
+.form-cabecalho {
+    margin-bottom: 2rem;
+}
+
+.form-titulo {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+}
+
+.form-subtitulo {
+    font-size: 1.2rem;
+    margin-bottom: 2rem;
+}
+
+.imagem-contato {
+    width: 100%;
+    max-height: 400px;
+    object-fit: cover;
+    border-radius: 10px;
+}
+
+.contato-formulario {
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.titulo-formulario {
+    font-size: 1.8rem;
+    color: #333;
+    margin-bottom: 1rem;
+}
+
+.descricao-formulario {
+    margin-bottom: 2rem;
+    color: #666;
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+    background-color: #fff;
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.form-label {
+    display: block;
+    margin-top: 0.5rem;
+    font-weight: 500;
+    color: #333;
+    font-size: 0.9rem;
+}
+
+.required {
+    color: #dc3545;
+    margin-left: 2px;
+}
+
+.form-help {
+    display: block;
+    margin-top: 0.25rem;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+/* Checkbox e Radio styles */
+.checkbox-group,
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.radio-group {
+    border: none;
+    padding: 0;
+}
+
+.radio-legend {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+
+.form-checkbox,
+.form-radio {
+    width: auto;
+    margin-right: 0.5rem;
+}
+
+.checkbox-label,
+.radio-label {
+    margin: 0;
+    cursor: pointer;
+}
+
+/* File input */
+.form-file {
+    width: 100%;
+    padding: 8px;
+    border: 2px dashed #e1e5e9;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+}
+
+/* Botão */
+.form-botao {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.form-botao:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.form-botao:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Mensagens */
+.form-sucesso {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    border: 1px solid #c3e6cb;
+}
+
+.form-erro {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    border: 1px solid #f5c6cb;
+}
+
+/* Botões adicionais */
+.material-apoio-botoes {
+    margin-top: 2rem;
+}
+
+.material-apoio-botao {
+    display: inline-block;
+    padding: 10px 20px;
+    margin: 0.5rem 0.5rem 0.5rem 0;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+    .contato-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+    
+    .form-titulo {
+        font-size: 2rem;
+        text-align: left;
+    }
+    
+    .contato-formulario {
+        padding: 1.5rem;
+    }
+
+    .titulo-formulario{
+        text-align: left;
+    }
+}
+</style>
+
+<script>
+function enviarFormularioDinamico(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const botao = form.querySelector('.form-botao');
+    const textoOriginal = botao.textContent;
+    const mensagemSucesso = form.dataset.mensagemSucesso || 'Formulário enviado com sucesso!';
+    
+    // Remover mensagens anteriores
+    const mensagemAnterior = form.parentNode.querySelector('.form-sucesso, .form-erro');
+    if (mensagemAnterior) {
+        mensagemAnterior.remove();
+    }
+    
+    // Estado de carregamento
+    form.classList.add('form-enviando');
+    botao.textContent = 'Enviando...';
+    botao.disabled = true;
+    
+    // Coletar dados do formulário
+    const formData = new FormData(form);
+    
+    // Aqui você pode implementar o envio real para o servidor
+    // Por enquanto, vamos simular
+    setTimeout(() => {
+        // Resetar estado
+        form.classList.remove('form-enviando');
+        botao.textContent = textoOriginal;
+        botao.disabled = false;
+        
+        // Simular sucesso (90% das vezes)
+        if (Math.random() > 0.1) {
+            // Sucesso
+            const msgSucesso = document.createElement('div');
+            msgSucesso.className = 'form-sucesso';
+            msgSucesso.textContent = mensagemSucesso;
+            form.parentNode.appendChild(msgSucesso);
+            
+            // Limpar formulário
+            form.reset();
+            
+            // Remover mensagem após 5 segundos
+            setTimeout(() => {
+                msgSucesso.remove();
+            }, 5000);
+        } else {
+            // Erro
+            const msgErro = document.createElement('div');
+            msgErro.className = 'form-erro';
+            msgErro.textContent = 'Erro ao enviar formulário. Tente novamente.';
+            form.parentNode.appendChild(msgErro);
+            
+            // Remover mensagem após 5 segundos
+            setTimeout(() => {
+                msgErro.remove();
+            }, 5000);
+        }
+    }, 2000);
+}
+</script>
