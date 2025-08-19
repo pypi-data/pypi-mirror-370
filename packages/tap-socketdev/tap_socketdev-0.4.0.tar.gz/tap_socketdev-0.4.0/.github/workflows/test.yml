@@ -1,0 +1,84 @@
+name: Test tap-socketdev
+
+on:
+  push:
+    branches: [main]
+    paths:
+    - tap_socketdev/**
+    - tests/**
+    - noxfile.py
+    - pyproject.toml
+    - uv.lock
+    - .github/workflows/test.yml
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+    - tap_socketdev/**
+    - tests/**
+    - noxfile.py
+    - pyproject.toml
+    - uv.lock
+    - .github/workflows/test.yml
+  workflow_dispatch:
+  schedule:
+  # Run weekly on Monday at 12:00 PM UTC
+  - cron: "0 12 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+  # renovate: datasource=pypi depName=nox
+  NOX_VERSION: 2025.5.1
+  # renovate: datasource=pypi depName=uv
+  UV_VERSION: 0.8.11
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      NOXFORCEPYTHON: ${{ matrix.python-version }}
+      NOXSESSION: tests
+      PYO3_USE_ABI3_FORWARD_COMPATIBILITY: "1"
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        python-version:
+        - "3.10"
+        - "3.11"
+        - "3.12"
+        - "3.13"
+        - "3.14"
+
+    steps:
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6.5.0
+      with:
+        version: ${{ env.UV_VERSION }}
+    - name: Run tests
+      env:
+        TAP_SOCKETDEV_API_KEY: ${{ secrets.TAP_SOCKETDEV_API_KEY }}
+        TAP_SOCKETDEV_START_DATE: ${{ secrets.TAP_SOCKETDEV_START_DATE }}
+      run: >
+        uvx
+        --managed-python
+        --python ${{ matrix.python-version }}
+        --with nox==${{ env.NOX_VERSION }}
+        nox --verbose
+
+  typing:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6.5.0
+      with:
+        version: ${{ env.UV_VERSION }}
+    - name: Run typing checks
+      run: >
+        uvx
+        --no-python-downloads
+        --with nox==${{ env.NOX_VERSION }}
+        nox --verbose -t typing
