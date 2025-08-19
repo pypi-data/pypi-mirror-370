@@ -1,0 +1,4 @@
+VERSION = "0.0.2"
+
+API_HOST = "0.0.0.0"
+API_PORT = 9000
