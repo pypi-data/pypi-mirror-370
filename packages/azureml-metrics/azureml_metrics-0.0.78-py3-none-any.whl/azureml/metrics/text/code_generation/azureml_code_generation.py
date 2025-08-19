@@ -1,0 +1,216 @@
+# ---------------------------------------------------------
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# ---------------------------------------------------------
+"""Methods specific to Sequence to Sequence Chat completion task type."""
+
+import logging
+import numpy as np
+from typing import Any, Dict, List, Optional, Callable, Iterator
+
+from azureml.metrics import constants, _scoring_utilities
+from azureml.metrics.common import utilities
+from azureml.metrics.common._validation import _validate_metrics_list, _check_seq2seq_list_of_list_of_str, \
+    _check_seq2seq_list_of_str, _check_seq2seq_list_of_int, _check_seq2seq_bool, _check_seq2seq_int, \
+    _check_seq2seq_tokenizer
+from azureml.metrics.common.azureml_metrics import AzureMLMetrics
+from azureml.metrics.common.contract import Contract
+
+logger = logging.getLogger(__name__)
+
+
+class AzureMLCodeGenerationMetrics(AzureMLMetrics):
+    def __init__(self,
+                 metrics: Optional[List[str]] = None,
+                 test_cases: Optional[List] = None,
+                 allow_code_eval: Optional[bool] = None,
+                 no_of_candidates: Optional[List[int]] = None,
+                 num_workers: Optional[int] = None,
+                 timeout: Optional[int] = None,
+                 tokenizer: Optional[Any] = None,
+                 smoothing: Optional[bool] = False,
+                 aggregator: Optional[bool] = True,
+                 stemmer: Optional[bool] = False,
+                 dataset: Optional[str] = None,
+                 custom_dimensions: Optional[Dict[str, Any]] = None,
+                 log_activity: Optional[Callable[[logging.Logger, str, Optional[str], Optional[Dict[str, Any]]],
+                                                 Iterator[Optional[Any]]]] = None,
+                 log_traceback: Optional[Callable[[BaseException, logging.Logger, Optional[str],
+                                                   Optional[bool], Optional[Any]], None]] = None) -> None:
+        """
+        Given the test_cases (assertions) and candidates (prediction),
+        generate metrics for Code generation task.
+
+        :param metrics: pass@k metric to be computed for code generation task
+        :param test_cases: list of strings which contains the assertion or test case statements.
+        :param allow_code_eval: Boolean to indicate whether to execute untrusted model generated code
+        :param no_of_candidates: number of code candidates to consider in the evaluation.
+        :param num_workers: number of workers used to evaluate the candidate programs
+        :param timeout: The maximum time taken to produce a prediction before it is considered a “timeout”.
+        :param tokenizer: function that can tokenize input data
+        :params smoothing: Boolean to indicate whether to smooth out the bleu score
+        :params aggregator: Boolean to indicate whether to aggregate scores
+        :params stemmer: Boolean to indicate whether to use Porter stemmer for word suffixes
+
+        :param custom_dimensions: custom_dimensions used for telemetry purposes.
+        :param log_activity is a callback to log the activity with parameters
+            :param logger: logger
+            :param activity_name: activity name
+            :param activity_type: activity type
+            :param custom_dimensions: custom dimensions
+        :param log_traceback is a callback to log exception traces. with parameters
+            :param exception: The exception to log.
+            :param logger: The logger to use.
+            :param override_error_msg: The message to display that will override the current error_msg.
+            :param is_critical: If is_critical, the logger will use log.critical, otherwise log.error.
+            :param tb: The traceback to use for logging; if not provided,
+                        the one attached to the exception is used.
+        :return: None
+        """
+        self.metrics = metrics if metrics else constants.Metric.CODE_GENERATION_SET
+        self.test_cases = test_cases
+        self.allow_code_eval = allow_code_eval
+        self.no_of_candidates = no_of_candidates
+        self.num_workers = num_workers
+        self.timeout = timeout
+        self.tokenizer = tokenizer
+        self.smoothing = smoothing
+        self.aggregator = aggregator
+        self.stemmer = stemmer
+        self.dataset = dataset
+        self.__custom_dimensions = custom_dimensions
+        self.log_activity = log_activity
+        self.log_traceback = log_traceback
+        super().__init__(log_activity, log_traceback)
+
+    def validate_code_generation(self,
+                                 y_test: List[Any],
+                                 y_pred: List[Any],):
+        """
+        Validate the inputs for code generation.
+
+        :param y_test: Actual list of code samples
+        :param y_pred: list of list of predictions or code candidates
+                generated by model.
+        """
+        reference_code = "validate_code_generation"
+        _validate_metrics_list("code generation", self.metrics, constants.Metric.CODE_GENERATION_SET,
+                               reference_code)
+
+        _check_seq2seq_list_of_list_of_str(y_test, 'y_test', ignore_none=True,
+                                           reference_code=reference_code)
+        _check_seq2seq_list_of_list_of_str(y_pred, 'y_pred', ignore_none=True,
+                                           reference_code=reference_code)
+        _check_seq2seq_list_of_str(self.test_cases, 'test_cases',
+                                   ignore_none=True, reference_code=reference_code)
+        _check_seq2seq_list_of_int(self.no_of_candidates, 'no_of_candidates',
+                                   reference_code=reference_code)
+        _check_seq2seq_bool(self.allow_code_eval, 'allow_code_eval', reference_code=reference_code)
+        _check_seq2seq_int(self.num_workers, 'num_workers', ignore_none=True, reference_code=reference_code)
+        _check_seq2seq_int(self.timeout, 'timeout', ignore_none=True, reference_code=reference_code)
+        if self.tokenizer:
+            _check_seq2seq_tokenizer(self.tokenizer, 'tokenizer', reference_code=reference_code)
+        _check_seq2seq_bool(self.smoothing, 'smoothing', reference_code=reference_code)
+        _check_seq2seq_bool(self.aggregator, 'aggregator', reference_code=reference_code)
+        _check_seq2seq_bool(self.stemmer, 'stemmer', reference_code=reference_code)
+
+        if y_test is not None:
+            Contract.assert_true(len(y_test) == len(y_pred), 'Number of samples in y_test and y_pred do not match',
+                                 log_safe=True, reference_code=reference_code, target='y_test')
+
+    def log_code_generation_debug(self,
+                                  y_test: List[Any],
+                                  y_pred: List[Any],
+                                  ) -> None:
+        """
+        Log shapes of code generation inputs for debugging.
+
+        :param y_test: Actual list of test cases
+        :param y_pred: list of list of predictions or code candidates
+                generated by model.
+        """
+        debug_text = 'the quick brown fox jumped over the lazy dog'
+        debug_data = {
+            'y_test_length': len(y_test) if y_test is not None else 0,
+            'y_pred_length': len(y_pred),
+            'metrics': self.metrics,
+            'test_cases_length': len(self.test_cases) if self.test_cases is not None else 0,
+            'allow_code_eval': self.allow_code_eval,
+            'no_of_candidates': self.no_of_candidates,
+            'num_workers': self.num_workers,
+            'timeout': self.timeout,
+            'tokenizer_example_output': ' '.join(self.tokenizer(debug_text)) if self.tokenizer else debug_text,
+            'smoothing': self.smoothing,
+            'aggregator': self.aggregator,
+            'stemmer': self.stemmer,
+        }
+
+        logger.info("Code generation metrics debug: {}".format(debug_data))
+
+    def _score_code_generation(self,
+                               y_test: List[Any],
+                               y_pred: List[Any],):
+        """
+        Compute model evaluation metrics for a code generation task.
+
+        :param y_test: Actual list of test cases
+        :param y_pred: list of list of predictions or code candidates
+                generated by model.
+        """
+        logger.warning("using only first prediction for every data sample as "
+                       "bleu or rouge metrics doesn't support multiple predictions")
+        processed_y_pred = [pred_sample[0] for pred_sample in y_pred]
+        results = {}
+        for name in self.metrics:
+            safe_name = _scoring_utilities.get_safe_metric_name(name)
+            max_ngram = constants.Metric.TRANSLATION_NGRAM_MAP.get(name, None)
+            try:
+                metric_class = _scoring_utilities.get_metric_class(name)
+                if max_ngram is not None:
+                    metric = metric_class(y_test, processed_y_pred, self.tokenizer, max_ngram, self.smoothing)
+                elif name in constants.Metric.SUMMARIZATION_SET:
+                    metric = metric_class(y_test, processed_y_pred, [name], self.tokenizer, self.aggregator,
+                                          self.stemmer)
+                else:
+                    metric = metric_class(y_test, y_pred, self.test_cases, self.allow_code_eval,
+                                          self.no_of_candidates, self.num_workers, self.timeout, self.dataset)
+                computed_result = metric.compute()
+
+                if name is constants.Metric.CodeGenerationPassRateScore:
+                    results.update(computed_result)
+                else:
+                    results[name] = computed_result.get(name, None) \
+                        if isinstance(computed_result, dict) else computed_result
+            except MemoryError:
+                raise
+            except Exception as e:
+                logger.error("Scoring failed for Code generation metric {}".format(safe_name))
+                self.log_traceback(e, logger, is_critical=False)
+                results[name] = np.nan
+        return utilities.segregate_scalar_non_scalar(results)
+
+    def compute(self, y_test: List[Any], y_pred: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Compute all metrics for code generation task based on the config.
+
+        :param y_test: Actual list of test cases
+        :param y_pred: list of list of predictions or code candidates
+            generated by model.
+        :return: Dict of computed metrics
+        """
+        self.validate_code_generation(y_test, y_pred)
+        self.log_code_generation_debug(y_test, y_pred)
+        scored_metrics = self._score_code_generation(
+            y_test,
+            y_pred,
+        )
+
+        return scored_metrics
+
+    @staticmethod
+    def list_metrics():
+        """Get the list of supported metrics.
+
+            :return: List of supported metrics.
+        """
+        supported_metrics = constants.Metric.CODE_GENERATION_SET
+        return supported_metrics
