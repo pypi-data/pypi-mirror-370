@@ -1,0 +1,102 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # Override MAOS API for development
+  maos-api:
+    build:
+      target: development
+    environment:
+      - MAOS_ENV=development
+      - LOG_LEVEL=DEBUG
+      - SECURITY_REQUIRE_ENCRYPTION=false
+      - SECURITY_REQUIRE_AUTH=false
+    volumes:
+      - ../../src:/app/src
+      - ../../examples:/app/examples
+      - ../../config:/app/config
+      - ../../tests:/app/tests
+    command: ["python", "examples/backend_api_example.py", "--host", "0.0.0.0", "--port", "8000", "--debug"]
+    ports:
+      - "8000:8000"
+      - "8001:8001"  # Additional port for development
+
+  # Redis with less strict settings for development
+  redis:
+    environment:
+      - REDIS_PASSWORD=  # No password in development
+    command: redis-server --appendonly yes
+
+  # PostgreSQL with development settings
+  postgres:
+    environment:
+      - POSTGRES_PASSWORD=dev_password
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+
+  # Development tools container
+  dev-tools:
+    build:
+      context: ../..
+      dockerfile: examples/docker/Dockerfile
+      target: development
+    container_name: maos-dev-tools
+    volumes:
+      - ../../:/app
+      - dev_tools_data:/root
+    working_dir: /app
+    command: tail -f /dev/null  # Keep container running
+    environment:
+      - MAOS_ENV=development
+      - PYTHONPATH=/app/src
+    networks:
+      - maos-network
+
+  # Test runner service
+  test-runner:
+    build:
+      context: ../..
+      dockerfile: examples/docker/Dockerfile
+      target: development
+    container_name: maos-test-runner
+    volumes:
+      - ../../:/app
+    working_dir: /app
+    environment:
+      - MAOS_ENV=testing
+      - PYTHONPATH=/app/src
+      - REDIS_HOST=redis
+    command: python -m pytest tests/ -v
+    depends_on:
+      - redis
+    profiles:
+      - testing
+    networks:
+      - maos-network
+
+  # Code quality tools
+  linting:
+    build:
+      context: ../..
+      dockerfile: examples/docker/Dockerfile
+      target: development
+    container_name: maos-linting
+    volumes:
+      - ../../:/app
+    working_dir: /app
+    command: >
+      sh -c "
+        echo 'Running code quality checks...'
+        python -m black --check src/ tests/ examples/
+        python -m isort --check-only src/ tests/ examples/
+        python -m flake8 src/ tests/ examples/
+        python -m mypy src/
+      "
+    profiles:
+      - quality
+
+volumes:
+  dev_tools_data:
+    driver: local
