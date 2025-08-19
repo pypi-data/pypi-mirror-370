@@ -1,0 +1,205 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-ad-server"
+dynamic = ["version"]
+description = "MCP服务器用于处理广告投放数据"
+authors = [
+    {name = "江厚望", email = "jianghouwang@dartou.com"},
+    {name = "邓嘉豪", email = "dengjiahao@dartou.com"},
+    {name = "刘松奇", email = "liusongqi@dartou.com"},
+]
+maintainers = [
+    {name = "江厚望", email = "jianghouwang@dartou.com"},
+]
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+keywords = ["mcp", "advertising", "analytics", "data-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "mcp>=1.2.0",
+    "httpx[socks]>=0.25.0",
+    "aiofiles>=23.0.0",
+    "python-dateutil>=2.8.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.7.0",
+    "mcpo>=0.0.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.12.0",
+    "isort>=5.13.0",
+    "ruff>=0.1.9",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+]
+monitoring = [
+    "prometheus-client>=0.19.0",
+]
+cache = [
+    "redis>=5.0.0",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.4.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+
+[project.scripts]
+mcp-ad-server = "mcp_ad_server.main:main"
+
+# setuptools配置 - 包含数据文件
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mcp_ad_server*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "mcp_ad_server.__version__"}
+
+[tool.setuptools.package-data]
+"*" = ["data/**/*.json"]
+
+# 工具配置
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+    | \.mypy_cache
+    | \.pytest_cache
+    | \.ruff_cache
+    | __pycache__
+    | build
+    | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["mcp_ad_server"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+    "N",  # pep8-naming
+    "S",  # flake8-bandit
+]
+ignore = [
+    "S101",  # Use of assert detected (we use assert in tests)
+    "S608",  # Possible SQL injection vector through string-based query construction
+    "S104",  # Possible binding to all interfaces (for debug/test servers)
+    "S105",  # Possible hardcoded password (for test tokens)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["S101", "S104", "S105", "F841", "E402", "E501"]
+"**/debug_*.py" = ["S104", "S105", "B904", "E501"]
+"**/services/api_client.py" = ["E501"]  # Allow long lines in API client docstrings
+"**/tools/*.py" = ["E501"]  # Allow long lines in tool docstrings
+"**/models/*.py" = ["E501"]  # Allow long lines in model validation messages
+"**/managers/*.py" = ["E501"]  # Allow long lines in manager logging messages
+"**/resources/*.py" = ["E402"]  # Allow imports after sys.path manipulation
+"analyze_indicators.py" = ["E501"]  # Analysis script with long descriptive lines
+"run_server.py" = ["E402"]  # Server script with path setup
+"test_*.py" = ["E501", "E402", "S603"]  # Test files
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "mcp.*",
+    "httpx.*",
+    "aiofiles.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+    "--cov=src/mcp_ad_server",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=80",
+]
+markers = [
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "slow: marks tests as slow",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "tests/*",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "isort>=6.0.1",
+    "pre-commit>=4.2.0",
+    "ruff>=0.12.7",
+]
+
