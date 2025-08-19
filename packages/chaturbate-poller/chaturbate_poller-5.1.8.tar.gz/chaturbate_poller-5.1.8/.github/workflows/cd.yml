@@ -1,0 +1,219 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+
+env:
+  DEFAULT_PYTHON: "3.13"
+  UV_CACHE_DIR: /tmp/uv-cache
+  FORCE_COLOR: "1"
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: ${{ github.workflow }}-release-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      dist_artifacts_name: dist
+      dist_artifacts_dir: dist
+      lock_file_artifact: uv.lock
+    steps:
+      - name: Setup | Checkout Repository at workflow sha
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+          persist-credentials: true
+
+      - name: Setup | Force correct release branch on workflow sha
+        run: git checkout -B ${{ github.event.workflow_run.head_branch }}
+
+      - name: Setup | Install uv
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6
+        with:
+          enable-cache: true
+          cache-suffix: build-${{ env.DEFAULT_PYTHON }}-${{ runner.os }}
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+          cache-local-path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Setup | Update lock file to latest versions
+        run: uv lock --upgrade
+
+      - name: Setup | Install Python & Project dependencies
+        run: uv sync --group=build
+
+      - name: Build | Build next version artifacts
+        id: version
+        env:
+          GH_TOKEN: "none"
+        run: uv run semantic-release -v version --no-commit --no-tag
+
+      - name: Upload | Distribution Artifacts
+        if: ${{ steps.version.outputs.released == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: ${{ env.dist_artifacts_name }}
+          path: ${{ format('{0}/**', env.dist_artifacts_dir) }}
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Upload | Lock File Artifact
+        if: ${{ steps.version.outputs.released == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: ${{ env.lock_file_artifact }}
+          path: ${{ env.lock_file_artifact }}
+          if-no-files-found: error
+          retention-days: 2
+
+    outputs:
+      new-release-detected: ${{ steps.version.outputs.released }}
+      new-release-version: ${{ steps.version.outputs.version }}
+      new-release-tag: ${{ steps.version.outputs.tag }}
+      new-release-is-prerelease: ${{ steps.version.outputs.is_prerelease }}
+      distribution-artifacts: ${{ env.dist_artifacts_name }}
+      lock-file-artifact: ${{ env.lock_file_artifact }}
+
+  release:
+    runs-on: ubuntu-24.04
+    needs:
+      - build
+
+    if: ${{ needs.build.outputs.new-release-detected == 'true' }}
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Setup | Checkout Repository on Release Branch
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup | Force release branch to be at workflow sha
+        run: git reset --hard ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup | Install uv
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6
+        with:
+          enable-cache: true
+          cache-suffix: release-${{ env.DEFAULT_PYTHON }}-${{ runner.os }}
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+          cache-local-path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Setup | Install Python & Project dependencies
+        run: uv sync --group=build --frozen
+
+      - name: Setup | Download Build Artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        id: artifact-download
+        with:
+          name: ${{ needs.build.outputs.distribution-artifacts }}
+          path: dist
+
+      - name: Setup | Download Lock File Artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        with:
+          name: ${{ needs.build.outputs.lock-file-artifact }}
+
+      - name: Setup | Stage Lock File for Version Commit
+        run: git add uv.lock
+
+      - name: Release | Verify branch integrity
+        id: verify
+        run: |
+          # Verify we're on the main branch
+          CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          if [ "$CURRENT_BRANCH" != "main" ]; then
+              echo "::error::Release can only be triggered from main branch, got: $CURRENT_BRANCH"
+              exit 1
+          fi
+
+          # Verify no new commits have been pushed since the workflow was triggered
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          WORKFLOW_SHA="${{ github.event.workflow_run.head_sha }}"
+
+          echo "Current HEAD SHA: $CURRENT_SHA"
+          echo "Workflow trigger SHA: $WORKFLOW_SHA"
+
+          if [ "$CURRENT_SHA" != "$WORKFLOW_SHA" ]; then
+              echo "::error::New commits detected since workflow was triggered."
+              echo "::error::Expected: $WORKFLOW_SHA, Current: $CURRENT_SHA"
+              echo "::error::Aborting release"
+              exit 1
+          fi
+
+          echo "Branch integrity validated: $CURRENT_BRANCH at $CURRENT_SHA"
+
+      - name: Release | Create Release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run semantic-release -v --strict version --skip-build
+          uv run semantic-release publish
+
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      new-release-version: ${{ steps.release.outputs.version }}
+      new-release-tag: ${{ steps.release.outputs.tag }}
+
+
+  deploy:
+    runs-on: ubuntu-24.04
+    if: ${{ needs.release.outputs.released == 'true' && github.repository == 'MountainGod2/chaturbate_poller' }}
+    needs:
+      - build
+      - release
+
+    environment:
+      name: pypi
+      url: https://pypi.org/project/chaturbate-poller/
+
+    permissions:
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Setup | Download Build Artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        id: artifact-download
+        with:
+          name: ${{ needs.build.outputs.distribution-artifacts }}
+          path: dist
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc  # v1.12.4
+        with:
+          packages-dir: dist
+          print-hash: true
+          verbose: true
+          attestations: true
+
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/*

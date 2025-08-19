@@ -1,0 +1,268 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+env:
+  DEFAULT_PYTHON: "3.13"
+  UV_CACHE_DIR: /tmp/uv-cache
+  FORCE_COLOR: "1"
+  UV_COMPILE_BYTECODE: "1"
+  UV_CACHE_COMPRESSION: "1"
+  UV_CONCURRENT_DOWNLOADS: "4"
+
+permissions:
+  contents: write
+  security-events: write
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: dorny/paths-filter@7267a8516b6f92bdb098633497bad573efdbf271 # v2
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'tests/**'
+              - 'examples/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'Dockerfile'
+              - '.github/workflows/**'
+              - '.pre-commit-config.yaml'
+            docs:
+              - 'docs/**'
+              - '*.md'
+
+  quality-checks:
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup UV & Python
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6
+        with:
+          enable-cache: true
+          cache-suffix: quality-${{ env.DEFAULT_PYTHON }}-${{ runner.os }}
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+          cache-local-path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Install Dependencies
+        run: |
+          export UV_CACHE_DIR="${{ env.UV_CACHE_DIR }}"
+          uv sync --group=dev --frozen
+
+      - name: Run Linting
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_on: error
+          command: |
+            echo "::group::Ruff Format Check"
+            uv run ruff format --check --diff
+            echo "::endgroup::"
+
+            echo "::group::Ruff Lint Check"
+            uv run ruff check
+            echo "::endgroup::"
+
+      - name: Run MyPy Type Checking
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_on: timeout
+          command: |
+            echo "::group::MyPy Type Check"
+            uv run mypy ./
+            echo "::endgroup::"
+
+      - name: Run BasedPyright Type Checking
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_on: timeout
+          command: |
+            echo "::group::BasedPyright Type Check"
+            uv run basedpyright ./
+            echo "::endgroup::"
+
+  test:
+    if: needs.changes.outputs.code == 'true'
+    needs: [changes, quality-checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup UV & Python
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6
+        with:
+          enable-cache: true
+          cache-suffix: test-${{ matrix.python-version }}-${{ runner.os }}
+          python-version: ${{ matrix.python-version }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+          cache-local-path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Install Dependencies
+        run: |
+          export UV_CACHE_DIR="${{ env.UV_CACHE_DIR }}"
+          uv sync --group=dev --frozen
+
+      - name: Run Tests
+        run: uv run pytest --junit-xml=test-results.xml -n auto --maxfail=5
+
+      - name: Upload Coverage
+        if: matrix.python-version == '3.13'
+        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-results-py${{ matrix.python-version }}
+          path: |
+            test-results.xml
+            coverage.xml
+          if-no-files-found: ignore
+
+  security-analysis:
+    if: needs.changes.outputs.code == 'true'
+    needs: [changes, quality-checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup UV & Python
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6
+        with:
+          enable-cache: true
+          cache-suffix: security-${{ env.DEFAULT_PYTHON }}-${{ runner.os }}
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+          cache-local-path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@96f518a34f7a870018057716cc4d7a5c014bd61c # v3
+        with:
+          languages: python
+
+      - name: Install Dependencies & Generate Coverage
+        run: |
+          export UV_CACHE_DIR="${{ env.UV_CACHE_DIR }}"
+          uv sync --group=dev --frozen
+          uv run pytest
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@8c71dc039c2dd71d3821e89a2b58ecc7fee6ced9 # v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Run Security Scans
+        run: |
+          echo "::group::Bandit Security Scan"
+          uv run bandit -r src/ -f sarif -o bandit.sarif || true
+          echo "::endgroup::"
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4 # 0.32.0
+        with:
+          scan-type: "fs"
+          skip-dirs: ".git,.github,.venv,docs/_build"
+          ignore-unfixed: true
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: 1
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@96f518a34f7a870018057716cc4d7a5c014bd61c # v3
+
+      - name: Upload Security Results
+        if: always()
+        uses: github/codeql-action/upload-sarif@96f518a34f7a870018057716cc4d7a5c014bd61c # v3
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+
+      - name: Upload Trivy Results
+        if: always()
+        uses: github/codeql-action/upload-sarif@96f518a34f7a870018057716cc4d7a5c014bd61c # v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  docs:
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.code == 'true'
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup UV & Python
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6
+        with:
+          enable-cache: true
+          cache-suffix: docs-${{ env.DEFAULT_PYTHON }}-${{ runner.os }}
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+          cache-local-path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Install Dependencies & Build Docs
+        run: |
+          export UV_CACHE_DIR="${{ env.UV_CACHE_DIR }}"
+          uv sync --group=docs --frozen
+          rm -rf docs/_build
+          uv run sphinx-build docs docs/_build/html -W
+
+      - name: Deploy to Pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_build/html
