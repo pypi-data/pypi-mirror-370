@@ -1,0 +1,79 @@
+# zh2ru-idterms
+
+**中文证件名词 → 俄语对照库**  
+专门用于 **护照 / 驾驶证** 等涉外文档的中俄专用名词翻译。  
+库中内置 SQLite 数据库 `terms.db`，包含：
+
+- **地理名词**（省、市、区县）
+- **姓名规则**（姓氏拼音 → 俄文，名的拼音 → Palladius 转写）
+- **机构名称**（护照 / 驾驶证相关的机关机构）
+
+---
+
+## 🚀 安装
+
+```bash
+pip install zh2ru-idterms
+```
+
+## 本地开发安装：
+
+```bash
+pip install -e .
+```
+
+## 📦 特点
+
+• 开箱即用：数据库已内置，无需手动导入。
+• 专门针对证件翻译（护照 / 驾驶证）。
+• 提供 Python API，可直接查询。
+
+## 📖 使用方法
+
+```python
+from zh2ru_idterms import (
+    get_place_path,
+    find_surname_pinyin,
+    to_palladius_given,
+    translate_person_name,
+    find_org,
+)
+
+# 1. 地理名词
+print(get_place_path(province_zh="浙江省", city_zh="宁波市", district_zh="鄞州区"))
+# 输出: Чжэцзян / Нинбо / Иньчжоу
+
+# 2. 姓氏拼音 → 俄语
+print(find_surname_pinyin("zhang"))
+# 输出: чжан
+
+# 3. 名（拼音 → Palladius 转写）
+print(to_palladius_given("xiaoming"))
+# 输出: сяомин
+
+# 4. 中文姓名全名 → 俄语
+print(translate_person_name("zhang", "xiaoming"))
+# 输出: Чжан Сяомин
+
+# 5. 机构名称
+print(find_org("国家移民管理局", doc_type="passport"))
+# 输出: Государственное управление по делам иммиграции КНР
+```
+
+## 📚 数据范围
+
+- **地理名词**：包含中国各省、市、区县的俄语翻译。
+- **姓名规则**：提供常见姓氏的拼音到俄语的映射，以及名的 Palladius 转写。
+- **机构名称**：涵盖护照、驾驶证等相关机构的俄语翻译。
+- **支持多种证件类型**：护照、驾驶证等。
+
+## 🛠️ 开发者
+
+数据导入（仅开发者需要）
+
+最终用户无需操作数据库。
+开发者可使用 import_all.py 或各独立脚本导入最新数据到 terms.db。
+
+## 📜 License
+
+MIT License
