@@ -1,0 +1,60 @@
+############################################################################
+#
+# This file defines the build process for funpack-fmrib-conig, as hosted at:
+#
+#    https://git.fmrib.ox.ac.uk/fsl/funpack-fmrib-config
+#
+# The build pipeline comprises the following stages:
+#
+#    1. build:  Build PyPI distributions
+#    2. deploy: Deploy to PyPI
+#
+############################################################################
+
+
+stages:
+ - build
+ - deploy
+
+
+#############
+# Build stage
+#############
+
+build-pypi-dist:
+  stage: build
+  image: python:3.9
+  only:
+    - tags@fsl/funpack-fmrib-config
+
+  tags:
+    - docker
+
+  script:
+   - bash ./.ci/build_pypi_dist.sh
+
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - dist/*
+
+
+##############
+# Deploy stage
+##############
+
+deploy-pypi:
+  only:
+    - tags@fsl/funpack-fmrib-config
+  stage: deploy
+  when:  manual
+  image: python:3.9
+
+  tags:
+    - docker
+
+  dependencies:
+    - build-pypi-dist
+
+  script:
+    - bash ./.ci/deploy_pypi.sh
