@@ -1,0 +1,62 @@
+Metadata-Version: 2.3
+Name: safe-s3-storage
+Version: 0.8.3
+Summary: S3 safe storage
+Keywords: s3,kaspersky,antivirus,upload
+Author: community-of-python
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Communications :: File Sharing
+Classifier: Typing :: Typed
+Requires-Dist: httpx
+Requires-Dist: aioboto3
+Requires-Dist: types-aioboto3[s3]
+Requires-Dist: stamina
+Requires-Dist: pydantic
+Requires-Dist: pyvips
+Requires-Dist: pyvips-binary
+Requires-Dist: puremagic
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+
+# safe-s3-storage
+
+S3 tools for uploading files to S3 safely (antivirus check, etc) as well as downloading and deleting files.
+
+## How To Use
+
+```
+uv add safe-s3-storage
+poetry add safe-s3-storage
+```
+
+## Retries on S3 errors
+
+safe-s3-storage doesn't provide any retries on S3 errors. You should configure in `S3Client`:
+
+```python
+import typing
+
+import aioboto3
+from aiobotocore.config import AioConfig
+from types_aiobotocore_s3 import S3Client
+
+from application.settings import settings
+
+
+async def create_s3_resource() -> typing.AsyncIterator[S3Client]:
+    s3_session: typing.Final = aioboto3.Session(
+        aws_access_key_id=settings.s3_access_key_id,
+        aws_secret_access_key=settings.s3_secret_access_key.get_secret_value(),
+    )
+    async with s3_session.client(
+        "s3",
+        endpoint_url=str(settings.s3_endpoint_url),
+        config=AioConfig(retries={"max_attempts": 3, "mode": "standard"}),
+    ) as s3_client:
+        yield s3_client
+
+```
