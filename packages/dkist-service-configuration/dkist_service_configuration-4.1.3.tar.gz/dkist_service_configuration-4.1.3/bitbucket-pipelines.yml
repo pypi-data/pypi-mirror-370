@@ -1,0 +1,73 @@
+image: python:3.11
+
+definitions:
+  steps:
+    - step: &download_execute_script
+        name: Download Script Execute Script
+        script:
+          - echo "Retrieving Script Execution Script"
+          - curl -fL https://getcli.jfrog.io | sh
+          - ./jfrog rt dl --url $ARTIFACTORY_URL --user $ARTIFACTORY_USER --password $ARTIFACTORY_PASSWORD generic-packages/ci_scripts/latest/execute_script.sh
+          - cat ci_scripts/latest/execute_script.sh
+          - chmod 755 ci_scripts/latest/execute_script.sh
+        artifacts:
+          - ci_scripts/latest/execute_script.sh
+
+    - step: &lint
+        caches:
+          - pip
+        name: Lint
+        script:
+          - ./ci_scripts/latest/execute_script.sh lint_python.sh
+
+    - step: &test-311
+        caches:
+          - pip
+        name: Test Python 3.11
+        script:
+          - pip install -U pip
+          - pip install tox
+          - tox -e py311
+          - ./ci_scripts/latest/execute_script.sh upload_coverage.sh
+
+    - step: &test311-min
+        image: python:3.11
+        caches:
+          - pip
+        name: Test Python 3.11 - Minimum
+        script:
+          - pip install -U pip
+          - pip install tox
+          - tox run -e py311-min
+
+    - step: &scan
+        caches:
+          - pip
+        name: Scan
+        script:
+          - ./ci_scripts/latest/execute_script.sh scan_python.sh
+
+    - step: &publish
+        caches:
+          - pip
+        name: Publish
+        script:
+          - ./ci_scripts/latest/execute_script.sh push_python.sh
+
+pipelines:
+  default:
+    - step: *download_execute_script
+    - step: *lint
+    - parallel:
+      - step: *test-311
+      - step: *test311-min
+    - step: *scan
+  tags:
+    'v*':
+      - step: *download_execute_script
+      - parallel:
+          - step: *lint
+          - step: *test-311
+          - step: *test311-min
+          - step: *scan
+      - step: *publish
