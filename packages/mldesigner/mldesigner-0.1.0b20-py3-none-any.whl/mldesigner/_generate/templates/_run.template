@@ -1,0 +1,75 @@
+# ------------------------------------------------------------------------------
+# This is generated from {{pipeline_job.studio_url}}
+# To run this code, please install SDK by this command:
+# pip install "mldesigner[pipeline]>=0.0.0b5" --upgrade
+# More detailed guide to set up your environment: TODO(2027847):Complete TODO in helloworld_pipeline_job_with_deep_reference
+# ------------------------------------------------------------------------------
+
+import argparse
+import logging
+import os
+import sys
+
+from azure.ai.ml import MLClient
+from azure.identity import DefaultAzureCredential, InteractiveBrowserCredential
+
+
+def get_logger(name, verbosity=logging.INFO, target_stdout=False):
+    logger = logging.getLogger(name)
+    logger.propagate = False
+    logger.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(stream=sys.stdout) if target_stdout else logging.StreamHandler()
+    formatter = logging.Formatter("[%(asctime)s][%(name)s][%(levelname)s] - %(message)s")
+    handler.setFormatter(formatter)
+    handler.setLevel(verbosity)
+    logger.addHandler(handler)
+    return logger
+
+
+logger = get_logger(__name__)
+current_folder = os.path.dirname(os.path.abspath(__file__))
+os.chdir(current_folder)
+sys.path.append(current_folder)
+
+
+def get_arg_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--validate", "-v", action="store_true", help="Only validate pipeline")
+    parser.add_argument("--verbose", action="store_true", help="Print verbose info")
+    parser.add_argument("--wait", action="store_true", help="Wait until pipeline terminates")
+    return parser
+
+
+def main(pipeline_job, client, **kwargs):
+    parser = get_arg_parser()
+    args, additional_args = parser.parse_known_args()
+    logger.info("args: %s", args)
+    logger.info(f"additional args: {additional_args}")
+
+    if args.validate:
+        client.jobs.validate(pipeline_job, raise_on_failure=True)
+        logger.info("Hooray, pipeline validation succeed.")
+    else:
+        pipeline_job = client.jobs.create_or_update(pipeline_job, **kwargs)
+        logger.info(f"You can reach the submitted pipeline in {pipeline_job.studio_url}")
+        if args.wait:
+            client.jobs.stream(pipeline_job.name)
+
+
+if __name__ == "__main__":
+    from pipelines.{{pipeline_folder_name}} import pipeline_job
+
+    try:
+        credential = DefaultAzureCredential()
+        # Check if given credential can get token successfully.
+        credential.get_token("https://management.azure.com/.default")
+    except Exception:
+        # Fall back to InteractiveBrowserCredential in case DefaultAzureCredential not work
+        credential = InteractiveBrowserCredential()
+
+    ml_client = MLClient.from_config(credential=credential)
+
+    main(
+        pipeline_job=pipeline_job,
+        client=ml_client,
+    )
