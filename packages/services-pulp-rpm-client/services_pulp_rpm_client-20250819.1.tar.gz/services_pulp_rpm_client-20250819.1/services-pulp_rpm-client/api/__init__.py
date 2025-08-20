@@ -1,0 +1,25 @@
+# flake8: noqa
+
+# import apis into api package
+from services-pulp_rpm-client.api.acs_rpm_api import AcsRpmApi
+from services-pulp_rpm-client.api.content_advisories_api import ContentAdvisoriesApi
+from services-pulp_rpm-client.api.content_distribution_trees_api import ContentDistributionTreesApi
+from services-pulp_rpm-client.api.content_modulemd_defaults_api import ContentModulemdDefaultsApi
+from services-pulp_rpm-client.api.content_modulemd_obsoletes_api import ContentModulemdObsoletesApi
+from services-pulp_rpm-client.api.content_modulemds_api import ContentModulemdsApi
+from services-pulp_rpm-client.api.content_packagecategories_api import ContentPackagecategoriesApi
+from services-pulp_rpm-client.api.content_packageenvironments_api import ContentPackageenvironmentsApi
+from services-pulp_rpm-client.api.content_packagegroups_api import ContentPackagegroupsApi
+from services-pulp_rpm-client.api.content_packagelangpacks_api import ContentPackagelangpacksApi
+from services-pulp_rpm-client.api.content_packages_api import ContentPackagesApi
+from services-pulp_rpm-client.api.content_repo_metadata_files_api import ContentRepoMetadataFilesApi
+from services-pulp_rpm-client.api.distributions_rpm_api import DistributionsRpmApi
+from services-pulp_rpm-client.api.publications_rpm_api import PublicationsRpmApi
+from services-pulp_rpm-client.api.remotes_rpm_api import RemotesRpmApi
+from services-pulp_rpm-client.api.remotes_uln_api import RemotesUlnApi
+from services-pulp_rpm-client.api.repositories_rpm_api import RepositoriesRpmApi
+from services-pulp_rpm-client.api.repositories_rpm_versions_api import RepositoriesRpmVersionsApi
+from services-pulp_rpm-client.api.rpm_comps_api import RpmCompsApi
+from services-pulp_rpm-client.api.rpm_copy_api import RpmCopyApi
+from services-pulp_rpm-client.api.rpm_prune_api import RpmPruneApi
+
