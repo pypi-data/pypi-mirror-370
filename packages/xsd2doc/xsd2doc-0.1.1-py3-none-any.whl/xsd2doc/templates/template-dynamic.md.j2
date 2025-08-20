@@ -1,0 +1,115 @@
+# XSD Documentation
+
+## Elements
+{% for elem_name, elem in parsed_data.all_elements.items() %}
+### <a id="{{ elem_name | replace(' ', '-') | lower }}"></a>{{ elem_name }}
+
+**Children:**  
+{% if elem.children or elem.children_groups %}
+    {% if elem.children %}
+| Child | Notes |
+| --- | --- |
+{% for c in elem.children %}
+| [{{ c }}](#{{ c | replace(' ', '-') | lower }}) | {{ notes[elem_name].get(c, "") }} |
+{% endfor %}
+    {% endif %}
+
+    {% if elem.children_groups %}
+from groups:  
+| Group | Notes |
+| --- | --- |
+{% for g in elem.children_groups %}
+| [{{ g }}](#group-{{ g | replace(' ', '-') | lower }}) | {{ notes[elem_name].get(g, "") }} |
+{% endfor %}
+    {% endif %}
+{% else %}
+- *(None)*
+{% endif %}
+
+**Attributes:**  
+{% if elem.attributes or elem.attribute_groups %}
+    {% if elem.attributes %}
+| Attribute | Type | Use | Notes |
+| --- | --- | --- | --- |
+{% for attr in elem.attributes %}
+| {{ attr.name }} | {{ attr.attr_type }} | {{ attr.use }} | {{ notes[elem_name].get(attr.name, "") }} |
+{% endfor %}
+    {% endif %}
+
+    {% if elem.attribute_groups %}
+from groups:  
+| Attribute Group | Notes |
+| --- | --- |
+{% for g in elem.attribute_groups %}
+| [{{ g }}](#attribute-group-{{ g | replace(' ', '-') | lower }}) | {{ notes[elem_name].get(g, "") }} |
+{% endfor %}
+    {% endif %}
+{% else %}
+- *(None)*
+{% endif %}
+
+---
+{% endfor %}
+
+## Group Definitions
+{% if parsed_data.all_element_groups %}
+{% for name, group_info in parsed_data.all_element_groups.items() %}
+
+### <a id="group-{{ name | replace(' ', '-') | lower }}"></a>Group: {{ name }}
+
+**Values:**  
+{% if group_info.vals and group_info.vals|length > 0 %}
+| Element | Type | Min Occurs | Max Occurs | Notes |
+| --- | --- | --- | --- | --- |
+{% for val in group_info.vals %}
+| [{{ val.name }}](#{{ val.name | replace(' ', '-') | lower }}) | {{ val.node_type.split('}')[-1] if val.node_type else "" }} | {{ val.min_occurs if val.min_occurs else "N/A" }} | {{ val.max_occurs if val.max_occurs else "unbounded" }} | {{ notes[name].get(val.name, "") }} |
+{% endfor %}
+{% else %}
+- *(None)*
+{% endif %}
+
+**Referenced by:**  
+{% if group_info.referenced_by %}
+{% for ref in group_info.referenced_by %}
+[{{ ref }}](#{{ ref | replace(' ', '-') | lower }}){% if not loop.last %}, {% endif %}
+{% endfor %}
+{% else %}
+- *(None)*
+{% endif %}
+{% endfor %}
+{% else %}
+*(No groups found)*
+{% endif %}
+
+
+---
+
+## Attribute Group Definitions
+{% if parsed_data.all_attribute_groups %}
+{% for name, attr_group_info in parsed_data.all_attribute_groups.items() %}
+
+### <a id="attribute-group-{{ name | replace(' ', '-') | lower }}"></a>Attribute Group: {{ name }}
+
+**Values:**  
+{% if attr_group_info.vals %}
+| Attribute | Type | Use | Default | Notes |
+| --- | --- | --- | --- | --- |
+{% for attr in attr_group_info.vals %}
+| {{ attr.name }} | {{ attr.attr_type }} | {{ attr.use if attr.use else "optional" }} | {{ attr.default if attr.default else "" }} | {{ notes[name].get(attr.name, "") }} |
+{% endfor %}
+{% else %}
+- *(None)*
+{% endif %}
+
+**Referenced by:**  
+{% if attr_group_info.referenced_by %}
+{% for ref in attr_group_info.referenced_by %}
+[{{ ref }}](#{{ ref | replace(' ', '-') | lower }}){% if not loop.last %}, {% endif %}
+{% endfor %}
+{% else %}
+- *(None)*
+{% endif %}
+{% endfor %}
+{% else %}
+*(No attribute groups found)*
+{% endif %}
