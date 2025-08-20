@@ -1,0 +1,346 @@
+Metadata-Version: 2.4
+Name: sarm-sdk
+Version: 1.0.16
+Summary: Python SDK for SARM(Security Asset Risk Management) Platform
+Home-page: https://github.com/murphysec
+Author: Murphysec Team
+Author-email: Murphysec Team <developer@murphysec.com>
+License: MIT
+Project-URL: Homepage, https://www.murphysec.com
+Keywords: security,asset,risk,management,sdk,api
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Security
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests>=2.20.0
+Requires-Dist: pydantic>=1.6.0
+Requires-Dist: typing-extensions>=3.7.4
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: pytest-cov>=2.0; extra == "dev"
+Requires-Dist: black>=21.0; extra == "dev"
+Requires-Dist: flake8>=3.8; extra == "dev"
+Requires-Dist: mypy>=0.812; extra == "dev"
+Requires-Dist: pre-commit>=2.0; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=4.0; extra == "docs"
+Requires-Dist: sphinx-rtd-theme>=0.5; extra == "docs"
+Requires-Dist: myst-parser>=0.15; extra == "docs"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
+# SARM SDK
+
+**资产风险管理平台 Python SDK**
+
+[![Python Version](https://img.shields.io/badge/python-3.7+-blue.svg)](https://python.org)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+SARM SDK 是 SARM（资产风险管理平台）的官方 Python SDK，提供了完整的 API 封装和数据模型，支持组织架构、软件成分、漏洞管理、安全问题等全业务流程的数据导入和管理。
+
+## ✨ 主要特性
+
+- 🚀 **简单易用**: 提供 Pythonic 的 API 接口，易于学习和使用
+- 📊 **完整覆盖**: 支持平台所有核心功能模块
+- 🔒 **类型安全**: 基于 Pydantic 提供完整的数据验证和类型提示
+- 🔄 **批量操作**: 支持高效的批量数据导入和处理
+- 🛡️ **异常处理**: 完善的错误处理和异常体系
+- 📝 **丰富示例**: 提供详细的使用示例和最佳实践
+
+## 📦 安装
+
+```bash
+pip install sarm-sdk
+```
+
+## 🚀 快速开始
+
+### 基础使用
+
+```python
+from sarm_sdk import SARMClient
+from sarm_sdk.models import OrganizeInsert, VulnInsert
+
+# 初始化客户端
+client = SARMClient(
+    base_url="https://your-platform-api.com",
+    token="your-bearer-token"
+)
+
+# 创建组织
+org = OrganizeInsert(
+    organize_name="技术部",
+    organize_unique_id="ORG-001",
+    organize_punique_id="0",
+    status="active"
+)
+result = client.organizations.create(org, execute_release=True)
+print(f"组织创建成功: {result.success_count}个")
+
+# 刷新组织缓存（重要！）
+client.organizations.refresh_cache()
+
+# 创建漏洞
+vuln = VulnInsert(
+    vuln_unique_id="VULN-001",
+    title="SQL注入漏洞",
+    description="存在SQL注入风险",
+    severity="high",
+    security_capability_unique_id="SAST-001"
+)
+result = client.vulnerabilities.create(vuln, execute_release=True)
+print(f"漏洞创建成功: {result.success_count}个")
+
+# 关闭客户端
+client.close()
+```
+
+### 批量操作
+
+```python
+from sarm_sdk.models import ComponentInsert
+
+# 批量创建软件成分
+components = [
+    ComponentInsert(
+        component_unique_id="spring-boot-2.7.0",
+        component_name="Spring Boot",
+        component_version="2.7.0",
+        status="active",
+        asset_type="open_source_component",
+        ecosystem="Maven"
+    ),
+    ComponentInsert(
+        component_unique_id="jackson-2.13.2",
+        component_name="Jackson",
+        component_version="2.13.2", 
+        status="active",
+        asset_type="open_source_component",
+        ecosystem="Maven"
+    )
+]
+
+# 批量创建（支持最多1000条记录）
+result = client.components.create_batch(components, execute_release=True)
+print(f"批量创建完成: 总数{result.total_count}, 成功{result.success_count}, 失败{result.failed_count}")
+
+# 查看失败的记录
+for failed_item in result.failed_items:
+    print(f"失败: {failed_item.unique_id}, 原因: {failed_item.msg}")
+```
+
+## 📚 核心功能模块
+
+### 1. 组织架构管理 (`client.organizations`)
+
+```python
+# 创建组织
+client.organizations.create(org_data, execute_release=True)
+
+# 批量创建组织
+client.organizations.create_batch(org_list, execute_release=True)
+
+# 刷新组织架构缓存（批量操作后必须调用）
+client.organizations.refresh_cache()
+
+# 获取组织架构树
+tree = client.organizations.get_tree()
+
+# 查询组织
+result = client.organizations.get(organize_name="技术部", page=1, limit=50)
+```
+
+### 2. 漏洞管理 (`client.vulnerabilities`)
+
+```python
+# 创建漏洞
+client.vulnerabilities.create(vuln_data, execute_release=True)
+
+# 批量创建漏洞
+client.vulnerabilities.create_batch(vuln_list, execute_release=True)
+
+# 获取漏洞列表
+result = client.vulnerabilities.get_list(severity="critical", page=1, limit=50)
+```
+
+### 3. 安全问题管理 (`client.security_issues`)
+
+```python
+# 创建安全问题
+client.security_issues.create(issue_data, execute_release=True)
+
+# 批量创建安全问题
+client.security_issues.create_batch(issue_list, execute_release=True)
+
+# 获取安全问题列表
+result = client.security_issues.get_list(issue_level="critical")
+```
+
+### 4. 软件成分管理 (`client.components`)
+
+```python
+# 创建软件成分
+client.components.create(component_data, execute_release=True)
+
+# 批量创建软件成分
+client.components.create_batch(component_list, execute_release=True)
+
+# 获取软件成分列表
+result = client.components.get_list(asset_type="open_source_component")
+```
+
+### 5. 应用载体管理 (`client.carriers`)
+
+```python
+# 创建应用载体
+client.carriers.create(carrier_data, execute_release=True)
+
+# 批量创建应用载体
+client.carriers.create_batch(carrier_list, execute_release=True)
+```
+
+### 6. 安全能力管理 (`client.security_capabilities`)
+
+```python
+# 创建安全能力
+client.security_capabilities.create(capability_data)
+
+# 获取安全能力列表
+result = client.security_capabilities.get_list()
+```
+
+## 🔧 高级特性
+
+### 错误处理
+
+```python
+from sarm_sdk.exceptions import (
+    SARMException,
+    SARMAPIError, 
+    SARMValidationError,
+    SARMNetworkError
+)
+
+try:
+    result = client.organizations.create(org_data)
+except SARMValidationError as e:
+    print(f"数据验证失败: {e}")
+    print(f"字段错误: {e.field_errors}")
+except SARMAPIError as e:
+    print(f"API调用失败: {e}")
+    print(f"状态码: {e.status_code}")
+    print(f"错误代码: {e.error_code}")
+except SARMNetworkError as e:
+    print(f"网络错误: {e}")
+except SARMException as e:
+    print(f"SDK错误: {e}")
+```
+
+### 客户端配置
+
+```python
+client = SARMClient(
+    base_url="https://api.platform.com",
+    token="your-token",
+    timeout=60,                    # 请求超时时间
+    max_retries=3,                 # 最大重试次数
+    retry_backoff_factor=0.5       # 重试退避因子
+)
+
+# 测试连接
+if client.test_connection():
+    print("连接成功")
+else:
+    print("连接失败")
+```
+
+### Execute-Release 参数
+
+```python
+# execute_release=True: 数据直接发布，跳过预处理
+result = client.organizations.create(org_data, execute_release=True)
+
+# execute_release=False 或不传: 数据进入预处理状态，等待审核
+result = client.organizations.create(org_data, execute_release=False)
+```
+
+## 📖 数据模型
+
+SDK 提供了完整的数据模型，支持数据验证和类型提示：
+
+```python
+from sarm_sdk.models import (
+    # 组织架构
+    OrganizeInsert, Organization, OrganizationTree,
+    
+    # 漏洞管理  
+    VulnInsert, Vulnerability, VulnCvss, VulnContext,
+    
+    # 安全问题
+    IssueInsert, SecurityIssue,
+    
+    # 软件成分
+    ComponentInsert, Component,
+    
+    # 应用载体
+    CarrierInsert, Carrier,
+    
+    # 安全能力
+    SecurityCapability,
+    
+    # 响应模型
+    BatchOperationResult, SuccessResponse, ErrorResponse
+)
+```
+
+## 🚨 重要注意事项
+
+### 1. 数据导入顺序
+
+建议按以下顺序导入数据，确保依赖关系正确：
+
+```python
+# 1. 安全能力（前置依赖）
+client.security_capabilities.create_batch(capabilities)
+
+# 2. 组织架构
+client.organizations.create_batch(organizations, execute_release=True)
+client.organizations.refresh_cache()  # 必须刷新缓存！
+
+# 3. 业务系统和应用载体
+client.carriers.create_batch(carriers, execute_release=True)
+
+# 4. 软件成分
+client.components.create_batch(components, execute_release=True)
+
+# 5. 漏洞数据
+client.vulnerabilities.create_batch(vulnerabilities, execute_release=True)
+
+# 6. 安全问题
+client.security_issues.create_batch(issues, execute_release=True)
+```
+
+### 2. 批量操作限制
+
+- 单次批量操作最大支持 **1000条** 记录
+- 请求大小限制：最大 **10MB**
+- 请求频率限制：每分钟最大 **1000次** 请求
+
+### 3. 组织架构缓存
+
+- 批量导入组织数据后 **必须** 调用 `refresh_cache()` 方法
+- 缓存刷新是异步操作，大量数据可能需要等待
+- 建议在业务低峰期执行批量操作
