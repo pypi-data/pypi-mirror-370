@@ -1,0 +1,40 @@
+name: Build documentation for GitHub Pages 
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch: # Enable manual action trigger
+
+env:
+  PYTHONPATH: .
+
+jobs:
+  build_documentation_for_github_pages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: main
+      - name: Setup
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip' # caching pip dependencies
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install sphinx sphinx-rtd-theme
+      - name: Build documentation
+        run: python3 -m sphinx ./doc docs
+      - name: Publish
+        shell: bash
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "no@mail.tmp"
+          git add -f docs/
+          git commit -m "Doc build"
+          git subtree split --prefix docs/ main -b gh-pages-split
+          git push origin gh-pages-split:gh-pages --force
