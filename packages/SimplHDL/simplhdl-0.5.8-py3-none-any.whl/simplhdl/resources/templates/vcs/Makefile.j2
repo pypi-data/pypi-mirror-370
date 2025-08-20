@@ -1,0 +1,66 @@
+VLOGAN := vlogan
+VHDLAN := vhdlan
+VCS := vcs
+SIMV := ./simv
+{% if uvm %}
+UVM := uvm.com
+{% else %}
+UVM :=
+{% endif %}
+
+VLOGAN_FLAGS := -full64 +warn=noLNX_OS_VERUN {{vlogan_args|replace('#', '\#')}}
+VHDLAN_FLAGS := -full64 {{vhdlan_args|replace('#', '\#')}}
+VCS_FLAGS := -full64 -licqueue +warn=noLINX_KRNL {{vcs_args|replace('#', '\#')}}
+SIMV_FLAGS := -licqueue {{simv_args|replace('#', '\#')}}
+
+include project.mk
+-include cocotb.mk
+
+.PHONY: clean compile elaborate simulate gui
+
+
+simulate: elaborate
+	$(SIMV) $(SIMV_FLAGS)
+
+
+gui: elaborate
+	$(SIMV) $(SIMV_FLAGS) -gui
+
+
+elaborate: compile
+	$(VCS) $(VCS_FLAGS) $(TOPLEVELS)
+
+
+compile: $(VERILOG_FILESETS) $(VHDL_FILESETS)
+
+
+include dependencies.mk
+include *.files
+
+
+$(LIBRARIES):
+	mkdir -p $@
+
+
+$(UVM):
+	$(VLOGAN) $(VLOGAN_FLAGS)
+	@touch $@
+
+
+%-vhdl.fileset.com: %-vhdl.fileset %-vhdl.files | $(LIBRARIES) $(UVM)
+	$(VHDLAN) $(VHDLAN_FLAGS) -f $<
+	@touch $@
+
+
+%-verilog.fileset.com: %-verilog.fileset %-verilog.files | $(LIBRARIES) $(UVM)
+	$(VLOGAN) $(VLOGAN_FLAGS) -f $<
+	@touch $@
+
+
+%-systemverilog.fileset.com: %-systemverilog.fileset %-systemverilog.files | $(LIBRARIES) $(UVM)
+	$(VLOGAN) $(VLOGAN_FLAGS) -f $<
+	@touch $@
+
+
+clean:
+	rm -rf $(LIBRARIES) *-vhdl.fileset.com *-verilog.fileset.com *-systemverilog.fileset.com simv.daidir csrc
