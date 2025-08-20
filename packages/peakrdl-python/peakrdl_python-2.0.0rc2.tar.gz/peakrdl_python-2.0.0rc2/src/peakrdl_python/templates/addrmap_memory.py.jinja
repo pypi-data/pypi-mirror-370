@@ -1,0 +1,102 @@
+{#
+peakrdl-python is a tool to generate Python Register Access Layer (RAL) from SystemRDL
+Copyright (C) 2021 - 2023
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#}
+
+{% from 'reg_definitions.py.jinja' import register_class_attributes with context %}
+{% from 'addrmap_udp_property.py.jinja' import udp_property with context %}
+{% from 'addrmap_universal_property.py.jinja' import universal_properties with context %}
+{% from 'addrmap_system_rdl_name_mapping.py.jinja' import get_child_by_system_rdl_name with context %}
+{% from 'addrmap_system_rdl_name_mapping.py.jinja' import systemrdl_python_child_name_map with context %}
+{% from 'child_definitions.py.jinja' import reg_children_iterator with context %}
+
+{%- macro memory_class(node) %}
+class {{node.python_class_name}}({{node.base_class(asyncoutput)}}{% if legacy_block_access %}Legacy{% endif %}):
+    """
+    Class to represent a memory in the register model
+
+    {{get_table_block(node.instance) | indent}}
+    """
+
+    __slots__ : list[str] = [{%- for child_node in node.instance.children(unroll=False) -%}{%- if isinstance(child_node, systemrdlRegNode) -%}'__{{child_node.inst_name}}'{% if not loop.last %}, {% endif %}{% endif %}{%- endfor %}]
+
+    def __init__(self,
+                 address: int,
+                 logger_handle: str,
+                 inst_name: str,
+                 parent:{% if asyncoutput %}Async{% endif %}AddressMap):
+
+        super().__init__(address=address,
+                         entries={{node.instance.get_property('mementries')}},
+                         accesswidth={{get_memory_accesswidth(node.instance)}},
+                         width={{node.instance.get_property('memwidth')}},
+                         logger_handle=logger_handle,
+                         inst_name=inst_name,
+                         parent=parent)
+
+        {% for child_node in node.children(unroll=False) -%}
+            {{ register_class_attributes(child_node) | indent }}
+        {% endfor %}
+
+        {%- for child_node in node.children(unroll=False) -%}
+            {%- if isinstance(child_node, systemrdlRegNode) %}
+    @property
+    def {{safe_node_name(child_node)}}(self) -> '{% if child_node.is_array -%}{{get_fully_qualified_type_name(child_node)}}_array{% else %}{{get_fully_qualified_type_name(child_node)}}{%- endif -%}':
+        """
+        Property to access {{child_node.inst_name}} register {% if child_node.is_array -%}array{% endif %}
+
+        {{get_table_block(child_node) | indent(8)}}
+        """
+        return self.__{{child_node.inst_name}}
+            {%- endif %}
+        {% endfor %}
+
+    {{ reg_children_iterator(node) }}
+
+    {{ systemrdl_python_child_name_map(node.instance) }}
+
+    {{ get_child_by_system_rdl_name(node.instance) }}
+
+    {{ udp_property(node) }}
+
+    {{ universal_properties(node.instance) }}
+
+    {%- if node.instance.is_array %}
+class {{node.python_class_name}}_array({{node.base_class(asyncoutput)}}Array):
+    """
+    Class to represent a memory array in the register model
+    """
+    __slots__: list[str] = []
+
+    def __init__(self, logger_handle: str, inst_name: str,
+                 parent: {% if asyncoutput %}Async{% endif %}AddressMap,
+                 address: int,
+                 stride: int,
+                 dimensions: tuple[int, ...]):
+
+        super().__init__(logger_handle=logger_handle, inst_name=inst_name,
+                         parent=parent, address=address,
+                         stride=stride, dimensions=dimensions)
+
+    @property
+    def _element_datatype(self) -> Type[Node]:
+        return {{node.python_class_name}}
+
+    {{ universal_properties(node.instance) }}
+    {%- endif %}
+
+{%- endmacro %}
+
