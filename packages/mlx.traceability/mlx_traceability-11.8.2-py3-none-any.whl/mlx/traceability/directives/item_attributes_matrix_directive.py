@@ -1,0 +1,170 @@
+"""Module for the item-attributes-matrix directive"""
+from docutils import nodes
+from docutils.parsers.rst import directives
+
+from ..traceable_base_directive import TraceableBaseDirective
+from ..traceable_base_node import TraceableBaseNode
+from ..traceable_item import TraceableItem
+
+
+class ItemAttributesMatrix(TraceableBaseNode):
+    '''Matrix for referencing documentation items with their attributes'''
+
+    def perform_replacement(self, app, collection):
+        """ Creates table with items, printing their attribute values.
+
+        Args:
+            app: Sphinx application object to use.
+            collection (TraceableCollection): Collection for which to generate the nodes.
+        """
+        item_ids = collection.get_items(self['filter'],
+                                        attributes=self['filter-attributes'],
+                                        sortattributes=self['sort'],
+                                        reverse=self['reverse'])
+        top_node = self.create_top_node(self['title'])
+        table = nodes.table()
+        if self.get('classes'):
+            table.get('classes').extend(self.get('classes'))
+        tbody = nodes.tbody()
+        titles = [nodes.paragraph('', '')]
+
+        for item_id in item_ids:
+            p_node = self.make_internal_item_ref(app, item_id)  # 1st col
+            if self['transpose']:
+                titles.append(p_node)
+            else:
+                row = nodes.row()
+                row.append(nodes.entry('', p_node))
+                item = collection.get_item(item_id)
+                self.fill_item_row(row, item)
+                tbody += row
+
+        for attr in self['attributes']:
+            p_node = self.make_attribute_ref(app, attr)
+            if self['transpose']:
+                row = nodes.row()
+                row.append(nodes.entry('', p_node))
+                self.fill_attribute_row(row, attr, item_ids, collection)
+                tbody += row
+            else:
+                titles.append(p_node)
+
+        headings = [nodes.entry('', title) for title in titles]
+        number_of_columns = len(titles)
+        tgroup = nodes.tgroup()
+        tgroup += [nodes.colspec(colwidth=5) for _ in range(number_of_columns)]
+        tgroup += nodes.thead('', nodes.row('', *headings))
+        tgroup += tbody
+        table += tgroup
+        top_node += table
+        self.replace_self(top_node)
+
+    def fill_item_row(self, row, item):
+        """ Fills the row for one item with the specified attributes.
+
+        Args:
+            row (nodes.row): Row node to fill.
+            item (TraceableItem): TraceableItem object to get attributes from.
+        """
+        for attr in self['attributes']:
+            cell = nodes.entry()
+            p_node = nodes.paragraph()
+            txt = item.get_attribute(attr)
+            p_node += nodes.Text(txt)
+            cell += p_node
+            row += cell
+
+    @staticmethod
+    def fill_attribute_row(row, attr, item_ids, collection):
+        """ Fills the row for a particular attribute with attribute values from item IDs.
+
+        Args:
+            row (nodes.row): Row node to fill.
+            attr (str): Attribute name.
+            item_ids (list): List of item IDs.
+            collection (TraceableCollection): Storage object for a collection of TraceableItems.
+        """
+        for item_id in item_ids:
+            item = collection.get_item(item_id)
+            cell = nodes.entry()
+            p_node = nodes.paragraph()
+            txt = item.get_attribute(attr)
+            p_node += nodes.Text(txt)
+            cell += p_node
+            row += cell
+
+
+class ItemAttributesMatrixDirective(TraceableBaseDirective):
+    """
+    Directive to generate a matrix of items with their attribute values.
+
+    Syntax::
+
+      .. item-attributes-matrix:: title
+         :filter: regexp
+         :<<attribute>>: regexp
+         :attributes: <<attribute>> ...
+         :sort: <attribute>> ...
+         :reverse:
+         :nocaptions:
+         :onlycaptions:
+         :transpose:
+    """
+    # Optional argument: title (whitespace allowed)
+    optional_arguments = 1
+    # Options
+    option_spec = {
+        'class': directives.class_option,
+        'filter': directives.unchanged,
+        'attributes': directives.unchanged,
+        'sort': directives.unchanged,
+        'reverse': directives.flag,
+        'nocaptions': directives.flag,
+        'onlycaptions': directives.flag,
+        'transpose': directives.flag,
+    }
+    # Content disallowed
+    has_content = False
+
+    def run(self):
+        """ Processes the contents of the directive. """
+        env = self.state.document.settings.env
+        app = env.app
+
+        node = ItemAttributesMatrix('')
+        node['document'] = env.docname
+        node['line'] = self.lineno
+
+        if self.options.get('class'):
+            node.get('classes').extend(self.options.get('class'))
+
+        # Process title (optional argument)
+        if self.arguments:
+            node['title'] = self.arguments[0]
+        else:
+            node['title'] = 'Matrix of items and attributes'
+
+        # Process ``filter`` options
+        self.process_options(
+            node,
+            {
+                'filter': {'default': '', 'is_pattern': True},
+            },
+        )
+
+        self.add_found_attributes(node, is_pattern=True)
+
+        # Process ``attributes`` option, given as a string with attributes
+        # separated by space. It is converted to a list.
+        self.add_attributes(node, 'attributes', list(TraceableItem.defined_attributes))
+
+        # Process ``sort`` option, given as a string with attributes
+        # separated by space. It is converted to a list.
+        self.add_attributes(node, 'sort', [], description='sorting attribute')
+
+        self.check_option_presence(node, 'reverse')
+        self.check_option_presence(node, 'transpose')
+
+        self.check_caption_flags(node, app.config.traceability_attributes_matrix_no_captions)
+
+        return [node]
