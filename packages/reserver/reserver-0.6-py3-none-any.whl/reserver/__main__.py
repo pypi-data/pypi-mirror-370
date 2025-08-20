@@ -1,0 +1,59 @@
+# -*- coding: utf-8 -*-
+"""Reserver main."""
+import argparse
+from art import tprint
+from .params import RESERVER_VERSION
+from .functions import reserver_help
+from .uploader import PyPIUploader
+
+
+def main():
+    """
+    CLI main function.
+
+    :return: None
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--name',
+        nargs='*',
+        type=str,
+        metavar="PACKAGE_NAME",
+        help='Name(s) to get reserved',
+    )
+    parser.add_argument(
+        '--param',
+        nargs='*',
+        type=str,
+        metavar="PACKAGE_PARAM",
+        help='Path to JSON file(s) containing package(s) parameters to set',
+    )
+    parser.add_argument(
+        '--token',
+        nargs='?',
+        type=str,
+        metavar="(TEST.PYPI|PYPI)_TOKEN",
+        help='The token for (main|test) PyPI account',
+    )
+    parser.add_argument('--test', action='store_true', help='test PyPI (test.pypi.org)', default=False)
+    parser.add_argument('--version', help="version", action='store_true', default=False)
+    parser.add_argument('-v', help="version", action='store_true', default=False)
+    args = parser.parse_known_args()[0]
+    if args.version or args.v:
+        print(RESERVER_VERSION)
+        return
+    names = args.name
+    params = args.param
+    test_pypi = args.test
+    pypi_token = args.token
+    if names and pypi_token:
+        PyPIUploader(pypi_token, test_pypi).batch_upload(names, params)
+    else:
+        tprint("Reserver")
+        tprint("V:" + RESERVER_VERSION)
+        reserver_help()
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
