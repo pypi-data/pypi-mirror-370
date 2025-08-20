@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database for testing
+  postgres-test:
+    image: postgres:15
+    container_name: django_admin_magic_postgres_test
+    environment:
+              POSTGRES_DB: django_admin_magic_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+              test: ["CMD-SHELL", "pg_isready -U postgres -d django_admin_magic_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - postgres
+
+  # MySQL database for testing
+  mysql-test:
+    image: mysql:8.0
+    container_name: django_admin_magic_mysql_test
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+              MYSQL_DATABASE: django_admin_magic_test
+      MYSQL_USER: django
+      MYSQL_PASSWORD: django
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_test_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - mysql
+
+  # Oracle database for testing (using Oracle Express Edition)
+  oracle-test:
+    image: container-registry.oracle.com/database/express:21.3.0-xe
+    container_name: django_admin_magic_oracle_test
+    environment:
+      ORACLE_PWD: oracle
+      ORACLE_CHARACTERSET: AL32UTF8
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_test_data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "sqlplus", "-L", "system/oracle@localhost:1521/XE", "AS", "SYSDBA", "@healthcheck.sql"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    profiles:
+      - oracle
+
+  # Redis for caching tests (optional)
+  redis-test:
+    image: redis:7-alpine
+    container_name: django_admin_magic_redis_test
+    ports:
+      - "6379:6379"
+    profiles:
+      - redis
+
+volumes:
+  postgres_test_data:
+  mysql_test_data:
+  oracle_test_data: 
