@@ -1,0 +1,16 @@
+from typing import TypeVar
+
+T = TypeVar("T")
+U = TypeVar("U")
+K = TypeVar("K")
+T1 = TypeVar("T1")
+T2 = TypeVar("T2")
+T3 = TypeVar("T3")
+T4 = TypeVar("T4")
+T5 = TypeVar("T5")
+K1 = TypeVar("K1")
+K2 = TypeVar("K2")
+K3 = TypeVar("K3")
+K4 = TypeVar("K4")
+K5 = TypeVar("K5")
+K6 = TypeVar("K6")
