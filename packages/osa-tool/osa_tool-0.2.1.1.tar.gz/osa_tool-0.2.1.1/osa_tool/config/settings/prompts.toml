@@ -1,0 +1,261 @@
+# LLM prompts for various text generation tasks.
+
+[prompts]
+preanalysis = """
+INPUT DATA:
+
+1. REPOSITORY FILE TREE:
+
+{repository_tree}
+
+2. README CONTENT:
+
+{readme_content}
+
+TASK:
+
+Based on the provided data about the files and the README content,
+your task is to identify and return the paths to 4-6 key files that
+contain the main business logic or project description.
+
+Generate a JSON response following this exact structure:
+
+{{
+    "key_files": [
+        "path/to/file1",
+        "path/to/file2"
+    ]
+}}
+
+RULES:
+
+- The value of "key_files" must be a JSON array (list) of strings, each string representing the relative path to one important file.
+- Include only the most important files that define the project’s core logic.
+- Exclude files related to tests, configuration, or assets unless they are central to the business logic.
+- Exclude README files.
+- Return only valid JSON without additional explanations or formatting.
+"""
+
+core_features = """
+INPUT DATA:
+
+1. PROJECT NAME: {project_name}
+
+2. METADATA:
+
+{metadata}
+
+3. README CONTENT:
+
+{readme_content}
+
+4. KEY FILES CONTENTS:
+
+{key_files_content}
+
+TASK:
+
+Based on the provided information about the project, generate a list of core features for the project.
+Each core feature should be represented by JSON format following this exact structure:
+
+{{
+    "feature_name": "text",
+    "feature_description": "text",
+    "is_critical": boolean
+}}
+
+RULES:
+
+- The output should be a JSON array.
+- Each element in the array should represent one core feature.
+- Use double quotes for JSON formatting.
+- Be sure to generate multiple core features, each describing a different aspect of the project.
+- The 'feature_name' should describe a key aspect.
+- The 'feature_description' should be a detailed but short explanation of the feature.
+"""
+
+overview = """
+INPUT DATA:
+
+1. PROJECT NAME: {project_name}
+
+2. SHORT DESCRIPTION: {description}
+
+3. README CONTENT:
+
+{readme_content}
+
+4. CORE FEATURES:
+
+{core_features}
+
+TASK:
+Generate a concise overview of the project by analyzing the provided data.
+Your response should be a short paragraph that encapsulates the core use-case, value proposition.
+Generate a JSON response following this exact structure:
+
+{{
+    "overview": "text"
+}}
+
+RULES:
+
+- Focus on the project's core purpose and its value proposition without mentioning specific technical aspects.
+- Avoid technical jargon, code snippets, or any implementation details.
+- The overview should be no more than 60 words.
+"""
+
+getting_started = """
+INPUT DATA:
+
+1. PROJECT NAME: {project_name}
+
+2. README CONTENT:
+
+{readme_content}
+
+3. CONTENTS OF THE EXAMPLES DIRECTORY:
+
+{examples_files_content}
+
+TASK:
+You are generating the "Getting Started" section for the README file of the project above.
+Your goal is to help a new user understand how to start using the project by analyzing the provided example files and any relevant assets (such as images or gifs) from the README.
+
+PROCESS:
+
+- Carefully review the example files to identify clear entrypoints, demos, or code snippets showing how to run or integrate the project.
+- If any meaningful examples exist, use them to generate a concise, beginner-friendly Getting Started section with code snippets formatted in markdown code blocks.
+- Additionally, review the provided README content to check for relevant images or gifs (e.g., usage demos, screenshots, or diagrams) that could enhance the Getting Started section.
+- If suitable images or gifs are found, include them in the section using proper markdown syntax (`![alt text](path)`), preserving the original paths exactly as they appear in the provided README content.
+
+RESPONSE FORMAT:
+Generate a JSON response following this exact structure:
+
+{{
+    "getting_started": "text or null"
+}}
+
+RULES:
+
+- Be concise, clear, and beginner-friendly.
+- Use markdown formatting, including code blocks if relevant.
+- Include actual code from the example files if available.
+- Include relevant images or gifs from the README if they help clarify how to start using the project.
+- DO NOT make up usage instructions — rely only on the provided content.
+- DO NOT invent or modify image paths — use them exactly as found in the provided README content.
+- If no meaningful example files are found and no helpful images or gifs are available, return `"getting_started": null`
+- Do not add a "## Getting Started" heading — only the content for that section.
+- Output valid JSON, strictly following the given structure.
+"""
+
+deduplicate_sections = """
+INPUT DATA:
+
+1. INSTALLATION SECTION CONTENT:
+
+{installation}
+
+2. GETTING STARTED SECTION CONTENT:
+
+{getting_started}
+
+TASK:
+You are cleaning up and reorganizing the "Installation" and "Getting Started" sections for a project's README file.
+Your goal is to eliminate duplicated or overlapping information between the two sections while preserving their logical separation:
+
+- The "Installation" section should only contain information about how to install the project (package managers, dependencies, environment setup, etc.).
+- The "Getting Started" section should only contain information about how to start using the project after it’s installed (running the program, example commands, usage demos, etc.).
+
+
+PROCESS:
+
+- Carefully review the content of both sections.
+- Identify and remove any duplicated or redundant information that appears in both sections.
+- If a piece of information belongs logically to the "Installation" section (like `pip install` commands or dependency instructions), move or leave it there.
+- If a piece of information belongs to the "Getting Started" section (like how to run the project or a first example command), move or leave it there.
+- Do not invent or modify any instructions — rely solely on the provided content.
+- Preserve markdown formatting (including code blocks and image links) as they appear in the input.
+
+RESPONSE FORMAT:
+Return a JSON object in the following format:
+
+{{
+    "installation": "cleaned installation section text, or null if empty",
+    "getting_started": "cleaned getting started section text, or null if empty"
+}}
+
+RULES:
+
+- Remove duplicated lines or paragraphs that appear in both sections.
+- Ensure each section contains only relevant, logically appropriate information.
+- If a section ends up empty after deduplication, return null for that section.
+- Add section header for "## Installation".
+- Don't add section header for "## Getting Started".
+- Output valid JSON, strictly following the given structure.
+"""
+
+refine = """
+INPUT DATA:
+
+1. ORIGINAL README CONTENT:
+
+{old_readme}
+
+2. GENERATED README SECTIONS (as JSON):
+
+{new_readme_sections}
+
+TASK:
+You are refining the generated README by combining it with the original README content.
+
+GOAL:
+Improve the generated README by:
+- Preserving valuable content from the original README that is missing in the generated one.
+- Removing outdated, redundant, or duplicated content.
+- Ensuring clear, consistent, and well-structured markdown formatting.
+
+PROCESS:
+
+- Use the generated README sections as the base structure.
+- Review both the original README and the generated sections.
+- If useful information from the original README is missing in the generated one, integrate it into the appropriate section.
+- Avoid duplicate or conflicting content.
+- Keep markdown formatting clean and consistent.
+- If there’s valuable content in the original README not present in the generated one, you may create new sections, but only if it doesn’t overlap with existing ones.
+
+TABLE OF CONTENTS:
+
+- If a Table of Contents exists, update it to reflect the final list of section names, using the exact section titles.
+- Exclude `badges` and `Overview` from the Table of Contents.
+
+FINAL OUTPUT:
+
+Return a valid JSON object where:
+- Each key is a section title (e.g., "badges", "Overview", "Installation").
+- The value is the cleaned, final markdown content for that section.
+- The order of keys determines the order of sections in the final README.
+- Omit any empty sections.
+
+Example:
+
+{{
+    "badges": "project title, badges...",
+    "Overview": "overview text...",
+    "Installation": "installation instructions...",
+    "Usage": "how to use..."
+}}
+
+RULES:
+
+- No extra explanations or comments.
+- No content duplication.
+- Preserve markdown formatting.
+- JSON keys order defines README order.
+
+SPECIAL RULES:
+
+- All content before the first meaningful markdown header (starting with `## `) in the original README should go to the `badges` section **only if it contains the project title, logos, or status badges**.
+- Textual descriptions, images, or code examples before the first `## ` header should be evaluated and placed into the appropriate sections (like "Overview", "Usage", or "Installation").
+- Avoid placing unrelated text or images in `badges`.
+"""
