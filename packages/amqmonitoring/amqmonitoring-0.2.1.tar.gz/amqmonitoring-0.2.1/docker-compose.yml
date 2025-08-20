@@ -1,0 +1,49 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ${RABBITMQ_CONTAINER_NAME:-rabbitmq_server}
+    hostname: ${RABBITMQ_HOSTNAME:-localhost}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_AMQPS_PORT:-5671}:5671"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "${RABBITMQ_MANAGEMENT_SSL_PORT:-15671}:15671"
+      - "${RABBITMQ_METRICS_PORT:-15692}:15692"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-SWQOKODSQALRPCLNMEQG}
+      SSL_FOLDER: /etc/rabbitmq/ssl
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq/
+      - rabbitmq_ssl:/etc/rabbitmq/ssl/
+      - ./examples/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./examples/setup-ssl.sh:/setup-ssl.sh:ro
+    command: >
+      bash -c "
+        if [ ! -f /etc/rabbitmq/ssl/ca_certificate.pem ] || [ ! -f /etc/rabbitmq/ssl/server_certificate.pem ] || [ ! -f /etc/rabbitmq/ssl/server_key.pem ]; then
+          echo 'SSL certificates not found, generating new ones...';
+          mkdir -p /etc/rabbitmq/ssl;
+          cd /etc/rabbitmq/ssl;
+          /setup-ssl.sh;
+        else
+          echo 'SSL certificates already exist, skipping generation.';
+        fi &&
+        docker-entrypoint.sh rabbitmq-server &
+        RABBITMQ_PID=$!
+        echo 'Waiting for RabbitMQ to start...'
+        sleep 10
+        rabbitmqctl trace_on
+        echo 'RabbitMQ tracing enabled'
+        wait $RABBITMQ_PID
+      "
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  rabbitmq_data:
+  rabbitmq_ssl:
