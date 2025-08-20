@@ -1,0 +1,70 @@
+====
+Util
+====
+
+Let's test the built in sub item data storages.
+
+  >>> from builtins import object
+  >>> import re
+  >>> import datetime
+  >>> import bson.tz_util
+  >>> import m01.mongo
+  >>> import m01.mongo.testing
+  >>> from m01.mongo.testing import pprint
+
+
+Dummy Parent
+------------
+
+  >>> class FakeParent(object):
+  ...     __name__ = 'PARENT'
+  ...     _m_changed = None
+  >>> parent = FakeParent()
+
+
+Dummy SubItem
+--------------
+
+  >>> class FakeSubItem(m01.mongo.testing.SampleSubItem):
+  ...     __name__ = None
+  ...     def __init__(self, data):
+  ...         self.__name__ = data.get('__name__')
+
+
+MongoItemsData
+--------------
+
+  >>> obj = FakeSubItem({
+  ...     '__name__': 'Name1',
+  ...     'text': 'Foo Bar 1',
+  ... })
+  >>> obj2 = FakeSubItem({
+  ...     '__name__': 'Name2',
+  ...     'text': 'Foo Bar 2',
+  ... })
+
+  >>> values = [obj, obj2]
+  >>> data = m01.mongo.util.MongoItemsData(values)
+  >>> type(data)
+  <class 'm01.mongo.util.MongoItemsData'>
+
+  >>> sorted([str(e) for e in data])
+  ["<FakeSubItem 'Name1'>", "<FakeSubItem 'Name2'>"]
+
+Let's set a fake __parent__ for simulate location etc.
+
+  >>> data.__parent__ = parent
+
+order
+-----
+
+  >>> data._order
+  ['Name1', 'Name2']
+
+  >>> newOrder = [obj2.__name__, obj.__name__]
+  >>> data._order != newOrder
+  True
+
+  >>> data.order(newOrder)
+  >>> data._order
+  ['Name2', 'Name1']

@@ -1,0 +1,217 @@
+========
+Use case
+========
+
+Our testing.py file contains some python objects. See m01/mongo/testing.py for
+more information. Here we use this objects and show how to interact with them.
+The objects depend on the MongoContainer and MongoContainerItem based classes.
+This means we can access the object tree based on the container pattern using
+the object.__name__ as container keys. In a real application this are the
+traversable object structure path. If you don't know the zope traversal concept,
+see zope.traversing etc. or more information.
+
+
+Condition
+---------
+
+Befor we start testing, check if our thread local cache is empty or if we have
+left over some junk from previous tests:
+
+  >>> from m01.mongo.testing import pprint
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+
+Setup
+-----
+
+First import some components:
+
+  >>> import datetime
+  >>> import transaction
+
+  >>> import m01.mongo
+  >>> import m01.mongo.base
+  >>> import m01.mongo.container
+  >>> from m01.mongo import interfaces
+  >>> from m01.mongo import testing
+
+We also need a application root object. Let's define a static MongoContainer
+as our application database root item.
+
+  >>> class MongoRoot(m01.mongo.container.MongoContainer):
+  ...     """Mongo application root"""
+  ... 
+  ...     _id = m01.mongo.getObjectId(0)
+  ... 
+  ...     def __init__(self):
+  ...         pass
+  ... 
+  ...     @property
+  ...     def collection(self):
+  ...         return testing.getRootItems()
+  ... 
+  ...     @property
+  ...     def cacheKey(self):
+  ...         return 'root'
+  ... 
+  ...     def load(self, data):
+  ...         """Load data into the right mongo item."""
+  ...         return testing.Companies(data)
+  ... 
+  ...     def __repr__(self):
+  ...         return '<%s %s>' % (self.__class__.__name__, self._id)
+
+
+As you can see our MongoRoot class defines a static mongo ObjectID as _id. This
+means the same _id get use every time. This _id acts as our __parent__
+reference.
+
+The following method allows us to generate new MongoRoot item instances. This
+allows us to show that we generate different root items like we would do on a
+server restart.
+
+  >>> def getRoot():
+  ...     return MongoRoot()
+
+Here is our database root item:
+
+  >>> root = getRoot()
+  >>> root
+  <MongoRoot 000000000000000000000000>
+
+  >>> root._id
+  ObjectId('000000000000000000000000')
+
+
+MongoContainer
+--------------
+
+Now let's use our enhanced testing data and setup a content structure:
+
+  >>> data = {'name': u'Europe'}
+  >>> europe = testing.Companies(data)
+  >>> root[u'europe'] = europe
+
+  >>> data = {'name': u'Asia'}
+  >>> asia = testing.Companies(data)
+  >>> root[u'asia'] = asia
+
+  >>> transaction.commit()
+
+Let's check our companies in Mongo:
+
+  >>> rootCollection = testing.getRootItems()
+  >>> obj = rootCollection.find_one({'name': 'Europe'})
+  >>> pprint(obj)
+  {u'__name__': u'europe',
+   u'_id': ObjectId('563fffb1c5a88842b805ab86'),
+   u'_pid': ObjectId('000000000000000000000000'),
+   u'_type': u'Companies',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'Europe'}
+
+Now let's add a Company, Employer and some documents:
+
+  >>> data = {'name': u'Projekt01 GmbH'}
+  >>> m01 = testing.Company(data)
+  >>> europe[u'm01'] = m01
+
+  >>> data = {'name': u'Roger Ineichen'}
+  >>> roger = testing.Employer(data)
+  >>> m01[u'roger'] = roger
+
+  >>> data = {'name': u'Manual'}
+  >>> manual = testing.Document(data)
+  >>> roger[u'manual'] = manual
+
+  >>> transaction.commit()
+
+As you can see we added a data structure using our container, item objects:
+
+  >>> root['europe']
+  <Companies u'europe'>
+
+  >>> root['europe']['m01']
+  <Company u'm01'>
+
+  >>> root['europe']['m01']['roger']
+  <Employer u'roger'>
+
+  >>> root['europe']['m01']['roger']['manual']
+  <Document u'manual'>
+
+As you can see this structure is related to their __parent__ references. This
+means if we add another structure into the same mongodb, each item knows it's
+container.
+
+  >>> data = {'name': u'Credit Suisse'}
+  >>> cs = testing.Company(data)
+  >>> asia[u'cs'] = cs
+
+  >>> data = {'name': u'Max Muster'}
+  >>> max = testing.Employer(data)
+  >>> cs[u'max'] = max
+
+  >>> data = {'name': u'Paper'}
+  >>> paper = testing.Document(data)
+  >>> max[u'paper'] = paper
+
+  >>> transaction.commit()
+
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+  >>> root['asia']
+  <Companies u'asia'>
+
+  >>> root['asia']['cs']
+  <Company u'cs'>
+
+  >>> root['asia']['cs']['max']
+  <Employer u'max'>
+
+  >>> root['asia']['cs']['max']['paper']
+  <Document u'paper'>
+
+  >>> transaction.commit()
+
+We can't access another item from the same type from another parent container:
+
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+  >>> eu = root['europe']
+
+  >>> transaction.commit()
+
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+  >>> eu['cs']
+  Traceback (most recent call last):
+  ... 
+  KeyError: 'cs'
+
+  >>> transaction.commit()
+
+As you can see the KeyError left items back in our thread local cache. We can
+use our thread local cache cleanup event handler which is by default registered
+as an EndRequestEvent subscriber for cleanup our thread local cache:
+
+  >>> pprint(LOCAL.__dict__)
+  {u'europe': {'loaded': {}, 'removed': {}}}
+
+Let's use our subscriber:
+
+  >>> from m01.mongo import clearThreadLocalCache
+  >>> clearThreadLocalCache()
+
+As you can see our cache items get removed:
+
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}

@@ -1,0 +1,323 @@
+============
+MongoStorage
+============
+
+The MongoStorage can store IMongoStorageItem objects in a MongoDB. A
+MongoStorageItem must be able to dump it's data to valid mongo values. This
+test will show how our MongoStorage works and also shows the limitations.
+
+Note: the mongo container also implements a container/mapping pattern like the
+storage implementation. The only difference is, the container only provides the
+mapping api using contaner[key] = obj, container[key] and del container[key].
+The storage api provides no explicit mapping key and offers add and remove
+methods instead. This means the container uses it's own naming pattern and the
+storage is using the mongodb._id as it's object name (obj.__name__).
+
+
+Condition
+---------
+
+Befor we start testing, check if our thread local cache is empty or if we have
+let over some junk from previous tests:
+
+  >>> from m01.mongo import LOCAL
+  >>> from m01.mongo.testing import pprint
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+
+Setup
+-----
+
+First import some components:
+
+  >>> import datetime
+  >>> import transaction
+  >>> from zope.container.interfaces import IReadContainer
+  >>> from m01.mongo import interfaces
+  >>> from m01.mongo import testing
+
+And set up a database root:
+
+  >>> root = {}
+
+
+MongoStorageItem
+----------------
+
+The mongo item provides by default a ObjectId stored as _id. If there is none
+given during create an object, we will set one:
+
+  >>> data = {}
+  >>> obj = testing.SampleStorageItem(data)
+  >>> obj._id
+  ObjectId('...')
+
+The ObjectId is also use as our __name__  value. See the MongoContainer and
+MongoContainerItem implementation if you need to choose your own names:
+
+  >>> obj.__name__
+  u'...'
+
+  >>> obj.__name__ == str(obj._id)
+  True
+
+A mongo item also provides created and modified date attributes. If we
+initialize an object without a given created date, a new utc datetime instance
+get used:
+
+  >>> obj.created
+  datetime.datetime(..., tzinfo=UTC)
+
+  >>> obj.modified is None
+  True
+
+A mongo storage item knows if a state get changed. This means we can find out
+if we should write the item back to the MongoDB. The MongoItem stores the state
+in a _m_changed value like persistent objects do in _p_changed. As you can see
+the initial state is ```None``:
+
+  >>> obj._m_changed is None
+  True
+
+The MongoItem also has a version number which we increment each time we change
+the item. By default this version is set as _version attribute and set by
+default to 0 (zero):
+
+  >>> obj._version
+  0
+
+If we change a value in a MongoItem, the state get changed:
+
+  >>> obj.title = u'New Title'
+  >>> obj._m_changed
+  True
+
+but the version get not imcremented. We only imcrement the version if we save
+the item in MongoDB:
+
+  >>> obj._version
+  0
+
+We also change the _m_change marker if we remove a value:
+
+  >>> obj = testing.SampleStorageItem(data)
+  >>> obj._m_changed is None
+  True
+
+  >>> obj.title
+  u''
+
+  >>> obj.title = u'New Title'
+  >>> obj._m_changed
+  True
+
+  >>> obj.title
+  u'New Title'
+
+Now let's set the _m_chande property set to False before we delete the attr:
+
+  >>> obj._m_changed = False
+  >>> obj._m_changed
+  False
+
+  >>> del obj.title
+
+As you can see we can delete an attribute but it only falls back to the default
+schema field value. This seems fine.
+
+  >>> obj.title
+  u''
+
+  >>> obj._m_changed
+  True
+
+
+MongoStorage
+------------
+
+Now we can add a MongoStorage to the zope datbase:
+
+  >>> storage = testing.SampleStorage()
+  >>> root['storage'] = storage
+  >>> transaction.commit()
+
+Now we can add a sample MongoStorageItem to our storage. Note we can only use the
+add method which will return the new generated __name__. Using own names is not
+supported by this implementation. As you can see the name is an MongoDB
+24 hex character string objectId representation.
+
+  >>> data = {'title': u'Title',
+  ...         'description': u'Description'}
+  >>> item = testing.SampleStorageItem(data)
+  >>> storage = root['storage']
+
+Our storage provides the IMongoStorage and IReadContainer interfaces:
+
+  >>> interfaces.IMongoStorage.providedBy(storage)
+  True
+
+  >>> IReadContainer.providedBy(storage)
+  True
+
+
+add
+---
+
+We can add a mongo item to our storage by using the add method.
+
+  >>> __name__ = storage.add(item)
+  >>> __name__
+  u'...'
+  >>> len(__name__)
+  24
+
+  >>> transaction.commit()
+
+After adding our item, the item provides a created date:
+
+  >>> item.created
+  datetime.datetime(..., tzinfo=UTC)
+
+
+__len__
+-------
+
+  >>> storage = root['storage']
+  >>> len(storage)
+  1
+
+
+__getitem__
+-----------
+
+  >>> item = storage[__name__]
+  >>> item
+  <SampleStorageItem ...>
+
+As you can see our MongoStorageItem provides the following data. We can dump
+the item. Note, you probaly have to implement a custom dump method which will
+dump the right data for you MongoStorageItem.
+
+  >>> pprint(item.dump())
+  {'__name__': '...',
+   '_id': ObjectId('...'),
+   '_pid': None,
+   '_type': 'SampleStorageItem',
+   '_version': 1,
+   'comments': [],
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'date': None,
+   'description': 'Description',
+   'item': None,
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'number': None,
+   'numbers': [],
+   'title': 'Title'}
+
+The object provides also a name which is the name we've got during adding the
+object:
+
+  >>> item.__name__ == __name__
+  True
+
+
+keys
+----
+
+The container can also return key:
+
+  >>> tuple(storage.keys())
+  (u'...',)
+
+
+values
+------
+
+The container can also return values:
+
+  >>> tuple(storage.values())
+  (<SampleStorageItem ...>,)
+
+items
+-----
+
+The container can also return items:
+
+  >>> tuple(storage.items())
+  ((u'...', <SampleStorageItem ...>),)
+
+
+__delitem__
+-----------
+
+As next we will remove the item:
+
+  >>> del storage[__name__]
+  >>> storage.get(__name__) is None
+  True
+
+  >>> transaction.commit()
+
+
+Object modification
+-------------------
+
+If we get a mongo item from a storage and modify the item, the version get
+increased by one and a current modified datetime get set.
+
+Let's add a new item:
+
+  >>> data = {'title': u'A Title',
+  ...         'description': u'A Description'}
+  >>> item = testing.SampleStorageItem(data)
+  >>> __name__ = storage.add(item)
+  >>> transaction.commit()
+
+Now get the item::
+
+  >>> item = storage[__name__]
+  >>> item.title
+  u'A Title'
+
+and change the titel:
+
+  >>> item.title = u'New Title'
+  >>> item.title
+  u'New Title'
+
+As you can see the item get marked as changed:
+
+  >>> item._m_changed
+  True
+
+Now get the mongo item version. This should be set to 1 (one) since we only
+added the object and didn't change since we added them:
+
+  >>> item._version
+  1
+
+If we now commit the transaction, the version get increased by one:
+
+  >>> transaction.commit()
+  >>> item._version
+  2
+
+If you now load the mongo item from the MongoDB aain, you can see that the
+title get changed:
+
+  >>> item = storage[__name__]
+  >>> item.title
+  u'New Title'
+
+And that the version get updated to 2:
+
+  >>> item._version
+  2
+
+  >>> transaction.commit()
+
+Check our thread local cache before we leave this test:
+
+  >>> pprint(LOCAL.__dict__)
+  {}

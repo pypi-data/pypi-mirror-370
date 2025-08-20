@@ -1,0 +1,291 @@
+===========
+Transaction
+===========
+
+
+First some notes about zope transaction handling. Zope uses a transaction data
+manager which will observe an object. We use a generic transaction data manager
+for our storage and container implementation. They just dispatch the calls
+to the object which implements the transaction handling API.
+
+Transaction commit
+------------------
+
+Let's explain how this transaction manager will call the different transaction
+data managers during a commit. The transaction manager will call the following
+methods on each data manager. This means each method get called on each data
+manager before the next method get called:
+
+    1. tpc_begin
+
+    2. commit
+
+    3. tpc_vote
+
+    4. tpc_finish
+
+If an error happens during this different calls the following get called on each
+data manger:
+
+    1. abort
+
+    2. tpc_abort
+
+Note, abort only get called if a data manager get voted. This means
+the transaction manager did call the methods e.g. tpc_begin, commit, tpc_vote
+without any error on a data manager. And the method tpc_abort get called on any
+error.
+
+Let's show an example what could happen if we have 2 data managers. First show
+how a successfull transaction commit will look like:
+
+- dm1.tpc_begin
+- dm2.tpc_begin
+
+- dm1.commit
+- dm2.commit
+
+- dm1.tpc_vote
+- dm2.tpc_vote
+
+- dm1.tpc_finish
+- dm2.tpc_finish
+
+
+tpc_begin fails
+~~~~~~~~~~~~~~~
+
+Now show what's happen if the first data manager fails during tpc_begin:
+
+- dm1.tpc_begin
+  -> error
+
+- dm1.tpc_abort
+- dm2.tpc_abort
+
+- raise sys.exc_info()
+
+Now show what's happen if the second data manager fails during tpc_begin:
+
+- dm1.tpc_begin
+- dm2.tpc_begin
+  -> error
+
+- dm1.tpc_abort
+- dm2.tpc_abort
+
+- raise sys.exc_info()
+
+
+commit fails
+~~~~~~~~~~~~
+
+Now show what's happen if the first data manager fails during commit:
+
+- dm1.tpc_begin
+- dm2.tpc_begin
+
+- dm1.commit
+  -> error
+
+- dm1.tpc_abort
+- dm2.tpc_abort
+
+- raise sys.exc_info()
+
+Now show what's happen if the second data manager fails during commit:
+
+- dm1.tpc_begin
+- dm2.tpc_begin
+
+- dm1.commit
+- dm2.commit
+  -> error
+
+- dm1.tpc_abort
+- dm2.tpc_abort
+
+- raise sys.exc_info()
+
+
+tpc_vote fails
+~~~~~~~~~~~~~~
+
+Now show what's happen if the first data manager fails during tpc_vote. As you
+can see this is the same as above because non of the two dat manger get voted:
+
+- dm1.tpc_begin
+- dm2.tpc_begin
+
+- dm1.commit
+- dm2.commit
+
+- dm1.tpc_vote
+  -> error
+
+- dm1.tpc_abort
+- dm2.tpc_abort
+
+- raise sys.exc_info()
+
+But if the second data manger will fail on tpc_vote, abort get called on the
+first data manager because this data manager get marked as voted:
+
+- dm1.tpc_begin
+- dm2.tpc_begin
+
+- dm1.commit
+- dm2.commit
+
+- dm1.tpc_vote
+- dm2.tpc_vote
+  -> error
+
+- dm1.abort
+
+- dm1.tpc_abort
+- dm2.tpc_abort
+
+- raise sys.exc_info()
+
+As you can see tpc_finish does not get called on any error.
+
+
+tpc_finish fails
+~~~~~~~~~~~~~~~~
+
+Now show what's happen if a data manager fails during tpc_finish:
+
+- dm1.tpc_begin
+- dm2.tpc_begin
+
+- dm1.tpc_vote
+- dm2.tpc_vote
+
+- dm1.tpc_finish
+  -> raise error
+
+As you can see there is no abort call which will cleanup anything. This means
+tpc_finish should never fail. Never ever or your data get messed up!
+
+
+Transaction Abort
+-----------------
+
+Also note the transaction manager can get aborted at all. This will call
+abort on any data manager without tpc_begin etc. During this abort call
+tpc_abort does not get called.
+
+This makes things a little bit complex becaues soemtimes abort get called
+and sometimes tpc_abort and sometimes both of them.
+
+
+Things to know
+--------------
+
+There is a _callAfterCommitHooks method which will get called after a commit.
+This method does also call rm.abort if any _after_commit is registered.
+This seems like a bug to me. If not this means we should make sure that
+we allways cleanup our abort call process after tpc_finish.
+
+
+Retry
+-----
+
+Another thing which makes transaction handling a little bit complexer is
+the zope retry concept. This means if a transaction get aborted it will
+try another time to process everything and commit again. This is set by default
+to 3 retry handling.
+
+This is important if it comes to caching. If we cache different objects
+in a thread local storage, we have to make sure that we cleanup this caches
+if zope starts a retry. Otherwise we run into a problem with manipulated and
+cached data.
+
+
+Caching
+-------
+
+We use a cache for cache the data from the database per request. We will clear
+the cached data on the end of the request on transaction commit.
+
+
+Fazit
+-----
+
+How can we use this strategy within an external data storage like MongoDB
+for a consistent data management. Here are some basics:
+
+- We need to keep the original data if we need to revert commited changes
+
+- We need to approve commited data
+
+- We need to revert data on any kind of abort
+
+But if we commit and the data and we loose the database connection before we can
+revert, we will get inconsistent data. This is true for allmost any kind
+of external database without a global transaction. This should very rarely
+happen. And if so it's like a system interrupt which most system can't
+handle anyway.
+
+Let's assume that our database connection does not get lost during a commit
+phase between calling tpc_begin and tpc_finish/tpc_abort.
+
+
+Concept
+-------
+
+Currently we use a custom transaction data manager which offers an enhanced concept with voteApprove and voteCommit methods.
+We also use only one single transaction data manager for all different kind
+of MongoItems. This means we can approve all changed mongo items before we
+start to commit the first one.
+
+
+Note
+----
+
+Take care, the server will only commit the data after the request get processed.
+This means if you read data from a server for build a response, the data on the
+server probably doesn't support the state because the transaction is not
+commited if we changed an object.
+
+You have two solutions for handle this correct:
+
+    1. return the response to the client and load the data in a new request.
+       That's probably a bad idea.
+
+    2. Read the data based on the storage or container where your item is
+       located in. This means, the server could probably have more data writen
+       by another request/transaction.
+
+    3. commit a transaction right after manipulate, add or delete objects
+
+
+I recommend to split your code into 2 parts if you need to read data from the
+server after manipulate, add or delete objects:
+
+    1. start request
+
+    2. read the data
+
+    3. manipulate them e.g. modify, add or remove items
+
+    4. commit the transaction
+
+    5. only do read operations after commit e.g. read updated data. Make sure
+       you don't manipulate, add or delete any data after commit. Ok, our
+       transaction manager can handle such second commits. But this will end
+       in a transaction error if somethig fails and you don't have any chance
+       to handle them except with a SystemError. And the data from the first
+       commit is still in the commited state.
+
+    6. return response
+
+Note, you should really split your code into the described steps and not commit
+more then once. If you commit more then once, the first commit part could not
+get reverted and your data will get left in a inconsistent state if the a second
+commit will fail.
+
+It's very save to use the pattern described above because the second part after
+calling transaction commit will not have anything to commit till you don't
+manipulate data after the first commit.

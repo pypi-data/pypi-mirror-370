@@ -1,0 +1,139 @@
+=======
+Testing
+=======
+
+Let's test some testing methods.
+
+  >>> import re
+  >>> import datetime
+  >>> import bson.tz_util
+  >>> import m01.mongo
+  >>> import m01.mongo.testing
+  >>> from m01.mongo.testing import pprint
+
+
+RENormalizer
+------------
+
+The RENormalizer is able to normalize text and produce comparable output. You
+can setup the RENormalizer with a list of input, output expressions. This is
+usefull if you dump mongodb data which contains dates or other not so simple
+reproducable data. Such a dump result can get normalized before the unit test
+will compare the output. Also see zope.testing.renormalizing for the same
+pattern which is useable as a doctest checker.
+
+  >>> normalizer = m01.mongo.testing.RENormalizer([
+  ...    (re.compile('[0-9]*[.][0-9]* seconds'), '... seconds'),
+  ...    (re.compile('at 0x[0-9a-f]+'), 'at ...'),
+  ...    ])
+
+  >>> text = """
+  ... <object object at 0xb7f14438>
+  ... completed in 1.234 seconds.
+  ... 
+  ... <object object at 0xb7f14450>
+  ... completed in 1.234 seconds.
+  ... """
+
+  >>> print((normalizer(text)))
+  <BLANKLINE>
+  <object object at ...>
+  completed in ... seconds.
+  <BLANKLINE>
+  <object object at ...>
+  completed in ... seconds.
+  <BLANKLINE>
+
+Now let's test some mongodb relevant stuff:
+
+  >>> from bson.dbref import DBRef
+  >>> from bson.min_key import MinKey
+  >>> from bson.max_key import MaxKey
+  >>> from bson.objectid import ObjectId
+  >>> from bson.timestamp import Timestamp
+
+  >>> oid = m01.mongo.getObjectId(42)
+  >>> oid
+  ObjectId('0000002a0000000000000000')
+
+  >>> data = {'oid': oid,
+  ...         'dbref': DBRef("foo", 5, "db"),
+  ...         'date': datetime.datetime(2011, 5, 7, 1, 12),
+  ...         'utc': datetime.datetime(2011, 5, 7, 1, 12, tzinfo=bson.tz_util.utc),
+  ...         'min': MinKey(),
+  ...         'max': MaxKey(),
+  ...         'timestamp': Timestamp(4, 13),
+  ...         'string': 'string',
+  ...         'unicode': u'unicode',
+  ...         'int': 42}
+
+#TODO: Python3   ...         're': re.compile("a*b", re.IGNORECASE),
+#Add this re to the texts in P3 only. (P2 and P3 have complete different implementations of re)
+
+
+Now let's pretty print the data:
+
+  >>> pprint(data)
+  {'date': datetime.datetime(...),
+   'dbref': DBRef('foo', 5, 'db'),
+   'int': 42,
+   'max': MaxKey(),
+   'min': MinKey(),
+   'oid': ObjectId('...'),
+   'string': 'string',
+   'timestamp': Timestamp('...'),
+   'unicode': 'unicode',
+   'utc': datetime.datetime(2011, 5, 7, 1, 12, tzinfo=UTC)}
+
+
+reNormalizer
+~~~~~~~~~~~~
+
+As you can see our predefined reNormalizer will convert the values using our
+given patterns:
+
+  >>> import m01.mongo.testing
+  >>> res = m01.mongo.testing.reNormalizer(data)
+  >>> print(res)
+  {'date': datetime.datetime(...),
+   'dbref': DBRef('foo', 5, 'db'),
+   'int': 42,
+   'max': MaxKey(),
+   'min': MinKey(),
+   'oid': ObjectId('...'),
+   'string': 'string',
+   'timestamp': Timestamp('...'),
+   'unicode': 'unicode',
+   'utc': datetime.datetime(..., tzinfo=UTC)}
+
+
+pprint
+~~~~~~
+
+  >>> m01.mongo.testing.reNormalizer.pprint(data)
+  {'date': datetime.datetime(...),
+   'dbref': DBRef('foo', 5, 'db'),
+   'int': 42,
+   'max': MaxKey(),
+   'min': MinKey(),
+   'oid': ObjectId('...'),
+   'string': 'string',
+   'timestamp': Timestamp('...'),
+   'unicode': 'unicode',
+   'utc': datetime.datetime(..., tzinfo=UTC)}
+
+
+UTC
+---
+
+The pymongo library offers a custom UTC implementation including pickle support
+used by deepcopy. Let's test if this implementation works and replace our custom
+timezone with the bson.tz_info.utc:
+
+  >>> dt = data['utc']
+  >>> dt
+  datetime.datetime(2011, 5, 7, 1, 12, tzinfo=UTC)
+
+  >>> import copy
+  >>> copy.deepcopy(dt)
+  datetime.datetime(2011, 5, 7, 1, 12, tzinfo=UTC)

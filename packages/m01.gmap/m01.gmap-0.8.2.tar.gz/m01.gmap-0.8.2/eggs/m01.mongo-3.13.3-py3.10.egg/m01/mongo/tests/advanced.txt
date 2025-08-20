@@ -1,0 +1,144 @@
+===========================
+Speedup your implementation
+===========================
+
+Since not every strategy is the best for every applications and we can't
+implement all concepts in this package, we will list here some imporvements.
+
+
+values and items
+----------------
+
+The MongoContainers and MongoStorage implementation will load all data within
+the values and items methods. Even if we already cached them in our thread
+local cache. Here is an optimized method which could get used if you need to
+load a large set of data.
+
+The original implementation of MongoMappingBase.values looks like::
+
+    def values(self):
+        # join transaction handling
+        self.ensureTransaction()
+        for data in self.doFind(self.collection):
+            __name__ = data['__name__']
+            if __name__ in self._cache_removed:
+                # skip removed items
+                continue
+            obj = self._cache_loaded.get(__name__)
+            if obj is None:
+                try:
+                    # load, locate and cache if not cached
+                    obj = self.doLoad(data)
+                except (KeyError, TypeError):
+                    continue
+            yield obj
+        # also return items not stored in MongoDB yet
+        for k, v in self._cache_added.items():
+            yield v
+
+If you like to prevent loading all data, you could probably only load
+keys and lookup data for items which didn't get cached yet. This would
+reduce network traffic and could look like::
+
+    def values(self):
+        # join transaction handling
+        self.ensureTransaction()
+        # only get __name__ and _id
+        for data in self.doFind(self.collection, {}, ['__name__', '_id']):
+            __name__ = data['__name__']
+            if __name__ in self._cache_removed:
+                # skip removed items
+                continue
+            obj = self._cache_loaded.get(__name__)
+            if obj is None:
+                try:
+                    # now we can load data from mongo
+                    d = self.doFindOne(self.collection, data)
+                    # load, locate and cache if not cached
+                    obj = self.doLoad(d)
+                except (KeyError, TypeError):
+                    continue
+            yield obj
+        # also return items not stored in MongoDB yet
+        for k, v in self._cache_added.items():
+            yield v
+
+Note: the same concept can get used for the items method.
+
+Note: I don't recommend to call keys, values or items for large collections
+at any time. Take a look at the batching concept we implemented. The
+getBatchData method is probably what you need to use with a large set of data.
+
+
+AdvancedConverter
+-----------------
+
+The class below shows an advanced implementation which is able to convert a
+nested data structure.
+
+Normaly a converter can convert attribute values. If the attribute
+value is a list of items which contains another list of items, then you need to
+use another converter which is able to convert this nested structure. But
+normaly this is the responsibility of the first level item to convert it's
+values. This is the reason why we didn't implement this concept by default.
+
+Remember, a default converter definition looks like::
+
+  def itemConverter(value):
+      _type = value.get('_type')
+      if _type == 'Car':
+          return Car
+      if _type == 'House':
+          return House
+      else:
+          return value
+
+And the class defines something like::
+
+  converters = {'myItems': itemConverter}
+
+Our advanced converter sample can convert a nested data structure and looks
+like::
+
+  def toCar(value):
+      return Car(value)
+
+  converters = {'myItems': {'House': toHouse, 'Car': toCar}}
+
+  class AdvancedConverter(object):
+
+      converters = {} # attr-name/converter or {_type:converter}
+      def convert(self, key, value):
+          """This convert method knows how to handle nested converters."""
+          converter = self.converters.get(key)
+          if converter is not None:
+              if isinstance(converter, dict):
+                  if isinstance(value, (list, tuple)):
+                      res = []
+                      for o in value:
+                          if isinstance(o, dict):
+                              _type = o.get('_type')
+                              if _type is not None:
+                                  converter = converter.get(_type)
+                                  value = converter(o)
+                          res.append(value)
+                      value = res
+                  elif isinstance(value, dict):
+                      _type = o.get('_type')
+                      if _type is not None:
+                          converter = converter.get(_type)
+                          value = converter(value)
+                  else:
+                      value = converter(value)
+              else:
+                  if isinstance(value, (list, tuple)):
+                      # convert list values
+                      value = [converter(d) for d in value]
+                  else:
+                      # convert simple values
+                      value = converter(value)
+          return value
+
+I'm sure if you understand what we implemented, you will find a lot of space
+to improve and write your own special methods which can do the right thing for
+your use cases.

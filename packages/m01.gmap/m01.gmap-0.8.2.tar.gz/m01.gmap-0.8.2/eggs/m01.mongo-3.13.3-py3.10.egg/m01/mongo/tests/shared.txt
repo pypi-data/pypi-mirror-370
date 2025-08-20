@@ -1,0 +1,253 @@
+=====================
+Shared MongoContainer
+=====================
+
+The MongoContainer can store non persistent IMongoContainerItem objects in a
+MongoDB. A MongoContainerItem must be able to dump it's data to valid mongo
+values. This test will show how our MongoContainer works.
+
+
+Condition
+---------
+
+Befor we start testing, check if our thread local cache is empty or if we have
+let over some junk from previous tests:
+
+  >>> from m01.mongo.testing import pprint
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+
+Setup
+-----
+
+First import some components:
+
+  >>> import datetime
+  >>> import transaction
+  >>> from zope.container.interfaces import IContainer
+
+  >>> import m01.mongo
+  >>> import m01.mongo.base
+  >>> import m01.mongo.container
+  >>> from m01.mongo import interfaces
+  >>> from m01.mongo import testing
+
+We also need a application root object. Let's define a static MongoContainer
+as our application database root item.
+
+  >>> class MongoRoot(m01.mongo.container.MongoContainer):
+  ...     """Mongo application root"""
+  ... 
+  ...     _id = m01.mongo.getObjectId(0)
+  ... 
+  ...     def __init__(self):
+  ...         pass
+  ... 
+  ...     @property
+  ...     def collection(self):
+  ...         return testing.getRootItems()
+  ... 
+  ...     @property
+  ...     def cacheKey(self):
+  ...         return 'root'
+  ... 
+  ...     def load(self, data):
+  ...         """Load data into the right mongo item."""
+  ...         return testing.Companies(data)
+  ... 
+  ...     def __repr__(self):
+  ...         return '<%s %s>' % (self.__class__.__name__, self._id)
+
+
+As you can see our MongoRoot class defines a static mongo ObjectID as _id. This
+means the same _id get use every time. This _id acts as our __parent__
+reference.
+
+The following method allows us to generate new MongoRoot item instances. This
+allows us to show that we generate different root items like we would do on a
+server restart.
+
+  >>> def getRoot():
+  ...     return MongoRoot()
+
+Here is our database root item:
+
+  >>> root = getRoot()
+  >>> root
+  <MongoRoot 000000000000000000000000>
+
+  >>> root._id
+  ObjectId('000000000000000000000000')
+
+
+Containers
+----------
+
+Now let's use our enhanced testing data and setup a content structure:
+
+  >>> data = {'name': u'Europe'}
+  >>> europe = testing.Companies(data)
+  >>> root[u'europe'] = europe
+
+  >>> data = {'name': u'Asia'}
+  >>> asia = testing.Companies(data)
+  >>> root[u'asia'] = asia
+
+  >>> transaction.commit()
+
+Let's check our companies in Mongo:
+
+  >>> rootCollection = testing.getRootItems()
+  >>> obj = rootCollection.find_one({'name': 'Europe'})
+  >>> pprint(obj)
+  {u'__name__': u'europe',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'Companies',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'Europe'}
+
+Now let's add a Company, Employer and some documents:
+
+  >>> data = {'name': u'Projekt01 GmbH'}
+  >>> pro = testing.Company(data)
+  >>> europe[u'pro'] = pro
+
+  >>> data = {'name': u'Roger Ineichen'}
+  >>> roger = testing.Employer(data)
+  >>> pro[u'roger'] = roger
+
+  >>> data = {'name': u'Manual'}
+  >>> manual = testing.Document(data)
+  >>> roger[u'manual'] = manual
+
+  >>> transaction.commit()
+
+As you can see we added a data structure using our container, item objects:
+
+  >>> root['europe']
+  <Companies u'europe'>
+
+  >>> root['europe']['pro']
+  <Company u'pro'>
+
+  >>> root['europe']['pro']['roger']
+  <Employer u'roger'>
+
+  >>> root['europe']['pro']['roger']['manual']
+  <Document u'manual'>
+
+As you can see this structure is related to their __parent__ references. This
+means if we add another structure into the same mongodb, each item knows it's
+container.
+
+  >>> data = {'name': u'Credit Suisse'}
+  >>> cs = testing.Company(data)
+  >>> asia[u'cs'] = cs
+
+  >>> data = {'name': u'Max Muster'}
+  >>> max = testing.Employer(data)
+  >>> cs[u'max'] = max
+
+  >>> data = {'name': u'Paper'}
+  >>> paper = testing.Document(data)
+  >>> max[u'paper'] = paper
+
+  >>> transaction.commit()
+
+  >>> root['asia']
+  <Companies u'asia'>
+
+  >>> root['asia']['cs']
+  <Company u'cs'>
+
+  >>> root['asia']['cs']['max']
+  <Employer u'max'>
+
+  >>> root['asia']['cs']['max']['paper']
+  <Document u'paper'>
+
+We can't access another item from the same type from another parent container:
+
+  >>> root['europe']['cs']
+  Traceback (most recent call last):
+  ... 
+  KeyError: 'cs'
+
+  >>> transaction.commit()
+
+As you can see the KeyError left items back in our thread local cache. We can
+use our thread local cache cleanup event handler which is by default registered
+as an EndRequestEvent subscriber for cleanup our thread local cache:
+
+  >>> pprint(LOCAL.__dict__)
+  {u'europe': {'loaded': {}, 'removed': {}}}
+
+Let's use our subscriber:
+
+  >>> from m01.mongo import clearThreadLocalCache
+  >>> clearThreadLocalCache()
+
+As you can see our cache items get removed:
+
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+
+Shared Container
+----------------
+
+Now let's implement a shared container which contains all IEmployer items:
+
+  >>> class SharedEployers(m01.mongo.container.MongoContainer):
+  ...     """Shared Employer container"""
+  ... 
+  ...     # mark a container as shared by set the _mpid to None
+  ...     _mpid = None
+  ... 
+  ...     @property
+  ...     def collection(self):
+  ...         return testing.getEmployers()
+  ... 
+  ...     def load(self, data):
+  ...         return testing.Employer(data)
+
+Now let's try if the shared container can access all Employer items:
+
+  >>> shared = SharedEployers()
+  >>> pprint(tuple(shared.items()))
+  ((u'roger', <Employer u'roger'>), (u'max', <Employer u'max'>))
+
+  >>> for obj in list(shared.values()):
+  ...     pprint(obj.dump())
+  {'__name__': u'roger',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': u'Employer',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'name': u'Roger Ineichen'}
+  {'__name__': u'max',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': u'Employer',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'name': u'Max Muster'}
+
+Now commit our transaction which will cleanup our caches. Database cleanup is
+done in our test teardown:
+
+  >>> transaction.commit()
+
+Check our thread local cache before we leave this test:
+
+  >>> pprint(LOCAL.__dict__)
+  {}

@@ -1,0 +1,165 @@
+==============
+MongoContainer
+==============
+
+The MongoContainer can store IMongoContainerItem objects in a MongoDB. A
+MongoContainerItem must be able to dump it's data to valid mongodb data. This
+test will show how our MongoContainer works.
+
+
+Condition
+---------
+
+First import some components:
+
+  >>> import json
+  >>> from zope.interface import implementer
+  >>> import transaction
+  >>> import zope.interface
+  >>> import zope.schema
+  >>> import m01.mongo.item
+  >>> import m01.mongo.testing
+  >>> from m01.mongo.fieldproperty import MongoFieldProperty
+  >>> from m01.mongo import interfaces
+
+Befor we start testing, check if our thread local cache is empty or if we have
+left over some junk from previous tests:
+
+  >>> from m01.mongo import LOCAL
+  >>> m01.mongo.testing.pprint(LOCAL.__dict__)
+  {}
+
+
+Setup
+-----
+
+And set up a database root:
+
+  >>> root = {}
+
+
+MongoContainerItem
+------------------
+
+  >>> class ISampleContainerItem(interfaces.IMongoContainerItem,
+  ...     zope.location.interfaces.ILocation):
+  ...     """Sample item interface."""
+  ... 
+  ...     title = zope.schema.TextLine(
+  ...         title=u'Object Title',
+  ...         description=u'Object Title',
+  ...         required=True)
+
+
+  >>> @implementer(ISampleContainerItem)
+  ... class SampleContainerItem(m01.mongo.item.MongoContainerItem):
+  ...     """Sample container item"""
+  ... 
+  ... 
+  ...     title = MongoFieldProperty(ISampleContainerItem['title'])
+  ... 
+  ...     dumpNames = ['title']
+
+
+MongoContainer
+--------------
+
+  >>> class ISampleContainer(interfaces.IMongoContainer):
+  ...     """Sample container interface."""
+
+
+  >>> @implementer(ISampleContainer)
+  ... class SampleContainer(m01.mongo.container.MongoContainer):
+  ...     """Sample container."""
+  ... 
+  ... 
+  ...     @property
+  ...     def collection(self):
+  ...         db = m01.mongo.testing.getTestDatabase()
+  ...         return db['test']
+  ... 
+  ...     def load(self, data):
+  ...         """Load data into the right mongo item."""
+  ...         return SampleContainerItem(data)
+
+  >>> container = SampleContainer()
+  >>> root['container'] = container
+
+
+Create an object tree
+---------------------
+
+Now we can add a sample MongoContainerItem to our container using the mapping
+api:
+
+  >>> data = {'title': u'Title'}
+  >>> item = SampleContainerItem(data)
+  >>> container = root['container']
+  >>> container[u'item'] = item
+
+Transaction
+-----------
+
+Zope provides transactions for store objects in the database. We also provide
+such a transaction and a transation data manager for store our objects in the
+mongodb. This means right now nothing get stored in our test database because
+we didn't commit the transaction:
+
+  >>> collection = m01.mongo.testing.getTestCollection()
+  >>> collection.count_documents({})
+  0
+
+Let's commit our transaction an store the container item in mongodb:
+
+  >>> transaction.commit()
+
+  >>> collection = m01.mongo.testing.getTestCollection()
+  >>> collection.count_documents({})
+  1
+
+After commit, the thread local storage is empty:
+
+  >>> LOCAL.__dict__
+  {}
+
+
+Mongodb data
+------------
+
+As you can see the following data get stored in our mongodb:
+
+  >>> data = collection.find_one({'__name__': 'item'})
+  >>> m01.mongo.testing.pprint(data)
+  {u'__name__': u'item',
+   u'_id': ObjectId('...'),
+   u'_pid': None,
+   u'_type': u'SampleContainerItem',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'title': u'Title'}
+
+
+Object
+------
+
+We can get from our container and mongo will load the data from mongodb:
+
+  >>> obj = container[u'item']
+  >>> obj
+  <SampleContainerItem u'item'>
+
+  >>> obj.title
+  u'Title'
+
+Let's tear down our test setup:
+
+  >>> transaction.commit()
+  >>> from m01.mongo import clearThreadLocalCache
+  >>> clearThreadLocalCache()
+
+As you can see our cache items get removed:
+
+  >>> from m01.mongo import LOCAL
+  >>> m01.mongo.testing.pprint(LOCAL.__dict__)
+  {}

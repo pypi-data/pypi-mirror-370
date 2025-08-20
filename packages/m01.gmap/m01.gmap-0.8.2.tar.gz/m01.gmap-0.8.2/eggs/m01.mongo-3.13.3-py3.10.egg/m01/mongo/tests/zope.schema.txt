@@ -1,0 +1,622 @@
+=================
+Using zope.schema
+=================
+
+This test will expain how a zope.schema field is related to the python object
+and the data stored in mongodb. We will show the different zope.schema field
+options and how it's possible to store None (mongodb null value) and pass the zope.schema validation. This test should explain if you can and should use a
+spare index or not and what values get stored in mongodb depoending on the
+different zope.schema options.
+
+
+Condition
+---------
+
+Befor we start testing, check if our thread local cache is empty or if we have
+left over some junk from previous tests:
+
+  >>> import transaction
+  >>> from zope.interface import implementer
+  >>> import zope.schema
+  >>> import zope.interface
+  >>> from zope.interface.verify import verifyObject
+  >>> import m01.mongo
+  >>> import m01.mongo.schema
+  >>> import m01.mongo.item
+  >>> from m01.mongo.fieldproperty import MongoDateProperty
+  >>> from m01.mongo.fieldproperty import MongoFieldProperty
+  >>> from m01.mongo import interfaces
+  >>> from m01.mongo import testing
+  >>> from m01.mongo.testing import pprint
+  >>> from m01.mongo.testing import reNormalizer
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+Setup
+-----
+
+First let's define a static MongoContainer as our application database root:
+
+  >>> class Root(m01.mongo.container.MongoContainer):
+  ...     """Mongo application root"""
+  ... 
+  ...     _id = m01.mongo.getObjectId(0)
+  ... 
+  ...     def __init__(self, factory=None):
+  ...         self.factory = factory
+  ... 
+  ...     @property
+  ...     def collection(self):
+  ...         return testing.getTestCollection()
+  ... 
+  ...     @property
+  ...     def cacheKey(self):
+  ...         return 'root'
+  ... 
+  ...     def load(self, data):
+  ...         """Load data into the right mongo item."""
+  ...         return self.factory(data)
+  ... 
+  ...     def __repr__(self):
+  ...         return '<%s %s>' % (self.__class__.__name__, self._id)
+
+and add some testing helper methods:
+
+  >>> def getSample(key='sample'):
+  ...     return root[key]
+
+  >>> def doSaveAndDump(key='sample'):
+  ...     transaction.commit()
+  ...     obj = root[key]
+  ...     reNormalizer.pprint(obj.dump())
+
+  >>> def getNewRoot(factory):
+  ...     # commit old changes
+  ...     transaction.commit()
+  ...     # remove collection
+  ...     m01.mongo.testing.dropTestCollection()
+  ...     # setup new root
+  ...     return Root(factory)
+
+
+  >>> class IItemBaseSchema(interfaces.IMongoContainerItem):
+  ...     """Basic sample schema."""
+  ... 
+  ...     __name__ = zope.schema.TextLine(
+  ...         title=u'Title',
+  ...         description=u'Title',
+  ...         missing_value=u'',
+  ...         default=None,
+  ...         required=True)
+
+  >>> class ItemBase(m01.mongo.item.MongoContainerItem):
+  ...     """required=True, default=None item"""
+  ... 
+  ...     __name__ = MongoFieldProperty(IItemBaseSchema['__name__'])
+
+
+required=True, default=None and missing_value=None
+--------------------------------------------------
+
+Define an item with fields providing required=True, default=None and
+missing_value=None:
+
+  >>> class IRequiredTrueDefaultNoneMissingNone(IItemBaseSchema):
+  ...     """required=True, default=None, missing_value=None schema"""
+  ... 
+  ...     value = zope.schema.TextLine(
+  ...         title=u'Value',
+  ...         missing_value=None,
+  ...         default=None,
+  ...         required=True)
+
+  >>> @implementer(IRequiredTrueDefaultNoneMissingNone)
+  ... class RequiredTrueDefaultNoneMissingNone(ItemBase):
+  ...     """required=True, default=None, missing_value=None item"""
+  ... 
+  ... 
+  ...     value = MongoFieldProperty(
+  ...         IRequiredTrueDefaultNoneMissingNone['value'])
+  ... 
+  ...     dumpNames = [
+  ...         'value',
+  ...     ]
+
+By default, we can store a given value:
+
+  >>> root = getNewRoot(RequiredTrueDefaultNoneMissingNone)
+  >>> data = {'value': u'Value'}
+  >>> root[u'sample'] = RequiredTrueDefaultNoneMissingNone(data)
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultNoneMissingNone',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': 'Value'}
+
+We can create an object with no value. As you can see, the default value get
+stored:
+
+  >>> root = getNewRoot(RequiredTrueDefaultNoneMissingNone)
+  >>> data = {}
+  >>> root[u'sample'] = RequiredTrueDefaultNoneMissingNone(data)
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultNoneMissingNone',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': None}
+
+Such an object is valid in zope:
+
+  >>> sample = getSample()
+  >>> verifyObject(IRequiredTrueDefaultNoneMissingNone, sample)
+  True
+
+because the default schema value is used as object value:
+
+  >>> sample.value is None
+  True
+
+If we override such required values, we will run into a RequiredMissing
+exception if the non/empty value is defined in missing_value. That's how
+zope.schema and zope.interface works:
+
+  >>> sample = getSample()
+  >>> from zope.schema._bootstrapinterfaces import RequiredMissing
+  >>> try:
+  ...     sample.value = None
+  ... except RequiredMissing as ex:
+  ...     assert True
+
+But we can set valid values:
+
+  >>> sample = getSample()
+  >>> sample.value = u'Value 2'
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultNoneMissingNone',
+   '_version': 2,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': 'Value 2'}
+
+And we can override such existing values with a valid non/empty value:
+
+  >>> sample = getSample()
+  >>> sample.value = u''
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultNoneMissingNone',
+   '_version': 3,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': ''}
+
+As you can see, this is simple and makes sense.
+
+Also see the test RequiredTrueDefaultNoneMissingEmptyString where we use
+default=None and missing_value=u''. There we also can't override an existing
+value with None simply because None is not a valid value.
+
+And see the test RequiredFalseDefaultNoneMissingEmptyString where we use
+default=None and missing_value=u'' but a non required field.
+There we make sure, that we can override an existing value with None.
+
+
+required=True, default=None and missing_value=u''
+-------------------------------------------------
+
+Define an item with fields providing required=True, default=None and
+missing_value=u'':
+
+  >>> class IRequiredTrueDefaultNoneMissingEmptyString(IItemBaseSchema):
+  ...     """required=True, default=None, missing_value=u'' schema"""
+  ... 
+  ...     value = zope.schema.TextLine(
+  ...         title=u'Value',
+  ...         missing_value=u'',
+  ...         default=None,
+  ...         required=True)
+
+  >>> @implementer(IRequiredTrueDefaultNoneMissingEmptyString)
+  ... class RequiredTrueDefaultNoneMissingEmptyString(ItemBase):
+  ...     """required=True, default=None, missing_value=u'' item"""
+  ... 
+  ... 
+  ...     value = MongoFieldProperty(
+  ...         IRequiredTrueDefaultNoneMissingEmptyString['value'])
+  ... 
+  ...     dumpNames = [
+  ...         'value',
+  ...     ]
+
+We can create an object with no value. As you can see, the default value get
+stored:
+
+  >>> root = getNewRoot(RequiredTrueDefaultNoneMissingEmptyString)
+  >>> data = {}
+  >>> root[u'sample'] = RequiredTrueDefaultNoneMissingEmptyString(data)
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultNoneMissingEmptyString',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': None}
+
+And we can override a value with a valid value:
+
+  >>> sample = getSample()
+  >>> sample.value = u'Value 2'
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultNoneMissingEmptyString',
+   '_version': 2,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': 'Value 2'}
+
+But we can't override an existing value with None because None is not valid
+value type:
+
+  >>> from zope.schema._bootstrapinterfaces import WrongType
+  >>> sample = getSample()
+  >>> from zope.schema._bootstrapinterfaces import RequiredMissing
+  >>> try:
+  ...     sample.value = None
+  ... except WrongType as ex:
+  ...     assert True
+
+
+or with an empty string because an empty string is defined as missing_value:
+
+  >>> sample = getSample()
+  >>> try:
+  ...     sample.value = u''
+  ... except RequiredMissing as ex:
+  ...     print(ex)
+  value
+
+
+
+required=True, default=u'' and missing_value=u''
+------------------------------------------------
+
+Define an item with fields providing required=True, default=u'' and
+missing_value=u'':
+
+  >>> class IRequiredTrueDefaultEmptyStringMissingEmptyString(IItemBaseSchema):
+  ...     """required=True, default=None, missing_value=u'' schema"""
+  ... 
+  ...     value = zope.schema.TextLine(
+  ...         title=u'Value',
+  ...         missing_value=u'',
+  ...         default=u'',
+  ...         required=True)
+
+  >>> @implementer(IRequiredTrueDefaultEmptyStringMissingEmptyString)
+  ... class RequiredTrueDefaultEmptyStringMissingEmptyString(ItemBase):
+  ...     """required=True, default=None, missing_value=u'' item"""
+  ... 
+  ... 
+  ...     value = MongoFieldProperty(
+  ...         IRequiredTrueDefaultEmptyStringMissingEmptyString['value'])
+  ... 
+  ...     dumpNames = [
+  ...         'value',
+  ...     ]
+
+We can create an object with no value. As you can see, the default value get
+stored:
+
+  >>> root = getNewRoot(RequiredTrueDefaultEmptyStringMissingEmptyString)
+  >>> data = {}
+  >>> root[u'sample'] = RequiredTrueDefaultEmptyStringMissingEmptyString(data)
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultEmptyStringMissingEmptyString',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': ''}
+
+and we can override a value with a valid value:
+
+  >>> sample = getSample()
+  >>> sample.value = u'Value'
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredTrueDefaultEmptyStringMissingEmptyString',
+   '_version': 2,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': 'Value'}
+
+and this schema allows doesn't allows to override an existing value with None.
+Because None is not a valid value type:
+
+  >>> sample = getSample()
+  >>> try:
+  ...     sample.value = None
+  ... except WrongType as ex:
+  ...     assert True
+
+
+required=False, default=None and missing_value=None
+---------------------------------------------------
+
+Define an item with fields providing required=False, default=None and
+missing_value=None:
+
+  >>> class IRequiredFalseDefaultNoneMissingNone(IItemBaseSchema):
+  ...     """required=False, default=None, missing_value=None schema"""
+  ... 
+  ...     value = zope.schema.TextLine(
+  ...         title=u'Value',
+  ...         missing_value=None,
+  ...         default=None,
+  ...         required=False)
+
+  >>> @implementer(IRequiredFalseDefaultNoneMissingNone)
+  ... class RequiredFalseDefaultNoneMissingNone(ItemBase):
+  ...     """required=False, default=None, missing_value=None item"""
+  ... 
+  ... 
+  ...     value = MongoFieldProperty(
+  ...         IRequiredFalseDefaultNoneMissingNone['value'])
+  ... 
+  ...     dumpNames = [
+  ...         'value',
+  ...     ]
+
+We can create an object with no value. As you can see, the default value get
+stored:
+
+  >>> root = getNewRoot(RequiredFalseDefaultNoneMissingNone)
+  >>> data = {}
+  >>> root[u'sample'] = RequiredFalseDefaultNoneMissingNone(data)
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultNoneMissingNone',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': None}
+
+and we can override a value with a valid value:
+
+  >>> sample = getSample()
+  >>> sample.value = u'Value'
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultNoneMissingNone',
+   '_version': 2,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': 'Value'}
+
+As you can see, we can override an existing value with None because the field
+is not required independent if the missing_value defines None as missing value:
+
+  >>> sample = getSample()
+  >>> sample.value = None
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultNoneMissingNone',
+   '_version': 3,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': None}
+
+and sure, we can also use an ampty string as empty value:
+
+  >>> sample = getSample()
+  >>> sample.value = u''
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultNoneMissingNone',
+   '_version': 4,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': ''}
+
+
+required=False, default=None and missing_value=u''
+--------------------------------------------------
+
+Define an item with fields providing required=False, default=None and
+missing_value=u'':
+
+  >>> class IRequiredFalseDefaultNoneMissingEmptyString(IItemBaseSchema):
+  ...     """required=False, default=None, missing_value=u'' schema"""
+  ... 
+  ...     value = zope.schema.TextLine(
+  ...         title=u'Value',
+  ...         missing_value=u'',
+  ...         default=None,
+  ...         required=False)
+
+  >>> @implementer(IRequiredFalseDefaultNoneMissingEmptyString)
+  ... class RequiredFalseDefaultNoneMissingEmptyString(ItemBase):
+  ...     """required=False, default=None, missing_value=u'' item"""
+  ... 
+  ... 
+  ...     value = MongoFieldProperty(
+  ...         IRequiredFalseDefaultNoneMissingEmptyString['value'])
+  ... 
+  ...     dumpNames = [
+  ...         'value',
+  ...     ]
+
+We can create an object with no value. As you can see, the default value get
+stored:
+
+  >>> root = getNewRoot(RequiredFalseDefaultNoneMissingEmptyString)
+  >>> data = {}
+  >>> root[u'sample'] = RequiredFalseDefaultNoneMissingEmptyString(data)
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultNoneMissingEmptyString',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': None}
+
+and we can override a value with a valid value:
+
+  >>> sample = getSample()
+  >>> sample.value = u'Value'
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultNoneMissingEmptyString',
+   '_version': 2,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': 'Value'}
+
+and we can't override a value None because None is not a valid value type:
+
+  >>> sample = getSample()
+  >>> try:
+  ...     sample.value = None
+  ... except WrongType as ex:
+  ...     assert True
+
+but we can override an existing value with an empty string because the field is
+not required independent if an empty string is not a valid value type:
+
+  >>> sample = getSample()
+  >>> sample.value = u''
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultNoneMissingEmptyString',
+   '_version': 3,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': ''}
+
+
+required=False, default=u'' and missing_value=u''
+-------------------------------------------------
+
+Define an item with fields providing required=False, default=u'' and
+missing_value=u'':
+
+  >>> class IRequiredFalseDefaultEmptyStringMissingEmptyString(IItemBaseSchema):
+  ...     """required=False, default=None, missing_value=u'' schema"""
+  ... 
+  ...     value = zope.schema.TextLine(
+  ...         title=u'Value',
+  ...         missing_value=u'',
+  ...         default=u'',
+  ...         required=False)
+
+  >>> @implementer(IRequiredFalseDefaultEmptyStringMissingEmptyString)
+  ... class RequiredFalseDefaultEmptyStringMissingEmptyString(ItemBase):
+  ...     """required=False, default=None, missing_value=u'' item"""
+  ... 
+  ... 
+  ...     value = MongoFieldProperty(
+  ...         IRequiredFalseDefaultEmptyStringMissingEmptyString['value'])
+  ... 
+  ...     dumpNames = [
+  ...         'value',
+  ...     ]
+
+We can create an object with no value. As you can see, the default value get
+stored:
+
+  >>> root = getNewRoot(RequiredFalseDefaultEmptyStringMissingEmptyString)
+  >>> data = {}
+  >>> root[u'sample'] = RequiredFalseDefaultEmptyStringMissingEmptyString(data)
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultEmptyStringMissingEmptyString',
+   '_version': 1,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': ''}
+
+and we can override a value with a valid value:
+
+  >>> sample = getSample()
+  >>> sample.value = u'Value'
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultEmptyStringMissingEmptyString',
+   '_version': 2,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': 'Value'}
+
+but we can't override the value with an invalid value type:
+
+  >>> sample = getSample()
+  >>> try:
+  ...     sample.value = None
+  ... except WrongType as ex:
+  ...     assert True
+
+
+but we can override the value with an empty value, even if the value is defined
+as missing_value because the field is not required:
+
+  >>> sample = getSample()
+  >>> sample.value = u''
+  >>> doSaveAndDump()
+  {'__name__': 'sample',
+   '_id': ObjectId('...'),
+   '_pid': ObjectId('...'),
+   '_type': 'RequiredFalseDefaultEmptyStringMissingEmptyString',
+   '_version': 3,
+   'created': datetime.datetime(..., tzinfo=UTC),
+   'modified': datetime.datetime(..., tzinfo=UTC),
+   'value': ''}
+
+
+tear down
+---------
+
+Tear down and check our thread local cache before we leave this test:
+
+  >>> transaction.commit()
+  >>> pprint(LOCAL.__dict__)
+  {}

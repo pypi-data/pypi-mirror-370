@@ -1,0 +1,469 @@
+===========
+MongoObject
+===========
+
+A MongoObject can get stored independent from anything else in a MongoDB. Such
+MongoObject can get used together with a field property called
+MongoOjectProperty. The field property is responsible for set and get such
+MongoObject to and from MongoDB. A persistent item which provides such a
+MongoObject within a MongoObjectProperty only has to provide an oid attribute
+with a unique value. You can use the m01.oid package for such a unique oid
+or implement an own pattern.
+
+The MongoObject uses the __parent__._moid and the attribute (field) name as
+it's unique MongoDB key.
+
+Note, this test uses a fake MongoDB server setup. But this fake server is far
+away from beeing complete. We will add more feature to this fake server if we
+need them in other projects. See testing.py for more information.
+
+
+Condition
+---------
+
+Befor we start testing, check if our thread local cache is empty or if we have
+let over some junk from previous tests:
+
+  >>> from m01.mongo.testing import pprint
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+
+Setup
+-----
+
+First import some components:
+
+  >>> import datetime
+  >>> import transaction
+  >>> from m01.mongo import interfaces
+  >>> from m01.mongo import testing
+
+First, we need to setup a persistent object:
+
+  >>> content = testing.Content(42)
+  >>> content._moid
+  42
+
+And add them to the ZODB:
+
+  >>> root = {}
+  >>> root['content'] = content
+  >>> transaction.commit()
+
+  >>> content = root['content']
+  >>> content
+  <Content 42>
+
+
+MongoObject
+-----------
+
+Now let's add a MongoObject instance to our sample content object:
+
+  >>> data = {'title': u'Mongo Object Title',
+  ...         'description': u'A Description',
+  ...         'item': {'text':u'Item'},
+  ...         'date': datetime.date(2010, 2, 28).toordinal(),
+  ...         'numbers': [1,2,3],
+  ...         'comments': [{'text':u'Comment 1'}, {'text':u'Comment 2'}]}
+  >>> obj = testing.SampleMongoObject(data)
+  >>> obj._id
+  ObjectId('...')
+
+  obj.title
+  u'Mongo Object Title'
+
+  >>> obj.description
+  u'A Description'
+
+  >>> obj.item
+  <SampleSubItem u'...'>
+
+  >>> obj.item.text
+  u'Item'
+
+  >>> obj.numbers
+  [1, 2, 3]
+
+  >>> obj.comments
+  [<SampleSubItem u'...'>, <SampleSubItem u'...'>]
+
+  >>> tuple(obj.comments)[0].text
+  u'Comment 1'
+
+  >>> tuple(obj.comments)[1].text
+  u'Comment 2'
+
+Our MongoObject doesn't provide a _aprent__ or __name__ right now:
+
+  >>> obj.__parent__ is None
+  True
+
+  >>> obj.__name__ is None
+  True
+
+But after adding the mongo object to our content which uses a
+MongoObjectProperty, the mongo object get located and becomes the attribute
+name as _field value. If the object didn't provide a __name__, the same value
+will also get applied for __name__:
+
+  >>> content.obj = obj
+  >>> obj.__parent__
+  <Content 42>
+
+  >>> obj.__name__
+  u'obj'
+
+  >>> obj.__name__
+  u'obj'
+
+After adding our mongo object, there should be a reference in our thread local
+cache:
+
+  >>> pprint(LOCAL.__dict__)
+  {u'42:obj': <SampleMongoObject u'obj'>,
+   'MongoTransactionDataManager': <m01.mongo.tm.MongoTransactionDataManager object at ...>}
+
+A MongoObject provides a _oid attribute which is used as the MongoDB key. This
+value uses the __parent__._moid and the mongo objects attribute name:
+
+  >>> obj._oid == '%s:%s' % (content._moid, obj.__name__)
+  True
+
+  >>> obj._oid
+  u'42:obj'
+
+Now check if we can get the mongo object again and if we still get the same
+values:
+
+  >>> obj = content.obj
+  >>> obj.title
+  u'Mongo Object Title'
+
+  >>> obj.description
+  u'A Description'
+
+  >>> obj.item
+  <SampleSubItem u'...'>
+
+  >>> obj.item.text
+  u'Item'
+
+  >>> obj.numbers
+  [1, 2, 3]
+
+  >>> obj.comments
+  [<SampleSubItem u'...'>, <SampleSubItem u'...'>]
+
+  >>> tuple(obj.comments)[0].text
+  u'Comment 1'
+
+  >>> tuple(obj.comments)[1].text
+  u'Comment 2'
+
+Now let's commit the transaction which will store the obj in our fake mongo DB:
+
+  >>> transaction.commit()
+
+After we commited to the MongoDB, the mongo object and our transaction data
+manger reference should be gone in the thread local cache:
+
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+Now check our mongo object values again. If your content item is stored in a
+ZODB, you would get the content item from a ZODB connection root:
+
+  >>> content = root['content']
+  >>> content
+  <Content 42>
+
+  >>> obj = content.obj
+  >>> obj
+  <SampleMongoObject u'obj'>
+
+  >>> obj.title
+  u'Mongo Object Title'
+
+  >>> obj.description
+  u'A Description'
+
+  >>> obj.item
+  <SampleSubItem u'...'>
+
+  >>> obj.item.text
+  u'Item'
+
+  >>> obj.numbers
+  [1, 2, 3]
+
+  >>> obj.comments
+  [<SampleSubItem u'...'>, <SampleSubItem u'...'>]
+
+  >>> tuple(obj.comments)[0].text
+  u'Comment 1'
+
+  >>> tuple(obj.comments)[1].text
+  u'Comment 2'
+
+  >>> pprint(obj.dump())
+  {'__name__': u'obj',
+   '_field': u'obj',
+   '_id': ObjectId('...'),
+   '_oid': u'42:obj',
+   '_type': u'SampleMongoObject',
+   '_version': 1,
+   'comments': [{'_id': ObjectId('...'),
+                 '_type': u'SampleSubItem',
+                 'created': datetime.datetime(...),
+                 'modified': None,
+                 'text': u'Comment 1'},
+                {'_id': ObjectId('...'),
+                 '_type': u'SampleSubItem',
+                 'created': datetime.datetime(...),
+                 'modified': None,
+                 'text': u'Comment 2'}],
+   'created': datetime.datetime(...),
+   'date': 733831,
+   'description': u'A Description',
+   'item': {'_id': ObjectId('...'),
+            '_type': u'SampleSubItem',
+            'created': datetime.datetime(...),
+            'modified': None,
+            'text': u'Item'},
+   'modified': datetime.datetime(...),
+   'number': None,
+   'numbers': [1, 2, 3],
+   'removed': False,
+   'title': u'Mongo Object Title'}
+
+  >>> transaction.commit()
+
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+Now let's replace the existing item with a new one and add another item to
+the item lists. Also make sure we can use append instead of re-apply the full
+list like zope widgets do:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> obj.item = testing.SampleSubItem({'text': u'New Item'})
+
+  >>> newItem = testing.SampleSubItem({'text': u'New List Item'})
+  >>> obj.comments.append(newItem)
+
+  >>> obj.numbers.append(4)
+
+  >>> transaction.commit()
+
+check again:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> obj.title
+  u'Mongo Object Title'
+
+  >>> obj.description
+  u'A Description'
+
+  >>> obj.item
+  <SampleSubItem u'...'>
+
+  >>> obj.item.text
+  u'New Item'
+
+  >>> obj.numbers
+  [1, 2, 3, 4]
+
+  >>> obj.comments
+  [<SampleSubItem u'...'>, <SampleSubItem u'...'>]
+
+  >>> tuple(obj.comments)[0].text
+  u'Comment 1'
+
+  >>> tuple(obj.comments)[1].text
+  u'Comment 2'
+
+And now re-apply a full list of values to the list field:
+
+  >>> comOne = testing.SampleSubItem({'text': u'First List Item'})
+  >>> comTwo = testing.SampleSubItem({'text': u'Second List Item'})
+  >>> comments = [comOne, comTwo]
+  >>> obj.comments = comments
+  >>> obj.numbers = [1,2,3,4,5]
+  >>> transaction.commit()
+
+check again:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> len(obj.comments)
+  2
+
+  >>> obj.comments
+  [<SampleSubItem u'...'>, <SampleSubItem u'...'>]
+
+  >>> len(obj.numbers)
+  5
+
+  >>> obj.numbers
+  [1, 2, 3, 4, 5]
+
+Also check if we can remove list items:
+
+  >>> obj.numbers.remove(1)
+  >>> obj.numbers.remove(2)
+
+  >>> obj.comments.remove(comTwo)
+
+  >>> transaction.commit()
+
+check again:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> len(obj.comments)
+  1
+
+  >>> obj.comments
+  [<SampleSubItem u'...'>]
+
+  >>> len(obj.numbers)
+  3
+
+  >>> obj.numbers
+  [3, 4, 5]
+
+  >>> transaction.commit()
+
+We can also remove items from the item list by it's __name__:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> del obj.comments[comOne.__name__]
+
+  >>> transaction.commit()
+
+check again:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> len(obj.comments)
+  0
+
+  >>> obj.comments
+  []
+
+  >>> transaction.commit()
+
+Or we can add items to the item list by name:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> obj.comments[comOne.__name__] = comOne
+
+  >>> transaction.commit()
+
+check again:
+
+  >>> content = root['content']
+  >>> obj = content.obj
+
+  >>> len(obj.comments)
+  1
+
+  >>> obj.comments
+  [<SampleSubItem u'...'>]
+
+  >>> transaction.commit()
+
+
+Coverage
+--------
+
+Our items list also provides the following methods:
+
+  >>> obj.comments.__contains__(comOne.__name__)
+  True
+
+  >>> comOne.__name__ in obj.comments
+  True
+
+  >>> obj.comments.get(comOne.__name__)
+  <SampleSubItem u'...'>
+
+  >>> list(obj.comments.keys()) == [comOne.__name__]
+  True
+
+  >>> try:
+  ...     from collections.abc import Iterable  # Python 3
+  ... except ImportError:
+  ...     from collections import Iterable  # Python 2
+  >>> isinstance(obj.comments.values(), Iterable)
+  True
+
+  >>> isinstance(obj.comments.items(), Iterable)
+  True
+
+  >>> tuple(obj.comments.items())
+  ((u'...', <SampleSubItem u'...'>),)
+
+  >>> obj.comments == obj.comments
+  True
+
+Let's test some internals for increase coverage:
+
+  >>> obj.comments._m_changed
+  Traceback (most recent call last):
+  ... 
+  AttributeError: _m_changed is a write only property
+
+  >>> obj.comments._m_changed = False
+  Traceback (most recent call last):
+  ... 
+  ValueError: Can only dispatch True to __parent__
+
+  >>> obj.comments.locate(42)
+
+Our simple value typ list also provides the following methods:
+
+  >>> obj.numbers.__contains__(3)
+  True
+
+  >>> 3 in obj.numbers
+  True
+
+  >>> obj.numbers == obj.numbers
+  True
+
+  >>> obj.numbers.pop()
+  5
+
+  >>> del obj.numbers[0]
+
+  >>> obj.numbers[0] = 42
+
+  >>> obj.numbers._m_changed
+  Traceback (most recent call last):
+  ... 
+  AttributeError: _m_changed is a write only property
+
+  >>> obj.numbers._m_changed = False
+  Traceback (most recent call last):
+  ... 
+  ValueError: Can only dispatch True to __parent__
+
+Check our thread local cache before we leave this test:
+
+  >>> pprint(LOCAL.__dict__)
+  {}

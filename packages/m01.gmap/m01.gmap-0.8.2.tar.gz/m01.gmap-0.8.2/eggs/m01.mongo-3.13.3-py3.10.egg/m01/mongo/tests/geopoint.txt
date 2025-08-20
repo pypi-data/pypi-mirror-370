@@ -1,0 +1,337 @@
+========
+GeoPoint
+========
+
+The GeoPoint item can store a geo location and is used in an item as
+a kind of sub item providing longitude and latitude and type. Additional to this
+fields a GeoPoint provides the _m_changed dispatching concept and is able
+to notify the __parent__ item if lon/lat get changed. The item also provides
+ILocation for security lookup support. The MongoGeoPointProperty field property
+is responsible for apply a __parent__ and __name__ and use the right class
+factory.
+
+The GeoPoint item supports the order longitude, latitude and preserves them.
+
+
+Condition
+---------
+
+Befor we start testing, check if our thread local cache is empty or if we have
+let over some junk from previous tests:
+
+  >>> from m01.mongo.testing import pprint
+  >>> from m01.mongo import LOCAL
+  >>> from m01.mongo.testing import reNormalizer
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+
+Setup
+-----
+
+First import some components:
+
+  >>> import datetime
+  >>> import transaction
+
+  >>> import m01.mongo
+  >>> import m01.mongo.base
+  >>> import m01.mongo.geo
+  >>> import m01.mongo.container
+  >>> from m01.mongo import interfaces
+  >>> from m01.mongo import testing
+
+We also need a application root object. Let's define a static MongoContainer
+as our application database root item.
+
+  >>> class MongoRoot(m01.mongo.container.MongoContainer):
+  ...     """Mongo application root"""
+  ... 
+  ...     _id = m01.mongo.getObjectId(0)
+  ... 
+  ...     def __init__(self):
+  ...         pass
+  ... 
+  ...     @property
+  ...     def collection(self):
+  ...         return testing.getRootItems()
+  ... 
+  ...     @property
+  ...     def cacheKey(self):
+  ...         return 'root'
+  ... 
+  ...     def load(self, data):
+  ...         """Load data into the right mongo item."""
+  ...         return testing.GeoPointSample(data)
+  ... 
+  ...     def __repr__(self):
+  ...         return '<%s %s>' % (self.__class__.__name__, self._id)
+
+
+The following method allows us to generate new MongoRoot item instances. This
+allows us to show that we generate different root items like we would do on a
+server restart.
+
+  >>> def getRoot():
+  ...     return MongoRoot()
+
+Here is our database root item:
+
+  >>> root = getRoot()
+  >>> root
+  <MongoRoot 000000000000000000000000>
+
+  >>> root._id
+  ObjectId('000000000000000000000000')
+
+
+indexing
+--------
+
+First setup an index:
+
+  >>> collection = testing.getRootItems()
+
+  >>> from pymongo import GEOSPHERE
+  >>> collection.create_index([('lonlat', GEOSPHERE)])
+  u'lonlat_2dsphere'
+
+
+GeoPointSample
+--------------
+
+As you can see, we can initialize a GeoPoint within a list of lon/lat values
+or within a lon/lat dict:
+
+  >>> data = {'name': u'sample', 'lonlat': {'lon': 1, 'lat': 3}}
+  >>> sample = testing.GeoPointSample(data)
+  >>> sample.lonlat
+  <GeoPoint lon:1.0, lat:3.0>
+
+  >>> data = {'name': u'sample', 'lonlat': [1, 3]}
+  >>> sample = testing.GeoPointSample(data)
+  >>> sample.lonlat
+  <GeoPoint lon:1.0, lat:3.0>
+
+  >>> root[u'sample'] = sample
+
+  >>> transaction.commit()
+
+Let's check our item in Mongo:
+
+  >>> data = collection.find_one({'name': 'sample'})
+  >>> reNormalizer.pprint(data)
+  {u'__name__': u'sample',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [1.0, 3.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+
+We can also use a GeoPoint as lonlat data:
+
+  >>> geo = m01.mongo.geo.GeoPoint({u'lat': 4, u'lon': 2})
+  >>> data = {'name': u'sample2', 'lonlat': geo}
+  >>> sample2 = testing.GeoPointSample(data)
+  >>> root[u'sample2'] = sample2
+
+  >>> transaction.commit()
+
+  >>> data = collection.find_one({'name': 'sample2'})
+  >>> reNormalizer.pprint(data)
+  {u'__name__': u'sample2',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [2.0, 4.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample2'}
+
+
+We can also set a GeoPoint as lonlat value:
+
+  >>> sample2 = root[u'sample2']
+  >>> geo = m01.mongo.geo.GeoPoint({'lon': 4, 'lat': 6})
+  >>> sample2.lonlat = geo
+
+  >>> transaction.commit()
+
+  >>> data = collection.find_one({'name': 'sample2'})
+  >>> reNormalizer.pprint(data)
+  {u'__name__': u'sample2',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 2,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [4.0, 6.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample2'}
+
+
+index
+-----
+
+  >>> pprint(collection.index_information())
+  {'_id_': {'key': [('_id', 1)], 'ns': 'm01_mongo_testing.items', 'v': 2}, 'lonlat_2dsphere': {'2dsphereIndexVersion': 3, 'key': [('lonlat', '2dsphere')], 'ns': 'm01_mongo_testing.items', 'v': 2}}
+
+
+search
+------
+
+Let's test some geo location search query and make sure our lon/lat order
+will fit and get preserved during the mongodb roundtrip.
+
+Now seearch for a geo location:
+
+  >>> def printFind(collection, query):
+  ...     for data in collection.find(query):
+  ...         reNormalizer.pprint(data)
+
+Using the geospatial index we can find documents within another point:
+
+  >>> point = {"type": "Polygon",
+  ...          "coordinates": [[[0,0], [0,6], [2,6], [2,0], [0,0]]]}
+  >>> query = {"lonlat": {"$within": {"$geometry": point}}}
+  >>> printFind(collection, query)
+  {u'__name__': u'sample',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [1.0, 3.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+
+Using the geospatial index we can find documents near another point:
+
+  >>> point = {'type': 'Point', 'coordinates': [0, 2]}
+  >>> printFind(collection, {'lonlat': {'$near': {'$geometry': point}}})
+  {u'__name__': u'sample',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [1.0, 3.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+  {u'__name__': u'sample2',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 2,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [4.0, 6.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample2'}
+
+It's also possible to query for all items within a given rectangle
+(specified by lower-left and upper-right coordinates):
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$box': [[1,2], [2,3]]}}})
+  {u'__name__': u'sample',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [1.0, 3.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+
+As you can see if we use the wrong order for lon/lat (lat/lon), we will not
+get a value:
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$box': [[2,1], [3,2]]}}})
+
+We can also search for a circle (specified by center point and radius):
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$center': [[0, 0], 2]}}})
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$center': [[0, 0], 4]}}})
+  {u'__name__': u'sample',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [1.0, 3.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$center': [[0, 0], 10]}}})
+  {u'__name__': u'sample',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [1.0, 3.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+  {u'__name__': u'sample2',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 2,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [4.0, 6.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample2'}
+
+Also check if the lat/lon order matters:
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$center': [[1, 2], 1]}}})
+  {u'__name__': u'sample',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [1.0, 3.0], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$center': [[2, 1], 1]}}})
+
+
+And check if we can store real lon/lat values by using a float:
+
+  >>> data = {'name': u'sample', 'lonlat': {'lon': 20.123, 'lat': 29.123}}
+  >>> sample3 = testing.GeoPointSample(data)
+  >>> root[u'sample3'] = sample3
+
+  >>> transaction.commit()
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$center': [[25, 25], 4]}}})
+
+  >>> printFind(collection, {'lonlat': {'$within': {'$center': [[25, 25], 10]}}})
+  {u'__name__': u'sample3',
+   u'_id': ObjectId('...'),
+   u'_pid': ObjectId('...'),
+   u'_type': u'GeoPointSample',
+   u'_version': 1,
+   u'created': datetime.datetime(..., tzinfo=UTC),
+   u'lonlat': {u'coordinates': [20.123, 29.123], u'type': u'Point'},
+   u'modified': datetime.datetime(..., tzinfo=UTC),
+   u'name': u'sample'}
+
+
+tear down
+---------
+
+  >>> from m01.mongo import clearThreadLocalCache
+  >>> clearThreadLocalCache()
+
+As you can see our cache items get removed:
+
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}

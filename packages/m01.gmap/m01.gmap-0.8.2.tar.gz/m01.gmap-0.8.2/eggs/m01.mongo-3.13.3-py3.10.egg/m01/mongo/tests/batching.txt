@@ -1,0 +1,329 @@
+========
+Batching
+========
+
+The MongoMappingBase base class used by MongoStorage and MongoContainer can
+return batched data or items and batch information.
+
+Note; this test runs in level 2 because it uses a working MongoDB. This is
+needed because we like to test the real sort and limit functions in a MongoDB.
+
+
+Condition
+---------
+
+Befor we start testing, check if our thread local cache is empty or if we have
+left over some junk from previous tests:
+
+  >>> from m01.mongo.testing import pprint
+  >>> from m01.mongo import LOCAL
+  >>> from six.moves import range
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+Setup
+-----
+
+First import some components:
+
+  >>> import datetime
+  >>> import transaction
+  >>> from m01.mongo import testing
+
+
+setup
+-----
+
+Now we can add a MongoStorage to the database. Let's just use a simple
+dict as database root:
+
+  >>> root = {}
+  >>> storage = testing.SampleStorage()
+  >>> root['storage'] = storage
+  >>> transaction.commit()
+
+Now let's add 1000 MongoItems:
+
+  >>> storage = root['storage']
+  >>> for i in range(1000):
+  ...     data = {u'title': u'Title %i' % i,
+  ...             u'description': u'Description %i' % i,
+  ...             u'number': i}
+  ...     item = testing.SampleStorageItem(data)
+  ...     __name__ = storage.add(item)
+
+  >>> transaction.commit()
+
+After we commited to the MongoDB, the mongo object and our transaction data
+manger reference should be gone in the thread local cache:
+
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+As you can see, our collection contains 1000 items:
+
+  >>> storage = root['storage']
+  >>> len(storage)
+  1000
+
+
+batching
+--------
+
+Note, this method does not return items, it only returns the MongoDB data. This
+is what you should use. If this doesn't fit because you need a list of the real
+MongoItem this would be complicated beause we could have removed marked items
+in our LOCAL cache which the MongoDB doesn't know about.
+
+Let's get the batch information:
+
+  >>> storage.getBatchData()
+  (<...Cursor object at ...>, 1, 40, 1000)
+
+As you an see, we've got a curser with mongo data, the start index, the total
+amount of items and the page counter. Note, the first page starts at 1 (one)
+and not zero. Let's show another ample with different values:
+
+  >>> storage.getBatchData(page=5, size=10)
+  (<...Cursor object at ...>, 5, 100, 1000)
+
+As you can see we can iterate our cursor:
+
+  >>> page = 1
+  >>> size = 3
+  >>> cursor, page, total, pages = storage.getBatchData(page=page, size=size)
+
+  >>> pprint(tuple(cursor))
+  ({'__name__': '...',
+    '_id': ObjectId('...'),
+    '_pid': None,
+    '_type': 'SampleStorageItem',
+    '_version': 1,
+    'comments': [],
+    'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    'description': 'Description ...',
+    'item': None,
+    'modified': datetime.datetime(..., tzinfo=UTC),
+    'number': ...,
+    'numbers': [],
+    'title': 'Title ...'},
+   {'__name__': '...',
+    '_id': ObjectId('...'),
+    '_pid': None,
+    '_type': 'SampleStorageItem',
+    '_version': 1,
+    'comments': [],
+    'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    'description': 'Description ...',
+    'item': None,
+    'modified': datetime.datetime(..., tzinfo=UTC),
+    'number': ...,
+    'numbers': [],
+    'title': 'Title ...'},
+   {'__name__': '...',
+    '_id': ObjectId('...'),
+    '_pid': None,
+    '_type': 'SampleStorageItem',
+    '_version': 1,
+    'comments': [],
+    'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    'description': 'Description ...',
+    'item': None,
+    'modified': datetime.datetime(..., tzinfo=UTC),
+    'number': ...,
+    'numbers': [],
+    'title': 'Title ...'})
+
+As you can see, the cursor counts the total amount of items:
+
+  >>> storage.collection.count_documents({})
+  1000
+
+But we can force to count the result based on limit and skip arguments by use
+True as argument:
+
+  >>> storage.collection.count_documents({}, skip=page, limit=size)
+  3
+
+As you can see batching or any other object lookup will left items back in our
+thread local cache. We can use our thread local cache cleanup event handler
+which is normal registered as an EndRequestEvent subscriber:
+
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {u'm01_mongo_testing.test...': {'added': {}, 'removed': {}}}
+
+Let's use our subscriber:
+
+  >>> from m01.mongo import clearThreadLocalCache
+  >>> clearThreadLocalCache()
+
+As you can see our cache items get removed:
+
+  >>> from m01.mongo import LOCAL
+  >>> pprint(LOCAL.__dict__)
+  {}
+
+
+order
+-----
+
+An important part in batching is ordering. As you can see, we can limit the
+batch size and get a slice of data from a sequence. It is very important that
+the data get ordered at the MongoDB before we slice the data into a batch.
+Let's test if this works based on our ordable number value and a sort order
+where lowest value comes first. Start with page=0:
+
+  >>> cursor, page, pages, total = storage.getBatchData(page=1, size=3,
+  ...     sortName='number', sortOrder=1)
+
+  >>> cursor
+  <pymongo.cursor.Cursor object at ...>
+
+  >>> page
+  1
+
+  >>> pages
+  334
+
+  >>> total
+  1000
+
+When ordering is done right, the first item should have a number value 0 (zero):
+
+  >>> pprint(tuple(cursor))
+  ({u'__name__': u'...',
+    u'_id': ObjectId('...'),
+    '_pid': None,
+    u'_type': u'SampleStorageItem',
+    u'_version': 1,
+    u'comments': [],
+    u'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    u'description': u'Description 0',
+    'item': None,
+    u'modified': datetime.datetime(..., tzinfo=UTC),
+    u'number': 0,
+    u'numbers': [],
+    u'title': u'Title 0'},
+   {u'__name__': u'...',
+    u'_id': ObjectId('...'),
+    '_pid': None,
+    u'_type': u'SampleStorageItem',
+    u'_version': 1,
+    u'comments': [],
+    u'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    u'description': u'Description 1',
+    'item': None,
+    u'modified': datetime.datetime(..., tzinfo=UTC),
+    u'number': 1,
+    u'numbers': [],
+    u'title': u'Title 1'},
+   {u'__name__': u'...',
+    u'_id': ObjectId('...'),
+    '_pid': None,
+    u'_type': u'SampleStorageItem',
+    u'_version': 1,
+    u'comments': [],
+    u'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    u'description': u'Description 2',
+    'item': None,
+    u'modified': datetime.datetime(..., tzinfo=UTC),
+    u'number': 2,
+    u'numbers': [],
+    u'title': u'Title 2'})
+
+The second page (page=1) should start with number == 3:
+
+  >>> cursor, page, pages, total = storage.getBatchData(page=2, size=3,
+  ...     sortName='number', sortOrder=1)
+  >>> pprint(tuple(cursor))
+  ({u'__name__': u'...',
+    u'_id': ObjectId('...'),
+    '_pid': None,
+    u'_type': u'SampleStorageItem',
+    u'_version': 1,
+    u'comments': [],
+    u'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    u'description': u'Description 3',
+    'item': None,
+    u'modified': datetime.datetime(..., tzinfo=UTC),
+    u'number': 3,
+    u'numbers': [],
+    u'title': u'Title 3'},
+   {u'__name__': u'...',
+    u'_id': ObjectId('...'),
+    '_pid': None,
+    u'_type': u'SampleStorageItem',
+    u'_version': 1,
+    u'comments': [],
+    u'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    u'description': u'Description 4',
+    'item': None,
+    u'modified': datetime.datetime(..., tzinfo=UTC),
+    u'number': 4,
+    u'numbers': [],
+    u'title': u'Title 4'},
+   {u'__name__': u'...',
+    u'_id': ObjectId('...'),
+    '_pid': None,
+    u'_type': u'SampleStorageItem',
+    u'_version': 1,
+    u'comments': [],
+    u'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    u'description': u'Description 5',
+    'item': None,
+    u'modified': datetime.datetime(..., tzinfo=UTC),
+    u'number': 5,
+    u'numbers': [],
+    u'title': u'Title 5'})
+
+As you can see your page size is 334. Let's show this batch slice. The
+item in this batch should have a number == 999. but note:
+
+  >>> pages
+  334
+
+  >>> cursor, page, total, pages = storage.getBatchData(page=334, size=3,
+  ...     sortName='number', sortOrder=1)
+  >>> pprint(tuple(cursor))
+  ({u'__name__': u'...',
+    u'_id': ObjectId('...'),
+    '_pid': None,
+    u'_type': u'SampleStorageItem',
+    u'_version': 1,
+    u'comments': [],
+    u'created': datetime.datetime(..., tzinfo=UTC),
+    'date': None,
+    u'description': u'Description 999',
+    'item': None,
+    u'modified': datetime.datetime(..., tzinfo=UTC),
+    u'number': 999,
+    u'numbers': [],
+    u'title': u'Title 999'},)
+
+
+teardown
+--------
+
+Call transaction commit which will cleanup our LOCAL caches:
+
+  >>> transaction.commit()
+
+Again, clear thread local cache:
+
+  >>> clearThreadLocalCache()
+
+Check our thread local cache before we leave this test:
+
+  >>> pprint(LOCAL.__dict__)
+  {}
