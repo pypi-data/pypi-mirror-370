@@ -1,0 +1,80 @@
+Metadata-Version: 2.4
+Name: emerald_hws
+Version: 0.0.14
+Summary: A package to manipulate and monitor Emerald Heat Pump Hot Water Systems
+Author-email: Ross Williamson <ross@inertia.net.nz>
+License-Expression: MIT
+Project-URL: Homepage, https://github.com/ross-w/emerald_hws_py
+Project-URL: Bug Tracker, https://github.com/ross-w/emerald_hws_py/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: boto3<2.0.0,>=1.40.0
+Requires-Dist: awsiotsdk<2.0.0,>=1.24.0
+Requires-Dist: requests>=2.25.0
+Provides-Extra: dev
+Requires-Dist: ruff<1.0.0,>=0.12.0; extra == "dev"
+
+# emerald_hws_py
+Python package for controlling Emerald Heat Pump Hot Water Systems
+
+## Overview
+This package provides an interface to control and monitor Emerald Heat Pump Hot Water Systems through their API and MQTT service.
+
+## Installation
+```bash
+pip install emerald_hws
+```
+
+## Usage
+```python
+from emerald_hws.emeraldhws import EmeraldHWS
+
+# Basic usage with default connection settings
+client = EmeraldHWS("your_email@example.com", "your_password")
+client.connect()
+
+# List all hot water systems
+hws_list = client.listHWS()
+print(f"Found {len(hws_list)} hot water systems")
+
+# Get status of first HWS
+hws_id = hws_list[0]
+status = client.getFullStatus(hws_id)
+print(f"Current temperature: {status['last_state'].get('temp_current')}")
+
+# Turn on the hot water system
+client.turnOn(hws_id)
+```
+
+## Configuration Options
+
+### Connection Timeout
+The module will automatically reconnect to the MQTT service periodically to prevent stale connections. You can configure this timeout:
+
+```python
+# Set connection timeout to 6 hours (360 minutes)
+client = EmeraldHWS("your_email@example.com", "your_password", connection_timeout_minutes=360)
+```
+
+### Health Check
+The module can proactively check for message activity and reconnect if no messages have been received for a specified period:
+
+```python
+# Set health check to check every 30 minutes
+client = EmeraldHWS("your_email@example.com", "your_password", health_check_minutes=30)
+
+# Disable health check
+client = EmeraldHWS("your_email@example.com", "your_password", health_check_minutes=0)
+```
+
+## Callback for Updates
+You can register a callback function to be notified when the state of any hot water system changes:
+
+```python
+def my_callback():
+    print("Hot water system state updated!")
+
+client = EmeraldHWS("your_email@example.com", "your_password", update_callback=my_callback)
+```
