@@ -1,0 +1,239 @@
+Metadata-Version: 2.4
+Name: cat-cafe-sdk
+Version: 0.1.0
+Summary: Python SDK for CAT Cafe - Continuous Alignment Testing platform for LLM observability
+Author-email: Kurtis Seebaldt <kurtisseebaldt@artium.ai>
+Requires-Python: >=3.12
+Requires-Dist: httpx>=0.24.0
+Provides-Extra: dev
+Requires-Dist: pytest-asyncio>=0.21.0; extra == 'dev'
+Requires-Dist: pytest>=7.0.0; extra == 'dev'
+Requires-Dist: respx>=0.20.0; extra == 'dev'
+Description-Content-Type: text/markdown
+
+# CAT Cafe SDK
+
+Python SDK for CAT Cafe - Continuous Alignment Testing platform for LLM observability.
+
+## Installation
+
+```bash
+pip install cat-cafe-sdk
+```
+
+## Quick Start
+
+```python
+from cat_cafe_sdk import CATTestRunClient, DatasetImport, DatasetExample
+
+# Initialize the client
+client = CATTestRunClient(base_url="http://localhost:8000")
+
+# Create a dataset
+dataset = DatasetImport(
+    name="My Test Dataset",
+    description="Sample dataset for testing",
+    examples=[
+        DatasetExample(
+            input=[{"role": "user", "content": "What's the weather?"}],
+            expected_output=[{"role": "assistant", "content": "Weather info"}],
+            tags=["weather"]
+        )
+    ]
+)
+
+# Import the dataset
+result = client.import_dataset(dataset)
+dataset_id = result["dataset"]["id"]
+
+# Define a test function
+def my_test_function(example):
+    # Your AI system logic here
+    user_question = example.input[-1]["content"]
+    return f"Response to: {user_question}"
+
+# Define evaluators
+def accuracy_evaluator(actual_output, expected_output):
+    # Your evaluation logic here
+    score = 0.8  # Example score
+    reason = "Good response"
+    return score, reason
+
+# Run tests on the dataset
+experiment_id = client.run_test_on_dataset(
+    dataset=dataset_id,
+    test_function=my_test_function,
+    evaluators=[accuracy_evaluator],
+    name="My Experiment",
+    description="Testing my AI system"
+)
+
+print(f"Experiment completed: {experiment_id}")
+```
+
+## Core Classes
+
+### CATTestRunClient / CATExperimentClient
+
+The main client for interacting with CAT Cafe:
+
+```python
+client = CATTestRunClient(base_url="http://localhost:8000")
+```
+
+### Dataset Models
+
+- **DatasetImport**: For creating new datasets with examples
+- **DatasetExample**: Individual examples in a dataset
+- **Dataset**: Structured dataset object returned from API
+- **Example**: Individual example object returned from API
+
+### Experiment Models
+
+- **Experiment**: Experiment configuration
+- **ExperimentResult**: Results from running experiments
+
+## Key Methods
+
+### Dataset Operations
+
+```python
+# Import a complete dataset
+result = client.import_dataset(dataset_import)
+
+# Fetch dataset as structured object
+dataset = client.fetch_dataset(dataset_id)
+
+# Find dataset by name
+dataset = client.fetch_dataset_by_name("My Dataset")
+
+# List all datasets
+datasets = client.list_datasets()
+```
+
+### Experiment Operations
+
+```python
+# Run tests on a dataset (all-in-one)
+experiment_id = client.run_test_on_dataset(
+    dataset=dataset_id,
+    test_function=my_test_func,
+    evaluators=[evaluator1, evaluator2],
+    name="My Test Run"
+)
+
+# Manual experiment workflow
+experiment_id = client.start_experiment(experiment_config)
+client.submit_results(experiment_id, results)
+client.complete_experiment(experiment_id)
+```
+
+## Test Functions
+
+Test functions receive an `Example` object and should return a string output:
+
+```python
+def my_test_function(example: Example) -> str:
+    # Access the input messages
+    user_message = example.input[-1]["content"]
+    
+    # Your AI system logic here
+    response = call_my_ai_system(user_message)
+    
+    return response
+```
+
+## Evaluators
+
+Evaluators receive the actual output and expected output, returning a score and reason:
+
+```python
+def my_evaluator(actual_output: str, expected_output: list) -> tuple[float, str]:
+    # Your evaluation logic
+    if "correct_info" in actual_output:
+        return 1.0, "Contains correct information"
+    else:
+        return 0.0, "Missing correct information"
+```
+
+## Advanced Usage
+
+### Async Test Functions
+
+```python
+async def async_test_function(example: Example) -> str:
+    # Async AI system call
+    response = await my_async_ai_system(example.input)
+    return response
+
+# Note: Async functions work but have limitations in certain contexts
+experiment_id = client.run_test_on_dataset(
+    dataset=dataset_id,
+    test_function=async_test_function,
+    name="Async Test"
+)
+```
+
+### Custom Metadata
+
+```python
+def metadata_function(example: Example, output: str) -> dict:
+    return {
+        "response_length": len(output),
+        "example_tags": example.tags
+    }
+
+experiment_id = client.run_test_on_dataset(
+    dataset=dataset_id,
+    test_function=my_test_function,
+    metadata_function=metadata_function,
+    name="Test with Metadata"
+)
+```
+
+### Manual Experiment Control
+
+```python
+# Create experiment configuration
+experiment_config = Experiment(
+    name="Manual Experiment",
+    description="Step-by-step experiment",
+    dataset_id=dataset_id,
+    tags=["manual", "testing"]
+)
+
+# Start experiment
+experiment_id = client.start_experiment(experiment_config)
+
+# Run your tests and collect results
+results = []
+dataset = client.fetch_dataset(dataset_id)
+
+for example in dataset.examples:
+    output = my_test_function(example)
+    
+    result = ExperimentResult(
+        example_id=example.id,
+        input_data={"input": example.input},
+        expected_output=str(example.expected_output),
+        actual_output=output,
+        evaluation_scores={"manual_score": 0.8}
+    )
+    results.append(result)
+
+# Submit results
+client.submit_results(experiment_id, results)
+
+# Complete experiment
+client.complete_experiment(experiment_id, {"total_examples": len(results)})
+```
+
+## Requirements
+
+- Python 3.12+
+- httpx
+- CAT Cafe server running (default: http://localhost:8000)
+
+## License
+
+MIT License
