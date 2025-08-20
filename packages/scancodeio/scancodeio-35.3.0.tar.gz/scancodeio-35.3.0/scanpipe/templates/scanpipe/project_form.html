@@ -1,0 +1,182 @@
+{% extends "scanpipe/base.html" %}
+
+{% block content %}
+  <div class="container is-max-widescreen">
+    {% include 'scanpipe/includes/navbar_header.html' %}
+
+    <section class="mx-5 pt-0 pb-1">
+      <h2 class="subtitle mb-0 mb-4">
+        Create a <strong>Project</strong>
+      </h2>
+
+      {% include 'scanpipe/forms/form_errors.html' %}
+
+      <div class="columns">
+        <div class="column is-7 pr-5 pb-0">
+
+          <form method="post" action="{% url 'project_add' %}" enctype="multipart/form-data">{% csrf_token %}
+            <div class="field">
+              <label class="label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+              <div class="control">
+                {{ form.name }}
+                <p class="help">{{ form.name.help_text }}</p>
+              </div>
+            </div>
+
+            <label class="label">Inputs</label>
+            <div class="box py-3">
+              <label class="label has-text-weight-semibold" for="{{ form.input_files.id_for_label }}">Upload files</label>
+              <div class="file has-name is-boxed is-fullwidth" id="input_files_box">
+                <label class="file-label">
+                  {{ form.input_files }}
+                  <span class="file-cta">
+                    <span class="file-icon">
+                      <i class="fa-solid fa-upload"></i>
+                    </span>
+                    <span class="file-label has-text-centered">
+                      Drop files over here (or click)
+                    </span>
+                  </span>
+                  <span class="file-name is-height-auto" id="inputs_file_name">
+                    <i>No files selected</i>
+                  </span>
+                </label>
+              </div>
+
+              <div class="field mt-4">
+                <label class="label has-text-weight-semibold" for="{{ form.input_urls.id_for_label }}">{{ form.input_urls.label }}</label>
+                <div class="control">
+                  {{ form.input_urls }}
+                  <p class="help">{{ form.input_urls.help_text }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="is-flex is-justify-content-space-between">
+                <label class="label" for="{{ form.pipeline.id_for_label }}">
+                  {{ form.pipeline.label }}
+                </label>
+                <label class="checkbox" for="{{ form.execute_now.id_for_label }}">
+                  {{ form.execute_now }}
+                  {{ form.execute_now.label }}
+                </label>
+              </div>
+              <div class="control">
+                <span class="select">
+                  {{ form.pipeline }}
+                </span>
+              </div>
+            </div>
+
+            <div class="field">
+              {{ form.selected_groups }}
+            </div>
+
+            <div class="columns mt-3 is-variable is-1">
+              <div class="column is-one-third">
+                <a href="{% url 'project_list' %}" class="button is-fullwidth">Cancel</a>
+              </div>
+              <div class="column">
+                <input type="submit" class="button is-fullwidth is-link" value="Create">
+              </div>
+            </div>
+          </form>
+          {{ form.media }}
+        </div>
+
+        <div class="column has-background-ter has-border-radius mb-3">
+          <h3 class="subtitle mb-3">Pipelines:</h3>
+          {% for pipeline_name, pipeline_info in pipelines.items %}
+            <div {% if not forloop.last %}class="mb-2"{% endif %}>
+              <a class="modal-button is-block" data-target="pipeline-help-modal" data-pipeline-name="{{ pipeline_name }}" aria-haspopup="true">
+                <strong>{{ pipeline_name }}</strong>
+                <i class="fa-regular fa-circle-question"></i>
+              </a>
+              {{ pipeline_info.summary }}
+            </div>
+          {% endfor %}
+        </div>
+        {% include "scanpipe/modals/pipeline_help_modal.html" %}
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      let form = document.querySelector('form');
+
+      form.addEventListener('submit', function(event) {
+        let background = displayOverlay();
+
+        // The upload progress is only added when input files are provided.
+        if (!form["input_files"].files.length) return false;
+
+        event.preventDefault();
+
+        let progress_bar = document.createElement('progress');
+        progress_bar.className = 'progress is-success is-medium file-upload';
+        progress_bar.setAttribute('value', '0');
+        progress_bar.setAttribute('max', '100');
+
+        let progress_container = document.createElement('div');
+        progress_container.className = 'container is-max-desktop mt-6 px-6';
+        progress_container.appendChild(progress_bar)
+        background.appendChild(progress_container);
+
+        let form_errors = document.getElementById('form-errors');
+        displayFormUploadProgress(form, progress_bar, form_errors, true);
+      });
+    });
+  </script>
+
+  {{ pipelines_available_groups|json_script:"pipelines_available_groups" }}
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      const availableGroupsDataSource = document.getElementById("pipelines_available_groups");
+      const availableGroupsMapping = JSON.parse(availableGroupsDataSource.textContent);
+
+      const pipelineSelect = document.getElementById("id_pipeline");
+      const idSelectedGroups = document.getElementById("id_selected_groups");
+
+      function clearSelectedGroups() {
+        idSelectedGroups.innerHTML = "";
+      }
+
+      function buildCheckbox(group) {
+        const id = `id_${group}`;
+        return `
+          <label class="checkbox ml-2" for="${id}">
+            <span class="tag is-warning has-text-weight-bold">
+              <input type="checkbox" name="selected_groups" value="${group}" id="${id}" class="mr-1">
+              ${group}
+            </span>
+          </label>`;
+      }
+
+      function handlePipelineChange() {
+        clearSelectedGroups();
+
+        const selectedPipelineName = pipelineSelect.value;
+        if (!selectedPipelineName) return;
+
+        const availableGroups = availableGroupsMapping[selectedPipelineName];
+        if (availableGroups && availableGroups.length > 0) {
+          const strongElement = document.createElement('strong');
+          strongElement.innerHTML = '<i class="fa-solid fa-circle-arrow-right"></i> Include:';
+          idSelectedGroups.appendChild(strongElement);
+
+          availableGroups.forEach((group) => {
+            const checkboxHtml = buildCheckbox(group);
+            idSelectedGroups.insertAdjacentHTML('beforeend', checkboxHtml);
+          });
+        }
+      }
+
+      handlePipelineChange();
+      pipelineSelect.addEventListener("change", handlePipelineChange);
+    });
+  </script>
+{% endblock %}

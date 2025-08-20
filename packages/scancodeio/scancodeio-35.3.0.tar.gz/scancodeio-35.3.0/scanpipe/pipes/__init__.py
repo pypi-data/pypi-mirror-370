@@ -1,0 +1,576 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# http://nexb.com and https://github.com/aboutcode-org/scancode.io
+# The ScanCode.io software is licensed under the Apache License version 2.0.
+# Data generated with ScanCode.io is provided as-is without warranties.
+# ScanCode is a trademark of nexB Inc.
+#
+# You may not use this software except in compliance with the License.
+# You may obtain a copy of the License at: http://apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software distributed
+# under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
+#
+# Data Generated with ScanCode.io is provided on an "AS IS" BASIS, WITHOUT WARRANTIES
+# OR CONDITIONS OF ANY KIND, either express or implied. No content created from
+# ScanCode.io should be considered or used as legal advice. Consult an Attorney
+# for any legal advice.
+#
+# ScanCode.io is a free software code scanning tool from nexB Inc. and others.
+# Visit https://github.com/aboutcode-org/scancode.io for support and download.
+
+import difflib
+import logging
+import sys
+import time
+import uuid
+from contextlib import suppress
+from datetime import datetime
+from itertools import islice
+from pathlib import Path
+
+from django.db.models import Count
+
+from scanpipe.models import AbstractTaskFieldsModel
+from scanpipe.models import CodebaseRelation
+from scanpipe.models import CodebaseResource
+from scanpipe.models import DiscoveredDependency
+from scanpipe.models import DiscoveredLicense
+from scanpipe.models import DiscoveredPackage
+from scanpipe.pipes import scancode
+
+logger = logging.getLogger("scanpipe.pipes")
+
+
+def make_codebase_resource(project, location, save=True, **extra_fields):
+    """
+    Create a CodebaseResource instance in the database for the given ``project``.
+
+    The provided ``location`` is the absolute path of this resource.
+    It must be rooted in `project.codebase_path` as only the relative path within the
+    project codebase/ directory is stored in the database.
+
+    Extra fields can be provided as keywords arguments to this function call::
+
+        make_codebase_resource(
+            project=project,
+            location=resource.location,
+            rootfs_path=resource.path,
+            tag=layer_tag,
+        )
+
+    In this example, ``rootfs_path`` is an optional path relative to a rootfs root
+    within an Image/VM filesystem context. e.g.: "/var/log/file.log"
+
+    All paths use the POSIX separators.
+
+    If a CodebaseResource already exists in the ``project`` with the same path,
+    the error raised on save() is not stored in the database and the creation is
+    skipped.
+    """
+    from scanpipe.pipes import flag
+
+    relative_path = Path(location).relative_to(project.codebase_path)
+    parent_path = str(relative_path.parent)
+    if parent_path == ".":
+        parent_path = ""
+
+    try:
+        resource_data = scancode.get_resource_info(location=str(location))
+    except OSError as error:
+        logger.error(
+            f"Failed to read resource at {location}: "
+            f"Permission denied or file inaccessible."
+        )
+        resource_data = {"status": flag.RESOURCE_READ_ERROR}
+        project.add_error(
+            model=CodebaseResource,
+            details={"resource_path": str(relative_path)},
+            exception=error,
+        )
+
+    if extra_fields:
+        resource_data.update(**extra_fields)
+
+    codebase_resource = CodebaseResource(
+        project=project,
+        path=relative_path,
+        parent_path=parent_path,
+        **resource_data,
+    )
+
+    if save:
+        codebase_resource.save(save_error=False)
+    return codebase_resource
+
+
+def get_resource_codebase_root(project, resource_path):
+    """Return "to" or "from" depending on the resource location in the codebase."""
+    relative_path = Path(resource_path).relative_to(project.codebase_path)
+    first_part = relative_path.parts[0]
+    if first_part in ["to", "from"]:
+        return first_part
+    return ""
+
+
+def yield_resources_from_codebase(project):
+    """
+    Yield CodebaseResource instances, including their ``info`` data, ready to be
+    inserted in the database using ``save()`` or ``bulk_create()``.
+    """
+    for resource_path in project.walk_codebase_path():
+        yield make_codebase_resource(
+            project=project,
+            location=resource_path,
+            save=False,
+            tag=get_resource_codebase_root(project, resource_path),
+        )
+
+
+def collect_and_create_codebase_resources(project, batch_size=5000):
+    """
+    Collect and create codebase resources including the "to/" and "from/" context using
+    the resource tag field.
+
+    The default ``batch_size`` can be overridden, although the benefits of a value
+    greater than 5000 objects are usually not significant.
+    """
+    model_class = CodebaseResource
+    objs = yield_resources_from_codebase(project)
+
+    while True:
+        batch = list(islice(objs, batch_size))
+        if not batch:
+            break
+        model_class.objects.bulk_create(batch, batch_size)
+
+
+def update_or_create_resource(project, resource_data):
+    """Get, update or create a CodebaseResource then return it."""
+    for_packages = resource_data.pop("for_packages", None) or []
+
+    resource = CodebaseResource.objects.get_or_none(
+        project=project,
+        path=resource_data.get("path"),
+    )
+
+    if resource:
+        resource.update_from_data(resource_data)
+    else:
+        resource = CodebaseResource.create_from_data(project, resource_data)
+
+    for package_uid in for_packages:
+        package = project.discoveredpackages.get(package_uid=package_uid)
+        resource.add_package(package)
+
+    return resource
+
+
+def _clean_package_data(package_data):
+    """Clean provided `package_data` to make it compatible with the model."""
+    package_data = package_data.copy()
+    if release_date := package_data.get("release_date"):
+        if type(release_date) is str:
+            release_date = release_date.removesuffix("Z")
+            package_data["release_date"] = datetime.fromisoformat(release_date).date()
+
+    # Strip leading "codebase/" to make path compatible with
+    # paths stored in resource database
+    cleaned_datafile_paths = [
+        path.removeprefix("codebase/")
+        for path in package_data.get("datafile_paths", [])
+    ]
+    package_data["datafile_paths"] = cleaned_datafile_paths
+    return package_data
+
+
+def update_or_create_package(
+    project,
+    package_data,
+    codebase_resources=None,
+    is_virtual=False,
+):
+    """
+    Get, update or create a DiscoveredPackage then return it.
+    Use the `project` and `package_data` mapping to lookup and creates the
+    DiscoveredPackage using its Package URL and package_uid as a unique key.
+    The package can be associated to `codebase_resources` providing a list or queryset
+    of resources.
+    """
+    purl_data = DiscoveredPackage.extract_purl_data(package_data)
+    package_data = _clean_package_data(package_data)
+    # No values for package_uid requires to be empty string for proper queryset lookup
+    package_uid = package_data.get("package_uid") or ""
+    datasource_id = package_data.get("datasource_id") or ""
+
+    package = DiscoveredPackage.objects.get_or_none(
+        project=project,
+        package_uid=package_uid,
+        **purl_data,
+    )
+
+    if package:
+        package.update_from_data(package_data)
+    else:
+        package = DiscoveredPackage.create_from_data(project, package_data)
+
+    if package:
+        if datasource_id and datasource_id not in package.datasource_ids:
+            datasource_ids = package.datasource_ids.copy()
+            datasource_ids.append(datasource_id)
+            package.update(datasource_ids=datasource_ids)
+
+        if codebase_resources:
+            package.add_resources(codebase_resources)
+
+    return package
+
+
+def create_local_files_package(project, defaults, codebase_resources=None):
+    """Create a local-files package using provided ``defaults`` data."""
+    package_data = {
+        "type": "local-files",
+        "namespace": project.slug,
+        "name": str(uuid.uuid4()),
+    }
+    package_data.update(defaults)
+    return update_or_create_package(project, package_data, codebase_resources)
+
+
+def ignore_dependency_scope(project, dependency_data):
+    """
+    Return True if the dependency should be ignored, i.e.: not created.
+    The ignored scopes are defined on the project ``ignored_dependency_scopes`` setting
+    field.
+    """
+    ignored_scope_index = project.ignored_dependency_scopes_index
+    if not ignored_scope_index:
+        return False
+
+    dependency_package_type = dependency_data.get("package_type")
+    dependency_scope = dependency_data.get("scope")
+    if dependency_package_type and dependency_scope:
+        if dependency_scope in ignored_scope_index.get(dependency_package_type, []):
+            return True  # Ignore this dependency entry.
+
+    return False
+
+
+def update_or_create_dependency(
+    project,
+    dependency_data,
+    for_package=None,
+    resolved_to_package=None,
+    datafile_resource=None,
+    datasource_id=None,
+    strip_datafile_path_root=False,
+):
+    """
+    Get, update or create a DiscoveredDependency then returns it.
+    Use the `project` and `dependency_data` mapping to lookup and creates the
+    DiscoveredDependency using its dependency_uid and for_package_uid as a unique key.
+
+    If `strip_datafile_path_root` is True, then
+    `DiscoveredDependency.create_from_data()` will strip the root path segment
+    from the `datafile_path` of `dependency_data` before looking up the
+    corresponding CodebaseResource for `datafile_path`. This is used in the case
+    where Dependency data is imported from a scancode-toolkit scan, where the
+    root path segments are not stripped for `datafile_path`.
+    If the dependency is resolved and a resolved package is created, we have the
+    corresponding package_uid at `resolved_to`.
+    """
+    if ignore_dependency_scope(project, dependency_data):
+        return  # Do not create the DiscoveredDependency record.
+
+    dependencies = get_dependencies(project, dependency_data)
+
+    for dependency in dependencies:
+        is_for_new_package = (
+            for_package
+            and dependency.for_package
+            and dependency.for_package != for_package
+        )
+        if is_for_new_package:
+            DiscoveredDependency.populate_dependency_uuid(dependency_data)
+            dependency = DiscoveredDependency.create_from_data(
+                project,
+                dependency_data,
+                for_package=for_package,
+                resolved_to_package=resolved_to_package,
+                datafile_resource=datafile_resource,
+                datasource_id=datasource_id,
+                strip_datafile_path_root=strip_datafile_path_root,
+            )
+            break
+
+        elif dependency:
+            dependency.update_from_data(dependency_data)
+            if resolved_to_package and not dependency.resolved_to_package:
+                dependency.update(resolved_to_package=resolved_to_package)
+            if for_package and not dependency.for_package:
+                dependency.update(for_package=for_package)
+
+    if not dependencies:
+        DiscoveredDependency.populate_dependency_uuid(dependency_data)
+        dependency = DiscoveredDependency.create_from_data(
+            project,
+            dependency_data,
+            for_package=for_package,
+            resolved_to_package=resolved_to_package,
+            datafile_resource=datafile_resource,
+            datasource_id=datasource_id,
+            strip_datafile_path_root=strip_datafile_path_root,
+        )
+
+    return dependency
+
+
+def update_or_create_license_detection(
+    project,
+    detection_data,
+    resource_path=None,
+    from_package=False,
+    count_detection=True,
+    is_license_clue=False,
+    check_todo=False,
+):
+    """
+    Get, update or create a DiscoveredLicense object then return it.
+    Use the `project` and `detection_data` mapping to lookup and creates the
+    DiscoveredLicense using its detection identifier as a unique key.
+
+    Additonally if `resource_path` is passed, add the file region where
+    the license was detected to the DiscoveredLicense object, if not present
+    already. `from_package` is True if the license detection was in a
+    `extracted_license_statement` from a package metadata.
+    """
+    if is_license_clue:
+        detection_data = scancode.get_detection_data_from_clue(detection_data)
+
+    detection_identifier = detection_data["identifier"]
+    detection_data["is_license_clue"] = is_license_clue
+
+    license_detection = project.discoveredlicenses.get_or_none(
+        identifier=detection_identifier,
+    )
+    detection_data = _clean_license_detection_data(detection_data)
+
+    if license_detection:
+        license_detection.update_from_data(detection_data)
+    else:
+        license_detection = DiscoveredLicense.create_from_data(
+            project=project,
+            detection_data=detection_data,
+            from_package=from_package,
+        )
+
+    if not license_detection:
+        detection_data["resource_path"] = resource_path
+        project.add_error(
+            model="update_or_create_license_detection",
+            details=detection_data,
+        )
+        return
+
+    if resource_path:
+        file_region = scancode.get_file_region(
+            detection_data=detection_data,
+            resource_path=resource_path,
+        )
+        license_detection.update_with_file_region(
+            file_region=file_region,
+            count_detection=count_detection,
+        )
+
+    if check_todo:
+        scancode.check_license_detection_for_issues(license_detection)
+
+    return license_detection
+
+
+def _clean_license_detection_data(detection_data):
+    detection_data = detection_data.copy()
+    if "reference_matches" in detection_data:
+        matches = detection_data.pop("reference_matches")
+        detection_data["matches"] = matches
+
+    updated_matches = []
+    for match_data in detection_data["matches"]:
+        from_file_path = match_data["from_file"]
+        if from_file_path:
+            match_data["from_file"] = from_file_path.removeprefix("codebase/")
+
+        updated_matches.append(match_data)
+
+    detection_data["matches"] = updated_matches
+    return detection_data
+
+
+def update_license_detection_with_issue(project, todo_issue):
+    detection_data = todo_issue.get("detection")
+    if "identifier" not in detection_data:
+        return
+
+    detection_identifier = detection_data.get("identifier")
+    license_detection = project.discoveredlicenses.get_or_none(
+        identifier=detection_identifier,
+    )
+    if license_detection:
+        review_comments = todo_issue.get("review_comments").values()
+        license_detection.update(
+            needs_review=True,
+            review_comments=list(review_comments),
+        )
+
+
+def get_dependencies(project, dependency_data):
+    """
+    Given a `dependency_data` mapping, get a list of DiscoveredDependency objects
+    for that `project` with similar dependency data.
+    """
+    dependency_uid = dependency_data.get("dependency_uid")
+    extracted_requirement = dependency_data.get("extracted_requirement") or ""
+
+    dependencies = []
+    if not dependency_uid:
+        purl_data = DiscoveredDependency.extract_purl_data(dependency_data)
+        dependencies = DiscoveredDependency.objects.filter(
+            project=project,
+            extracted_requirement=extracted_requirement,
+            **purl_data,
+        )
+    else:
+        dependency = DiscoveredDependency.objects.get_or_none(
+            project=project,
+            dependency_uid=dependency_uid,
+        )
+        if dependency:
+            dependencies.append(dependency)
+
+    return dependencies
+
+
+def get_or_create_relation(project, relation_data):
+    """
+    Get  or create a CodebaseRelation then return it.
+    The support for update is not useful as there is no fields on the model that
+    could be updated.
+    """
+    from_resource_path = relation_data.get("from_resource")
+    to_resource_path = relation_data.get("to_resource")
+    resource_qs = project.codebaseresources
+
+    codebase_relation, _ = CodebaseRelation.objects.get_or_create(
+        project=project,
+        from_resource=resource_qs.get(path=from_resource_path),
+        to_resource=resource_qs.get(path=to_resource_path),
+        map_type=relation_data.get("map_type"),
+    )
+
+    return codebase_relation
+
+
+def make_relation(from_resource, to_resource, map_type, **extra_fields):
+    return CodebaseRelation.objects.create(
+        project=from_resource.project,
+        from_resource=from_resource,
+        to_resource=to_resource,
+        map_type=map_type,
+        **extra_fields,
+    )
+
+
+def normalize_path(path):
+    """Return a normalized path from a `path` string."""
+    return "/" + path.strip("/")
+
+
+def strip_root(location):
+    """Return the provided `location` without the root directory."""
+    return "/".join(str(location).strip("/").split("/")[1:])
+
+
+def filename_now(sep="-"):
+    """Return the current date and time in iso format suitable for filename."""
+    now = datetime.now().isoformat(sep=sep, timespec="seconds")
+    return now.replace(":", sep)
+
+
+def count_group_by(queryset, field_name):
+    """
+    Return a summary of all existing values for the provided `field_name` on the
+    `queryset`, including the count of each entry, as a dictionary.
+    """
+    counts = (
+        queryset.values(field_name)
+        .annotate(count=Count(field_name))
+        .order_by(field_name)
+    )
+
+    return {entry.get(field_name): entry.get("count") for entry in counts}
+
+
+def get_bin_executable(filename):
+    """Return the location of the `filename` executable binary."""
+    return str(Path(sys.executable).parent / filename)
+
+
+def get_text_str_diff_ratio(str_a, str_b):
+    """
+    Return a similarity ratio as a float between 0 and 1 by comparing the
+    text content of the ``str_a`` and ``str_b``.
+
+    Return None if any of the two resources str is empty.
+    """
+    if not (str_a and str_b):
+        return
+
+    if not isinstance(str_a, str) or not isinstance(str_b, str):
+        raise ValueError("Values must be str")
+
+    matcher = difflib.SequenceMatcher(a=str_a.splitlines(), b=str_b.splitlines())
+    return matcher.quick_ratio()
+
+
+def get_resource_diff_ratio(resource_a, resource_b):
+    """
+    Return a similarity ratio as a float between 0 and 1 by comparing the
+    text content of the CodebaseResource ``resource_a`` and ``resource_b``.
+
+    Return None if any of the two resources are not readable as text.
+    """
+    with suppress(IOError):
+        return get_text_str_diff_ratio(
+            str_a=resource_a.file_content,
+            str_b=resource_b.file_content,
+        )
+
+
+def poll_until_success(check, sleep=10, **kwargs):
+    """
+    Given a function `check`, which returns the status of a run, return True
+    when the run instance has completed successfully.
+
+    Return False when the run instance has failed, stopped, or gone stale.
+
+    The arguments for `check` need to be provided as keyword argument into this
+    function.
+    """
+    run_status = AbstractTaskFieldsModel.Status
+    # Return False if the run instance has the following statuses
+    FAIL_STATUSES = [
+        run_status.FAILURE,
+        run_status.STOPPED,
+        run_status.STALE,
+    ]
+    while True:
+        status = check(**kwargs)
+
+        if status == run_status.SUCCESS:
+            return True
+
+        if status in FAIL_STATUSES:
+            return False
+
+        time.sleep(sleep)

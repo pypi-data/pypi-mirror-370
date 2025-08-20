@@ -1,0 +1,185 @@
+{% load humanize %}
+
+{% if project.package_count %}
+  <hr>
+  <h3 id="package-charts" class="title is-4 has-text-centered">
+    Discovered Packages
+    <span class="tag is-link is-rounded ml-1">{{ project.package_count|intcomma }}</span>
+  </h3>
+  <div class="columns is-gapless">
+    <div class="column">
+      <div id="package_type_chart" data-url="{{ packages_url }}" data-lookup_field="type"></div>
+    </div>
+    <div class="column">
+      <div id="package_license_chart" data-url="{{ packages_url }}" data-lookup_field="declared_license_expression"></div>
+    </div>
+  </div>
+{% endif %}
+
+{% if project.dependency_count %}
+  <hr>
+  <h3 id="dependency-charts" class="title is-4 has-text-centered">
+    Discovered Dependencies
+    <span class="tag is-link is-rounded ml-1">{{ project.dependency_count|intcomma }}</span>
+  </h3>
+  <div class="columns is-gapless">
+    <div class="column">
+      <div id="dependency_type_chart" data-url="{{ dependencies_url }}" data-lookup_field="type"></div>
+    </div>
+    <div class="column">
+      <div id="dependency_is_runtime_chart" data-url="{{ dependencies_url }}" data-lookup_field="is_runtime"></div>
+    </div>
+  </div>
+  <div class="columns is-gapless">
+    <div class="column">
+      <div id="dependency_is_optional_chart" data-url="{{ dependencies_url }}" data-lookup_field="is_optional"></div>
+    </div>
+    <div class="column">
+      <div id="dependency_is_pinned_chart" data-url="{{ dependencies_url }}" data-lookup_field="is_pinned"></div>
+    </div>
+  </div>
+{% endif %}
+
+{% if project.resource_count %}
+  <hr>
+  <h3 id="resource-charts" class="title is-4 has-text-centered mb-3">
+    Codebase Resources
+  </h3>
+  {% include "scanpipe/includes/file_filter.html" with project=project file_filter=file_filter only %}
+  <div class="columns is-gapless">
+    {% include "scanpipe/includes/resource_chart_column.html" with field_name="programming_language" url=resources_url %}
+    {% include "scanpipe/includes/resource_chart_column.html" with field_name="mime_type" url=resources_url %}
+  </div>
+  <div class="columns is-gapless">
+    {% include "scanpipe/includes/resource_chart_column.html" with field_name="holders" url=resources_url %}
+    {% include "scanpipe/includes/resource_chart_column.html" with field_name="copyrights" url=resources_url %}
+  </div>
+  <div class="columns is-gapless">
+    {% include "scanpipe/includes/resource_chart_column.html" with field_name="detected_license_expression" url=resources_url %}
+    <div class="column"></div>
+  </div>
+{% endif %}
+
+{% if file_compliance_alert or package_compliance_alert %}
+  <hr>
+  <h3 class="title is-4 has-text-centered mb-3">
+    Policies
+  </h3>
+  <div class="columns is-gapless">
+    {% if file_compliance_alert %}
+      {% include "scanpipe/includes/resource_chart_column.html" with field_name="compliance_alert" url=resources_url %}
+    {% endif %}
+    {% if package_compliance_alert %}
+      <div class="column">
+        <div id="package_compliance_alert_chart" data-url="{{ packages_url }}" data-lookup_field="compliance_alert"></div>
+      </div>
+    {% endif %}
+    {% if not file_compliance_alert or not package_compliance_alert %}
+      <div class="column"></div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% block scripts %}
+  {{ file_programming_language|json_script:"file_programming_language" }}
+  {{ file_mime_type|json_script:"file_mime_type" }}
+  {{ file_holders|json_script:"file_holders" }}
+  {{ file_copyrights|json_script:"file_copyrights" }}
+  {{ file_detected_license_expression|json_script:"file_detected_license_expression" }}
+  {{ file_compliance_alert|json_script:"file_compliance_alert" }}
+  {{ package_declared_license_expression|json_script:"package_declared_license_expression" }}
+  {{ package_type|json_script:"package_type" }}
+  {{ package_compliance_alert|json_script:"package_compliance_alert" }}
+  {{ dependency_type|json_script:"dependency_type" }}
+  {{ dependency_is_runtime|json_script:"dependency_is_runtime" }}
+  {{ dependency_is_optional|json_script:"dependency_is_optional" }}
+  {{ dependency_is_pinned|json_script:"dependency_is_pinned" }}
+  <script>
+    let makeChart = function(data_source_id, element_id, title) {
+      let data_source = document.getElementById(data_source_id);
+      if (!data_source) return false;
+
+      let data = JSON.parse(data_source.textContent);
+      if (Object.keys(data).length === 0) return false;
+
+      bb.generate({
+        data: {
+          columns: Object.entries(data),
+          type: "donut",
+          colors: {
+            "(No value detected)": "rgba(201, 203, 207, 0.5)",
+            "ok": "rgb(42, 196, 179)",
+            "error": "rgb(255, 97, 123)",
+            "warning": "rgb(254, 175, 41)",
+            "missing": "rgb(177, 128, 208)",
+          },
+          hide: "(No value detected)"
+        },
+        legend: {
+          position: 'inset',
+          inset: {
+            anchor: 'top-left',
+            x: 400,
+            y: 50
+          }
+        },
+        donut: {
+          title: title,
+        },
+        tooltip: {
+          format: {
+            value: function(value, ratio, id) {
+              let percent = (ratio * 100).toFixed(1);
+              return `${value} (${percent}%)`;
+            }
+          }
+        },
+        bindto: element_id,
+        onafterinit: function() {
+          // Open a filtered list based on the clicked data.
+          // Ctrl/Meta + click will open in a _blank target.
+          // Using onafterinit to attach click event handler manually
+          // in place of using data.onclick: function(data, element)
+          // as the event is not provided there but required for the metaKey support.
+          this.$.main.on("click", function(event) {
+            let base_chart_div = event.target.closest(".bb");
+            let base_url = base_chart_div.dataset.url;
+            let field = base_chart_div.dataset.lookup_field;
+            let in_package = base_chart_div.dataset.in_package;
+            // Retrieve the data ("name" value for filtering) from the .bb-tooltip section
+            let name = document.querySelector(`#${base_chart_div.id} .bb-tooltip .name`).textContent;
+            if (base_url && field) {
+              // Keep in sync with FilterSetUtilsMixin.(empty_value|other_value)
+              if (name === "(No value detected)") name = "_EMPTY_";
+              if (name === "Other") name = "_OTHER_";
+              let full_url = `${base_url}?${field}=${name}`;
+              if (in_package) full_url += `&in_package=${in_package}`;
+              if (event.ctrlKey || event.metaKey) window.open(full_url, '_blank');
+              else window.location.href = full_url;
+            }
+          });
+        }
+     });
+    };
+
+    {% if project.package_count %}
+      makeChart("package_type", "#package_type_chart", "Package\nType");
+      makeChart("package_declared_license_expression", "#package_license_chart", "Package\nLicense\nExpression");
+      makeChart("package_compliance_alert", "#package_compliance_alert_chart", "Package\nCompliance\nAlert");
+    {% endif %}
+    {% if project.dependency_count %}
+      makeChart("dependency_type", "#dependency_type_chart", "Package\nType");
+      makeChart("dependency_is_runtime", "#dependency_is_runtime_chart", "Runtime\nDependencies");
+      makeChart("dependency_is_optional", "#dependency_is_optional_chart", "Optional\nDependencies");
+      makeChart("dependency_is_pinned", "#dependency_is_pinned_chart", "Pinned\nDependencies");
+    {% endif %}
+    {% if project.resource_count %}
+      makeChart("file_programming_language", "#programming_language_chart", "Programming\nLanguage");
+      makeChart("file_mime_type", "#mime_type_chart", "Mime\nType");
+      makeChart("file_holders", "#holders_chart", "Holder");
+      makeChart("file_copyrights", "#copyrights_chart", "Copyright");
+      makeChart("file_detected_license_expression", "#detected_license_expression_chart", "Detected\nLicense\nExpression");
+      makeChart("file_compliance_alert", "#compliance_alert_chart", "Resource\nCompliance\nAlert");
+    {% endif %}
+  </script>
+{% endblock %}
