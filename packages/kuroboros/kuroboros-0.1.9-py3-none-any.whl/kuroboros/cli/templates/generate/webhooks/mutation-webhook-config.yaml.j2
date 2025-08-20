@@ -1,0 +1,29 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ name }}-mutation-webhook
+webhooks:
+{%- for wh in webhooks %}
+  - name: {{ wh.crd_name }}-mutation-webhook
+    clientConfig:
+      service:
+        name: {{ name }}-webhook
+        namespace: {{ name }}
+        path: /{{ wh.api_version }}/{{ wh.singular }}/mutate
+      caBundle: {{ ca_bundle | default('""') }}
+    rules:
+      - apiGroups:
+          - {{ wh.group }}
+        apiVersions:
+          - {{ wh.api_version }}
+        operations:
+        {%- for operation in wh.operations %}
+          - {{ operation }}
+        {%- endfor %}
+        resources:
+          - {{ wh.plural }}
+        scope: {{ wh.scope }}
+    admissionReviewVersions: [ {{ wh.api_version }} ]
+    sideEffects: None
+    failurePolicy: Fail
+{%- endfor %}
