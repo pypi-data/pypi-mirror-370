@@ -1,0 +1,220 @@
+# Cyberwave Robotics Integrations
+
+Robot drivers, hardware interfaces, and CLI plugins for the Cyberwave Digital Twin Platform.
+
+## Installation
+
+```bash
+pip install cyberwave-robotics-integrations
+```
+
+Or with the main SDK:
+```bash
+pip install cyberwave cyberwave-robotics-integrations
+```
+
+## Supported Robots
+
+- **🦾 SO100** - 6-DOF robotic arm by Standard Robots
+- **🦾 SO_ARM100** - Advanced robotic arm with gripper
+- **🐕 Boston Dynamics Spot** - Quadruped robot
+- **🚁 DJI Tello** - Educational drone
+- **🦾 KUKA KR3** - Industrial robotic arm
+
+## Quick Start
+
+### Using with Cyberwave SDK
+
+```python
+import cyberwave as cw
+
+# Create digital twins for real robots
+spot = cw.twin("spot/spot_mini")
+so101 = cw.twin("cyberwave/so101")
+tello = cw.twin("dji/tello")
+
+# Control robots through digital twins
+spot.move(x=1, y=0, z=0)
+so101.joints.shoulder = 45  # degrees
+tello.move(x=0, y=0, z=1)  # takeoff
+```
+
+### Direct Driver Usage
+
+```python
+from cyberwave_robotics_integrations.drivers import so100_driver, spot_driver
+from cyberwave_robotics_integrations.factory import Robot
+
+# Method 1: Direct driver import
+driver = so100_driver.SO100Driver()
+driver.connect()
+driver.move_joint("shoulder", 45)
+driver.disconnect()
+
+# Method 2: Factory pattern
+robot = Robot("spot")
+robot.connect()
+robot.move_to(1.0, 2.0)
+robot.sit()
+robot.disconnect()
+
+# Method 3: Via main SDK
+from cyberwave import RobotDriver
+RobotDriver("kuka_kr3").connect()
+```
+
+## CLI Usage
+
+The package provides CLI commands for direct robot control:
+
+```bash
+# Install CLI support
+pip install cyberwave-cli cyberwave-robotics-integrations
+
+# Start robot drivers
+cyberwave drivers start spot
+cyberwave drivers start so100
+cyberwave drivers start tello
+
+# Check status
+cyberwave drivers status spot
+cyberwave drivers list
+
+# Stop drivers
+cyberwave drivers stop spot
+```
+
+### Advanced CLI Options
+
+```bash
+# Start with specific device ID and token
+cyberwave drivers start tello --device-id 123 --token <offline-token>
+
+# Automatic device registration
+cyberwave drivers start tello  # Auto-registers device
+
+# Start with telemetry forwarding
+cyberwave drivers start spot --forward-telemetry --backend-url http://localhost:8000
+```
+
+## Robot Driver Details
+
+### SO100 Robotic Arm
+```python
+from cyberwave_robotics_integrations.drivers.so100_driver import SO100Driver
+
+driver = SO100Driver()
+driver.connect()
+
+# Joint control
+driver.move_joint("shoulder", 45)  # degrees
+driver.move_joint("elbow", -30)
+driver.move_joint("wrist", 90)
+
+# Cartesian control
+driver.move_to_position([0.3, 0.1, 0.4])  # x, y, z in meters
+
+driver.disconnect()
+```
+
+### Boston Dynamics Spot
+```python
+from cyberwave_robotics_integrations.drivers.spot_driver import SpotDriver
+
+driver = SpotDriver()
+driver.connect()
+
+# Basic movements
+driver.stand()
+driver.sit()
+driver.move_to(1.0, 2.0)  # x, y coordinates
+
+# Advanced control
+driver.set_body_pose(roll=0.1, pitch=0.0, yaw=0.2)
+driver.walk_velocity(0.5, 0.0, 0.0)  # forward velocity
+
+driver.disconnect()
+```
+
+### DJI Tello Drone
+```python
+from cyberwave_robotics_integrations.drivers.tello_driver import TelloDriver
+
+driver = TelloDriver()
+driver.connect()
+
+# Flight control
+driver.takeoff()
+driver.move_up(50)  # cm
+driver.move_forward(100)  # cm
+driver.rotate_clockwise(90)  # degrees
+driver.land()
+
+driver.disconnect()
+```
+
+## Input Controllers
+
+Create custom control interfaces for robots:
+
+```python
+from cyberwave_robotics_integrations.input_controller import BaseInputController
+
+class KeyboardController(BaseInputController):
+    def handle_input(self, key):
+        if key == 'w':
+            self.robot.move_forward(0.1)
+        elif key == 's':
+            self.robot.move_backward(0.1)
+        # ... more controls
+
+# Use with any robot
+controller = KeyboardController(robot=spot_driver)
+controller.start()
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+export CYBERWAVE_API_KEY="your-api-key"
+export CYBERWAVE_BASE_URL="http://localhost:8000"
+export CYBERWAVE_ENVIRONMENT_ID="your-env-id"
+```
+
+### Config File
+
+Create `~/.cyberwave/config.yaml`:
+
+```yaml
+api_key: "your-api-key"
+base_url: "http://localhost:8000"
+default_environment: "your-env-id"
+robots:
+  spot:
+    ip: "192.168.1.100"
+    username: "admin"
+  so100:
+    port: "/dev/ttyUSB0"
+    baudrate: 115200
+```
+
+## Development
+
+### Running Tests
+
+```bash
+pytest tests/
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new drivers
+4. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details.
