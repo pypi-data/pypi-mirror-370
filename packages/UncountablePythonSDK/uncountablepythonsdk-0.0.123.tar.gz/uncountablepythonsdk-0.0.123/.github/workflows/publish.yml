@@ -1,0 +1,56 @@
+# publish.yml template from just.sh (https://github.com/jstrieb/just.sh)
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euxo pipefail {0}
+
+jobs:
+  build-packages:
+    name: Build distribution packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4
+        with:
+          fetch-depth: 0
+      - name: Set up UV
+        uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb
+        with:
+          version: "0.8.4"
+          activate-environment: true
+          enable-cache: true
+      - name: Install build dependencies
+        run: |
+          uv pip install --upgrade build
+      - name: Build distributions and wheels
+        run: |
+          python3 -m build
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4
+        with:
+          name: package-distributions
+          path: dist/
+  pypi-publish:
+    name: Upload release to PyPI
+    runs-on: ubuntu-latest
+    needs: build-packages
+    environment:
+      name: production
+      url: https://pypi.org/p/UncountablePythonSDK
+    permissions:
+      id-token: write
+    steps:
+    - uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e # v4
+      with:
+        name: package-distributions
+        path: dist/
+    - name: Publish package distributions to PyPI
+      uses: pypa/gh-action-pypi-publish@db8f07d3871a0a180efa06b95d467625c19d5d5f
