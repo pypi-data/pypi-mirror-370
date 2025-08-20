@@ -1,0 +1,27 @@
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+
+from typing import List
+from datetime import datetime
+
+from .._models import BaseModel
+from .chat_session_role import ChatSessionRole
+
+__all__ = ["ListChatSessionsResponse", "Session"]
+
+
+class Session(BaseModel):
+    id: str
+
+    created_at: datetime
+
+    project_id: str
+
+    title: str
+
+    updated_at: datetime
+
+    user_role: ChatSessionRole
+
+
+class ListChatSessionsResponse(BaseModel):
+    sessions: List[Session]
