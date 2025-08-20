@@ -1,0 +1,643 @@
+# UnrealOn
+
+**Enterprise browser automation framework with WebSocket bridge for distributed web scraping.**
+
+[![PyPI version](https://badge.fury.io/py/unrealon.svg)](https://badge.fury.io/py/unrealon)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## 🌐 About UnrealOn
+
+**UnrealOn** is a comprehensive web scraping platform that provides enterprise-grade infrastructure for data extraction at scale. Built on top of this framework, the **UnrealOn Server** offers managed hosting, real-time orchestration, and advanced anti-bot protection.
+
+**Platform**: [unrealon.com](https://unrealon.com) - Enterprise web scraping infrastructure  
+**Framework**: This repository - Open-source parser development framework
+
+**No Vendor Lock-in**: Use the framework locally for development, then deploy to any infrastructure - self-hosted, cloud, or managed UnrealOn Server.
+
+## 🚀 Quick Start
+
+**Get started in minutes with our simple parser framework:**
+
+```bash
+# Install the framework
+pip install unrealon
+
+# Create your first parser
+from unrealon import ParserManager, BrowserManager
+
+# That's it! You're ready to build parsers
+```
+
+## 📦 Ready-to-Use Amazon Parser
+
+**Get started immediately with our pre-configured Amazon parser:**
+- **[GitHub Repository](https://github.com/markolofsen/unrealon-parser-amazon)** - Complete Amazon parser with all configurations
+- **Zero Setup**: Clone and run with minimal configuration
+- **Production Ready**: Includes all enterprise features and optimizations
+- **Real Examples**: See how to build production parsers with UnrealOn
+
+## Overview
+
+UnrealOn is a modern Python framework for building web scrapers with enterprise-grade features. It combines browser automation, AI-powered extraction, and real-time orchestration in a simple, developer-friendly package.
+
+**Key Features:**
+- **Zero Configuration**: Everything works out of the box
+- **Browser Automation**: Built-in Playwright with stealth capabilities
+- **AI-Powered Extraction**: Automatic content analysis and selector generation
+- **Real-Time Communication**: WebSocket bridge for distributed parsing
+- **Enterprise Ready**: Logging, monitoring, and error handling included
+
+## Why Choose UnrealOn?
+
+### 🆚 **Simple Comparison**
+
+| Feature | UnrealOn | Scrapy | Selenium | Custom Solution |
+|---------|----------|--------|----------|-----------------|
+| **Setup Time** | ✅ 5 minutes | ❌ 30+ minutes | ❌ 20+ minutes | ❌ Hours |
+| **Browser Automation** | ✅ Built-in | ❌ Requires setup | ✅ Built-in | ❌ Manual |
+| **AI Extraction** | ✅ Automatic | ❌ Manual | ❌ Manual | ❌ Custom dev |
+| **Real-time Communication** | ✅ WebSocket | ❌ HTTP only | ❌ HTTP only | ❌ Manual |
+| **Proxy Support** | ✅ Auto-rotation | ❌ Manual | ❌ Manual | ❌ Manual |
+| **Error Handling** | ✅ Built-in | ❌ Manual | ❌ Manual | ❌ Manual |
+| **Logging** | ✅ Structured | ❌ Basic | ❌ Basic | ❌ Manual |
+
+### 💎 **Key Advantages**
+
+#### **1. Zero Configuration**
+**Problem**: Complex setup with multiple dependencies  
+**Solution**: Install and start coding immediately
+```python
+# No config files needed - everything works out of the box
+from unrealon import ParserManager
+parser = ParserManager()
+```
+
+#### **2. Built-in Browser Automation**
+**Problem**: Manual browser setup and management  
+**Solution**: Automatic browser handling with stealth
+```python
+# Browser automation with one line
+browser = BrowserManager()
+await browser.navigate("https://example.com")
+```
+
+#### **3. AI-Powered Extraction**
+**Problem**: Manual selector writing and maintenance  
+**Solution**: Automatic content analysis and extraction
+```python
+# AI automatically finds and extracts data
+result = await parser.extract_with_ai("https://example.com")
+```
+
+#### **4. Real-Time Communication**
+**Problem**: Batch processing with delayed results  
+**Solution**: Instant command execution and monitoring
+```python
+# Real-time parser management
+await parser.start_daemon()  # Listens for commands
+```
+
+## Installation
+
+### Prerequisites
+
+- Python 3.9 or higher
+- pip or poetry for package management
+
+### Quick Installation
+
+```bash
+# Install with pip
+pip install unrealon
+
+# Or with poetry
+poetry add unrealon
+```
+
+### Development Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/unrealos/unrealon-rpc.git
+cd unrealon-rpc
+
+# Install in development mode
+pip install -e .
+```
+
+## Simple Examples
+
+### 1. Basic Parser (5 minutes)
+
+```python
+from unrealon import ParserManager
+import asyncio
+
+class SimpleParser(ParserManager):
+    """Simple product parser - just write your logic!"""
+    
+    async def parse_products(self, url: str):
+        """Parse products from a listing page."""
+        # Navigate to the page
+        await self.browser.navigate(url)
+        
+        # Extract data using AI (automatic selectors)
+        result = await self.extract_with_ai(
+            url,
+            instruction="Extract all product information including title, price, and image"
+        )
+        
+        return result.data
+
+# Usage
+async def main():
+    parser = SimpleParser()
+    await parser.setup()
+    
+    products = await parser.parse_products("https://example.com/products")
+    print(f"Found {len(products)} products")
+    
+    await parser.cleanup()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### 2. Traditional Parser with BeautifulSoup
+
+```python
+from unrealon import ParserManager
+from bs4 import BeautifulSoup
+
+class TraditionalParser(ParserManager):
+    """Traditional parser using CSS selectors."""
+    
+    async def parse_products(self, url: str):
+        """Parse products using CSS selectors."""
+        # Get HTML content
+        html = await self.browser.get_html(url)
+        soup = BeautifulSoup(html, "html.parser")
+        
+        products = []
+        for item in soup.select(".product-item"):
+            product = {
+                "title": item.select_one(".title").text.strip(),
+                "price": item.select_one(".price").text.strip(),
+                "image": item.select_one("img")["src"]
+            }
+            products.append(product)
+        
+        return products
+
+# Usage
+async def main():
+    parser = TraditionalParser()
+    await parser.setup()
+    
+    products = await parser.parse_products("https://example.com/products")
+    print(f"Found {len(products)} products")
+    
+    await parser.cleanup()
+```
+
+### 3. Daemon Mode for Real-Time Processing
+
+```python
+from unrealon import ParserManager
+
+class DaemonParser(ParserManager):
+    """Parser that runs as a daemon for real-time commands."""
+    
+    async def handle_parse_command(self, command):
+        """Handle remote parse commands."""
+        url = command.data.get("url")
+        return await self.parse_products(url)
+    
+    async def parse_products(self, url: str):
+        """Parse products from URL."""
+        await self.browser.navigate(url)
+        result = await self.extract_with_ai(url, "Extract products")
+        return result.data
+
+# Run as daemon
+async def main():
+    parser = DaemonParser()
+    await parser.start_daemon()  # Listens for commands
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### 4. Scheduled Parser
+
+```python
+from unrealon import ParserManager
+import asyncio
+
+class ScheduledParser(ParserManager):
+    """Parser that runs on a schedule."""
+    
+    async def run_scheduled(self):
+        """Main method called by scheduler."""
+        urls = [
+            "https://example.com/products",
+            "https://example.com/deals",
+            "https://example.com/new"
+        ]
+        
+        all_products = []
+        for url in urls:
+            products = await self.parse_products(url)
+            all_products.extend(products)
+        
+        return {"products": all_products, "count": len(all_products)}
+
+# Run with scheduling
+async def main():
+    parser = ScheduledParser()
+    await parser.setup()
+    
+    # Run once
+    result = await parser.run_scheduled()
+    print(f"Collected {result['count']} products")
+    
+    await parser.cleanup()
+```
+
+## CLI Tools
+
+### Browser Automation CLI
+
+```bash
+# Launch browser session
+unrealon-browser browser launch --url https://example.com
+
+# Test stealth capabilities
+unrealon-browser browser stealth-test --url https://example.com
+
+# Interactive browser mode
+unrealon-browser browser interactive
+```
+
+### Cookie Management CLI
+
+```bash
+# List stored cookies
+browser-cookies list --parser my_parser
+
+# Clear cookies
+browser-cookies clear --parser my_parser
+
+# Show cookie statistics
+browser-cookies stats --parser my_parser
+```
+
+## Configuration
+
+### Environment Variables (Optional)
+
+Create a `.env` file for custom settings:
+
+```bash
+# Browser settings
+BROWSER_HEADLESS=true
+BROWSER_TIMEOUT=30
+
+# Logging
+LOG_LEVEL=INFO
+LOG_TO_FILE=true
+
+# Proxy settings (optional)
+PROXY_HOST=proxy.example.com
+PROXY_PORT=8080
+```
+
+### Custom Configuration
+
+```python
+from unrealon import ParserManager, BrowserConfig
+
+# Custom browser configuration
+browser_config = BrowserConfig(
+    headless=True,
+    timeout=30,
+    user_agent="Custom User Agent"
+)
+
+# Use custom config
+parser = ParserManager(browser_config=browser_config)
+```
+
+## Advanced Features
+
+### AI-Powered Extraction
+
+```python
+# Automatic content analysis
+result = await parser.extract_with_ai(
+    url="https://example.com/products",
+    instruction="Extract product title, price, rating, and review count",
+    confidence_threshold=0.8
+)
+
+print(f"Extracted {len(result.data)} items")
+print(f"Confidence: {result.confidence}")
+print(f"Cost: ${result.cost_usd}")
+```
+
+### Proxy Management
+
+```python
+from unrealon import ProxyConfig
+
+# Configure proxy rotation
+proxy_config = ProxyConfig(
+    proxies=[
+        "http://proxy1:8080",
+        "http://proxy2:8080",
+        "http://proxy3:8080"
+    ],
+    rotation_strategy="round_robin"
+)
+
+parser = ParserManager(proxy_config=proxy_config)
+```
+
+### Real-Time Communication
+
+```python
+# Start daemon with WebSocket connection
+await parser.start_daemon(
+    server_url="wss://api.unrealon.com",
+    api_key="your_api_key"
+)
+
+# Parser now listens for remote commands
+# Commands can be sent from any client
+```
+
+## Architecture
+
+### Core Components
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Parser SDK    │◄──►│  WebSocket      │◄──►│  Target         │
+│   (Client)      │    │  Bridge         │    │  Websites       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Browser       │    │   AI Services   │    │   Proxy &       │
+│   Automation    │    │   (LLM)         │    │   Stealth       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### Module Structure
+
+- **`unrealon_driver`**: Core parser framework and management
+- **`unrealon_bridge`**: WebSocket communication and orchestration
+- **`unrealon_browser`**: Browser automation with stealth capabilities
+
+## Best Practices
+
+### 1. Error Handling
+
+```python
+class RobustParser(ParserManager):
+    async def parse_products(self, url: str):
+        try:
+            await self.browser.navigate(url)
+            result = await self.extract_with_ai(url, "Extract products")
+            return result.data
+        except Exception as e:
+            self.logger.error(f"Parsing failed: {e}")
+            return {"error": str(e), "success": False}
+```
+
+### 2. Rate Limiting
+
+```python
+import asyncio
+
+class RateLimitedParser(ParserManager):
+    async def parse_multiple_pages(self, urls: list):
+        results = []
+        for url in urls:
+            result = await self.parse_products(url)
+            results.append(result)
+            
+            # Rate limiting
+            await asyncio.sleep(2)  # 2 second delay
+        
+        return results
+```
+
+### 3. Data Validation
+
+```python
+from pydantic import BaseModel
+
+class Product(BaseModel):
+    title: str
+    price: float
+    image_url: str
+
+class ValidatedParser(ParserManager):
+    async def parse_products(self, url: str):
+        raw_data = await self.extract_with_ai(url, "Extract products")
+        
+        # Validate data
+        products = []
+        for item in raw_data.data:
+            try:
+                product = Product(**item)
+                products.append(product)
+            except Exception as e:
+                self.logger.warning(f"Invalid product data: {e}")
+        
+        return products
+```
+
+## Testing
+
+### Unit Tests
+
+```python
+import pytest
+from unrealon import ParserManager
+
+class TestParser(ParserManager):
+    async def parse_products(self, url: str):
+        return [{"title": "Test Product", "price": 99.99}]
+
+@pytest.mark.asyncio
+async def test_parser():
+    parser = TestParser()
+    await parser.setup()
+    
+    result = await parser.parse_products("https://example.com")
+    assert len(result) == 1
+    assert result[0]["title"] == "Test Product"
+    
+    await parser.cleanup()
+```
+
+### Integration Tests
+
+```python
+@pytest.mark.asyncio
+async def test_browser_integration():
+    parser = ParserManager()
+    await parser.setup()
+    
+    # Test actual browser navigation
+    await parser.browser.navigate("https://httpbin.org/html")
+    html = await parser.browser.get_html()
+    
+    assert "Herman Melville" in html  # httpbin test content
+    
+    await parser.cleanup()
+```
+
+## Deployment
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+CMD ["python", "parser.py"]
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  parser:
+    build: .
+    environment:
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. Browser Launch Fails
+```bash
+# Install browser dependencies
+playwright install
+```
+
+#### 2. Import Errors
+```bash
+# Ensure correct installation
+pip install unrealon --upgrade
+```
+
+#### 3. Proxy Issues
+```python
+# Test proxy connection
+await parser.browser.test_proxy("http://proxy:8080")
+```
+
+### Debug Mode
+
+```python
+# Enable debug logging
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Or use environment variable
+# LOG_LEVEL=DEBUG
+```
+
+## Contributing
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/unrealos/unrealon-rpc.git
+cd unrealon-rpc
+
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run linting
+black src/
+isort src/
+```
+
+### Code Style
+
+- Follow PEP 8
+- Use type hints
+- Write docstrings
+- Add tests for new features
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Documentation**: [docs.unrealon.com](https://docs.unrealon.com)
+- **Issues**: [GitHub Issues](https://github.com/unrealos/unrealon-rpc/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/unrealos/unrealon-rpc/discussions)
+
+---
+
+## Real Projects Built on UnrealOn
+
+### 🚗 **CarAPIs** - Automotive Data Platform
+**Platform**: [carapis.com](https://carapis.com)  
+**Use Case**: Vehicle information extraction from dealerships and marketplaces  
+**Features**: Real-time car listings, pricing analysis, market trends  
+**Technology**: AI-powered vehicle data extraction with 95% accuracy
+
+### 🛒 **ShopAPIs** - E-commerce Intelligence  
+**Platform**: [shopapis.com](https://shopapis.com)  
+**Use Case**: Product monitoring and competitive analysis  
+**Features**: Price tracking, inventory monitoring, competitor analysis  
+**Technology**: Multi-platform e-commerce data collection
+
+### 📊 **StockAPIs** - Financial Data Platform
+**Platform**: [stockapis.com](https://stockapis.com)  
+**Use Case**: Market data and financial information extraction  
+**Features**: Real-time stock data, financial news analysis  
+**Technology**: High-frequency financial data collection
+
+### 🏠 **PropAPIs** - Real Estate Data Platform
+**Platform**: [propapis.com](https://propapis.com)  
+**Use Case**: Property listings and market analysis  
+**Features**: Real estate listings, price monitoring, market trends  
+**Technology**: Multi-source property data extraction
+
+**All platforms built with UnrealOn for reliable, scalable data extraction.**
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Commercial Platform
+
+For enterprise features, managed hosting, and professional support, visit [unrealon.com](https://unrealon.com/).
+
+---
+
+**UnrealOn** - Simple, powerful web scraping for developers.
