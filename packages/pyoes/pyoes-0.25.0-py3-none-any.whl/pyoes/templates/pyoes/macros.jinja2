@@ -1,0 +1,122 @@
+{% macro plausible_tracker(plausible_data_domain, plausible_omgeving, extended=False) %}
+  {% if plausible_omgeving in ('dev', 'test') %}
+    {% set omgeving = plausible_omgeving + '-' %}
+    {% set src = "https://" ~ omgeving ~ "webstats.onroerenderfgoed.be/js/" %}
+  {% else %}
+    {% set src = "https://plausible.io/js/" %}
+  {% endif %}
+  <!-- Plausible Analytics -->
+  {% if not extended %}
+  <script async defer data-domain="{{ plausible_data_domain }}" src="{{ src }}script.js"></script>
+  {% else %}
+  <script async defer data-domain="{{ plausible_data_domain }}" src="{{ src }}script.file-downloads.js"></script>
+  {% endif %}
+  <!-- End Plausible Analytics -->
+{% endmacro %}
+
+{% macro generate_uri(request, settingsURI, id) %}
+  {{ request.registry.settings[settingsURI]|replace('{0}', id) }}
+{% endmacro %}
+
+{% macro render_vlaanderen_header(omgeving, burgerprofiel_header_id, pyoes_banner, authenticated_userid, baseUrl) %}
+  {% if omgeving in ('local', 'dev', 'test') %}
+    {% set burgerprofielUrl = "https://tni.widgets.burgerprofiel.dev-vlaanderen.be/api/v1" %}
+  {% else %}
+    {% set burgerprofielUrl = "https://prod.widgets.burgerprofiel.vlaanderen.be/api/v1" %}
+  {% endif %}
+  <script src="{{ burgerprofielUrl }}/node_modules/@govflanders/vl-widget-polyfill/dist/index.js"></script>
+  <script src="{{ burgerprofielUrl }}/node_modules/@govflanders/vl-widget-client/dist/index.js"></script>
+  <script src="{{ burgerprofielUrl }}/widget/{{ burgerprofiel_header_id }}/embed"></script>
+  <script>
+    // Capture any widget that is present or will be present on the webpage.
+    vl.widget.client.capture(function (widget) {
+      // Only process the widget if widget is a global header.
+      if (widget.getPluginTypeId() === 'global_header') {
+        // Get the Citizen Profile Session extension from the global header widget.
+        widget.getExtension('citizen_profile.session').then(function (session) {
+          var websiteHasAuthenticatedSession = false;
+          {% if authenticated_userid  %}
+            websiteHasAuthenticatedSession = true;
+          {% endif %}
+          // Inform the session extension about the current session state of the website.
+          session.configure({
+            active: websiteHasAuthenticatedSession,
+            endpoints: {
+              loginUrl: '{{ baseUrl }}aanmelden',
+              loginRedirectUrl: '{{ baseUrl }}',
+              logoutUrl: '{{ baseUrl }}afmelden'
+            }
+          });
+          const pyoes_banner = JSON.parse('{{ pyoes_banner | tojson }}');
+          if (pyoes_banner && pyoes_banner.banner) {
+            render_info_banner(pyoes_banner.banner, pyoes_banner.detail || '');
+          }
+          });
+      }
+    });
+  </script>
+{% endmacro %}
+
+{% macro render_custom_burgerprofiel_contact() %}
+  <script>
+    function render_contact(config) {
+      // Capture any widget that is present or will be present on the webpage.
+      vl.widget.client.capture(function (widget) {
+        // Only process the widget if widget is a global header.
+        if (widget.getPluginTypeId() === 'global_header') {
+          //Extra contact config
+          widget.getExtension('contact').then(contact => {
+            contact.setServicePoints(config);
+          });
+        }
+      });
+    }
+  </script>
+{% endmacro %}
+
+{% macro render_vlaanderen_footer(omgeving, burgerprofiel_footer_id) %}
+  {% if omgeving in ('local', 'dev', 'test') %}
+    {% set burgerprofielUrl = "https://tni.widgets.burgerprofiel.dev-vlaanderen.be/api/v1" %}
+  {% else %}
+    {% set burgerprofielUrl = "https://prod.widgets.burgerprofiel.vlaanderen.be/api/v1" %}
+  {% endif %}
+  <script src="{{ burgerprofielUrl }}/widget/{{ burgerprofiel_footer_id }}/embed"></script>
+{% endmacro %}
+
+{% macro render_info_banner(banner, detail)  %}
+  <script type="text/javascript">
+   function render_info_banner() {
+    const headerdiv = document.getElementsByClassName('vlw__primary-bar__plugins');
+    var el = document.createElement('div');
+    el.className = 'message-banner';
+    var content = '<span>{{ banner }}</span>';
+    {% if detail %}
+      content = content.concat('<a onclick="showPopup()">   Meer info...</a>');
+    {% endif %}
+    el.innerHTML = content;
+
+    if (headerdiv.length > 0 && headerdiv[0].parentNode) {
+      headerdiv[0].parentNode.insertBefore(el, headerdiv[0]);
+    }
+   }
+
+   function showPopup() {
+     document.getElementById('onderhoud-popup').style.display = 'flex';
+   }
+
+   function hidePopup() {
+     document.getElementById('onderhoud-popup').style.display = 'none';
+   }
+  </script>
+  <div id="onderhoud-popup">
+    <div class="row onderhoud-banner-header">
+      <h2>{{ banner }}</h2>
+    </div>
+    <div class="row onderhoud-banner-detail">
+      <p>{{ detail }}</p>
+    </div>
+    <div class="row">
+      <a><span id="popup-sluiten" onclick="hidePopup()" aria-hidden="true">Sluiten...</span></a>
+    </div>
+  </div>
+{% endmacro %}
