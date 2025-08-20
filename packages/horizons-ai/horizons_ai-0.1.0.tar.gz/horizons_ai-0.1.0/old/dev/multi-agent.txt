@@ -1,0 +1,205 @@
+**Agent-first redesign — 10 compact layers**
+
+1. **Global task bus** – Swap the CLI for a pub/sub broker (e.g., NATS, Redis Streams). All task events are immutable messages:
+
+````json
+{ "msg":"TASK.CREATE", "taskId":"T-42", "actor":"ide-agent", "body":{…} }```
+
+2. **Task record = CRDT** – Store canonical task objects in a CRDT (or append-only log). Any agent can merge; conflicts settle via last-writer-wins on monotonic fields or agent-precedence rules.
+
+3. **Role-based ACL** – Flat file `roles.yml` →  
+```yaml
+agent:design_bot  perms:[create,split,comment]  precedence:40
+agent:code_bot    perms:[claim,complete]        precedence:30
+agent:qa_bot      perms:[verify]                precedence:20
+````
+
+The bus enforces “can the sender emit *this* verb on *that* task?” plus tiebreak by `precedence`.
+
+4. **Capability headers** – Every message gets `needPerm`, `needPrecedence≥x`. Lower-ranked agents ignore or queue until criteria met.
+
+5. **Claim-lock handshake** – `TASK.CLAIM:pending` → bus issues lease (`ttl=30 min`). Lease holder is the only writer until `TASK.UPDATE:complete` or lease expiry.
+
+6. **Dependency resolver agent** – A dedicated “scheduler” consumes the stream, filters tasks whose deps closed, sorts by `priority` then by `precedence`, emits `TASK.READY` events.
+
+7. **Inbox abstraction** – Each agent listens only to:
+   `TASK.READY` ∩ perms, `TASK.COMMENT` on claimed tasks, and broadcast `SYSTEM.CONFIG`.
+
+8. **Human bridge** – The current CLI/UI just publishes/consumes messages; zero logic change, but all state now lives in the log, not disk files.
+
+9. **Audit & rewind** – Because the log is append-only, snapshots can be regenerated, time-travel debugging is trivial, and new agents can rebuild local state by replay.
+
+10. **Extending schema** – Add `owner`, `permMask`, `precedence`, `ttl`, `leaseHolder` to the task JSON; drop them when exporting to humans for readability.
+
+That’s it: one shared event log, CRDT tasks, role+precedence headers, and a small scheduler agent gives you multi-agent cooperation without central bottlenecks.
+**Add asynchronous “reply threads” in 9 tight moves**
+
+1. **Thread-ID header**
+   Every bus message gains optional `"thread"` and `"parent"` fields.
+
+```json
+{ "msg":"TASK.REPLY", "task":"T-42", "thread":"th-7", "parent":"msg-451", ... }
+```
+
+If `thread` omitted, the message *is* the root and its own `thread`.
+
+2. **Thread root = TASK.DISCUSS**
+   The first “please reform” request is a `TASK.DISCUSS` event whose body proposes a change. It spawns `thread = msg-id`.
+
+3. **Fork-safe CRDT log**
+   Thread messages live in the same append-only stream as tasks, so they inherit ordering, signatures, and ACL checks. The task object itself is *not* mutated until the thread closes.
+
+4. **ACL overlay**
+   `roles.yml` can grant `discuss`, `reply`, `resolve` verbs separately from `update`. Low-precedence agents may discuss but not mutate.
+
+5. **Scheduler rules**
+   While any open thread has `status:"open"`, the scheduler withholds the task from the READY pool, avoiding mid-edit races.
+
+6. **Lease-aware resolution**
+   The current lease holder (or a higher-precedence agent) may emit `TASK.RESOLVE` with `resolution:accept|reject|supersede`, which auto-closes the thread (`status:"closed"`).
+
+7. **Human-style inboxes**
+   Agents subscribe to `thread=*` where they are author, assignee, or lease holder. IDE UIs can render threads as collapsible chains under each task.
+
+8. **Consensus fallback**
+   If the thread TTL expires (e.g., 24 h) without resolution, a policy bot escalates:
+   `TASK.ESCALATE → owner|human`, or merges the highest-precedence reply.
+
+9. **Schema diff on accept**
+   On `accept`, the resolver includes a minimal JSON-Patch. The patch is then applied to the task CRDT, preserving full auditability.
+
+Result: agents chat asynchronously in scoped reply chains, permissions stay intact, and the task moves forward only after an explicit, auditable close.
+
+
+**Add asynchronous “reply threads” in 9 tight moves**
+
+1. **Thread-ID header**
+   Every bus message gains optional `"thread"` and `"parent"` fields.
+
+```json
+{ "msg":"TASK.REPLY", "task":"T-42", "thread":"th-7", "parent":"msg-451", ... }
+```
+
+If `thread` omitted, the message *is* the root and its own `thread`.
+
+2. **Thread root = TASK.DISCUSS**
+   The first “please reform” request is a `TASK.DISCUSS` event whose body proposes a change. It spawns `thread = msg-id`.
+
+3. **Fork-safe CRDT log**
+   Thread messages live in the same append-only stream as tasks, so they inherit ordering, signatures, and ACL checks. The task object itself is *not* mutated until the thread closes.
+
+4. **ACL overlay**
+   `roles.yml` can grant `discuss`, `reply`, `resolve` verbs separately from `update`. Low-precedence agents may discuss but not mutate.
+
+5. **Scheduler rules**
+   While any open thread has `status:"open"`, the scheduler withholds the task from the READY pool, avoiding mid-edit races.
+
+6. **Lease-aware resolution**
+   The current lease holder (or a higher-precedence agent) may emit `TASK.RESOLVE` with `resolution:accept|reject|supersede`, which auto-closes the thread (`status:"closed"`).
+
+7. **Human-style inboxes**
+   Agents subscribe to `thread=*` where they are author, assignee, or lease holder. IDE UIs can render threads as collapsible chains under each task.
+
+8. **Consensus fallback**
+   If the thread TTL expires (e.g., 24 h) without resolution, a policy bot escalates:
+   `TASK.ESCALATE → owner|human`, or merges the highest-precedence reply.
+
+9. **Schema diff on accept**
+   On `accept`, the resolver includes a minimal JSON-Patch. The patch is then applied to the task CRDT, preserving full auditability.
+
+Result: agents chat asynchronously in scoped reply chains, permissions stay intact, and the task moves forward only after an explicit, auditable close.
+
+
+**Battle-tested distributed-systems patterns you can borrow**
+
+1. **Immutable event log + event sourcing** – Append every state change to a journal (Kafka, NATS JetStream). Snapshots are rebuilt by replay, so you get deterministic walk-backs, time-travel debugging, and idempotent recovery.  ([docs.nats.io][1], [martinfowler.com][2])
+
+2. **Workflow/temporal engines** – Frameworks such as **Temporal/Cadence** treat a “workflow” as pure, deterministic code that can be replayed on any worker. They checkpoint local state, handle retries, and guarantee that a crash/restart → identical results. Perfect for long-running multi-agent tasks.  ([temporal.io][3], [temporal.io][4], [docs.temporal.io][5])
+
+3. **Actor model runtimes** – **Akka / Pekko, Orleans** host millions of lightweight “actors” that own their state, talk by messages, and can lease a distributed lock (`Lease` API) for critical sections. This isolates agents, simplifies concurrency, and gives location transparency.  ([pekko.apache.org][6])
+
+4. **CRDTs & Operational Transform** – Conflict-free replicated data types let every replica (or agent) update locally and merge later with mathematically provable convergence. Great for shared task objects where edits may race.  ([en.wikipedia.org][7], [en.wikipedia.org][8])
+
+5. **Consensus & coordination services** – **ZooKeeper, etcd, Consul** expose primitives like `CreateEphemeral`, `Lease`, `Watch` to build leader election, distributed locks, and two-phase-commit recipes. They keep global invariants without relying on a single machine.  ([zookeeper.apache.org][9])
+
+6. **Saga pattern for multi-step updates** – Instead of a giant distributed transaction, a `Saga` chains local steps and, on failure, fires compensating steps (`T1 ↻`). Works well with an event bus and lets each agent own its rollback logic.  ([microservices.io][10])
+
+7. **CQRS (Command/Query split)** – Keep the write side (task-mutation commands) entirely separate from the read side (task views). Agents publish commands to the log; projections build whatever read models you need. This keeps write paths deterministic and read paths cheap.  ([martinfowler.com][11])
+
+8. **Leases & TTL-based ownership** – Many frameworks offer time-boxed “claims” (ZooKeeper ephemerals, NATS consumer acks, Temporal activity heart-beats). If the holder disappears or the TTL lapses, another agent can safely take over.  ([docs.nats.io][1], [zookeeper.apache.org][9])
+
+9. **Event-driven router / aggregator** – Patterns like *Event Aggregator* or content-based routers sit in front of the log so agents only see the messages they care about; helps enforce precedence and ACLs without bloating agent logic.  ([martinfowler.com][12], [martinfowler.com][13])
+
+10. **Deterministic versioning & replay** – Temporal, Akka, and others provide explicit version markers (`Workflow Patching APIs`, rolling actor upgrades) so you can evolve workflows without breaking replay – a must for reproducibility.  ([docs.temporal.io][5], [pekko.apache.org][6])
+
+**How to plug these in**
+
+* Use a **log (Kafka/NATS)** as the task bus.
+* Store the **task record** as a **CRDT** inside each event.
+* Run a **Temporal workflow** that waits on dependency events; it emits `TASK.READY` once all pre-conditions merge true.
+* Gate all **mutations** behind **Saga steps** so failures roll back cleanly.
+* Protect critical ops (e.g., assigning a high-priority task) with a **ZooKeeper lease** to avoid split-brain ownership.
+
+Adopting these primitives gets you **determinism, replay-ability, and proven fault-tolerance** without inventing new protocols.
+
+[1]: https://docs.nats.io/nats-concepts/jetstream/consumers?utm_source=chatgpt.com "Consumers - NATS Docs"
+[2]: https://martinfowler.com/eaaDev/EventSourcing.html?utm_source=chatgpt.com "Event Sourcing - Martin Fowler"
+[3]: https://temporal.io/blog/introducing-temporal-dotnet?utm_source=chatgpt.com "Introducing Temporal .NET – Deterministic Workflow Authoring"
+[4]: https://temporal.io/temporal-versus/cadence?utm_source=chatgpt.com "Temporal vs. Cadence"
+[5]: https://docs.temporal.io/develop/go/versioning?utm_source=chatgpt.com "Versioning - Go SDK | Temporal Platform Documentation"
+[6]: https://pekko.apache.org/docs/pekko/current/coordination.html?utm_source=chatgpt.com "Coordination · Apache Pekko Documentation"
+[7]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type?utm_source=chatgpt.com "Conflict-free replicated data type"
+[8]: https://en.wikipedia.org/wiki/Collaborative_real-time_editor?utm_source=chatgpt.com "Collaborative real-time editor - Wikipedia"
+[9]: https://zookeeper.apache.org/doc/r3.5.5/recipes.html?utm_source=chatgpt.com "ZooKeeper Recipes and Solutions"
+[10]: https://microservices.io/patterns/data/saga.html?utm_source=chatgpt.com "Pattern: Saga - Microservices.io"
+[11]: https://martinfowler.com/bliki/CQRS.html?utm_source=chatgpt.com "CQRS - Martin Fowler"
+[12]: https://martinfowler.com/articles/patterns-legacy-displacement/event-interception.html?utm_source=chatgpt.com "Event Interception - Martin Fowler"
+[13]: https://martinfowler.com/eaaDev/EventAggregator.html?utm_source=chatgpt.com "Event Aggregator - Martin Fowler"
+
+**Battle-tested distributed-systems patterns you can borrow**
+
+1. **Immutable event log + event sourcing** – Append every state change to a journal (Kafka, NATS JetStream). Snapshots are rebuilt by replay, so you get deterministic walk-backs, time-travel debugging, and idempotent recovery.  ([docs.nats.io][1], [martinfowler.com][2])
+
+2. **Workflow/temporal engines** – Frameworks such as **Temporal/Cadence** treat a “workflow” as pure, deterministic code that can be replayed on any worker. They checkpoint local state, handle retries, and guarantee that a crash/restart → identical results. Perfect for long-running multi-agent tasks.  ([temporal.io][3], [temporal.io][4], [docs.temporal.io][5])
+
+3. **Actor model runtimes** – **Akka / Pekko, Orleans** host millions of lightweight “actors” that own their state, talk by messages, and can lease a distributed lock (`Lease` API) for critical sections. This isolates agents, simplifies concurrency, and gives location transparency.  ([pekko.apache.org][6])
+
+4. **CRDTs & Operational Transform** – Conflict-free replicated data types let every replica (or agent) update locally and merge later with mathematically provable convergence. Great for shared task objects where edits may race.  ([en.wikipedia.org][7], [en.wikipedia.org][8])
+
+5. **Consensus & coordination services** – **ZooKeeper, etcd, Consul** expose primitives like `CreateEphemeral`, `Lease`, `Watch` to build leader election, distributed locks, and two-phase-commit recipes. They keep global invariants without relying on a single machine.  ([zookeeper.apache.org][9])
+
+6. **Saga pattern for multi-step updates** – Instead of a giant distributed transaction, a `Saga` chains local steps and, on failure, fires compensating steps (`T1 ↻`). Works well with an event bus and lets each agent own its rollback logic.  ([microservices.io][10])
+
+7. **CQRS (Command/Query split)** – Keep the write side (task-mutation commands) entirely separate from the read side (task views). Agents publish commands to the log; projections build whatever read models you need. This keeps write paths deterministic and read paths cheap.  ([martinfowler.com][11])
+
+8. **Leases & TTL-based ownership** – Many frameworks offer time-boxed “claims” (ZooKeeper ephemerals, NATS consumer acks, Temporal activity heart-beats). If the holder disappears or the TTL lapses, another agent can safely take over.  ([docs.nats.io][1], [zookeeper.apache.org][9])
+
+9. **Event-driven router / aggregator** – Patterns like *Event Aggregator* or content-based routers sit in front of the log so agents only see the messages they care about; helps enforce precedence and ACLs without bloating agent logic.  ([martinfowler.com][12], [martinfowler.com][13])
+
+10. **Deterministic versioning & replay** – Temporal, Akka, and others provide explicit version markers (`Workflow Patching APIs`, rolling actor upgrades) so you can evolve workflows without breaking replay – a must for reproducibility.  ([docs.temporal.io][5], [pekko.apache.org][6])
+
+**How to plug these in**
+
+* Use a **log (Kafka/NATS)** as the task bus.
+* Store the **task record** as a **CRDT** inside each event.
+* Run a **Temporal workflow** that waits on dependency events; it emits `TASK.READY` once all pre-conditions merge true.
+* Gate all **mutations** behind **Saga steps** so failures roll back cleanly.
+* Protect critical ops (e.g., assigning a high-priority task) with a **ZooKeeper lease** to avoid split-brain ownership.
+
+Adopting these primitives gets you **determinism, replay-ability, and proven fault-tolerance** without inventing new protocols.
+
+[1]: https://docs.nats.io/nats-concepts/jetstream/consumers?utm_source=chatgpt.com "Consumers - NATS Docs"
+[2]: https://martinfowler.com/eaaDev/EventSourcing.html?utm_source=chatgpt.com "Event Sourcing - Martin Fowler"
+[3]: https://temporal.io/blog/introducing-temporal-dotnet?utm_source=chatgpt.com "Introducing Temporal .NET – Deterministic Workflow Authoring"
+[4]: https://temporal.io/temporal-versus/cadence?utm_source=chatgpt.com "Temporal vs. Cadence"
+[5]: https://docs.temporal.io/develop/go/versioning?utm_source=chatgpt.com "Versioning - Go SDK | Temporal Platform Documentation"
+[6]: https://pekko.apache.org/docs/pekko/current/coordination.html?utm_source=chatgpt.com "Coordination · Apache Pekko Documentation"
+[7]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type?utm_source=chatgpt.com "Conflict-free replicated data type"
+[8]: https://en.wikipedia.org/wiki/Collaborative_real-time_editor?utm_source=chatgpt.com "Collaborative real-time editor - Wikipedia"
+[9]: https://zookeeper.apache.org/doc/r3.5.5/recipes.html?utm_source=chatgpt.com "ZooKeeper Recipes and Solutions"
+[10]: https://microservices.io/patterns/data/saga.html?utm_source=chatgpt.com "Pattern: Saga - Microservices.io"
+[11]: https://martinfowler.com/bliki/CQRS.html?utm_source=chatgpt.com "CQRS - Martin Fowler"
+[12]: https://martinfowler.com/articles/patterns-legacy-displacement/event-interception.html?utm_source=chatgpt.com "Event Interception - Martin Fowler"
+[13]: https://martinfowler.com/eaaDev/EventAggregator.html?utm_source=chatgpt.com "Event Aggregator - Martin Fowler"
+
+Claude-Code Task Master Dogfooding

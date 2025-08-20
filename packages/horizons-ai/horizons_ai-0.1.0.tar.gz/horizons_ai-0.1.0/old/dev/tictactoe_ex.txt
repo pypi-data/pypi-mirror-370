@@ -1,0 +1,167 @@
+Ran tool
+
+Read file: /Users/joshuapurtell/Documents/GitHub/Environments/src/synth_env/examples/sokoban/environment.py
+
+Read file: /Users/joshuapurtell/Documents/GitHub/Environments/src/synth_env/examples/sokoban/taskset.py
+
+Read file: /Users/joshuapurtell/Documents/GitHub/Environments/src/synth_env/examples/sokoban/engine.py
+
+Read file: /Users/joshuapurtell/Documents/GitHub/Environments/src/synth_env/examples/sokoban/agent_demos/test_synth_react_locally.py
+
+Read file: /Users/joshuapurtell/Documents/GitHub/Environments/tictactoe_context.xt
+
+Below is an actionable roadmap that mirrors the pattern used for `sokoban/` while re-using the logic already prototyped in `tictactoe_context.xt`.
+
+────────────────────────────────────────────────
+1. Directory layout
+────────────────────────────────────────────────
+src/synth_env/examples/tictactoe/
+│
+├─ engine.py                     - core game logic ( SokobanEngine)
+├─ environment.py                - glue that exposes Engine through
+│                                  StatefulEnvironment + ReproducibleEnvironment
+├─ taskset.py                    - Task / TaskInstance generator
+├─ agent_demos/
+│   ├─ test_synth_react_locally.py
+│   └─ test_synth_react_service.py
+└─ __init__.py
+
+Add any helpers (e.g. `engine_helpers/`) only if complexity grows.
+
+────────────────────────────────────────────────
+2. Engine (engine.py)
+────────────────────────────────────────────────
+• subclass `StatefulEngine` and `IReproducibleEngine`
+  class TicTacToeEngine(StatefulEngine, IReproducibleEngine):
+
+• Public state dataclass
+  ─ board: 3×3 np.ndarray[int]  (0=empty,1=agent,2=opponent)
+  ─ current_player: str  (“X”/“O”)
+  ─ last_move: str        (“A1”…)
+  ─ num_moves: int
+  ─ terminated / winner / draw …
+
+• Private state dataclass
+  ─ reward_last, total_reward, terminated, truncated
+
+• Action mapping
+  ACTION_STR_TO_INT = {"A1":0, …}  or keep
+  ACTION_INT_TO_STR = {0:"A1", …}
+
+• Core methods
+  _step_engine(action_int)
+  _reset_engine(seed?)
+  _serialize_engine / _deserialize_engine
+  get_current_states_for_observation()
+
+• Reward components
+  – Win  +1
+  – Draw 0
+  – Illegal move  -1 (and terminate)
+  – Small step penalty if desired
+
+────────────────────────────────────────────────
+3. Observation callables
+────────────────────────────────────────────────
+class SynthTicTacToeObservationCallable(GetObservationCallable):
+  • returns a lightweight dict
+    {
+      "board_text": ascii_board,      # like Sokoban
+      "current_player": "X",
+      "num_moves": 5,
+      "terminated": False,
+      "winner": None|“X”|“O”
+    }
+
+class SynthTicTacToeCheckpointObservationCallable … (for checkpoints)
+
+────────────────────────────────────────────────
+4. Tool
+────────────────────────────────────────────────
+class TicTacToeInteractTool(AbstractTool):
+  name = "interact"
+  description = "Place your mark in the specified cell."
+  call_schema  = TicTacToeActionInput(action:str)  # accepts “A1” etc.
+  result_schema = ToolResult (public / private payload identical to Sokoban)
+
+────────────────────────────────────────────────
+5. Environment (environment.py)
+────────────────────────────────────────────────
+class TicTacToeEnvironment(StatefulEnvironment,
+                           ReproducibleEnvironment[TicTacToeEngine]):
+
+  • identical structure to `SokobanEnvironment`
+  • validate_tool_calls() should accept either
+      {tool:"interact", args:{"action":"B2"}}
+    or the convenience nested lists used by Synth-AI evaluators.
+
+────────────────────────────────────────────────
+6. Task & TaskSet (taskset.py)
+────────────────────────────────────────────────
+• Define `TicTacToeTaskInstanceMetadata`
+  – starting_player (“X”/“O”), opening_move (optional),
+    optimal_result (win/draw/loss) using VALUE_FUNCTION from the log.
+
+• create_tictactoe_taskset()
+  – instantiate  20–50 starting positions with differing complexity
+  – compute shortest path length (min remaining moves to force win/draw)
+  – produce `SplitInfo` for val/test similar to Sokoban.
+
+────────────────────────────────────────────────
+7. ReAct demo scripts
+────────────────────────────────────────────────
+agent_demos/test_synth_react_locally.py
+  – Fork the Sokoban script, replace:
+      • observation formatter (board printing)
+      • action mapping table
+      • win/draw termination handling
+  – Keep same scaffold for `ReActAgent`, LLM calls, tracing etc.
+
+agent_demos/test_synth_react_service.py
+  – identical but hits the HTTP service once the env is registered.
+
+────────────────────────────────────────────────
+8. Service registration
+────────────────────────────────────────────────
+In `src/synth_env/service/app.py` (or equivalent):
+    import synth_env.examples.tictactoe.environment as ttt
+    register_environment("TicTacToe", ttt.TicTacToeEnvironment)
+
+────────────────────────────────────────────────
+9. Tests
+────────────────────────────────────────────────
+• units/test_tictactoe_environment.py  
+  – reset / step / checkpoint round-trip  
+• units/test_shortest_path_policy.py  
+  – brute-force perfect-play policy must never lose.  
+• integration/test_tictactoe_service.py  
+  – spin up FastAPI app & hit endpoints.
+
+────────────────────────────────────────────────
+10. Incremental build order
+────────────────────────────────────────────────
+1. Port core LudicEnv logic into `TicTacToeEngine`
+   (board handling, winner detection, serialization).
+2. Build observation/interaction tool → pass local env smoke tests.
+3. Create minimal ReAct demo that wins/draws against a random opponent.
+4. Add taskset generator & tests.
+5. Wire into service & integration tests.
+6. Expand ReAct evaluator to full-scale parallel eval (as in Sokoban).
+
+────────────────────────────────────────────────
+11. Re-use from `tictactoe_context.xt`
+────────────────────────────────────────────────
+• VALUE_FUNCTION and indexing helpers drop straight into engine.py.
+• `Action` parsing class can be moved unchanged.
+• Board pretty-printer (`INDEX_TO_NAME` grid) readily produces ascii.
+
+────────────────────────────────────────────────
+12. Estimated effort
+────────────────────────────────────────────────
+• 1–2 hrs to port engine + env scaffold
+• 0.5 hr for taskset
+• 0.5 hr for basic tests
+• 0.5 hr for ReAct demo
+Total ≈ 3–4 hrs of focused work.
+
+Once these pieces are in place, Tic-Tac-Toe will behave exactly like the other synth-env examples, and the evaluation pipeline (both local and service-based) will run unmodified.
