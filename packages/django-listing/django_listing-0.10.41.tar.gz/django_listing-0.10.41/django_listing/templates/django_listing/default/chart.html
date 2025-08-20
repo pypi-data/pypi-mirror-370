@@ -1,0 +1,39 @@
+{% extends "./listing.html" %}
+{% block listing %}
+    <div{{ listing.attrs }}>
+        {% with listing.chart_data as data %}
+        {% if data.apexcharts_options %}
+            {{ data|json_script:data.json_id }}
+            <div id="{{ data.chart_div_id }}"></div>
+            <script>
+                $(document).ready(function () {
+                    // Check if ApexCharts is loaded
+                    if (typeof ApexCharts === 'undefined') {
+                        console.error("django-listing : ApexCharts library not loaded");
+                        $("#{{ data.chart_div_id }}").html('<br>ApexCharts library not loaded, please add this attribute in your listing clss : <br><br><pre>request_media_for = "apexcharts"</pre>');
+                        return;
+                    }
+                    (() => {
+                        const data = JSON.parse(document.getElementById("{{ data.json_id }}").textContent);
+                        let apex_options = data.apexcharts_options;
+                        {% block apexcharts_additional_options %}{% endblock %}
+                        {% if listing.chart_options_template %}
+                            {% include listing.chart_options_template %}
+                        {% endif %}
+                        new ApexCharts(document.querySelector("#{{data.chart_div_id}}"), apex_options).render();
+                    })();
+                });
+            </script>
+            <br style="clear: both;"/>
+        {% else %}
+            {% if listing.empty_table_msg %}
+                {% block listing_empty %}
+                    <div class="empty-message">
+                        {{ listing.empty_table_msg }}
+                    </div>
+                {% endblock listing_empty %}
+            {% endif %}
+        {% endif %}
+        {% endwith %}
+    </div>
+{% endblock listing %}
