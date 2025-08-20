@@ -1,0 +1,146 @@
+Metadata-Version: 2.4
+Name: flexagg
+Version: 0.1.1
+Summary: Flexagg - A flexible aggregator CLI for dynamic script execution
+Author-email: Jimin <jimin@codetech.top>
+License: MIT
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Systems Administration
+Classifier: Topic :: Utilities
+Requires-Python: >=3.8
+Requires-Dist: cryptography>=42.0.0
+Requires-Dist: httpx>=0.28.0
+Requires-Dist: pydantic>=2.10.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: typer<0.16.0,>=0.15.0
+Description-Content-Type: text/markdown
+
+# Flexagg
+
+一个可扩展的聚合 CLI：扫描并自动发现分散在各处的 Typer 工具，将它们统一为一个 `fa` 命令下的子命令。
+
+## 安装
+
+```shell
+pip install flexagg
+```
+
+## 快速开始
+- 查看帮助：
+
+```shell
+fa --help
+```
+
+- 列出可用命令（支持自动补全；无子命令时显示帮助）：
+
+```shell
+fa commands
+```
+
+## 工作原理
+- Flexagg 会扫描已配置的目录与“flexagg 包”，自动发现其中的 Typer 实例。
+- 通过命令路径合并并注册到主命令 `fa` 下。
+- 如发现路径冲突，会给出错误与处理建议。
+
+## 配置扫描路径
+- 列出当前扫描路径：
+
+```shell
+fa config path ls
+```
+
+- 添加路径：
+
+```shell
+fa config path add /path/to/your/scripts
+```
+
+- 删除路径：
+
+```shell
+fa config path del /path/to/your/scripts
+```
+
+配置文件默认保存在 `~/.fa/config.yaml`。也可使用环境变量：
+- `FA_DIRS`: 逗号分隔的目录列表，用于扫描 Typer 实例
+- `FA_CONFIG_PATH`: 配置文件路径
+- `FA_SKIP_EXTERNAL_PATH=1`: 仅使用内置命令，忽略外部路径（便于冲突排查）
+
+## Secrets 子系统
+Flexagg 提供统一的机密管理，支持三种 provider：plaintext、gpg、crypto(AES-256-GCM)。
+
+- 设置机密：
+
+```shell
+fa secrets set group/key
+```
+
+- 切换为 GPG 并迁移所有明文机密文件（需要系统安装 `gpg`，并准备好接收者）：
+
+```shell
+fa config secrets set-gpg --recipient KEYID [--recipient KEYID ...]
+```
+
+- 切换为内置对称加密（AES-256-GCM）并迁移所有明文机密文件（安全输入口令，避免明文写入历史）：
+
+```shell
+stty -echo; printf 'Passphrase: '; IFS= read -r P; stty echo; printf '\n'
+if FA_PASS="$P" fa secrets verify; then
+  export FA_PASS="$P"
+  fa config secrets set-crypto
+else
+  unset FA_PASS
+  echo 'verification failed'
+fi
+unset P
+```
+
+- 仅验证对称口令（不在历史中留明文）：
+
+```shell
+stty -echo; printf 'Passphrase: '; IFS= read -r P; stty echo; printf '\n'
+FA_PASS="$P" fa secrets verify; unset P
+```
+
+机密文件默认位于 `~/.fa/secrets` 目录下：
+- 明文：`<group>.yaml`
+- GPG：`<group>.yaml.gpg`
+- Crypto：`<group>.yaml.enc`
+
+## Flexagg 包
+“flexagg 包”是包含 `flexagg.yaml` 的目录，用于显式声明要暴露的 Typer 实例。
+
+示例 `flexagg.yaml`：
+```yaml
+apps:
+  - main:app
+```
+
+其中 `main.py` 应定义一个名为 `app` 的 Typer 实例。
+
+## 冲突排查
+当多个来源的命令路径重叠时，Flexagg 会在注册阶段报错。可按提示裁剪路径：
+
+```shell
+FA_SKIP_EXTERNAL_PATH=1 fa config path ls
+FA_SKIP_EXTERNAL_PATH=1 fa config path del <path>
+```
+
+## 环境变量一览
+- `FA_DIRS`: 逗号分隔的扫描路径集合
+- `FA_CONFIG_PATH`: 指定配置文件路径
+- `FA_SKIP_EXTERNAL_PATH`: 为 `1` 时仅使用内置命令
+- `FA_PASS`: crypto provider 下用于加解密的对称口令
+
+## 许可
+MIT
