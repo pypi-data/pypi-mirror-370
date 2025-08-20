@@ -1,0 +1,38 @@
+name: <<TASK.RUN_TASK_NAME>>
+template: <<TASK.RUN_TEMPLATE_NAME>>
+<% if TASK.RUN_CONTINUE_ON %>
+continueOn:
+  failed: true # This task will continue even if any of the dependencies fail
+<% endif %>
+arguments:
+<% for DEP in TASK.RUN_LIST_DEPENDENCY %>
+  parameters:
+  <% if DEP.INDEX == 0 %>
+  - name: JOB_PARAMETERS
+    value: '<<TASK.RUN_INPUT_PARAMS>>'
+  - name: files-json
+    value: <<TASK.DOWNLOAD_FILES>>
+  - name: upload-base-path
+    value: <<TASK.UPLOAD_BASE_PATH>>
+  - name: upload-copy-paths
+    value: '<<TASK.UPLOAD_COPY_PATHS>>'
+  - name: upload-custom-path
+    value: '<<TASK.UPLOAD_CUSTOM_PATH  | default('', true)>>'
+  - name: zip-outputs
+    value: <<TASK.ZIP_OUTPUTS>>
+  <% for NODE_PARAM in TASK.RUN_NODAL_PARAMS %>
+  - name: <<NODE_PARAM.NAME>>
+    value: <<NODE_PARAM.VALUE>>
+  <% endfor %>
+  <% endif %>
+  - name: <<DEP.LOC_NAME>>
+    value: <<DEP.PAR_JOB.name>>
+  <% if not USE_PVC.enabled %>
+  artifacts:
+  - name: <<DEP.ART_NAME>>
+    from: '{{tasks.<<DEP.PAR_JOB_NAME>>.outputs.artifacts.output-files}}'
+  <% endif %>
+dependencies:
+<% if DEP.INDEX == 0 and TASK.DOWNLOAD_REQUIRED %>- <<TASK.DOWNLOAD_TASK_NAME>><% endif %>
+- <<DEP.PAR_JOB_NAME>>
+<% endfor %>

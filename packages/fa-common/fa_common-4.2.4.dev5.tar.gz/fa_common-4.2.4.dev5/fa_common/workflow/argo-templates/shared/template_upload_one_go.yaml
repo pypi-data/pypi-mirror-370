@@ -1,0 +1,130 @@
+name: <<TEMPLATE_NAME>>
+<% if RETRY > 0 %>
+retryStrategy:
+  retryPolicy: OnError
+  limit: <<RETRY>>
+<% endif %>
+container:
+  <% if HAS_SECRET %>
+  envFrom:
+    - secretRef:
+        name: <<SECRET_NAME>>
+  <% endif %>
+  args:
+  - |-
+    <% if not IS_ERR_TOLER %>
+    set -e;
+    <% endif %>
+
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.FIREBASE_STORAGE %>
+    echo "$<<SECRET_KEY>>" > /tmp/firebase.json
+    export GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase.json
+
+    function copy_logs {
+      <% if HAS_SECRET %>gcloud auth activate-service-account --key-file=$(GOOGLE_APPLICATION_CREDENTIALS);<% endif %>
+      gsutil -m cp -r /var/run/argo/ctr/main/combined <<JOBS[0].UPLOAD_BASE_PATH>>/{{workflow.name}}/{{pod.name}}/main.log;
+    };
+    trap copy_logs EXIT;
+
+    <% if HAS_SECRET %>gcloud auth activate-service-account --key-file=$(GOOGLE_APPLICATION_CREDENTIALS);<% endif %>
+
+    <% for JOB in JOBS %>
+    <% if JOB.uploads.is_custom_upload %>
+    targetPath=<<JOB.uploads.custom_path>>;
+    <% else %>
+    targetPath=<<JOB.uploads.default_path>>/{{workflow.name}}/{{inputs.parameters.pod-name-<<JOB.custom_id>>}};
+    <% endif %>
+
+    upload_copy_paths=(<% for p in JOB.uploads.copy_paths %>"<< p >>"<% if not loop.last %> <% endif %><% endfor %>);
+
+
+    outPath="/tmp/output-<<JOB.custom_id>>"
+
+    # Check if zip, zip outputs
+    if {{JOB.zip_outputs}}; then
+      cd $outPath;
+      zip -r /tmp/output.zip .;
+      cd -;
+    fi
+
+    if {{inputs.parameters.zip-outputs}}; then
+      gsutil -m cp /tmp/output.zip $targetPath/output.zip;
+    else
+      gsutil -m cp -r $outPath/** $targetPath;
+    fi
+
+    for p in $upload_copy_paths; do
+      gsutil -m cp -r  $targetPath/** $p;
+    done
+
+    <% if RUN_LOGGING %>gsutil -m cp -r /tmp/log-<<JOB.custom_id>>/main.log <<JOB.UPLOAD_BASE_PATH>>/{{workflow.name}}/{{inputs.parameters.pod-name-<<JOB.custom_id>>}}/main.log;<% endif %>
+    <% endfor %>
+    <% endif %>
+
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.MINIO %>
+    # Check if 's3' is not in the STORAGE_ENDPOINT_URL and set it if absent
+    if [[ ! "<<STORAGE_ENDPOINT_URL>>" == *"s3"* ]]; then
+      echo "Changing AWS_ENDPOINT_URL to: https://<<STORAGE_ENDPOINT_URL>> "
+      export AWS_ENDPOINT_URL="https://<<STORAGE_ENDPOINT_URL>>"
+    fi
+
+    function copy_logs {
+      aws s3 cp /var/run/argo/ctr/main/combined <<JOBS[0].UPLOAD_BASE_PATH>>/{{workflow.name}}/{{pod.name}}/main.log;
+    };
+    trap copy_logs EXIT;
+
+    <% for JOB in JOBS %>
+    <% if JOB.uploads.is_custom_upload %>
+    targetPath=<<JOB.uploads.custom_path>>;
+    <% else %>
+    targetPath=<<JOB.uploads.default_path>>/{{workflow.name}}/{{inputs.parameters.pod-name-<<JOB.custom_id>>}};
+    <% endif %>
+
+    upload_copy_paths=(<% for p in JOB.uploads.copy_paths %>"<< p >>"<% if not loop.last %> <% endif %><% endfor %>);
+
+    outPath="/tmp/output-<<JOB.custom_id>>"
+
+    # Check if zip, zip outputs
+    if {{JOB.zip_outputs}}; then
+      cd $outPath;
+      zip -r /tmp/output.zip .;
+      cd -;
+    fi
+
+    if {{inputs.parameters.zip-outputs}}; then
+      aws s3 cp /tmp/output.zip $targetPath/output.zip;
+    else
+      aws s3 cp $outPath/ $targetPath/ --recursive;
+    fi
+
+    aws s3 cp /tmp/output-<<JOB.custom_id>>/ $targetPath/ --recursive;
+
+    for path in $upload_copy_paths; do
+      aws s3 cp $targetPath/ $path --recursive;
+    done
+    <% if RUN_LOGGING %>aws s3 cp /tmp/log-<<JOB.custom_id>>/main.log <<JOB.UPLOAD_BASE_PATH>>/{{workflow.name}}/{{inputs.parameters.pod-name-<<JOB.custom_id>>}}/main.log;<% endif %>
+    <% endfor %>
+    <% endif %>
+    # <% if UPLOAD_LOGGING %>copy_logs;<% endif %>
+  command:
+  - /bin/bash
+  - -c
+  image: << CLOUD_BASE_IMAGE >>
+inputs:
+  artifacts:
+  <% for JOB in JOBS %>
+  - name: output-files-<<JOB.custom_id>>
+    path: /tmp/output-<<JOB.custom_id>>/
+    <% if RUN_LOGGING %>
+  - name: main-logs-<<JOB.custom_id>>
+    s3:
+      key: '{{workflow.name}}/{{inputs.parameters.pod-name-<<JOB.custom_id>>}}/main.log'
+    path: /tmp/log-<<JOB.custom_id>>/main.log
+    <% endif %>
+  <% endfor %>
+  parameters:
+  <% for JOB in JOBS %>
+  - name: pod-name-<<JOB.custom_id>>
+  <% endfor %>

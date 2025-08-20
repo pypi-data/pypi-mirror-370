@@ -1,0 +1,84 @@
+<% if USE_PVC.enabled %>
+name: <<TEMPLATE_NAME>>-<<JOB_ID>>
+<% else %>
+name: <<TEMPLATE_NAME>>
+<% endif %>
+<% if RETRY > 0 %>
+retryStrategy:
+  limit: <<RETRY>>
+<% endif %>
+container:
+  <% if HAS_SECRET %>
+  envFrom:
+    - secretRef:
+        name: <<SECRET_NAME>>
+  <% endif %>
+  <% if USE_PVC.enabled %>
+  volumeMounts:
+    - name: workspace-<<JOB_ID>>
+      mountPath: <<APP_INPUT_PATH.rstrip("/")>>
+      subPath: <<APP_INPUT_PATH.lstrip("/").rstrip("/")>>
+  <% endif %>
+  args:
+  - |-
+    <% if not IS_ERR_TOLER %>
+    set -e;
+    <% endif %>
+
+    <% if USE_PVC.enabled %>
+    base_local_path="<<APP_INPUT_PATH>>"
+    <% else %>
+    base_local_path="/tmp"
+    <% endif %>
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.FIREBASE_STORAGE %>
+    echo "$<<SECRET_KEY>>" > /tmp/firebase.json
+    export GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase.json
+
+    function copy_logs {
+      <% if HAS_SECRET %>gcloud auth activate-service-account --key-file=$(GOOGLE_APPLICATION_CREDENTIALS)<% endif %>
+      gsutil -m cp -r /var/run/argo/ctr/main/combined {{inputs.parameters.upload-base-path}}/{{workflow.name}}/{{pod.name}}/main.log
+    };
+    trap copy_logs EXIT;
+
+    <% if HAS_SECRET %>gcloud auth activate-service-account --key-file=$(GOOGLE_APPLICATION_CREDENTIALS);<% endif %>
+    FILES=($(echo '{{inputs.parameters.files-json}}' | jq -r '.[] | .public_url'))
+    for public_url in "${FILES[@]}"; do
+    file=$(basename $public_url)
+    gsutil cp $public_url $base_local_path/$file;
+    done
+    <% endif %>
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.MINIO %>
+    if [[ ! "<<STORAGE_ENDPOINT_URL>>" == *"s3"* ]]; then
+      echo "Changing AWS_ENDPOINT_URL to: https://<<STORAGE_ENDPOINT_URL>> "
+      export AWS_ENDPOINT_URL="https://<<STORAGE_ENDPOINT_URL>>"
+    fi
+
+    function copy_logs {
+      aws s3 cp /var/run/argo/ctr/main/combined {{inputs.parameters.upload-base-path}}/{{workflow.name}}/{{pod.name}}/main.log
+    };
+    trap copy_logs EXIT;
+
+    FILES=($(echo '{{inputs.parameters.files-json}}' | jq -r '.[] | .public_url'))
+    for public_url in "${FILES[@]}"; do
+    file=$(basename $public_url)
+    aws s3 cp $public_url $base_local_path/$file;
+    done
+    <% endif %>
+
+    # <% if DOWNLOAD_LOGGING %>copy_logs;<% endif %>
+  command:
+  - /bin/bash
+  - -c
+  image: << CLOUD_BASE_IMAGE >>
+inputs:
+  parameters:
+  - name: files-json
+  - name: upload-base-path
+<% if not USE_PVC.enabled %>
+outputs:
+  artifacts:
+  - name: downloaded-files
+    path: /tmp/
+<% endif %>
