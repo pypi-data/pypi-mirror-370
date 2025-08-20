@@ -1,0 +1,64 @@
+services:
+  weatherdb:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      - db
+    environment:
+      WEATHERDB_DB_HOST: db
+      WEATHERDB_DB_PORT: 5432
+      WEATHERDB_DB_DATABASE: weatherdb
+      WEATHERDB_DB_USER: postgres
+      WEATHERDB_DB_PASSWORD: /run/secrets/db_password
+      WEATHERDB_USER_CONFIG_FILE: /home/config_user.yaml
+      WEATHERDB_DATA_BASE_DIR: /home/data
+      WEATHERDB_HANDLE_NON_EXISTING_CONFIG: create
+      WEATHERDB_OPENTOPO_API_KEY: /run/secrets/opentopo_api_key
+      DOCKER_ENV: main
+    volumes:
+      - weatherdb_home:/home
+    command: ["sleep", "infinity"] # to keep awake
+    secrets:
+      - db_password
+      - opentopo_api_key
+    develop:
+      watch:
+        - action: rebuild
+          path: ../weatherdb
+          target: /src/weatherdb
+        - action: rebuild
+          path: ../MANIFEST.in
+          target: /src/MANIFEST.in
+        - action: rebuild
+          path: ../pyproject.toml
+          target: /src/pyproject.toml
+        - action: sync
+          path: ../tests
+          target: /src/tests
+
+  db:
+    image: timescale/timescaledb-ha:pg17 # about 1 minute faster for tests
+    # image: postgis/postgis:17-3.4
+    environment:
+      POSTGRES_DB: weatherdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    shm_size: '2g'
+    ports:
+      - 5454:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - db_password
+volumes:
+  postgres_data:
+  weatherdb_home:
+secrets:
+  db_password:
+    file: ./db_password.docker-secret
+  opentopo_api_key:
+    file: ./opentopo_api_key.docker-secret
+
+# start from parent folder with `docker compose -f docker\\docker-compose.yaml up --build`
+# To connect to the weatherdb service use `docker-compose exec weatherdb bash`
