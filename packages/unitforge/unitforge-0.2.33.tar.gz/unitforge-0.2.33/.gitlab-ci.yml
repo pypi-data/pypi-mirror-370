@@ -1,0 +1,39 @@
+image: "rust:latest"
+
+lint:
+  script:
+    - rustup component add clippy
+    - cargo clippy --no-deps -- -D warnings
+  allow_failure: true
+
+lint_serde:
+  script:
+    - rustup component add clippy
+    - cargo clippy -F serde --no-deps -- -D warnings
+  allow_failure: true
+
+lint_pyo3:
+  #RUSTFLAGS="-A clippy::useless_conversion" is a workaround for a PyO3 bug remove after switching to newer version
+  script:
+    - rustup component add clippy
+    - RUSTFLAGS="-A clippy::useless_conversion" cargo clippy -F pyo3 --no-deps -- -D warnings
+  allow_failure: true
+
+test:
+  script:
+    - rustc --version && cargo --version
+    - cargo test --workspace --verbose
+
+test_serde:
+  script:
+    - cargo test -F serde --workspace
+
+test_pyo3:
+  script:
+    - apt-get update && apt-get install -y python3 python3-venv python3.11-dev
+    - python3 -m venv .venv
+    - source .venv/bin/activate
+    - pip install --upgrade pip setuptools wheel maturin pytest numpy
+    - maturin develop --features pyo3
+    - pytest tests
+    - deactivate
