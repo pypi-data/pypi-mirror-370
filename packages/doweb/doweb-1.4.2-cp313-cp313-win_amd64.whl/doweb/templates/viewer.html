@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="description" content="EDA File Viewer">
+        <meta name="keywords" content="eda">
+        <title>DoWeb Layout Viewer</title>
+        <link rel="stylesheet"
+              href="{{ url_for('doweb_static', path='/bootstrap/bootstrap.min.css').__str__().replace("http://", http_scheme ) }}">
+    </link>
+    <link rel="stylesheet"
+          href="{{ url_for('doweb_static', path='/custom.css').__str__().replace("http://", http_scheme ) }}">
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <script type="text/javascript"
+            src="{{ url_for("doweb_static", path="/bootstrap/bootstrap.bundle.min.js").__str__().replace("http://", http_scheme ) }}"></script>
+</link>
+<link rel="icon"
+      type="image/png"
+      href="{{ url_for('doweb_static', path='img/doweb.png').__str__().replace("http://", http_scheme ) }}">
+</head>
+<body>
+    <div class="container-fluid h-100" id="viewer-panel">
+        <div class="row h-100 p-2" id="layout">
+            <div class="col rounded shadow d-flex flex-column position-relative h-100 ps-0 pe-1"
+                 id="layout-view">
+                <canvas class="rounded shadow canvas-container h-100 w-100"
+                        style="min-width: 100px;
+                               min-height: 100px"
+                        id="layout_canvas"></canvas>
+                <!-- Top Left Icon Toolbar -->
+                <div class="top-toolbar">
+                    <button class="tool-btn active"
+                            id="tool-select"
+                            onclick="selectTool('select')"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Select Tool">
+                        <span class="icon-fallback">
+                            <i class="bi bi-cursor"></i>
+                            <span class="fallback-text">⤴</span>
+                        </span>
+                    </button>
+                    <button class="tool-btn"
+                            id="tool-move"
+                            onclick="selectTool('move instances')"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Move Tool">
+                        <span class="icon-fallback">
+                            <i class="bi bi-arrows-move"></i>
+                            <span class="fallback-text">⇄</span>
+                        </span>
+                    </button>
+                    <button class="tool-btn"
+                            id="tool-ruler"
+                            onclick="selectTool('ruler')"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Ruler Tool">
+                        <span class="icon-fallback">
+                            <i class="bi bi-rulers"></i>
+                            <span class="fallback-text">📏</span>
+                        </span>
+                    </button>
+                    <button class="tool-btn"
+                            id="tool-clear-rulers"
+                            onclick="clearRulersFromToolbar()"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Clear All Rulers">
+                        <span class="icon-fallback">
+                            <i class="bi bi-eraser"></i>
+                            <span class="fallback-text">🧽</span>
+                        </span>
+                    </button>
+                    <button class="tool-btn"
+                            id="tool-fit"
+                            onclick="fitAllFromToolbar()"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Fit All">
+                        <span class="icon-fallback">
+                            <i class="bi bi-arrows-fullscreen"></i>
+                            <span class="fallback-text">⤢</span>
+                        </span>
+                    </button>
+                    <button class="tool-btn"
+                            id="reload"
+                            onclick="reloadFromToolbar()"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Reload View">
+                        <span class="icon-fallback">
+                            <i class="bi bi-arrow-repeat"></i>
+                            <span class="fallback-text">↻</span>
+                        </span>
+                    </button>
+                    <!-- Ports Tools Group -->
+                    <div class="tool-separator"></div>
+                    <!-- Ports Toggle Button -->
+                    <button class="tool-btn"
+                            id="port-toggle-btn"
+                            onclick="togglePorts()"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Toggle Port Visibility">
+                        <span class="icon-fallback">
+                            <i class="bi bi-diagram-3"></i>
+                            <span class="fallback-text">P</span>
+                        </span>
+                    </button>
+                    <!-- Show All Ports Button -->
+                    <button class="tool-btn"
+                            id="port-show-all-btn"
+                            onclick="showAllPorts()"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Show All Ports">
+                        <span class="icon-fallback">
+                            <i class="bi bi-diagram-3-fill"></i>
+                            <span class="fallback-text">P+</span>
+                        </span>
+                    </button>
+                    <!-- Layer Tools Group -->
+                    <div class="tool-separator"></div>
+                    <!-- Text Toggle Button -->
+                    <button class="tool-btn active"
+                            id="text-toggle-btn"
+                            onclick="toggleText()"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Toggle Text Visibility">
+                        <span class="icon-fallback">
+                            <i class="bi bi-fonts"></i>
+                            <span class="fallback-text">T</span>
+                        </span>
+                    </button>
+                    <!-- Dark Mode Button -->
+                    <button class="tool-btn"
+                            id="darkmode-btn"
+                            onclick="toggleDarkMode()"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Toggle Dark Scheme">
+                        <span class="icon-fallback">
+                            <i id="darkmode-icon" class="bi bi-moon-stars-fill"></i>
+                            <span class="fallback-text">S</span>
+                        </span>
+                    </button>
+                </div>
+                <!-- Coordinate Display - Bottom Right -->
+                <div class="position-absolute bottom-0 end-0 p-2" id="coord-display">
+                    <div class="coord-display">
+                        <span id="x-coord" class="coord-label">X: --</span>
+                        <span id="y-coord" class="coord-label">Y: --</span>
+                    </div>
+                </div>
+                <button id="side-bar-btn"
+                        class="position-absolute top-50 end-0 translate-middle-y btn btn-primary me-3">&gt;</button>
+            </div>
+            <div id="rightpanel"
+                 role="tablist"
+                 class="collapse show col-auto rounded shadow bg-default overflow-auto h-100 p-0 ps-1 toggled">
+                <ul class="nav nav-tabs" id="navigator" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active"
+                                id="layers-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#layers-tab-pane"
+                                type="button"
+                                role="tab"
+                                aria-controls="layers-tab-pane"
+                                aria-selected="true">Layers</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link"
+                                id="cells-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#cells-tab-pane"
+                                type="button"
+                                role="tab"
+                                aria-controls="cells-tab-pane"
+                                aria-selected="false">Cells</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link"
+                                id="metainfo-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#metainfo-tab-pane"
+                                type="button"
+                                role="tab"
+                                aria-controls="metainfo-tab-pane"
+                                aria-selected="false"
+                                hidden>Cell MetaInfo</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link"
+                                id="rdb-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#rdb-tab-pane"
+                                type="button"
+                                role="tab"
+                                aria-controls="rdb-tab-pane"
+                                aria-selected="false"
+                                hidden>RDB</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="rightpanel-content">
+                    <div class="tab-pane fade show active"
+                         id="layers-tab-pane"
+                         role="tabpanel"
+                         aria-labelledby="layers-tab"
+                         tabindex="0">
+                        <div id="layer-buttons">
+                            <div class="form-check form-switch ps-2 text-nowrap">
+                                <input class="form-check-input ms-0 ps-0"
+                                       type="checkbox"
+                                       role="switch"
+                                       id="layerEmptySwitch"
+                                       checked>
+                                <label class="form-check-label ps-2" for="layerEmptySwitch">Hide Empty Layers</label>
+                            </div>
+                            <div class="form-check form-switch ps-2 text-nowrap">
+                                <input class="form-check-input ms-0 ps-0"
+                                       type="checkbox"
+                                       role="switch"
+                                       id="layerNumberSwitch"
+                                       checked>
+                                <label class="form-check-label ps-2" for="layerNumberSwitch">Show Layer Numbers</label>
+                            </div>
+                            <div class="d-flex gap-2 mb-2 ps-2 my-0">
+                                <button type="button"
+                                        class="btn btn-primary btn-sm py-0 px-1"
+                                        onclick="showAllLayers()">Show All</button>
+                                <button type="button"
+                                        class="btn btn-primary btn-sm py-0 px-1"
+                                        onclick="hideAllLayers()">Hide All</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade"
+                         id="cells-tab-pane"
+                         role="tabpanel"
+                         aria-labelledby="cells-tab"
+                         tabindex="0"></div>
+                    <div class="tab-pane fade"
+                         id="metainfo-tab-pane"
+                         role="tabpanel"
+                         aria-labelledby="metainfo-tab"
+                         tabindex="0"></div>
+                    <div class="tab-pane fade"
+                         id="rdb-tab-pane"
+                         role="tabpanel"
+                         aria-labelledby="rdb-tab"
+                         tabindex="0">
+                        <div class="position-relative">
+                            <div class="form-floating my-1">
+                                <input type="text"
+                                       class="form-control z-0"
+                                       id="rdbCategory"
+                                       oninput="filterCategories(this);"
+                                       onfocus="categoryFocus(event);"
+                                       onfocusout="categoryFocusOut(event);"
+                                       placeholder="...">
+                                <label class="z-0" for="floatingInput">Filter by Category</label>
+                            </div>
+                            <select class="form-select position-absolute bottom-end-0 z-2 bg-light-subtle"
+                                    onchange="selectCategory(event)"
+                                    size="5"
+                                    id="rdbCategoryOptions"
+                                    onfocusout="categoryFocusOut(event);"
+                                    hidden></select>
+                        </div>
+                        <div class="position-relative">
+                            <div class="form-floating my-1">
+                                <input type="text"
+                                       class="form-control z-0"
+                                       id="rdbCell"
+                                       oninput="filterCells(this);"
+                                       onfocus="cellFocus(event);"
+                                       onfocusout="cellFocusOut(event);"
+                                       placeholder="...">
+                                <label class="z-0" for="floatingPassword">Filter by Cell</label>
+                            </div>
+                            <select class="form-select position-absolute bottom-end-0 z-2 bg-light-subtle"
+                                    onchange="selectCell(event);"
+                                    size="5"
+                                    id="rdbCellOptions"
+                                    onfocusout="cellFocusOut(event);"
+                                    hidden></select>
+                        </div>
+                        <select class="form-select my-1"
+                                onchange="requestItemDrawings();"
+                                multiple
+                                id="rdbItems"></select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Layer Context Menu -->
+    <div id="layerContextMenu" class="layer-context-menu">
+        <div class="menu-item primary"
+             onclick="showAllLayers(); hideLayerContextMenu();">Show All Layers</div>
+        <div class="menu-item secondary"
+             onclick="hideAllLayers(); hideLayerContextMenu();">Hide All Layers</div>
+        <div class="menu-item"
+             onclick="showOnlySelectedLayer(); hideLayerContextMenu();">Show Only Selected</div>
+    </div>
+    <script>var ws_url="{{ url }}"; var params = new URLSearchParams({{ params | tojson | safe }})</script>
+    <script type="text/javascript"
+            src="{{ url_for("doweb_static", path="viewer.js").__str__().replace("http://", http_scheme ) }}"></script>
+</body>
+</html>
