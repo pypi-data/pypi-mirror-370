@@ -1,0 +1,105 @@
+# **Feature Engineering Suite**
+
+This is a comprehensive and flexible Python library for performing common feature engineering tasks, designed to be easily integrated into Scikit-learn pipelines.
+
+## **Installation**
+
+First, ensure you have the necessary files (setup.py and the feature_engineering_suite directory) structured correctly.
+
+Navigate to the root directory (the one containing setup.py) in your terminal and run this command to create a source distribution:
+
+python setup.py sdist
+
+This will create a dist directory containing a file like feature_engineering_suite-0.1.0.tar.gz. You can now install your package using pip:
+
+pip install dist/feature_engineering_suite-0.1.0.tar.gz
+
+## **How to Use**
+
+The library is designed to be intuitive and flexible. Here's a complete example.
+
+### **1. Sample Data**
+Let's start with a sample dataset.
+```python
+import pandas as pd  
+import numpy as np
+
+# Create a sample DataFrame for a classification problem  
+data = {  
+    'age': [25, 30, 35, 40, 45, 50, 55, 60, 65, 70],  
+    'salary': [50000, 60000, 75000, 90000, 110000, 135000, 160000, 180000, 210000, 240000],  
+    'years_experience': [2, 5, 8, 12, 15, 18, 22, 25, 28, 30],  
+    'department': ['HR', 'IT', 'Sales', 'IT', 'Sales', 'HR', 'IT', 'Sales', 'HR', 'IT'],  
+    'education': ['Bachelor', 'Master', 'Bachelor', 'PhD', 'Master', 'Bachelor', 'PhD', 'Master', 'Bachelor', 'PhD'],  
+    'purchased_premium': [0, 0, 1, 0, 1, 1, 1, 0, 1, 1]  
+}  
+df = pd.DataFrame(data)  
+df['salary_correlated'] = df['salary'] * 1.1 + np.random.normal(0, 5000, df.shape[0])
+
+X = df.drop('purchased_premium', axis=1)  
+y = df['purchased_premium']
+```
+
+### **2. Feature Selection**
+
+First, let's identify the most important and least redundant features.
+```python
+from feature_engineering_suite import FeatureSelector
+
+# Get feature importance scores  
+importance = FeatureSelector.get_feature_importance(X.select_dtypes(include=np.number), y, task='classification')  
+print("--- Feature Importance ---")  
+print(importance)
+
+# Find and remove highly correlated features  
+corr_selector = FeatureSelector(correlation_threshold=0.9)  
+corr_selector.fit(X.select_dtypes(include=np.number))  
+print(f"\n--- Features to Drop (Correlation > 0.9) ---n{corr_selector.features_to_drop_}")  
+X_uncorrelated = corr_selector.transform(X)  
+print(f"nShape of X before dropping correlated features: {X.shape}")  
+print(f"Shape of X after dropping correlated features: {X_uncorrelated.shape}")
+```
+### **3. Transformation and Standardization**
+
+Now, let's apply transformations to the numerical features.
+```python
+from feature_engineering_suite import Standardizer, LogTransformer
+
+# Apply standard scaling to 'age' and 'years_experience'  
+standardizer = Standardizer(columns=['age', 'years_experience'])  
+X_scaled = standardizer.fit_transform(X_uncorrelated)
+
+# Apply log transformation to the 'salary' column  
+log_transformer = LogTransformer(columns=['salary'])  
+X_final_numeric = log_transformer.fit_transform(X_scaled)
+
+print("\n--- Data After Transformations ---")  
+print(X_final_numeric.head())
+```
+
+### **4. Categorical Encoding**
+
+Finally, let's encode the categorical features.
+```python
+from feature_engineering_suite import Encoder
+
+# Define an ordinal mapping for the 'education' column  
+education_map = {'Bachelor': 1, 'Master': 2, 'PhD': 3}
+
+# Use the Encoder for both one-hot and ordinal encoding  
+# We will one-hot encode 'department' and ordinally encode 'education'
+
+# One-hot encode department  
+onehot_encoder = Encoder(method='onehot', columns=['department'])  
+X_encoded = onehot_encoder.fit_transform(X_final_numeric)
+
+# Ordinal encode education  
+ordinal_encoder = Encoder(method='ordinal', columns=['education'], mapping={'education': education_map})  
+X_fully_processed = ordinal_encoder.fit_transform(X_encoded)
+
+print("\n--- Fully Processed DataFrame ---")  
+print(X_fully_processed.head())  
+print(f"\nFinal shape of processed data: {X_fully_processed.shape}")
+```
+
+This library provides the building blocks you need to create powerful and reproducible feature engineering pipelines for any dataset.
