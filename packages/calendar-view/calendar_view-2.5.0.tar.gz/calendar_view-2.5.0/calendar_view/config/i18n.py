@@ -1,0 +1,101 @@
+default_lang: str = 'en'
+
+day_of_week_i18n = {
+    'en': [
+        'Mo',
+        'Tu',
+        'We',
+        'Th',
+        'Fr',
+        'Sa',
+        'Su'
+    ],
+    'ua': [
+        'Пн',
+        'Вт',
+        'Ср',
+        'Чт',
+        'Пт',
+        'Сб',
+        'Нд'
+    ],
+    'es': [
+        'Lu',
+        'Ma',
+        'Mi',
+        'Ju',
+        'Vi',
+        'Sa',
+        'Do'
+    ],
+    'de': [
+        'Mo',
+        'Di',
+        'Mi',
+        'Do',
+        'Fr',
+        'Sa',
+        'So'
+    ],
+    'ru': [
+        'Пн',
+        'Вт',
+        'Ср',
+        'Чт',
+        'Пт',
+        'Сб',
+        'Вс'
+    ],
+    'pt': [
+        'Seg',
+        'Ter',
+        'Qua',
+        'Qui',
+        'Sex',
+        'Sab',
+        'Dom'
+    ],
+    'fr': [
+        'Lun',
+        'Mar',
+        'Mer',
+        'Jeu',
+        'Ven',
+        'Sam',
+        'Dim'
+    ],
+    'nl': [
+        'Ma',
+        'Di',
+        'Wo',
+        'Do',
+        'Vr',
+        'Za',
+        'Zo'
+    ],
+}
+
+
+def supported_languages() -> list[str]:
+    return list(day_of_week_i18n.keys())
+
+
+def days_of_week(lang: str = default_lang):
+    """
+    Returns the localisation for the names of all days of the week.
+    """
+    if lang not in day_of_week_i18n.keys():
+        raise ValueError('Not defined for language ' + lang)
+    return day_of_week_i18n[lang]
+
+
+def day_of_week(day_of_week: int, lang: str = default_lang):
+    """
+    Returns the localisation for the name of particular day of week.
+    :param day_of_week: 0 - Monday, 1 - Tuesday, ..., 6 - Sunday
+    """
+    if lang not in day_of_week_i18n.keys():
+        raise ValueError('Not defined for language ' + lang)
+    if not (0 <= day_of_week <= 6):
+        raise ValueError('Day of week has to be in range [0, 6]. Currect value: ' + str(day_of_week))
+    return day_of_week_i18n[lang][day_of_week]
