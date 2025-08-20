@@ -1,0 +1,125 @@
+Metadata-Version: 2.4
+Name: virt-wrapper
+Version: 0.6.1
+Summary: Wrapper that was developed in order to manage libvirt virtual machines
+Author-email: Dmitry Fateev <dimkaaaa1@gmail.com>
+Project-URL: Homepage, https://gitlab.com/Palit_Invalid/virt-wrapper
+Project-URL: Issues, https://gitlab.com/Palit_Invalid/virt-wrapper/-/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: libvirt-python<11.0.0,>=10.0.0
+Requires-Dist: pywinrm<0.6.0,>=0.5.0
+Requires-Dist: jinja2<4.0.0,>=3.0.0
+
+# Description
+
+Python wrapper for managing virtual infrastructure based on Hyper-V or KVM (libvirt)
+
+# Example usage
+## Get access to particular VM by UUID
+```python
+from virt_wrapper import *
+
+kvm = VirtualMachine(
+    host="linux-server.lan",
+    id="c7c2f567-064f-464e-9843-1ed55c04f35e",
+    type=HypervisorType.KVM,
+    auth=("user", "123456")
+)
+
+hvm = VirtualMachine(
+    host="windows-server.lan",
+    id="37a6cee8-f6ce-48c4-a635-7145e8770cca",
+    type=HypervisorType.HYPERV,
+    auth=("user", "123456")
+)
+
+print(f"Virtual machine on Linux has name: {kvm.name()}\nVirtual machine on Windows has name: {hvm.name()}")
+
+```
+
+## Get all VMs on particular hypervisor
+```python
+from virt_wrapper import *
+
+hypervisor = Hypervisor(
+    host="windows-server.lan",
+    type=HypervisorType.HYPERV,
+    auth=("user", "123456")
+)
+
+# OR
+
+hypervisor = Hypervisor(
+    host="linux-server.lan",
+    type=HypervisorType.KVM,
+    auth=("user", "123456")
+)
+
+for vm in hypervisor.virtual_machines():
+    print(vm.name())
+```
+
+
+# Requirements
+## KVM
+
+- SSH-key must be imported on target server
+- User must have full access to libvirt
+```sh
+usermod <your_user> -aG libvirt
+systemctl restart libvirtd
+```
+
+## Hyper-V
+- User must have full access to Hyper-V
+- WinRM must be enabled with this parameters
+    - HTTPS
+    - Basic auth
+
+```powershell
+# Enables the WinRM service and sets up the HTTP listener
+Enable-PSRemoting -Force
+
+# Create HTTPS listener
+$httpsParams = @{
+    ResourceURI = 'winrm/config/listener'
+    SelectorSet = @{
+        Transport = "HTTPS"
+        Address   = "*"
+    }
+    ValueSet = @{
+        CertificateThumbprint = ""
+        Enabled               = $true
+    }
+}
+New-WSManInstance @httpsParams
+
+# Enable basic auth
+Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $true
+
+# Opens port 5986 for all profiles
+$firewallParams = @{
+    Action      = 'Allow'
+    Description = 'Inbound rule for Windows Remote Management via WS-Management. [TCP 5986]'
+    Direction   = 'Inbound'
+    DisplayName = 'Windows Remote Management (HTTPS-In)'
+    LocalPort   = 5986
+    Profile     = 'Any'
+    Protocol    = 'TCP'
+}
+New-NetFirewallRule @firewallParams
+```
+
+# Available functions:
+- [x] Managing snapshots
+- [x] Managing virtual disks
+- [x] Managing networks
+- [x] Getting info about VM (state, description, guest OS, etc.)
+- [x] Controling VM (run, shutdown, pause, etc)
+- [x] Export/Import virtual machines
+- [ ] Migrating
+- [ ] Cloning
