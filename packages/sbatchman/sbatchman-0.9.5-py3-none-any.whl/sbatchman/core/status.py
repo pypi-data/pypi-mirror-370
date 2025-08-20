@@ -1,0 +1,22 @@
+from enum import Enum
+
+class Status(Enum):
+  SUBMITTING = "SUBMITTING"
+  FAILED_SUBMISSION = "FAILED_SUBMISSION"
+  QUEUED = "QUEUED"
+  RUNNING = "RUNNING"
+  COMPLETED = "COMPLETED"
+  FAILED = "FAILED"
+  CANCELLED = "CANCELLED"
+  TIMEOUT = "TIMEOUT"
+  OTHER = "OTHER"
+  UNKNOWN = "UNKNOWN"
+
+TERMINAL_STATES = {
+  Status.COMPLETED.value,
+  Status.FAILED.value,
+  Status.CANCELLED.value,
+  Status.TIMEOUT.value,
+  Status.FAILED_SUBMISSION.value
+  # Status.UNKNOWN.value,
+}
