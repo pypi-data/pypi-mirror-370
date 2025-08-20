@@ -1,0 +1,64 @@
+{# Set defaults for variables #}
+
+
+{# Front-end app naming #}
+
+
+{# Front-end menu, as columns with href, id, caption, and (fa fa-)icon #}
+
+{% set navigation_bar = [] %}
+
+{% set nav_bar_specs = {
+    "dashboard": dict(title="Dashboard", icon="dashboard"),
+    "upload": dict(title="Upload data", icon="cloud-upload"),
+    "control": dict(title="Flexibility actions", icon="wrench")
+}
+%}
+    
+{% set FLEXMEASURES_PLATFORM_NAME = FLEXMEASURES_PLATFORM_NAME | find_first_applicable_config_entry("FLEXMEASURES_PLATFORM_NAME") %}
+
+{% for view_name in FLEXMEASURES_MENU_LISTED_VIEWS %}
+    {% set view_name = view_name | parse_config_entry_by_account_roles("FLEXMEASURES_MENU_LISTED_VIEWS") %}
+    {% if view_name %}
+        {# add specs for views we don't know (plugin views) #}
+        {% do nav_bar_specs.update({view_name: dict(title=view_name.capitalize(), tooltip="", icon= "info")}) if view_name not in nav_bar_specs %}
+        {# update specs for view titles by configuration #}
+        {% do nav_bar_specs[view_name].update(dict(title=FLEXMEASURES_MENU_LISTED_VIEW_TITLES[view_name])) if view_name in FLEXMEASURES_MENU_LISTED_VIEW_TITLES %}
+        {# update specs for view icons by configuration #}
+        {% do nav_bar_specs[view_name].update(dict(icon=FLEXMEASURES_MENU_LISTED_VIEW_ICONS[view_name])) if view_name in FLEXMEASURES_MENU_LISTED_VIEW_ICONS %}
+        {# add view to menu if user is authenticated #}
+        {% do navigation_bar.append(
+            (view_name, view_name, nav_bar_specs[view_name]["title"], nav_bar_specs[view_name]["tooltip"], nav_bar_specs[view_name]["icon"])
+        ) if current_user.is_authenticated %}
+    {% endif %}
+{% endfor %}
+
+
+
+
+{% if current_user.is_authenticated %}
+    {% set has_admin_reader_rights = True if (current_user.has_role(ADMIN_ROLE) or current_user.has_role(ADMIN_READER_ROLE) or FLEXMEASURES_MODE == "demo") %}
+    {% set is_consultant = True if current_user.has_role(CONSULTANT_ROLE) %}
+    {% if has_admin_reader_rights %}
+        {% do navigation_bar.append(('assets', 'assets', 'Assets', '', 'list-ul'))  %}
+        {% do navigation_bar.append(('users', 'users', 'Users', '', 'users')) %}
+        {% do navigation_bar.append(('tasks', 'tasks', 'Tasks', '', 'tasks')) %}
+    {% endif %}
+
+    {% if is_consultant or has_admin_reader_rights %}
+        {% do navigation_bar.append(('accounts', 'accounts', 'Accounts', '', 'cubes')) %}
+    {% else %}
+        {% do navigation_bar.append(("accounts/{}".format(current_user.account.id), 'accounts', 'My Account', '', 'cubes')) %}
+    {% endif %}
+
+    {% do navigation_bar.append(('logged-in-user', 'logged-in-user', '', user_name, 'user')) %}
+{% endif %}
+
+{% do navigation_bar.append(('ui/static/documentation/html/index.html', 'docs', '', 'Documentation (new window)', 'question')) if documentation_exists and current_user.is_authenticated %}
+
+{% set active_page = active_page|default('dashboard') -%}
+
+
+{# Front-end app contents, always include this #}
+
+{% block base %} All your base are belong to us. {% endblock base %}
