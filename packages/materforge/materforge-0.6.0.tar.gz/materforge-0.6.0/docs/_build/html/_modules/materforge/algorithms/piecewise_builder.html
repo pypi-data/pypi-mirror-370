@@ -1,0 +1,385 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.algorithms.piecewise_builder &mdash; materforge 0.5.8.dev7+g4109a05.d20250814 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=eccf598c"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.algorithms.piecewise_builder</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.algorithms.piecewise_builder</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.algorithms.interpolation</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_ascending_order</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.algorithms.regression_processor</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegressionProcessor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessingConstants</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.yaml_keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">CONSTANT_KEY</span><span class="p">,</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">,</span> <span class="n">BOUNDS_KEY</span><span class="p">,</span> <span class="n">PRE_KEY</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.utils.utilities</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_sympy_compatible</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="PiecewiseBuilder">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PiecewiseBuilder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PiecewiseBuilder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Centralized piecewise function creation with different strategies.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="PiecewiseBuilder.build_from_data">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PiecewiseBuilder.build_from_data">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_from_data</span><span class="p">(</span><span class="n">temp_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                        <span class="n">T</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Main entry point for data-based piecewise creation.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            temp_array: Temperature data points</span>
+<span class="sd">            prop_array: Property values corresponding to temperatures</span>
+<span class="sd">            T: Temperature symbol for the piecewise function</span>
+<span class="sd">            config: Configuration dictionary containing bounds and regression settings</span>
+<span class="sd">            prop_name: Name of the property (for logging and error messages)</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            sp.Piecewise: Symbolic piecewise function</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Building piecewise function for property: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Input data - temperature points: </span><span class="si">%d</span><span class="s2">, property points: </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                     <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="k">if</span> <span class="n">temp_array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span><span class="p">,</span>
+                     <span class="nb">len</span><span class="p">(</span><span class="n">prop_array</span><span class="p">)</span> <span class="k">if</span> <span class="n">prop_array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="c1"># Validate input arrays</span>
+        <span class="k">if</span> <span class="n">temp_array</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">prop_array</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Null arrays provided for property &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature and property arrays cannot be None for &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">prop_array</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Array length mismatch for &#39;</span><span class="si">%s</span><span class="s2">&#39;: temp=</span><span class="si">%d</span><span class="s2">, prop=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                         <span class="n">prop_name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">prop_array</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature and property arrays must have same length for &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Empty arrays provided for property &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Empty data arrays provided for &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Ensure ascending order (handles both ascending and descending input)</span>
+            <span class="n">original_order</span> <span class="o">=</span> <span class="s2">&quot;ascending&quot;</span> <span class="k">if</span> <span class="n">temp_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot;descending&quot;</span>
+            <span class="n">temp_array</span><span class="p">,</span> <span class="n">prop_array</span> <span class="o">=</span> <span class="n">ensure_ascending_order</span><span class="p">(</span><span class="n">temp_array</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Data order for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2"> (reordered if needed)&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">original_order</span><span class="p">)</span>
+            <span class="c1"># Extract configuration</span>
+            <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="n">BOUNDS_KEY</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Boundary types for &#39;</span><span class="si">%s</span><span class="s2">&#39;: lower=</span><span class="si">%s</span><span class="s2">, upper=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                         <span class="n">prop_name</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">)</span>
+            <span class="n">T_standard</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">(</span><span class="s1">&#39;T&#39;</span><span class="p">)</span>
+            <span class="c1"># Check for regression configuration</span>
+            <span class="n">has_regression</span><span class="p">,</span> <span class="n">simplify_type</span><span class="p">,</span> <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">process_regression_params</span><span class="p">(</span>
+                <span class="n">config</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">has_regression</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Regression enabled for &#39;</span><span class="si">%s</span><span class="s2">&#39;: type=</span><span class="si">%s</span><span class="s2">, degree=</span><span class="si">%d</span><span class="s2">, segments=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                            <span class="n">prop_name</span><span class="p">,</span> <span class="n">simplify_type</span><span class="p">,</span> <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No regression configured for property &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="c1"># Create piecewise function based on regression settings</span>
+            <span class="k">if</span> <span class="n">has_regression</span> <span class="ow">and</span> <span class="n">simplify_type</span> <span class="o">==</span> <span class="n">PRE_KEY</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Building piecewise with pre-regression for &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+                <span class="n">pw_result</span> <span class="o">=</span> <span class="n">PiecewiseBuilder</span><span class="o">.</span><span class="n">_build_with_regression</span><span class="p">(</span>
+                    <span class="n">temp_array</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">,</span> <span class="n">T_standard</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">,</span>
+                    <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Building piecewise without regression for &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+                <span class="n">pw_result</span> <span class="o">=</span> <span class="n">PiecewiseBuilder</span><span class="o">.</span><span class="n">_build_without_regression</span><span class="p">(</span>
+                    <span class="n">temp_array</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">,</span> <span class="n">T_standard</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">)</span>
+            <span class="c1"># Handle symbol substitution if needed</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">str</span><span class="p">(</span><span class="n">T</span><span class="p">)</span> <span class="o">!=</span> <span class="s1">&#39;T&#39;</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Substituting symbol T -&gt; </span><span class="si">%s</span><span class="s2"> for property &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+                <span class="n">pw_result</span> <span class="o">=</span> <span class="n">pw_result</span><span class="o">.</span><span class="n">subs</span><span class="p">(</span><span class="n">T_standard</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully built piecewise function for property: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pw_result</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to build piecewise from data for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed building piecewise from data for &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+<div class="viewcode-block" id="PiecewiseBuilder.build_from_formulas">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PiecewiseBuilder.build_from_formulas">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_from_formulas</span><span class="p">(</span><span class="n">temp_points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">equations</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]],</span>
+                            <span class="n">T</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CONSTANT_KEY</span><span class="p">,</span>
+                            <span class="n">upper_bound_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CONSTANT_KEY</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create piecewise from symbolic equations.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            temp_points: Temperature breakpoints</span>
+<span class="sd">            equations: List of symbolic expressions (strings or SymPy expressions)</span>
+<span class="sd">            T: Temperature symbol</span>
+<span class="sd">            lower_bound_type: Boundary behavior below first breakpoint</span>
+<span class="sd">            upper_bound_type: Boundary behavior above last breakpoint</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            sp.Piecewise: Symbolic piecewise function</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Building piecewise function from </span><span class="si">%d</span><span class="s2"> formulas and </span><span class="si">%d</span><span class="s2"> breakpoints&quot;</span><span class="p">,</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="n">equations</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_points</span><span class="p">))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Temperature breakpoints: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">temp_points</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_points</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">10</span>
+                     <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">temp_points</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">, ..., </span><span class="si">{</span><span class="n">temp_points</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Boundary types: lower=</span><span class="si">%s</span><span class="s2">, upper=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">equations</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_points</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Equation count mismatch: </span><span class="si">%d</span><span class="s2"> equations for </span><span class="si">%d</span><span class="s2"> breakpoints&quot;</span><span class="p">,</span>
+                         <span class="nb">len</span><span class="p">(</span><span class="n">equations</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_points</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of equations (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">equations</span><span class="p">)</span><span class="si">}</span><span class="s2">) must be one less than temperature/break points &quot;</span>
+                             <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">temp_points</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_points</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Insufficient breakpoints: </span><span class="si">%d</span><span class="s2"> (minimum 2 required)&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_points</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;At least 2 temperature points required for piecewise equations&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">temp_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">temp_points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+            <span class="c1"># Parse equations into SymPy expressions using the provided symbol T</span>
+            <span class="n">parsed_equations</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">eqn_str</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">equations</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Parsing equation </span><span class="si">%d</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">eqn_str</span><span class="p">)</span>
+                    <span class="n">expr</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">sympify</span><span class="p">(</span><span class="n">eqn_str</span><span class="p">)</span>
+                    <span class="c1"># Validate that only T symbol is used</span>
+                    <span class="n">free_symbols</span> <span class="o">=</span> <span class="n">expr</span><span class="o">.</span><span class="n">free_symbols</span>
+                    <span class="n">invalid_symbols</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">sym</span><span class="p">)</span> <span class="k">for</span> <span class="n">sym</span> <span class="ow">in</span> <span class="n">free_symbols</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">sym</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">str</span><span class="p">(</span><span class="n">T</span><span class="p">)]</span>
+                    <span class="k">if</span> <span class="n">invalid_symbols</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid symbols in equation </span><span class="si">%d</span><span class="s2"> &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2"> (only &#39;</span><span class="si">%s</span><span class="s2">&#39; allowed)&quot;</span><span class="p">,</span>
+                                     <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">eqn_str</span><span class="p">,</span> <span class="n">invalid_symbols</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Invalid symbols </span><span class="si">{</span><span class="n">invalid_symbols</span><span class="si">}</span><span class="s2"> in equation &#39;</span><span class="si">{</span><span class="n">eqn_str</span><span class="si">}</span><span class="s2">&#39;. Only &#39;</span><span class="si">{</span><span class="n">T</span><span class="si">}</span><span class="s2">&#39; is allowed.&quot;</span><span class="p">)</span>
+                    <span class="n">parsed_equations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Successfully parsed equation </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to parse equation </span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">: &#39;</span><span class="si">{</span><span class="n">eqn_str</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Special case: single expression with extrapolation at both ends</span>
+            <span class="k">if</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">parsed_equations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span>
+                    <span class="n">lower_bound_type</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span> <span class="ow">and</span>
+                    <span class="n">upper_bound_type</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s2">&quot;Using a single expression with extrapolation at both ends. &quot;</span>
+                    <span class="s2">&quot;Consider simplifying your YAML definition to use a direct equation.&quot;</span>
+                <span class="p">)</span>
+                <span class="c1"># Return as Piecewise for consistency</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">((</span><span class="n">parsed_equations</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">T</span> <span class="o">&gt;=</span> <span class="o">-</span><span class="n">sp</span><span class="o">.</span><span class="n">oo</span><span class="p">))</span>  <span class="c1"># Always true, but explicit</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Created single-expression piecewise with universal extrapolation&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">result</span>
+            <span class="c1"># Build piecewise conditions for multiple equations or different boundary types</span>
+            <span class="n">conditions</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Building piecewise conditions for </span><span class="si">%d</span><span class="s2"> segments&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">parsed_equations</span><span class="p">))</span>
+            <span class="c1"># Handle lower bound</span>
+            <span class="k">if</span> <span class="n">lower_bound_type</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+                <span class="n">const_value</span> <span class="o">=</span> <span class="n">parsed_equations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">subs</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">temp_points</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">const_value</span><span class="p">,</span> <span class="n">T</span> <span class="o">&lt;</span> <span class="n">temp_points</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added lower constant boundary: value=</span><span class="si">%.3f</span><span class="s2"> at T&lt;</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span>
+                             <span class="nb">float</span><span class="p">(</span><span class="n">const_value</span><span class="p">),</span> <span class="n">temp_points</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="c1"># Handle intervals (including special cases for first and last)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">expr</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">parsed_equations</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">lower_bound_type</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">:</span>
+                    <span class="c1"># First segment with extrapolation</span>
+                    <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">expr</span><span class="p">,</span> <span class="n">T</span> <span class="o">&lt;</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]))</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added first segment with extrapolation: T&lt;</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+                <span class="k">elif</span> <span class="n">i</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">parsed_equations</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">upper_bound_type</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">:</span>
+                    <span class="c1"># Last segment with extrapolation</span>
+                    <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">expr</span><span class="p">,</span> <span class="n">T</span> <span class="o">&gt;=</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added last segment with extrapolation: T&gt;=</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>  <span class="c1"># Regular interval</span>
+                    <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">expr</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">And</span><span class="p">(</span><span class="n">T</span> <span class="o">&gt;=</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">T</span> <span class="o">&lt;</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])))</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added regular interval: </span><span class="si">%.1f</span><span class="s2">&lt;=T&lt;</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">temp_points</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="c1"># Handle upper bound</span>
+            <span class="k">if</span> <span class="n">upper_bound_type</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+                <span class="n">const_value</span> <span class="o">=</span> <span class="n">parsed_equations</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">subs</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">temp_points</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">const_value</span><span class="p">,</span> <span class="n">T</span> <span class="o">&gt;=</span> <span class="n">temp_points</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added upper constant boundary: value=</span><span class="si">%.3f</span><span class="s2"> at T&gt;=</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span>
+                             <span class="nb">float</span><span class="p">(</span><span class="n">const_value</span><span class="p">),</span> <span class="n">temp_points</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">(</span><span class="o">*</span><span class="n">conditions</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully built piecewise function from formulas with </span><span class="si">%d</span><span class="s2"> conditions&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">conditions</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to build piecewise from formulas: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed building piecewise from formulas: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_without_regression</span><span class="p">(</span><span class="n">temp_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                                  <span class="n">T</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">,</span> <span class="n">lower</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">upper</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create basic linear interpolation piecewise function.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            temp_array: Temperature data points (must be sorted)</span>
+<span class="sd">            prop_array: Property values</span>
+<span class="sd">            T: Temperature symbol</span>
+<span class="sd">            lower: Lower boundary behavior (&#39;constant&#39; or &#39;extrapolate&#39;)</span>
+<span class="sd">            upper: Upper boundary behavior (&#39;constant&#39; or &#39;extrapolate&#39;)</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            sp.Piecewise: Linear interpolation piecewise function</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Building linear interpolation piecewise: </span><span class="si">%d</span><span class="s2"> data points, bounds=(</span><span class="si">%s</span><span class="s2">,</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
+                     <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">),</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="p">)</span>
+        <span class="c1"># Convert arrays to Python floats to ensure SymPy compatibility</span>
+        <span class="n">temp_array</span> <span class="o">=</span> <span class="p">[</span><span class="n">ensure_sympy_compatible</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">temp_array</span><span class="p">]</span>
+        <span class="n">prop_array</span> <span class="o">=</span> <span class="p">[</span><span class="n">ensure_sympy_compatible</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">prop_array</span><span class="p">]</span>
+        <span class="n">conditions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Handle lower bound (T &lt; temp_array[0])</span>
+        <span class="k">if</span> <span class="n">lower</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+            <span class="n">lower_expr</span> <span class="o">=</span> <span class="n">prop_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Lower bound: constant value </span><span class="si">%.3f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">lower_expr</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># extrapolate</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">slope</span> <span class="o">=</span> <span class="p">(</span><span class="n">prop_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">prop_array</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="p">(</span><span class="n">temp_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">temp_array</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">lower_expr</span> <span class="o">=</span> <span class="n">prop_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">slope</span> <span class="o">*</span> <span class="p">(</span><span class="n">T</span> <span class="o">-</span> <span class="n">temp_array</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Lower bound: extrapolation with slope </span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">slope</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">lower_expr</span> <span class="o">=</span> <span class="n">prop_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Lower bound: single point, using constant </span><span class="si">%.3f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">lower_expr</span><span class="p">)</span>
+        <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">lower_expr</span><span class="p">,</span> <span class="n">T</span> <span class="o">&lt;</span> <span class="n">temp_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="c1"># Handle main interpolation segments</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Creating </span><span class="si">%d</span><span class="s2"> interpolation segments&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">slope</span> <span class="o">=</span> <span class="p">(</span><span class="n">prop_array</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">prop_array</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">/</span> <span class="p">(</span><span class="n">temp_array</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">temp_array</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">expr</span> <span class="o">=</span> <span class="n">prop_array</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="n">slope</span> <span class="o">*</span> <span class="p">(</span><span class="n">T</span> <span class="o">-</span> <span class="n">temp_array</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">condition</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">And</span><span class="p">(</span><span class="n">T</span> <span class="o">&gt;=</span> <span class="n">temp_array</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">T</span> <span class="o">&lt;</span> <span class="n">temp_array</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">expr</span><span class="p">,</span> <span class="n">condition</span><span class="p">))</span>
+            <span class="c1"># logger.debug(&quot;Segment %d: T∈[%.1f,%.1f), slope=%.6f&quot;,</span>
+            <span class="c1">#              i + 1, temp_array[i], temp_array[i + 1], slope)  #TODO: Uncomment for detailed output</span>
+        <span class="c1"># Handle upper bound (T &gt;= temp_array[-1])</span>
+        <span class="k">if</span> <span class="n">upper</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+            <span class="n">upper_expr</span> <span class="o">=</span> <span class="n">prop_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Upper bound: constant value </span><span class="si">%.3f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">upper_expr</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># extrapolate</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">slope</span> <span class="o">=</span> <span class="p">(</span><span class="n">prop_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">prop_array</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">])</span> <span class="o">/</span> <span class="p">(</span><span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">])</span>
+                <span class="n">upper_expr</span> <span class="o">=</span> <span class="n">prop_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">slope</span> <span class="o">*</span> <span class="p">(</span><span class="n">T</span> <span class="o">-</span> <span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Upper bound: extrapolation with slope </span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">slope</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">upper_expr</span> <span class="o">=</span> <span class="n">prop_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Upper bound: single point, using constant </span><span class="si">%.3f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">upper_expr</span><span class="p">)</span>
+        <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">upper_expr</span><span class="p">,</span> <span class="n">T</span> <span class="o">&gt;=</span> <span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Created piecewise function with </span><span class="si">%d</span><span class="s2"> total conditions&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">conditions</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">(</span><span class="o">*</span><span class="n">conditions</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_with_regression</span><span class="p">(</span><span class="n">temp_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                               <span class="n">T</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">,</span> <span class="n">lower</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">upper</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                               <span class="n">degree</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">segments</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create piecewise with regression.</span>
+<span class="sd">        This delegates to RegressionProcessor but provides a unified interface.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            temp_array: Temperature data points</span>
+<span class="sd">            prop_array: Property values</span>
+<span class="sd">            T: Temperature symbol</span>
+<span class="sd">            lower: Lower boundary behavior</span>
+<span class="sd">            upper: Upper boundary behavior</span>
+<span class="sd">            degree: Polynomial degree for regression</span>
+<span class="sd">            segments: Number of segments for regression</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            sp.Piecewise: Regression-based piecewise function</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Building piecewise with regression: degree=</span><span class="si">%d</span><span class="s2">, segments=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Regression parameters: lower=</span><span class="si">%s</span><span class="s2">, upper=</span><span class="si">%s</span><span class="s2">, data_points=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                     <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">))</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">process_regression</span><span class="p">(</span><span class="n">temp_array</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="p">,</span> <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span>
+                                                            <span class="n">seed</span><span class="o">=</span><span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">DEFAULT_REGRESSION_SEED</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully created regression-based piecewise function&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Regression processing failed: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
