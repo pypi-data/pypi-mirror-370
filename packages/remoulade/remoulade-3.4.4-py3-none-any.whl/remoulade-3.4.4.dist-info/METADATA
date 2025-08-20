@@ -1,0 +1,207 @@
+Metadata-Version: 2.4
+Name: remoulade
+Version: 3.4.4
+Summary: Background Processing for Python 3.
+Author: Wiremind
+Author-email: dev@wiremind.io
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Topic :: System :: Distributed Computing
+Classifier: License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: COPYING
+License-File: COPYING.LESSER
+Requires-Dist: prometheus-client>=0.2
+Requires-Dist: pytz
+Requires-Dist: python-dateutil>=2.8.0
+Requires-Dist: typing-extensions>=3.8
+Requires-Dist: attrs>=19.2.0
+Provides-Extra: rabbitmq
+Requires-Dist: amqpstorm<3,>=2.6; extra == "rabbitmq"
+Provides-Extra: redis
+Requires-Dist: redis~=5.0; extra == "redis"
+Provides-Extra: server
+Requires-Dist: flask>=1.1,~=2.3.3; extra == "server"
+Requires-Dist: marshmallow<4,>=3; extra == "server"
+Requires-Dist: flask-apispec; extra == "server"
+Provides-Extra: postgres
+Requires-Dist: sqlalchemy<2,>=1.4.29; extra == "postgres"
+Requires-Dist: psycopg2==2.9.5; extra == "postgres"
+Provides-Extra: pydantic
+Requires-Dist: pydantic>=2.0; extra == "pydantic"
+Requires-Dist: simplejson; extra == "pydantic"
+Provides-Extra: all
+Requires-Dist: simplejson; extra == "all"
+Requires-Dist: sqlalchemy<2,>=1.4.29; extra == "all"
+Requires-Dist: marshmallow<4,>=3; extra == "all"
+Requires-Dist: flask-apispec; extra == "all"
+Requires-Dist: flask>=1.1,~=2.3.3; extra == "all"
+Requires-Dist: pydantic>=2.0; extra == "all"
+Requires-Dist: redis~=5.0; extra == "all"
+Requires-Dist: amqpstorm<3,>=2.6; extra == "all"
+Requires-Dist: psycopg2==2.9.5; extra == "all"
+Provides-Extra: dev
+Requires-Dist: simplejson; extra == "dev"
+Requires-Dist: sqlalchemy<2,>=1.4.29; extra == "dev"
+Requires-Dist: marshmallow<4,>=3; extra == "dev"
+Requires-Dist: flask-apispec; extra == "dev"
+Requires-Dist: flask>=1.1,~=2.3.3; extra == "dev"
+Requires-Dist: pydantic>=2.0; extra == "dev"
+Requires-Dist: redis~=5.0; extra == "dev"
+Requires-Dist: amqpstorm<3,>=2.6; extra == "dev"
+Requires-Dist: psycopg2==2.9.5; extra == "dev"
+Requires-Dist: alabaster; extra == "dev"
+Requires-Dist: sphinx==4.1.1; extra == "dev"
+Requires-Dist: sphinxcontrib-napoleon; extra == "dev"
+Requires-Dist: sphinxcontrib-versioning; extra == "dev"
+Requires-Dist: sphinx-copybutton; extra == "dev"
+Requires-Dist: flake8; extra == "dev"
+Requires-Dist: flake8-bugbear; extra == "dev"
+Requires-Dist: flake8-quotes; extra == "dev"
+Requires-Dist: isort; extra == "dev"
+Requires-Dist: black~=23.12; extra == "dev"
+Requires-Dist: mypy~=1.10.0; extra == "dev"
+Requires-Dist: pyupgrade~=3.15.0; extra == "dev"
+Requires-Dist: sqlalchemy[mypy]; extra == "dev"
+Requires-Dist: types-redis; extra == "dev"
+Requires-Dist: types-python-dateutil; extra == "dev"
+Requires-Dist: types-simplejson; extra == "dev"
+Requires-Dist: types-pytz; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+Requires-Dist: bumpversion; extra == "dev"
+Requires-Dist: hiredis; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-benchmark[histogram]; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: pytest-timeout; extra == "dev"
+Requires-Dist: pytest-asyncio; extra == "dev"
+Requires-Dist: freezegun; extra == "dev"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+<img src="https://remoulade.readthedocs.io/en/latest/_static/logo.png" align="right" width="131" />
+
+# remoulade
+
+[![CircleCI](https://circleci.com/gh/wiremind/remoulade.svg?style=svg)](https://circleci.com/gh/wiremind/remoulade)
+[![PyPI version](https://badge.fury.io/py/remoulade.svg)](https://badge.fury.io/py/remoulade)
+[![Documentation](https://img.shields.io/badge/doc-latest-brightgreen.svg)](http://remoulade.readthedocs.io)
+
+*A fast and reliable distributed task processing library for Python 3.* Fork of dramatiq.io
+
+<hr/>
+
+**Changelog**: https://remoulade.readthedocs.io/en/latest/changelog.html <br/>
+**Documentation**: https://remoulade.readthedocs.io
+
+<hr/>
+
+
+## Installation
+
+If you want to use it with [RabbitMQ]
+```console
+    $ pipenv install 'remoulade[rabbitmq]'
+```
+
+or if you want to use it with [Redis]
+
+```console
+   $ pipenv install 'remoulade[redis]'
+```
+
+## Quickstart
+
+1. Make sure you've got [RabbitMQ] running, then create a new file called
+`example.py`:
+
+``` python
+from remoulade.brokers.rabbitmq import RabbitmqBroker
+import remoulade
+import requests
+import sys
+
+broker = RabbitmqBroker()
+remoulade.set_broker(broker)
+
+
+@remoulade.actor
+def count_words(url):
+    response = requests.get(url)
+    count = len(response.text.split(" "))
+    print(f"There are {count} words at {url!r}.")
+
+
+broker.declare_actor(count_words)
+
+if __name__ == "__main__":
+    count_words.send(sys.argv[1])
+```
+
+2. In one terminal, run your workers:
+```console
+   $ remoulade example
+```
+
+3. In another, start enqueueing messages:
+```console
+   $ python3 example.py http://example.com
+   $ python3 example.py https://github.com
+   $ python3 example.py https://news.ycombinator.com
+```
+
+Visit the [user guide] to see more features!.
+
+## Releasing
+
+If you want to contribute to the project. First make a Pull request and get approval from a Maintainer and then:
+1. Merge your pull request
+2. Update your local clone with latest version of upstream.
+3. run `bumpversion [minor|major|patch]` depending on your change level
+4. This will create a commit with appropriate version changes
+5. Run `git push` and `git push --tag` to the upstream/origin
+6. The tag will be created in github repository and a CI/CD pipeline will run to publish the package
+
+## Dashboard
+
+Check out [SuperBowl](https://github.com/wiremind/super-bowl) a dashboard for real-time monitoring and administrating all your Remoulade tasks.
+***See the current progress, enqueue, requeue, cancel and more ...***
+Super easy to use !.
+
+## Kubernetes
+
+Remoulade is tailored to run transparently in containers on [Kubernetes](https://kubernetes.io/) and to make the most of their features. This does not mean it cannot run outside of Kubernetes ;)
+
+## Monitoring/Prometheus
+
+Remoulade provides a `Prometheus` Middleware that exposes various metrics (processed messages, retries, fails etc.), [Check it out](https://github.com/wiremind/remoulade/blob/master/remoulade/middleware/prometheus.py).
+
+## Tracing/OpenTelemtry
+
+Take a look at [opentelemetry-instrumentation-remoulade](https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-remoulade) if you want to enable tracing for Remoulade operations (enqueue, message processing, retries etc.). See [here](https://github.com/open-telemetry/opentelemetry-python-contrib/blob/main/instrumentation/opentelemetry-instrumentation-remoulade/src/opentelemetry/instrumentation/remoulade/__init__.py) for an example.
+The library follows [OpenTelemetry](https://opentelemetry.io/) standards.
+
+## License
+
+remoulade is licensed under the LGPL.  Please see [COPYING] and
+[COPYING.LESSER] for licensing details.
+
+[COPYING.LESSER]: https://github.com/wiremind/remoulade/blob/master/COPYING.LESSER
+[COPYING]: https://github.com/wiremind/remoulade/blob/master/COPYING
+[RabbitMQ]: https://www.rabbitmq.com/
+[Redis]: https://redis.io
+[user guide]: https://remoulade.readthedocs.io/en/latest/guide.html
