@@ -1,0 +1,6 @@
+from .. import CEnum
+
+
+class AUDCLNT_SHAREMODE(CEnum):
+    AUDCLNT_SHAREMODE_SHARED = 0
+    AUDCLNT_SHAREMODE_EXCLUSIVE = 1
