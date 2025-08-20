@@ -1,0 +1,98 @@
+= Mangono Odoo Wheel Builder
+:manifest: __manifest__.py
+
+A standards-compliant Python build backend to package individual Odoo addons.
+The main idea and the code is taken from https://github.com/sbidoul/whool[sbidoul/whool].
+
+
+[NOTE]
+====
+If you are looking at packaging a customer project or a collection of addons, you
+may want to consider the [hatch-odoo](https://pypi.org/project/hatch-odoo) project.
+Because it is a wrapper around whool for internal Mangono use, every version can break behavior.
+====
+
+== Mangono Addon Wheeler vs whool
+
+. Allow to change version of the final wheel without following the version of the addon `{manifest}`.
+. Allow to distribute the final wheel with a different name (no `odoo-addon-` prefix).
+. Allow to distribute a addon without the `odoo` as depends.
+. Allow to add custom classifier to the `PKG-INFO` file.
+. Allow to add custom dependencies to the `PKG-INFO` file.
+
+The drawback is it's manifestoo based dependency resolver don't support this addons.
+In other words, you need to manually add the python package and the addon in your manifest.
+
+
+== Quick Start
+
+Create a file named `pyproject.toml` next to the addon's `{manifest}` with the
+following content:
+
+.pyproject.toml
+[source,toml]
+----
+[build-system]
+requires = ["mangono_odoo_wheeler"]
+build-backend = "mangono_odoo_wheeler.builder"
+
+[project]
+name = "awesome-odoo-addon"
+dynamic = ["version"]
+dependencies = []
+----
+
+== TODO
+
+=== Support `extra`
+
+`whool` support `dependencies` but it doesn't support `extras` (which are not supported by Mangono).
+
+== Recipes
+
+=== Use your module with a classic odoo addon build with `whool` (or `whool-mangono`)
+
+Inside your second module you need to tell what's the pip package name of your module.
+
+`depends_override` is the way to do that.
+
+.pyproject.toml
+[source,toml]
+----
+[build-system]
+requires = ["mangono_odoo_wheeler"]
+build-backend = "mangono_odoo_wheeler.builder"
+
+[tool.whool.depends_override]
+"my_httpx_module" = "mangono-odoo-addon-my-httpx-module"
+----
+
+=== Build multi odoo compatible addons
+
+.pyproject.toml
+[source,toml]
+----
+[build-system]
+requires = ["mangono_odoo_wheeler"]
+build-backend = "mangono_odoo_wheeler.builder"
+
+[project]
+name = "mangono-odoo-addon-my-httpx-module"
+classifiers = [
+    "Framework :: Odoo :: 15.0",
+    "Framework :: Odoo :: 16.0",
+    "Framework :: Odoo :: 17.0",
+]
+dynamic = ["version"]
+dependencies = [
+    "odoo>=15.0,17.1",
+]
+
+[tool.whool]
+odoo_series_override="15.0"
+external_dependencies_only=true
+----
+
+If you do that you need to be very carefull with the compatibility of your addon.
+But with the right dependencies you can package a multi-odoo compatible addon.
+The classifier are here to help your user to be sure your module is compatible with their Odoo version.

@@ -1,0 +1,97 @@
+= Odoo Version
+
+If {page-component-name} found the current odoo version for your wheel then automatically :
+
+* `odoo` is added a dependency in the `METADATA` file
+* Some classifiers are added to the `METADATA` file. See xref:metadata_classifiers.adoc[]
+
+{page-component-name} can found the odoo version from two sources.
+
+
+== From the `\\__manifest__.py` file
+{page-component-name} auto found the version from the `__manifest__.py` file.
+
+By default, unlike `whool` if the Odoo version can't be found in the `__manifest__.py` file, {page-component-name} will build the wheel without error.
+
+The key `"version"` in the `__manifest__.py` file must match the regex `(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)` to be valid as source.
+
+== From tool.{page-component-name}
+
+You can force the odoo version with the option `odoo_version_override` in the section `[tool.{page-component-name}]`.
+
+TIP: This feat is usefull if your addon support multiple odoo version, or if you don't want to change the version in the `\\__manifest__.py` file.
+
+
+.In an addon named `my-module`
+****
+
+CAUTION: If you set the `odoo_version_override` the key `"version"` in the `__manifest__.py` file will be ignored to defined the odoo version.
+
+.\\__manifest__.py
+[source,python]
+----
+{
+    "name": "My Module",
+    "version": "15.0.0.0",
+    "author": "Your Name",
+    "depends": [
+        "base",
+    ],
+    # ...
+}
+----
+
+.pyproject.toml
+[source,toml]
+----
+[build-system]
+requires = ["addon-odoo-wheel"]
+build-backend = "addon_odoo_wheel.builder"
+
+[tool.addon-odoo-wheel]
+odoo_version_override = "12.0"
+----
+
+The build will produce a wheel named `addon-odoo-my-module-15.0.0.0-py3-none-any.whl`
+
+But with a `odoo>=12.0,<13.0` as dependecy.
+
+****
+
+== Multi Odoo series addon
+
+In very small case you want to create an addon compatible available for multiple version of Odoo. +
+You can use the option `external_dependencies_override` in the section `[tool.mangono_odoo_wheeler]`
+
+.__manifest__.py
+[source,python]
+----
+{
+    "name": "Sample Module",
+    "version": "1.1.0",
+    # ...
+}
+----
+
+.pyproject.toml
+[source,toml]
+----
+[build-system]
+requires = ["mangono_odoo_wheeler"]
+build-backend = "mangono_odoo_wheeler.builder"
+
+[project]
+name = "awesome-odoo-addon"
+dynamic = ["version"]
+# ...
+
+[tool.mangono_odoo_wheeler]
+odoo_series_override = "==12.0,==13.0,==14.0,==17.0,==18.0" # <1>
+----
+<1> Follow python requirements format. Compatible with odoo version 12.0, 13.0, 14.0, 17.0 and 18.0.
+
+[IMPORTANT]
+====
+Name of the wheel: `awsome-odoo-addon-1.1.0-py3-none-any.whl`
+Odoo in dependencies: `odoo==12.0,==13.0,==14.0,==17.0,==18.0`
+====
