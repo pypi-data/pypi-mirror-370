@@ -1,0 +1,11 @@
+# INPUT PARAMS
+ENV_PARAM = "env"
+EXPORT_DATA_PARAM = "export_data"
+LAST_X_DAYS_PARAM = "last_x_days"
+SEASON_YEAR = "season_year"
+HANA_SEASON = "hana_season"
+FILE_NAME_PARAM = "file_name"
+PREV_SEASONS_PARAM = "prev_seasons"
+SEND_EMAIL = "send_email"
+MODEL_NAME_EXT = "model_name_ext"
+ALGO_TYPE = "algo"
