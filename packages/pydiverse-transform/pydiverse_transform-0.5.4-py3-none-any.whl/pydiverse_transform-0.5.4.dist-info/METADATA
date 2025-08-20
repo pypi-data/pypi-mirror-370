@@ -1,0 +1,135 @@
+Metadata-Version: 2.4
+Name: pydiverse-transform
+Version: 0.5.4
+Summary: Pipe based dataframe manipulation library that can also transform data on SQL databases
+Author: QuantCo, Inc.
+Author-email: Nicolas Camenisch <garnele007@gmail.com>, Finn Rudolph <finn.rudolph@t-online.de>, Martin Trautmann <windiana@users.sf.net>
+License: BSD 3-Clause License
+        
+        Copyright (c) 2022, pydiverse
+        All rights reserved.
+        
+        Redistribution and use in source and binary forms, with or without
+        modification, are permitted provided that the following conditions are met:
+        
+        1. Redistributions of source code must retain the above copyright notice, this
+           list of conditions and the following disclaimer.
+        
+        2. Redistributions in binary form must reproduce the above copyright notice,
+           this list of conditions and the following disclaimer in the documentation
+           and/or other materials provided with the distribution.
+        
+        3. Neither the name of the copyright holder nor the names of its
+           contributors may be used to endorse or promote products derived from
+           this software without specific prior written permission.
+        
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+        AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+        IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+        FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+        DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+        SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+        CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+        OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+        OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+License-File: LICENSE
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: SQL
+Classifier: Topic :: Database
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Software Development
+Requires-Python: <3.14,>=3.10.18
+Requires-Dist: pandas<3,>=2.3.0
+Requires-Dist: polars<2,>=1.30.0
+Requires-Dist: pyarrow<22,>=20.0.0
+Requires-Dist: pydiverse-common<0.4,>=0.3.5
+Requires-Dist: sqlalchemy<3,>=2.0.41
+Description-Content-Type: text/markdown
+
+# pydiverse.transform
+
+[![CI](https://github.com/pydiverse/pydiverse.transform/actions/workflows/tests.yml/badge.svg)](https://github.com/pydiverse/pydiverse.transform/actions/workflows/tests.yml)
+
+Pipe based dataframe manipulation library that can also transform data on SQL databases
+
+This is an early stage version 0.x which lacks documentation. Please contact
+https://github.com/orgs/pydiverse/teams/code-owners if you like to become an early adopter
+or to contribute early stage usage examples.
+
+## Usage
+
+pydiverse.transform can either be installed via pypi with `pip install pydiverse-transform` or via conda-forge
+with `conda install pydiverse-transform -c conda-forge`.
+
+## Example
+
+This code illustrates how to use pydiverse.transform with pandas and SQL:
+
+```python
+from pydiverse.transform import Table
+from pydiverse.transform.lazy import SQLTableImpl
+from pydiverse.transform.eager import PandasTableImpl
+from pydiverse.transform.core.verbs import *
+import pandas as pd
+import sqlalchemy as sqa
+
+
+def main():
+    dfA = pd.DataFrame(
+        {
+            "x": [1],
+            "y": [2],
+        }
+    )
+    dfB = pd.DataFrame(
+        {
+            "a": [2, 1, 0, 1],
+            "x": [1, 1, 2, 2],
+        }
+    )
+
+    input1 = Table(PandasTableImpl("dfA", dfA))
+    input2 = Table(PandasTableImpl("dfB", dfB))
+
+    transform = (
+        input1
+        >> left_join(input2 >> select(), input1.x == input2.x)
+        >> mutate(x5=input1.x * 5, a=input2.a)
+    )
+    out1 = transform >> collect()
+    print("\nPandas based result:")
+    print(out1)
+
+    engine = sqa.create_engine("sqlite:///:memory:")
+    dfA.to_sql("dfA", engine, index=False, if_exists="replace")
+    dfB.to_sql("dfB", engine, index=False, if_exists="replace")
+    input1 = Table(SQLTableImpl(engine, "dfA"))
+    input2 = Table(SQLTableImpl(engine, "dfB"))
+    transform = (
+        input1
+        >> left_join(input2 >> select(), input1.x == input2.x)
+        >> mutate(x5=input1.x * 5, a=input2.a)
+    )
+    out2 = transform >> collect()
+    print("\nSQL query:")
+    print(transform >> build_query())
+    print("\nSQL based result:")
+    print(out2)
+
+    out1 = out1.sort_values("a").reset_index(drop=True)
+    out2 = out2.sort_values("a").reset_index(drop=True)
+    assert len(out1.compare(out2)) == 0
+
+
+if __name__ == "__main__":
+    main()
+```
