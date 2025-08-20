@@ -1,0 +1,99 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>List Threshold</title>
+
+<!-- YAHOO YUI Library -->
+<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.0r4/build/fonts/fonts-min.css" />
+<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.0r4/build/paginator/assets/skins/sam/paginator.css" />
+<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.0r4/build/datatable/assets/skins/sam/datatable.css" />
+<!--
+<script type="text/javascript" src="http://yui.yahooapis.com/combo?2.8.0r4/build/yahoo-dom-event/yahoo-dom-event.js&2.8.0r4/build/connection/connection-min.js&2.8.0r4/build/datasource/datasource-min.js&2.8.0r4/build/datatable/datatable-min.js&2.8.0r4/build/json/json-min.js"></script>
+-->
+
+<script src="http://yui.yahooapis.com/2.8.0r4/build/yahoo-dom-event/yahoo-dom-event.js"></script>
+<script src="http://yui.yahooapis.com/2.8.0r4/build/dragdrop/dragdrop-min.js"></script>
+<script src="http://yui.yahooapis.com/2.8.0r4/build/connection/connection-min.js"></script>
+<script src="http://yui.yahooapis.com/2.8.0r4/build/element/element-min.js"></script>
+<script src="http://yui.yahooapis.com/2.8.0r4/build/datasource/datasource-min.js"></script>
+<script src="http://yui.yahooapis.com/2.8.0r4/build/datatable/datatable-min.js"></script>
+<script src="http://yui.yahooapis.com/2.8.0r4/build/json/json-min.js"></script>
+<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/paginator/paginator-min.js"></script> 
+
+<!-- WebTools library -->
+<script src="../javascript/namespace.js"></script>
+<script src="../javascript/dataTable.js"></script>
+<script src="../javascript/debugging.js"></script>
+</head>
+<body class="yui-skin-sam">
+<div id="resourceInfo"></div>
+<script type="text/javascript">
+//enableDebug()
+// {key: state} is omitted
+
+
+var textBoxEditorOptions = {
+    asyncSubmitter: function (callback, maxSlots) {
+        var record = this.getRecord(),
+            column = this.getColumn(),
+            oldValue = this.value,
+            datatable = this.getDataTable();
+        YAHOO.util.Connect.asyncRequest(
+            'GET',
+            '/wmbs/updatethreshold?siteName=' + record.getData("site") + '&taskType=' + record.getData("type") + '&maxSlots=' + maxSlots, 
+            {
+                success:function(o) {
+                    //var r = YAHOO.lang.JSON.parse(o.responseText);
+                    alert("change value from " + oldValue + " to " + maxSlots)
+                    callback(true, maxSlots)
+                },
+                failure:function(o) {
+                    alert("Can't update" + o.statusText);
+                    callback();
+                },
+                scope:this
+            }//,
+           //'{sitename:' + record.getData("site")  + ', tasktype:' + record.getData("type") + ', maxslots:' + maxSlots +'}'
+            //'
+        );                                              
+    },
+
+    validator:YAHOO.widget.DataTable.validateNumber
+};
+
+var dataSchema = {
+        fields: [//{key:"update",
+                  //editor: new YAHOO.widget.RadioCellEditor({radioOptions: ["yes"], disableBtns: false})
+                  //editor: new YAHOO.widget.CheckboxCellEditor({checkboxOptions: ["yes"]})
+                  //},
+                 {key: "site"},  {key: "type"},
+                 {key: "max_slots",
+                  editor: new YAHOO.widget.TextboxCellEditor(textBoxEditorOptions)}]
+};
+
+var dataUrl = "/wmbs/listthresholds"
+
+var dataSource = WMCore.createDataSource(dataUrl, dataSchema)
+//writeDebugObject(dataSource)
+//writeEval(dataSource.responseType)
+var dataTable = WMCore.createDataTable("resourceInfo", dataSource, 
+                             WMCore.createDefaultTableDef(dataSchema.fields),
+                             WMCore.createDefaultTableConfig(), 1000000)
+
+
+// Set up editing flow
+var highlightEditableCell = function(oArgs) {
+    var elCell = oArgs.target;
+    if(YAHOO.util.Dom.hasClass(elCell, "yui-dt-editable")) {
+        this.highlightCell(elCell);
+    }
+};
+
+dataTable.subscribe("cellMouseoverEvent", highlightEditableCell);
+dataTable.subscribe("cellMouseoutEvent", dataTable.onEventUnhighlightCell);
+dataTable.subscribe("cellClickEvent", dataTable.onEventShowCellEditor);
+
+
+</script>
+</body>
+</htm>
