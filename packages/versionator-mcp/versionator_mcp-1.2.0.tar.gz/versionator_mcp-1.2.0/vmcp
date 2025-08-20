@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""
+Versionator MCP Test Client - Manual testing tool for the MCP server
+
+Usage:
+    vmcp <package_manager> <package_name>
+    vmcp --list-tools
+    vmcp --health
+
+Examples:
+    vmcp python pandas
+    vmcp npm react
+    vmcp ruby rails
+    vmcp elixir ecto
+    vmcp rust serde
+    vmcp go github.com/gin-gonic/gin
+    vmcp terraform hashicorp/aws
+    vmcp docker nginx
+    vmcp perl JSON
+    vmcp r ggplot2
+    vmcp bioconda samtools
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+from typing import Any, Dict, Optional
+
+
+class MCPClient:
+    def __init__(self):
+        self.process = None
+        self.request_id = 0
+
+    def start_server(self):
+        """Start the MCP server process"""
+        self.process = subprocess.Popen(
+            ["python", "-m", "versionator_mcp.main"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd="/Users/alaina/projects/versionator-mcp"
+        )
+
+    def send_request(self, method: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Send an MCP request and return the response"""
+        if not self.process:
+            self.start_server()
+
+        self.request_id += 1
+        request = {
+            "jsonrpc": "2.0",
+            "id": self.request_id,
+            "method": method,
+            "params": params or {}
+        }
+
+        # Send the request
+        request_json = json.dumps(request) + "\n"
+        self.process.stdin.write(request_json)
+        self.process.stdin.flush()
+
+        # Read the response
+        response_line = self.process.stdout.readline()
+        if response_line.strip():
+            try:
+                return json.loads(response_line.strip())
+            except json.JSONDecodeError as e:
+                return {"error": f"Failed to parse JSON response: {e}", "raw_output": response_line}
+        else:
+            return {"error": "No response received"}
+
+    def initialize(self):
+        """Initialize the MCP session"""
+        response = self.send_request("initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {}
+            },
+            "clientInfo": {
+                "name": "vmcp-client",
+                "version": "1.0.0"
+            }
+        })
+
+        # Send initialized notification
+        initialized_request = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }
+        self.process.stdin.write(json.dumps(initialized_request) + "\n")
+        self.process.stdin.flush()
+
+        return response
+
+    def list_tools(self):
+        """List available tools"""
+        response = self.send_request("tools/list")
+        return response
+
+    def call_tool(self, name: str, arguments: Dict[str, Any]):
+        """Call a specific tool"""
+        response = self.send_request("tools/call", {
+            "name": name,
+            "arguments": arguments
+        })
+        return response
+
+    def close(self):
+        """Close the MCP session"""
+        if self.process:
+            self.process.terminate()
+            self.process.wait()
+
+def format_package_info(result: Dict[str, Any]) -> str:
+    """Format package information for display"""
+    if result.get("isError"):
+        return f"❌ Error: {result['content'][0]['text']}"
+
+    content = result.get("structuredContent", {})
+    if not content:
+        return "❌ No package information received"
+
+    name = content.get("name", "unknown")
+    version = content.get("version", "unknown")
+    registry = content.get("registry", "unknown")
+    description = content.get("description", "")
+    homepage = content.get("homepage", "")
+    license_info = content.get("license", "")
+
+    output = f"✅ {name} @ {version} ({registry})"
+
+    if description:
+        # Truncate very long descriptions
+        if len(description) > 200:
+            description = description[:200] + "..."
+        output += f"\n   📝 {description}"
+
+    if homepage:
+        output += f"\n   🏠 {homepage}"
+
+    if license_info:
+        # Truncate very long license text and just show the first line or license type
+        if len(license_info) > 100:
+            # Try to extract just the license name/type
+            first_line = license_info.split('\n')[0].strip()
+            if len(first_line) > 100:
+                first_line = first_line[:100] + "..."
+            license_info = first_line
+        output += f"\n   📄 License: {license_info}"
+
+    return output
+
+def query_package(client: MCPClient, package_manager: str, package_name: str) -> None:
+    """Query a package and display the result"""
+    print(f"🔍 Querying {package_manager}/{package_name}...")
+
+    response = client.call_tool("get_package_version", {
+        "package_manager": package_manager,
+        "package_name": package_name
+    })
+
+    if "result" in response:
+        print(format_package_info(response["result"]))
+    else:
+        print(f"❌ Error: {response.get('error', 'Unknown error')}")
+
+def list_tools(client: MCPClient) -> None:
+    """List all available tools"""
+    print("🔧 Available MCP Tools:")
+
+    response = client.list_tools()
+
+    if "result" in response and "tools" in response["result"]:
+        tools = response["result"]["tools"]
+        for tool in tools:
+            name = tool.get("name", "unknown")
+            description = tool.get("description", "").split("\n")[0]  # First line only
+            print(f"   • {name}: {description}")
+    else:
+        print(f"❌ Error listing tools: {response.get('error', 'Unknown error')}")
+
+def health_check(client: MCPClient) -> None:
+    """Check server health"""
+    print("🏥 Health Check:")
+
+    response = client.call_tool("health_check", {})
+
+    if "result" in response:
+        if response["result"].get("isError"):
+            print(f"❌ Health check failed: {response['result']['content'][0]['text']}")
+        else:
+            content = response["result"].get("structuredContent", {})
+            status = content.get("status", "unknown")
+            service = content.get("service", "unknown")
+            timestamp = content.get("timestamp", "unknown")
+            print(f"✅ Status: {status}")
+            print(f"   Service: {service}")
+            print(f"   Timestamp: {timestamp}")
+    else:
+        print(f"❌ Error: {response.get('error', 'Unknown error')}")
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Versionator MCP Test Client",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    vmcp python pandas          # Query PyPI for pandas
+    vmcp npm react              # Query npm for react
+    vmcp ruby rails             # Query RubyGems for rails
+    vmcp elixir ecto            # Query Hex.pm for ecto
+    vmcp rust serde             # Query crates.io for serde
+    vmcp go github.com/gin-gonic/gin  # Query Go modules
+    vmcp terraform hashicorp/aws      # Query Terraform registry
+    vmcp docker nginx           # Query DockerHub
+    vmcp perl JSON              # Query CPAN
+    vmcp r ggplot2              # Query CRAN
+    vmcp bioconda samtools      # Query Bioconda
+    vmcp --list-tools           # List all available tools
+    vmcp --health               # Check server health
+        """
+    )
+
+    parser.add_argument("package_manager", nargs="?", help="Package manager (python, npm, ruby, etc.)")
+    parser.add_argument("package_name", nargs="?", help="Package name to query")
+    parser.add_argument("--list-tools", action="store_true", help="List available MCP tools")
+    parser.add_argument("--health", action="store_true", help="Check server health")
+
+    args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return
+
+    client = MCPClient()
+
+    try:
+        # Initialize the MCP session
+        init_response = client.initialize()
+        if "error" in init_response:
+            print(f"❌ Failed to initialize MCP session: {init_response['error']}")
+            return
+
+        if args.list_tools:
+            list_tools(client)
+        elif args.health:
+            health_check(client)
+        elif args.package_manager and args.package_name:
+            query_package(client, args.package_manager, args.package_name)
+        else:
+            print("❌ Error: Please provide both package_manager and package_name, or use --list-tools or --health")
+            parser.print_help()
+
+    except KeyboardInterrupt:
+        print("\n🛑 Interrupted by user")
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+    finally:
+        client.close()
+
+if __name__ == "__main__":
+    main()
