@@ -1,0 +1,150 @@
+Metadata-Version: 2.4
+Name: thestage-elastic-models-cli
+Version: 0.0.17
+Summary: Elastic Models Client from TheStage AI
+Author-email: TheStage AI team <hello@thestage.ai>
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: qlip_serve_client==0.1.17
+Requires-Dist: locust
+Requires-Dist: locust-plugins
+Requires-Dist: Pillow
+Requires-Dist: requests
+Requires-Dist: wheel
+Requires-Dist: numpy<2,>=1.23.5
+Requires-Dist: aiohttp
+Dynamic: license-file
+
+# Elastic Models CLI
+
+**CLI tool for benchmarking and testing elastic AI model inference.**
+
+## Architecture Dependencies Overview
+
+### Package Hierarchy
+
+```
+elastic-models-cli (this package - CLIENT)
+├── CLI Binary: elastic-models-client 
+├── Package Name: thestage-elastic-models-cli
+├── Purpose: Client inference & load testing for AI model endpoints
+└── Dependencies:
+    └── qlip-serve-client
+        ├── Purpose: HTTP client library for Triton inference requests
+        └── Dependency: qlip-serve-common
+            └── Purpose: Shared types, protocols, and utilities for qlip ecosystem
+
+elastic-models (separate package - SERVER)  
+├── CLI Binary: elastic-models
+├── Package Name: elastic-models (TheStage.Inference)
+├── Purpose: AI model serving infrastructure & deployment
+└── Dependencies:
+    └── qlip-serve-generator
+        ├── Purpose: Model serving backend with auto-scaling & load balancing
+        └── Dependency: qlip-serve-common
+            └── Purpose: Shared types, protocols, and utilities for qlip ecosystem
+```
+
+### Dependency Rationale
+
+**qlip-serve-client**
+- **Status**: Unencrypted public package for qlip-serve ecosystem
+- **Why separate from elastic-models-cli?** 
+  - Shared codebase with qlip-serve-common (common unencrypted package) and qlip-serve-generator (encrypted package) in same repo
+  - Multiple packages depend on it beyond just this CLI
+  - Independent versioning and development cycle
+
+**qlip-serve-common**  
+- **Status**: Unencrypted common public package for qlip-serve ecosystem
+- **Purpose**: Shared utilities, types, and protocols for both client and server
+- **Used by**: Both qlip-serve-client and qlip-serve-server
+
+### CLI Naming Strategy
+
+**elastic-models-client** (this package)
+- Avoids binary conflicts with `elastic-models` server CLI
+- Clear indication this is the client-side tool
+- Allows both packages to coexist in same environment
+
+**elastic-models** (server package) 
+- Main serving CLI, exists in elastic-models package (TheStage.Inference)
+- Handles model deployment, serving, and management
+- Primary interface for production model hosting
+
+### Future Architecture Plans
+
+The server CLI (`elastic-models`) may eventually be extracted to the same repository as this client CLI but as a separate encrypted package. This would:
+- Unify CLI tooling in single repo while maintaining package separation
+- Keep elastic-models-client open source
+- Maintain encrypted server components for security
+- Enable better coordination between client/server CLI features
+- Simplify development workflow for TheStage AI team
+
+## Installation
+
+```bash
+pip install thestage-elastic-models-cli
+```
+
+## Commands
+
+### Client Inference
+```bash
+# Test single inference requests
+elastic-models-client client llm --prompt "Hello" --url <endpoint> --model <name>
+elastic-models-client client diffusion --prompt "A cat" --url <endpoint> --model <name>
+elastic-models-client client vlm --prompt "Describe image" --image <path> --url <endpoint> --model <name>
+elastic-models-client client stt --audio <path> --url <endpoint> --model <name>
+```
+
+
+### Benchmarking
+```bash
+# Run load tests using Locust
+elastic-models-client benchmark llm --url <endpoint> --model <name>
+elastic-models-client benchmark diffusion --url <endpoint> --model <name>
+elastic-models-client benchmark vlm --url <endpoint> --model <name>
+elastic-models-client benchmark stt --url <endpoint> --model <name>
+
+# Options: --concurrency, --num-requests, --output-dir, --authorization
+```
+
+## Requirements
+
+- **Python**: >=3.10
+- **Dependencies**: qlip_serve_client, locust, Pillow, requests, aiohttp
+- **NumPy**: <2.0 (Triton compatibility)
+
+## ⚠️ Important Caveats
+
+1. **Triton Dependency**: NumPy must be <2.0 for Triton server compatibility
+2. **Authorization**: Use `--authorization` for authenticated endpoints
+3. **Ready Endpoint**: Server readiness checks may fail with Nginx/Salad setups
+4. **Metadata**: Requires model metadata JSON file or auto-download from server
+
+## Quick Example
+
+```bash
+# Test single inference
+elastic-models-client client llm \
+  --prompt "Write a haiku about AI" \
+  --url https://api.example.com/v2/models \
+  --model meta-llama/Llama-3.1-8B
+
+# Benchmark LLM with 4 concurrent users, 100 requests
+elastic-models-client benchmark llm \
+  --url https://api.example.com/v2/models \
+  --model meta-llama/Llama-3.1-8B \
+  --concurrency 4 \
+  --num-requests 100 \
+  --output-dir ./results
+```
+
+## Output
+
+- **Benchmarks**: CSV stats, HTML reports, JSONL logs (optional)
+- **Client**: JSON response with inference results
