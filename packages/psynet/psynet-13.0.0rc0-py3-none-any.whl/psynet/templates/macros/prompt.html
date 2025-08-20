@@ -1,0 +1,355 @@
+{% macro simple(params) %}
+    {% if params.text is not none %}
+        <style>
+            #prompt-text {
+                text-align: {{ params.text_align }};
+            }
+        </style>
+
+        <div id="prompt-text">
+            {{ params.text_html }}
+        </div>
+    {% endif %}
+    <script>
+        let loop = {{ params.loop | tojson }};
+
+        psynet.trial.onEvent("trialFinished", function() {
+            if (loop) {
+                psynet.trial.restart();
+            }
+        });
+    </script>
+{% endmacro %}
+
+{% macro audio(params) %}
+    {{ simple(params) }}
+
+    {% if params.controls %}
+        {{ audio_controls(params) }}
+    {% endif %}
+
+    <script>
+        var audioPromptPlayerOptions = {{ params.js_play_options | tojson }};
+        psynet.page.prompt.play = function(providedOptions) {
+            let options = psynet.utils.deepCopy(audioPromptPlayerOptions);
+            Object.assign(options, providedOptions);
+
+            let sound = psynet.audio.prompt.play(options);
+            sound.source.addEventListener("ended", function() {
+                if (!sound.manuallyStopped) {
+                    psynet.trial.registerEvent("promptEnd");
+                }
+            });
+        };
+
+        psynet.page.prompt.stop = function(providedOptions) {
+            psynet.media.stopAllAudio();
+        }
+
+        psynet.trial.onEvent("promptStart", psynet.page.prompt.play);
+        psynet.trial.onEvent("trialPrepare", psynet.media.stopAllAudio);
+        psynet.trial.onEvent("trialStop", psynet.page.prompt.stop);
+    </script>
+{% endmacro %}
+
+{% macro audio_controls(params) %}
+    <style>
+        #audio-prompt-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding-top: 25px;
+            padding-bottom: 25px;
+        }
+        .audio-prompt-button {
+            margin-left: 10px;
+            margin-right: 10px;
+        }
+        #audio-prompt-loop {
+            margin-left: 10px;
+            margin-right: 10px;
+        }
+    </style>
+
+    <div id="audio-prompt-controls">
+        {% if "Play from start" in params.controls %}
+        <button id="audio-prompt-play" type="button" class="btn audio-prompt-button btn-primary btn-sm" disabled>
+            {{ params.controls["Play from start"] }}
+        </button>
+        {% endif %}
+        {% if "Stop" in params.controls %}
+        <button id="audio-prompt-stop" type="button" class="btn audio-prompt-button btn-secondary btn-sm" disabled>
+            {{ params.controls["Stop"] }}
+        </button>
+        {% endif %}
+        {% if "Loop" in params.controls %}
+        <div id="audio-prompt-loop">
+          <input id="audio-prompt-loop-input" type="checkbox" value="" {% if params.loop %} checked {% endif %}>
+          <label id="audio-prompt-loop-label" for="audio-prompt-loop-input" style="cursor: pointer;">
+            {{ params.controls["Loop"] }}
+          </label>
+        </div>
+        {% endif %}
+    </div>
+    <script>
+    $(document).ready(function() {
+        $("#audio-prompt-play").on("click", function() {
+            psynet.trial.restart();
+        });
+        $("#audio-prompt-stop").on("click", function() {
+            psynet.trial.stop();
+        });
+        $("#audio-prompt-loop-input").on("change", function(event) {
+            loop = event.target.checked;
+        });
+        psynet.trial.onEvent("trialStop", psynet.media.stopAllAudio);
+    });
+
+    psynet.trial.onEvent("trialConstruct", function() {
+        $(".audio-prompt-button").prop("disabled", false)
+    });
+    </script>
+{% endmacro %}
+
+{% macro video(params) %}
+    {{ simple(params) }}
+
+    <style>
+        #prompt-video-container {
+            display: flex;
+            justify-content: center;
+        }
+        #prompt {
+            padding-top: 25px;
+            padding-bottom: 25px;
+            visibility: hidden;
+        }
+        {% if params.mirrored is true %}
+        video {
+            -webkit-transform: scaleX(-1);
+            transform: scaleX(-1);
+        }
+        {% endif %}
+    </style>
+
+    <div id="prompt-video-container">
+        <video id="prompt" style="width: {{ params.width }}; height: {{ params.height }};" alt="{{ gettext("Video not found") | replace('"',"'") | safe }}" controls></video>
+    </div>
+
+    <script>
+        let options = {{ params.js_play_options | tojson }};
+        let startAt = options.start_at;
+        let endAt = options.end_at;
+        let muted = options.muted;
+        let controls = options.controls;
+        let hideWhenFinished = options.hide_when_finished;
+
+        let videoPlayer = document.getElementById('prompt');
+        videoPlayer.muted = muted;
+        videoPlayer.controls = controls;
+
+        let hideVideo = function() {
+            videoPlayer.style.visibility = "hidden";
+        }
+        let showVideo = function() {
+            videoPlayer.style.visibility = "visible";
+        }
+
+        hideVideo();
+
+        let videoStopTimer = null;
+
+        psynet.page.prompt.play = function(providedOptions) {
+            videoPlayer.currentTime = startAt;
+            showVideo();
+            videoPlayer.play();
+            if (endAt !== null) {
+                console.assert(startAt !== null);
+                let duration = endAt - startAt
+                videoStopTimer = setTimeout(
+                    () => psynet.page.prompt.stop({manual: false}),
+                    duration * 1000
+                );
+            }
+        };
+
+        videoPlayer.addEventListener("ended", () => psynet.page.prompt.stop({manual: false}));
+
+        psynet.page.prompt.stop = function(providedOptions) {
+            let options = {
+                manual: true
+            };
+            Object.assign(options, providedOptions);
+
+            clearTimeout(videoStopTimer);
+            videoPlayer.pause();
+            videoPlayer.manuallyStopped = options.manual;
+
+            if (hideWhenFinished) {
+                hideVideo();
+            }
+            if (!options.manual) {
+                psynet.trial.registerEvent("promptEnd");
+            }
+        };
+
+        psynet.trial.onEvent("trialPrepare", () => {
+            videoPlayer.currentTime = startAt;
+        });
+        psynet.trial.onEvent("promptStart", psynet.page.prompt.play);
+        psynet.trial.onEvent("trialStop", psynet.page.prompt.stop);
+    </script>
+{% endmacro %}
+
+
+{% macro image(params) %}
+    <style>
+        #prompt-image {
+            width: {{ params.width }};
+            height: {{ params.height }};
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            margin-top: {{ params.margin_top}};
+            margin-bottom: {{ params.margin_bottom}};
+            opacity: 0;
+        }
+    </style>
+
+    <img id="prompt-image" src="{{ params.url }}" alt="{{ gettext("Image not found")  | replace('"',"'") | safe  }}">
+
+    <script>
+        let promptImage = $("#prompt-image").get(0);
+
+        psynet.trial.onEvent("trialConstruct", () => {
+            if (!promptImage.complete) {
+                psynet.waitForEventListener(promptImage, "load");
+            }
+        });
+        psynet.trial.onEvent("promptStart", () => promptImage.style.opacity = 1);
+        psynet.trial.onEvent("promptEnd", () => promptImage.style.opacity = 0);
+    </script>
+
+    {{ simple(params) }}
+{% endmacro %}
+
+{% macro color(params) %}
+    <style>
+        .color-box-container {
+            display: flex;
+            justify-content: center;
+        }
+        .color-box {
+            width: 200px;
+            height: 200px;
+            margin: 0px;
+            border-style: solid;
+            border-color: black;
+            background-color: hsl({{ params.hsl[0] }}, {{ params.hsl[1] }}%, {{ params.hsl[2] }}%);
+        }
+    </style>
+
+    <div class="color-box-container">
+        <div class="color-box"></div>
+    </div>
+
+    {{ simple(params) }}
+{% endmacro %}
+
+{% from "macros/graphics.html" import graphic_%}
+{% macro graphic(params) %}
+    {{ simple(params) }}
+    {{ graphic_(params) }}
+{% endmacro %}
+
+
+{% macro js_synth(params) %}
+    {{ simple(params) }}
+    {{ audio_controls(params) }}
+
+    <script src="/static/scripts/Tonejs/Tone.js"></script>
+    <script src="/static/scripts/js-synthesizer/instruments.js"></script>
+    <script src="/static/scripts/js-synthesizer/synthesis.js"></script>
+
+    <script>
+        let stimulus = {{ params.stimulus | tojson }};
+        let options = {{ params.options | tojson }};
+
+        var DEFAULT_PARAMS = { // Default parameters to use if not otherwise specified by backend.
+            "attack": 0.2, // Attack phase duration in seconds
+            "decay": 0.1, // Decay phase duration in seconds
+            "sustain_amp": 0.8, // Amplitude fraction to decay to relative to max amplitude
+            "release": 1, // Release phase duration in seconds
+            "duration": 1.33, // Overall tone duration in seconds
+            "attackCurve": "linear", // Amplitude curve profile for attack portion
+            "decayCurve": "exponential", // Amplitude curve profile for decay portion
+            "releaseCurve": "exponential", // Amplitude curve profile for release portion
+            "max_num_harmonics": 10, // Maximum number of partial harmonics per tone
+            "num_harmonics": 10, // Actual number of partial harmonics to use
+            "max_num_pitches": 3, // Maximum number of pitches in a chord
+            "type": "harmonic", // Synthesis type
+            "octave_definition": 2, // 2 is the harmonic series
+            "max_num_octave_transpositions": 4, // Maximum number of octave transpositions used to create a Shepard tower (runs from -num_octave_transpositions to num_octave_transpositions).
+            "num_octave_transpositions": 0, // Actual number of octave transpositions to use
+            "roll_off": 3, // Roll-off in units of dB/octave,
+            "shepard_center": 65.5, // Center of the gaussian weights used in octave transpositions
+            "shepard_width": 8.2, // Width of the gaussian weights used in octave transpositions
+        }
+        DEFAULT_PARAMS.max_num_harmonics = options.max_num_harmonics;
+        DEFAULT_PARAMS.max_num_octave_transpositions = options.max_num_octave_transpositions;
+        DEFAULT_PARAMS.max_num_pitches = options.max_num_pitches;
+
+        let LOADED_INSTRUMENTS = {};
+        let ACTIVE_NODES;
+
+        let sleep = async function(time) {
+            await new Promise((resolve) => {
+                setTimeout(() => resolve(), time * 1000);
+            });
+        }
+
+        psynet.trial.onEvent("trialPrepare", async function() {
+            await Tone.start();
+            for (const i of options.instruments) {
+                if (i.samples) {
+                    INSTRUMENTS[i.type] = {urls: i.samples, baseUrl: i.base_url};
+                }
+                LOADED_INSTRUMENTS[i.type] = await load_sampler(i.type);
+            }
+            if (options["max_num_pitches"] > 0) {
+                ACTIVE_NODES = generate_additive_nodes(options);
+            } else {
+                ACTIVE_NODES = [];
+            }
+
+            await sleep(0.5);
+        });
+
+        psynet.trial.onEvent("promptStart", () => play_stimulus(stimulus));
+    </script>
+{% endmacro %}
+
+{% macro abc_notation(params) %}
+    {{ simple(params) }}
+
+    <script src="/static/scripts/abc-js/abcjs-basic.js"></script>
+
+    <script>
+        let abcScore = "{{ params.content | safe }}";
+
+        function renderABCscore() {
+            $("#abcScore").css("visibility", "block")
+            ABCJS.renderAbc("abcScore", abcScore);
+        }
+
+        function hideABCscore() {
+            $("#abcScore").css("visibility", "hidden")
+        }
+
+        psynet.trial.onEvent("promptStart", renderABCscore);
+        psynet.trial.onEvent("promptEnd", hideABCscore);
+    </script>
+
+    <div id="abcScore"></div>
+
+{% endmacro %}

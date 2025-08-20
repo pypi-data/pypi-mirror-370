@@ -1,0 +1,137 @@
+{% extends "psynet_dashboard.html" %}
+
+{% block stylesheets %}
+    <style>
+        #dashboard-participant {
+            margin-top: 20px
+        }
+        #resume-table {
+            border-collapse: collapse;
+            border: none;
+        }
+        #btn-copy-url {
+            margin-left: 20px
+        }
+        colgroup col.title {
+          font-weight: bold;
+        }
+    </style>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+
+    <script>
+        function isValidAssignmentId(assignmentId) {
+            return assignmentId != "";
+        };
+
+        function selectParticipantByParticipantId() {
+            let participantId = $("#input-participant-id").get(0).value;
+            window.location.href = window.location.pathname + "?participant_id=" + participantId;
+        }
+
+        function selectParticipantByAssignmentId() {
+            let assignmentId = $("#input-assignment-id").get(0).value;
+            window.location.href = window.location.pathname + "?assignment_id=" + assignmentId;
+        }
+
+         function selectParticipantByWorkerId() {
+            let workerId = $("#input-worker-id").get(0).value;
+            window.location.href = window.location.pathname + "?worker_id=" + workerId;
+        }
+
+        {% if participant is not none %}
+            function copyURLForResumingSession() {
+                let url = "{{ get_timeline_url(participant) }}";
+                navigator.clipboard.writeText(url).then(function() {
+                  console.log("Copied URL to cliboard.");
+                });
+            }
+        {% endif %}
+    </script>
+{% endblock %}
+
+{% block body %}
+    <h1>{{ title }}</h1>
+    <p>This page allows you to retrieve information about a participant in the experiment, including the current status, the accumulated reward, and the link to resume the session.</p>
+    <div class="row" id="dashboard-participant">
+        <div class="col-5">
+            <table class="table" id="resume-table">
+                <colgroup>
+                    <col class="title"></col>
+                    <col></col>
+                </colgroup>
+
+                <tr>
+                    <td>Participant ID</td>
+                    <td><input id="input-participant-id" class="form-control response" type="text" value=""/></td>
+                    <td><button type="button" class="btn btn-primary" onclick="selectParticipantByParticipantId()">Go</button></td>
+                </tr>
+                <tr>
+                    <td>Assignment ID</td>
+                    <td><input id="input-assignment-id" class="form-control response" type="text" value=""/></td>
+                    <td><button type="button" class="btn btn-primary" onclick="selectParticipantByAssignmentId()">Go</button></td>
+                </tr>
+                <tr>
+                    <td>Worker ID</td>
+                    <td><input id="input-worker-id" class="form-control response" type="text" value=""/></td>
+                    <td><button type="button" class="btn btn-primary" onclick="selectParticipantByWorkerId()">Go</button></td>
+                </tr>
+            </table>
+        </div>
+        <div class="col-7">
+            {{ message }}
+
+            {% if participant is not none %}
+                {{ summarize_participant(participant) }}
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}
+
+{% macro summarize_participant(participant) %}
+    <table class="table" id="resume-table">
+        <tr>
+            <td>Participant ID</td>
+            <td>{{ participant.id }}</td>
+        </tr>
+        <tr>
+            <td>Unique ID</td>
+            <td>{{ participant.unique_id }}</td>
+        </tr>
+        <tr>
+            <td>Worker ID</td>
+            <td>{{ participant.worker_id }}</td>
+        </tr>
+        <tr>
+            <td>Assignment ID</td>
+            <td>{{ participant.assignment_id }}</td>
+        </tr>
+        <tr>
+            <td>Status</td>
+            <td>{{ participant.status }}</td>
+        </tr>
+        <tr>
+            <td>Failed</td>
+            <td>{{ participant.failed }}</td>
+        </tr>
+        <tr>
+            <td>Current module</td>
+            <td>{{ participant.current_module_id }}</td>
+        </tr>
+        <tr>
+            <td>Current reward</td>
+            <td>{{ participant.calculate_reward() }}</td>
+        </tr>
+        <tr>
+            <td>Link for resuming session</td>
+            <td>
+                <a href="{{ get_timeline_url(participant) }}" target="_blank">{{ get_timeline_url(participant) }}</a>
+                <button type="button" class="btn btn-secondary" id="btn-copy-url" onclick="copyURLForResumingSession()">Copy</button>
+            </td>
+        </tr>
+    </table>
+{% endmacro %}
+
+{% macro get_timeline_url(participants) %}{{ app_base_url }}/timeline?unique_id={{ participant.unique_id }}{% endmacro %}
