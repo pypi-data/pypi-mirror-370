@@ -1,0 +1,57 @@
+linux:
+  image: python:3.12
+  services:
+    - name: docker:dind
+      entrypoint: ["env", "-u", "DOCKER_HOST"]
+      command: ["dockerd-entrypoint.sh"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+    # See https://github.com/docker-library/docker/pull/166
+    DOCKER_TLS_CERTDIR: ""
+
+    # skip all but the basic tests
+    # (comment the below line in a PR to debug a Gitlab-specific issue)
+    PYTEST_ADDOPTS: -k "unit_test or test_0_basic" --suppress-no-test-exit-code
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        CIBW_ENABLE: "all"
+  script:
+    - curl -sSL https://get.docker.com/ | sh
+    - docker run --rm --privileged docker.io/tonistiigi/binfmt:latest --install all
+    - python -m pip install -U pip
+    - python -m pip install -e. pytest-custom-exit-code --group test
+    - python ./bin/run_tests.py
+
+windows:
+  image: mcr.microsoft.com/windows/servercore:1809
+  variables:
+    PYTEST_ADDOPTS: -k "unit_test or test_0_basic" --suppress-no-test-exit-code
+  before_script:
+    - choco install python -y --allow-downgrade --version 3.12.4
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        CIBW_ENABLE: "all"
+  script:
+    - py -m pip install -U pip
+    - py -m pip install -e. pytest-custom-exit-code --group test
+    - py bin\run_tests.py
+  tags:
+    - saas-windows-medium-amd64
+
+macos:
+  image: macos-14-xcode-15
+  variables:
+    PYTEST_ADDOPTS: -k "unit_test or test_0_basic" --suppress-no-test-exit-code
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        CIBW_ENABLE: "all"
+  script:
+    - python3 -m pip install -U pip
+    - python3 -m pip install -e. pytest-custom-exit-code --group test
+    - python3 ./bin/run_tests.py
+  tags:
+    - saas-macos-medium-m1

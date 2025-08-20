@@ -1,0 +1,76 @@
+pr:
+  paths:
+    exclude:
+      - .github/**
+      - bin/*
+      - docs/**
+      - examples/github-*
+      - examples/ci*
+      - examples/travis-ci-*
+      - .ci*
+      - .pre-commit-config.yaml
+      - .readthedocs.yml
+      - .travis.yml
+      - README.md
+      - mkdocs.yml
+      - noxfile.py
+
+jobs:
+- job: tests
+  strategy:
+    matrix:
+      linux_311:
+        imageName: "ubuntu-latest"
+        pythonVersion: "3.11"
+        testSelect: "native"
+      android_311:
+        imageName: "ubuntu-latest"
+        pythonVersion: "3.11"
+        testSelect: "android"
+      macos_311:
+        imageName: "macos-latest"
+        pythonVersion: "3.11"
+        testSelect: "native"
+      ios_311:
+        imageName: "macos-latest"
+        pythonVersion: "3.11"
+        testSelect: "ios"
+      android_macos_311:
+        imageName: "macos-latest"
+        pythonVersion: "3.11"
+        testSelect: "android"
+      windows_311:
+        imageName: "windows-latest"
+        pythonVersion: "3.11"
+        testSelect: "native"
+  timeoutInMinutes: 180
+  pool:
+    vmImage: $(imageName)
+
+  steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: $(pythonVersion)
+
+    - task: JavaToolInstaller@0
+      condition: and(eq(variables['testSelect'], 'android'), eq(variables['Agent.OS'], 'Linux'))
+      inputs:
+        versionSpec: '17'
+        jdkArchitectureOption: 'x64'
+        jdkSourceOption: 'PreInstalled'
+
+    - bash: docker run --rm --privileged docker.io/tonistiigi/binfmt:latest --install all
+      condition: and(eq(variables['imageName'], 'ubuntu-latest'), eq(variables['testSelect'], 'native'))
+      displayName: 'Install binfmt on Linux'
+
+    - bash: python -m pip install -U pip && python -m pip install -e. --group test
+      displayName: 'Update pip and install cibuildwheel --group test'
+
+    - bash: echo "##vso[task.setvariable variable=CIBW_ENABLE;]all"
+      condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      displayName: Set CIBW_ENABLE to all (main branch)
+
+    - bash: |
+        echo "CIBW_ENABLE = $CIBW_ENABLE"
+        python ./bin/run_tests.py --test-select $(testSelect)
+      displayName: 'Run tests'
