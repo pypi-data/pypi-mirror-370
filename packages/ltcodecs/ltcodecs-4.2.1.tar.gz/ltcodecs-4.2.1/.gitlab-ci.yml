@@ -1,0 +1,197 @@
+workflow:
+  rules:
+    - when: always
+
+stages:
+  - build
+  - test
+  - combine_coverage
+  - deploy
+
+variables:
+  # Requires two additional vars, REGISTRY_URL and REGISTRY_REPO to be defined
+  # in CI/CD variables on gitlab
+
+  # dockerfile locations
+  ROS1_DOCKERFILE_PATH: "docker/tests.Dockerfile.ros1"
+  ROS2_DOCKERFILE_PATH: "docker/tests.Dockerfile.ros2"
+  DOCKERFILE_AUTODOCS_PATH: "docker/auto-docs.Dockerfile"
+
+  # version based configurations
+  ROS1_DISTRO: "noetic"
+  ROS2_DISTRO: "jazzy"
+  ROS1_BASE_IMAGE: "ros:${ROS1_DISTRO}-ros-base"
+  ROS2_BASE_IMAGE: "ros:${ROS2_DISTRO}-ros-base"
+
+  ROS_TEST_IMAGE_NAME: "ltcodec_tests"
+  ROS1_TAG: "ros1-test-pipeline-${CI_PIPELINE_ID}"
+  ROS2_TAG: "ros2-test-pipeline-${CI_PIPELINE_ID}"
+
+  DOCS_IMAGE_NAME: "ltcodec_auto_docs"
+  DOCS_TAG: "auto-doc-pipeline-${CI_PIPELINE_ID}"
+
+  ARMW_BRANCH: ""
+  PYACOMMS_BRANCH: ""
+  LTCODEC_BRANCH: ""
+
+  ROS_ACOMMS_BRANCH: "devel"
+  ROS_ACOMMS_NET_BRANCH: "devel"
+
+.build_image_template:
+  image: docker:stable
+  stage: build
+  tags:
+    - privileged
+  services:
+    - name: docker:dind
+  script:
+    - docker build --rm --build-arg ROS_DISTRO=${ROS_DISTRO} --build-arg BASE_IMAGE=${ROS_BASE_IMAGE} -t $ROS_TEST_IMAGE_NAME:${IMAGE_TAG} -f $ROS_DOCKERFILE_PATH .
+    - docker tag ${ROS_TEST_IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${REGISTRY_REPO}/${ROS_TEST_IMAGE_NAME}:${IMAGE_TAG}
+    - docker push ${REGISTRY_URL}/${REGISTRY_REPO}/${ROS_TEST_IMAGE_NAME}:${IMAGE_TAG}
+
+build_ros_test_image_ros1:
+  extends: .build_image_template
+  variables:
+    IMAGE_TAG: "${ROS1_TAG}"
+    ROS_BASE_IMAGE: $ROS1_BASE_IMAGE
+    ROS_DOCKERFILE_PATH: $ROS1_DOCKERFILE_PATH
+
+build_ros_test_image_ros2:
+  extends: .build_image_template
+  variables:
+    IMAGE_TAG: "${ROS2_TAG}"
+    ROS_DOCKERFILE_PATH: $ROS2_DOCKERFILE_PATH
+    ROS_BASE_IMAGE: $ROS2_BASE_IMAGE
+
+build_auto_doc_image:
+  image: docker:stable
+  stage: build
+  tags:
+    - privileged
+  services:
+    - name: docker:dind
+  script:
+    - docker build --rm -t ${DOCS_IMAGE_NAME}:${DOCS_TAG} -f $DOCKERFILE_AUTODOCS_PATH .
+    - docker tag ${DOCS_IMAGE_NAME}:${DOCS_TAG} ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCS_IMAGE_NAME}:${DOCS_TAG}
+    - docker push ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCS_IMAGE_NAME}:${DOCS_TAG}
+
+trigger-ros_acomms-pipeline:
+  stage: test
+  trigger:
+    project: acomms/ros_acomms
+    branch: $ROS_ACOMMS_BRANCH
+    strategy: depend
+  variables:
+    LTCODEC_BRANCH: $LTCODEC_BRANCH
+    PYACOMMS_BRANCH: $PYACOMMS_BRANCH
+    ARMW_BRANCH: $ARMW_BRANCH
+  rules:
+    - if: '$CI_PIPELINE_SOURCE != "pipeline"'
+
+.test_template:
+  stage: test
+  script:
+    - pip install -r requirements.txt
+    - pip install .
+    - |
+      if [[ "$ARMW_BRANCH" != "" ]]; then
+          git clone -b "$ARMW_BRANCH" "https://gitlab-ci-token:$CI_JOB_TOKEN@git.whoi.edu/ros/armw.git" /armw && \
+          pip install /armw/.;
+      fi
+    - pytest --capture=no --junitxml=results.xml --cov=ltcodecs --cov-report=term --cov-report=xml --cov-report=html  tests/
+  artifacts:
+    paths:
+      - 'coverage.xml'
+      - 'htmlcov/'
+    reports:
+      junit: 'results.xml'
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+)%/'
+
+.ros_version_selector:
+  variables:
+    ROS_DISTRO: $ROS1_DISTRO
+    ROS_WORKSPACE_OUTPUT_DIR: "devel"
+    IMAGE_FULL_NAME: "$REGISTRY_URL/$REGISTRY_REPO/$ROS_TEST_IMAGE_NAME:$ROS1_TAG"
+  rules:
+    - if: $ROS_VERSION == "ros2"
+      variables:
+        ROS_DISTRO: $ROS2_DISTRO
+        ROS_WORKSPACE_OUTPUT_DIR: "install"
+        IMAGE_FULL_NAME: "$REGISTRY_URL/$REGISTRY_REPO/$ROS_TEST_IMAGE_NAME:$ROS2_TAG"
+    - when: on_success
+  image: $IMAGE_FULL_NAME
+
+test:
+  extends:
+    - .test_template
+    - .ros_version_selector
+  parallel:
+    matrix:
+      - ROS_VERSION: [ros1, ros2]
+
+test_coverage:
+  image: "$REGISTRY_URL/$REGISTRY_REPO/$ROS_TEST_IMAGE_NAME:$ROS1_TAG"
+  stage: combine_coverage
+  script:
+    - ls *.coverage
+    - coverage combine --keep *.${ROS1_DISTRO}.coverage
+    - coverage xml
+    - coverage html
+    - coverage report --omit=*__init__.py
+  coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+)%/'
+  artifacts:
+    paths:
+      - ".coverage"
+      - "htmlcov/"
+      - "coverage.xml"
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  except:
+    - dev/autodocs
+        
+auto-docs:
+  image: "$REGISTRY_URL/$REGISTRY_REPO/$DOCS_IMAGE_NAME:$DOCS_TAG"
+  stage: deploy
+  script:
+    - pip install -r requirements.txt
+    - pip install .
+    - cd docs
+    - make latexpdf
+    - mv _build/latex/ltcodecs.pdf ..
+  artifacts:
+    paths:
+      - ltcodecs.pdf
+
+pages:
+  image: "$REGISTRY_URL/$REGISTRY_REPO/$DOCS_IMAGE_NAME:$DOCS_TAG"
+  stage: deploy
+  script:
+    - pip install -r requirements.txt
+    - pip install .
+    - cd docs
+    - sphinx-build -b html . ../public
+  artifacts:
+    paths:
+      - public
+  only:
+    - tags
+    - master
+
+pypi:
+  image: python
+  stage: deploy
+  script:
+    - pip install -r requirements.txt
+    - pip install build twine
+    - python -m build
+    - twine upload --username __token__ --password $PYPI_TOKEN dist/*
+  artifacts:
+    paths:
+      - dist/
+  only:
+    - tags
