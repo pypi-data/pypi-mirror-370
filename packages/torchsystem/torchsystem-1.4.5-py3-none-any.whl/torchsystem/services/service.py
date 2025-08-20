@@ -1,0 +1,162 @@
+# Copyright 2024 Eric Hermosis
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You can obtain a copy of the License at:
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# This software is distributed "AS IS," without warranties or conditions.
+# See the License for specific terms.
+#
+# For inquiries, visit: entropy-flux.github.io/TorchSystem/
+
+from re import sub
+from typing import Any
+from collections.abc import Callable
+from torchsystem.depends import inject, Provider
+from torchsystem.depends import Depends as Depends
+
+class Service:
+    """
+    A SERVICE is the technical authority for a business capability. And it is the exclusive
+    owner of a certain subset of the business data.  It centralizes and organizes domain
+    operations, enforces business rules, and coordinates workflows. 
+
+    The `Service` serves as an entry point for the service layer and provides a simple way to
+    build stateless logic for executing domain operations.
+
+    A SERVICE should be modeled with UBIQUITOUS LANGUAGE. This means that the names of handler
+    functions should reflect the domain operations that the service is responsible for. Keep
+    this in mind when naming the functions that will be registered as handlers, since the `Service`
+    class provides a method to call the handlers by their registered name. This is useful for example 
+    when building REST APIs with Command Query Segregation (CQS) and you want to invoke a handler based
+    on the action they perfom (aka. The handler's name).
+
+    A naming generator can be provided to the `Service` constructor in order to customize the function names
+    to the ubiquitous language of the domain. The default generator transforms the function name from snake_case
+    to kebab-case.
+
+    Methods:
+        register:
+            Registers a handler for a specific command or query type. Handles nested or generic annotations.
+
+        handler:
+            Decorator for registering a function as a handler.
+
+        handle:
+            Executes the handler associated with a given action.
+
+    Example:
+        ```python	
+        from torch import cuda
+        from torchsystem import Depends
+        from torchsystem.services import Service
+
+        service = Service()
+
+        def device() -> str:
+            raise NotImplementedError('Override this function to return the device')
+
+        @service.handler
+        def train(model: Model, data: DataLoader, device: str = Depends(device)):
+            # Your training logic here
+            ...
+
+        service.dependency_overrides[device] = lambda: 'cuda' if cuda.is_available() else 'cpu'
+        ```
+    """
+    def __init__(
+        self, 
+        name: str | None = None,
+        *,
+        provider: Provider | None = None,
+        generator: Callable[[str], str] = lambda name: sub(r'_', '-', name)
+    ):
+        self.name = name
+        self.handlers = dict[str, Callable[..., Any]]()
+        self.generator = generator
+        self.provider = provider or Provider()
+
+    @property
+    def dependency_overrides(self) -> dict:
+        """
+        An entry point for overriding the dependencies for the service. This is useful for late binding,
+        testing and changing the behavior of the service in runtime.
+
+        Returns:
+            dict: A dictionary of the dependency map.
+
+        Example:
+            ```python
+            service = Service()
+            ...
+
+            service.dependency_overrides[device] = lambda: 'cuda' if cuda.is_available() else 'cpu'
+            ```
+        """
+        return self.provider.dependency_overrides
+
+    def override(self, dependency: Callable, implementation: Callable):
+        """
+        Overrides a dependency with an implementation. 
+
+        Args:
+            dependency (Callable): The dependency function to override.
+            implementation (Callable): The implementation of the function.
+        """
+        self.dependency_overrides[dependency] = implementation
+
+    def handler(self, wrapped: Callable[..., Any]) -> Callable[..., Any]:
+        """
+        Decorator for registering a function as a handler in the service. The handler is
+        registered with the name of the function as the key. The handler is also injected
+        with the dependencies provided by the service.
+
+        Args:
+            wrapped (Callable[..., Any]): The function to be registered as a handler.
+
+        Returns:
+            Callable[..., Any]: The injected handler function.
+        """
+        injected = inject(self.provider)(wrapped)
+        self.handlers[self.generator(wrapped.__name__)] = injected
+        return injected
+    
+    def handle(self, action: str, *arguments: Any) -> Any:
+        """
+        Executes the handler associated with the given action. The action is the generated name 
+        from the handler function to be executed. The name is generated by the `generator` function
+        provided to the service, which defaults to transforming the function name from snake case
+        to kebab case.
+
+        Args:
+            action (str): The action to execute the handler for.
+
+        Raises:
+            KeyError: If the handler for the action is not found.
+
+        Returns:
+            Any: Whatever the handler returns.
+
+        Example:
+            ```python
+            service = Service()
+
+            @service.handler
+            def train_model(model: Model, data: DataLoader, device: str = Depends(device)):
+                # Your training logic here
+                ...
+
+            model = Model()
+            data = Data()
+
+            service.handle('train-model', model, data) # train(model, data) will also work
+                                                       # but this is usefull when building REST APIs
+                                                       # with Command Query Segregation (CQS)
+            ```
+        """
+        handler = self.handlers.get(action, None)
+        if not handler:
+            raise KeyError(f'Handler not found for action: {action}')
+        return handler(*arguments)
