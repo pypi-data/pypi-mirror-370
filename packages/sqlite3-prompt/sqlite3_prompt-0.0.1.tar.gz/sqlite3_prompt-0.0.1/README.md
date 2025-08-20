@@ -1,0 +1,108 @@
+# SQLite3-Prompt
+
+一个功能强大的、支持自动补全和语法高亮的交互式 SQLite3 命令行终端。目的是提供一个友好的交互式环境，方便用户能便捷地进行数据库操作。
+
+## ✨ 功能特性
+
+- **智能自动补全**: 自动补全 SQL 关键字、表名、字段名
+- **语法高亮**: 在您输入时实时高亮 SQL 语句，提升可读性
+- **多行输入**: 支持将复杂的 SQL 语句分多行输入，直到以分号结尾
+- **历史记录**: 自动保存命令历史，方便回溯和重复执行
+- **跨平台**: 在 Windows, macOS 和 Linux 上均可良好运行
+- **易于使用**: 直观的命令行界面，与标准 sqlite3 命令行工具类似
+
+## 🚀 安装
+
+通过 `pip` 即可轻松安装：
+
+```bash
+pip install sqlite3-prompt
+```
+
+## 🖥️ 如何使用
+
+安装完成后，即可在您的终端中使用 `sqlite-prompt` 命令。
+
+### 基本用法
+
+**1. 连接到（或创建）一个数据库文件：**
+
+```bash
+sqlite-prompt my_database.db
+```
+
+**2. 直接启动，然后输入数据库路径：**
+
+```bash
+sqlite-prompt
+```
+程序会提示您输入数据库文件的路径。
+
+### 在 IPython 中使用
+
+`sqlite-prompt` 也可以在 IPython 等交互式环境中使用：
+
+```ipython
+In [1]: sqlite-prompt my_data.db
+已成功连接到数据库: my_data.db
+欢迎使用Python版SQLite3工作台 V1.0 (稳定版)。
+当前配色: monokai (自定义)。
+提示: SQL语句必须以分号 (;) 结尾才能执行，支持多行输入。
+输入 .help 获取帮助。
+sqlite>
+```
+
+### 支持的元命令
+
+进入终端后，您可以像使用标准 `sqlite3` 终端一样输入 SQL 命令。所有 SQL 语句必须以分号 (`;`) 结尾才能执行。
+
+- `.tables`: 显示数据库中所有的表
+- `.help`: 显示帮助信息
+- `.exit` 或 `.quit`: 退出终端
+
+### 示例会话
+
+```sql
+sqlite> CREATE TABLE users (
+   ...>   id INTEGER PRIMARY KEY,
+   ...>   name TEXT NOT NULL,
+   ...>   email TEXT UNIQUE
+   ...> );
+命令执行成功。
+(操作耗时: 0.0023 秒)
+
+sqlite> INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
+命令执行成功。
+(操作耗时: 0.0012 秒)
+
+sqlite> SELECT * FROM users;
++----+-------+-------------------+
+| id | name  | email             |
++====+=======+===================+
+|  1 | Alice | alice@example.com |
++----+-------+-------------------+
+
+查询到 1 行。
+(操作耗时: 0.0008 秒)
+
+sqlite> .exit
+数据库连接已关闭。
+```
+
+## 🛠️ 开发和贡献
+
+如果您想为这个项目做贡献或进行本地开发，可以：
+
+1. 克隆仓库
+2. 安装开发依赖：`pip install -e .`
+3. 进行您的修改
+4. 提交拉取请求
+
+## 📋 系统要求
+
+- Python 3.8 或更高版本
+- 依赖库：`prompt-toolkit`, `Pygments`, `tabulate`
+
+## 📜 许可证
+
+本项目基于 [MIT License](LICENSE) 开源。 
