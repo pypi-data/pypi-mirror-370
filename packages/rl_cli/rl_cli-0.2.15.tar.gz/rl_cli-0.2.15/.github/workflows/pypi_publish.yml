@@ -1,0 +1,48 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # This allows manual triggering
+    inputs:
+      version:
+        description: '0.1.1'
+        required: true
+        type: string
+        
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4.1.1
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5.0.0
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flit
+    
+    - name: Set version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Use the manually input version
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          # Extract version from GitHub release tag
+          VERSION=$(echo $GITHUB_REF | awk -F'/' '{print $NF}')
+        fi
+        # Update __init__.py with the new version using awk
+        awk -v version="$VERSION" '/__version__/{$0 = "__version__ = \"" version "\""} 1' rl_cli/__init__.py > tmp && mv tmp rl_cli/__init__.py
+        # Display the new version for verification
+        echo "Updated version to $VERSION"
+        cat rl_cli/__init__.py
+    
+    - name: Build and publish
+      env:
+        FLIT_USERNAME: __token__
+        FLIT_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+      run: flit publish
