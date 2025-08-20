@@ -1,0 +1,112 @@
+name: Test Integration
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -el {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+        test_type:
+          - "with_server_options"
+          - "not with_server_options"
+        os:
+          - ubuntu-latest
+        jupyterhub:
+          - "4.1.5"
+          - "5.3.0"
+    steps:
+    - uses: actions/checkout@v4.1.1
+
+    - name: Setup Python
+      uses: mamba-org/setup-micromamba@v1.8.1
+      with:
+        environment-file: environment-dev.yml
+        create-args: >-
+          python=${{ matrix.python-version }}
+          -c conda-forge
+
+    - name: Install JHub Apps
+      run: |
+        pip install .
+
+    - name: Install JupyterHub
+      run: |
+        pip install "jupyterhub==${{ matrix.jupyterhub }}"
+
+    - name: Install chp
+      run: npm install -g configurable-http-proxy
+
+    - name: conda list
+      run: conda list
+
+    - name: pip freeze
+      run: pip freeze
+
+    - name: Verify JupyterHub Version
+      run: |
+        # Check if the installed version matches the expected version
+        if [ "$(jupyterhub -V)" != "${{ matrix.jupyterhub }}" ]; then
+            echo "JupyterHub version $(jupyterhub -V) != ${{ matrix.jupyterhub }}"
+            exit 1
+        fi
+
+    - name: Add server options if with server types
+      if: matrix.test_type == 'with_server_options'
+      run: |
+        cat jupyter_config_profile_list >> jupyterhub_config.py
+        cat jupyterhub_config.py
+
+    - name: Install Playwright
+      run: |
+        pip install pytest-playwright
+
+    - name: Install Playwright Browser
+      run: |
+        playwright install
+
+    - name: Run Tests
+      run: |
+        pytest jhub_apps/tests/tests_e2e/ -vvv -s -m "${{ matrix.test_type }}" --log-cli-level=INFO
+
+    - name: Create artifact name
+      id: artifact-name
+      if: always()
+      run: |
+        if [ "${{ matrix.jupyterhub }}" = "4.1.5" ]; then
+            jhub_suffix="4x"
+        else
+            jhub_suffix="5x"
+        fi
+        echo "playwright-artifact-name=${{ matrix.test_type }}-$jhub_suffix-python${{ matrix.python-version }}-playwright-videos" >> "$GITHUB_OUTPUT"
+        echo "jhub-logs-artifact-name=${{ matrix.test_type }}-$jhub_suffix-python${{ matrix.python-version }}-jupyterhub-logs" >> "$GITHUB_OUTPUT"
+
+    - name: Upload Playwright Videos
+      if: always()
+      uses: actions/upload-artifact@v4.3.0
+      with:
+        name: ${{ steps.artifact-name.outputs.playwright-artifact-name }}
+        path: videos
+
+    - name: Upload JupyterHub logs
+      if: always()
+      uses: actions/upload-artifact@v4.3.0
+      with:
+        name: ${{ steps.artifact-name.outputs.jhub-logs-artifact-name }}
+        path: jupyterhub-logs.txt
+
+    - name: JupyterHub logs
+      if: always()
+      run: cat jupyterhub-logs.txt
