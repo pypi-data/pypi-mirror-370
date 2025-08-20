@@ -1,0 +1,150 @@
+{%- macro input_date(prefix='timestamp', initial=None, resolution='minute', is_dynamic=True) -%}
+	{% set year_name = prefix + '_year' %}
+	{% set month_name = prefix + '_month' %}
+	{% set day_name = prefix + '_day' %}
+	{% set hour_name = prefix + '_hour' %}
+	{% set minute_name = prefix + '_minute' %}
+
+	<div style="white-space: nowrap;" hx-get="/input_date" hx-params="*" hx-trigger="load
+			{%- if is_dynamic -%}
+				, change
+			{%- endif -%}" hx-include="this">
+		<input type="hidden" name="prefix" value="{{prefix}}">
+		<input type="hidden" name="resolution" value="{{resolution}}">
+
+		{% if initial %}
+			{% set initial_ct = initial|to_ct %}
+			{{input_hidden(year_name, initial=initial_ct.year)}}
+			{{input_hidden(month_name, initial=initial_ct.month)}}
+			{{input_hidden(day_name, initial=initial_ct.day)}}
+			{{input_hidden(hour_name, initial=initial_ct.hour)}}
+			{{input_hidden(minute_name, initial=initial_ct.minute)}}
+		{% else %}
+			{{input_hidden(year_name, initial=None)}}
+			{{input_hidden(month_name, initial=None)}}
+			{{input_hidden(day_name, initial=None)}}
+			{{input_hidden(hour_name, initial=None)}}
+			{{input_hidden(minute_name, initial=None)}}
+		{% endif %}
+	</div>
+{%- endmacro -%}
+
+{%- macro input_option(name, item_id, desc, initial=None) -%}
+    <option value="{{ item_id }}"
+        {%- if name in request.values -%}
+            {%- if request.values[name] == '' ~ item_id %} selected
+            {%- endif -%}
+        {%- else -%}
+            {%- if initial == item_id %} selected{% endif -%}
+            {%- endif -%}>{{ desc }}</option>
+{%- endmacro -%}
+
+{% macro input_hidden(name, initial=None) %}
+    <input type="hidden" name="{{name}}" value="
+        {%- if request.values[name] -%}
+            {{ request.values[name] }}
+        {%- elif initial is not none -%}
+            {{initial}}
+        {%- endif -%}">
+{%- endmacro -%}
+
+{% macro input_hidden_checkbox(name, initial=None) %}
+    <input type="hidden" name="{{name}}" value="
+        {%- if request.values[name] -%}
+            {{ request.values[name] }}
+        {%- elif initial is not none -%}
+					{%- if initial -%}
+						true
+					{%- else -%}
+						false
+					{%- endif -%}
+				{%- endif -%}">
+{%- endmacro -%}
+
+{% macro input_text(
+  name, initial=None, size=None, maxlength=None, placeholder=None,
+  required=None, pattern=None) %}
+    <input name="{{name}}" value="
+        {%- if request.values[name] -%}
+            {{ request.values[name] }}
+        {%- elif initial is not none -%}
+            {{initial}}
+        {%- endif -%}"
+        {%- if size %} size="{{ size }}"{% endif %}
+        {%- if placeholder %} placeholder="{{ placeholder }}"{% endif %}
+        {%- if required %} required="required"{% endif %}
+        {%- if pattern %} pattern="{{pattern}}"{% endif %}
+        {%- if maxlength %} maxlength="{{ maxlength }}"{% endif %}>
+{%- endmacro -%}
+
+{% macro input_number(
+  name, initial=None, size=None, maxlength=None, placeholder=None,
+  required=None) %}
+    <input type="number" name="{{name}}" value="
+        {%- if request.values[name] -%}
+            {{ request.values[name] }}
+        {%- elif initial is not none -%}
+            {{initial}}
+        {%- endif -%}"
+        {%- if size %} size="{{ size }}"{% endif %}
+        {%- if placeholder %} placeholder="{{ placeholder }}"{% endif %}
+        {%- if maxlength %} maxlength="{{ maxlength }}"{% endif %}
+        {%- if required %} required="required"{% endif %}>
+{%- endmacro -%}
+
+{% macro input_textarea(
+    name, initial, rows, cols, placeholder=None, show_pos=False) -%}
+	<div>
+		<textarea id="{{ name }}" name="{{ name }}" rows="{{ rows }}"
+			cols="{{ cols }}"
+			{%- if placeholder %} placeholder="{{ placeholder }}"{% endif %}>
+			{%- if request.values[name] -%}
+				{{ request.values[name] }}
+			{%- else -%}
+				{{ initial }}
+			{%- endif -%}
+		</textarea>
+		{% if show_pos %}
+			<p id="{{name}}_pos">Line: Column:</p>
+			<script type="text/javascript">
+				var props = document.getElementById('{{name}}');
+				var cursorPos = document.getElementById('{{name}}_pos');
+
+				props.onkeyup = updateLineCharacter;
+				props.onclick = updateLineCharacter;
+
+				function updateLineCharacter() {
+					var textLines = props.value.substr(0, props.selectionStart).split("\n");
+					var line = textLines.length;
+					var column = textLines[textLines.length - 1].length + 1;
+					cursorPos.innerHTML = "Line: " + line + " Column: "+ column
+				};
+			</script>
+		{% endif %}
+	</div>
+{%- endmacro -%}
+
+{%- macro input_checkbox(name, initial) %}
+	<input type="checkbox" name="{{ name }}" value="true"
+		{%- if request.values[name] -%}
+				{%- if request.values[name] == 'true' %} checked
+				{%- endif -%}
+		{%- else -%}
+				{%- if initial == True %} checked{% endif -%}
+		{%- endif -%}>
+{%- endmacro -%}
+
+{%- macro messages() %}
+	{% with msgs = get_flashed_messages() %}
+		{% if msgs %}
+			<ul>
+				{% for message in mgs %}
+					<li>{{message}}</li>
+				{% endfor %}
+			</ul>
+		{% endif %}
+	{% endwith %}
+{%- endmacro -%}
+
+{% block html %}
+{% endblock %}
