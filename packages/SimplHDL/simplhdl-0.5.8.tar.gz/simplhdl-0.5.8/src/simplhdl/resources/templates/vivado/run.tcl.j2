@@ -1,0 +1,68 @@
+package require Vivado
+
+set step [lindex $::argv 0]
+
+switch $step {
+    next {
+        set launch_args "-next_step"
+    }
+    previous {
+        reset_run [current_run] -prev_step
+        reset_run [current_run] -prev_step
+        set launch_args "-next_step"
+    }
+    reset {
+        reset_run [current_run]
+    }
+    bitstream {
+        set launch_args "-to_step write_bitstream"
+    }
+    archive {
+        archive_project -force [current_project].zip
+        exit 0
+    }
+    archive_exclude_results {
+        archive_project -force -exclude_run_results [current_project].zip
+        exit 0
+    }
+    archive_include_settings {
+        archive_project -force -include_config_settings [current_project].zip
+        exit 0
+    }
+    default {
+        set launch_args "-to_step ${step}_design"
+    }
+
+}
+
+if {$step == "lint"} {
+    set runs [list [current_run -synthesis]]
+    synth_design -top [get_property TOP [current_fileset]] -part [get_property PART [current_project]] -lint
+    exit
+} elseif {$step == "elaborate"} {
+    set runs [list [current_run -synthesis]]
+    synth_design -rtl -rtl_skip_mlo
+    exit
+} elseif {$step == "synthesis"} {
+    set runs [list [current_run -synthesis]]
+    launch_runs [current_run -synthesis]
+} else {
+    set runs [list [current_run -synthesis] [current_run -implementation]]
+    launch_runs [current_run] {*}[split $launch_args]
+}
+
+# wait_on_run renamed to wait_on_runs from Vivado 2022.1
+if {[package vsatisfies 1.[version -s] 1.2022.1]} {
+    wait_on_runs $runs
+} else {
+    foreach run $runs {
+        wait_on_run $run
+    }
+}
+
+foreach run $runs {
+    set status [get_property STATUS $run]
+    if { [string match *ERROR $status] } {
+        return -code error "ERROR: Run $run failed"
+    }
+}
