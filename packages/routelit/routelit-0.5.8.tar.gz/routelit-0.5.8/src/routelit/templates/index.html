@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/routelit/routelit.svg" />
+    <title>{% if PAGE_TITLE %}{{ PAGE_TITLE }}{% else %}Routelit{% endif %}</title>
+    {% if PAGE_DESCRIPTION %}
+    <meta name="description" content="{{ PAGE_DESCRIPTION }}" />
+    {% endif %}
+    <!-- In development: Load from Vite dev server -->
+    {% if RUN_MODE == "dev_client" and LOCAL_FRONTEND_SERVER %}
+      <script type="module">
+        import RefreshRuntime from "{{ LOCAL_FRONTEND_SERVER }}/@react-refresh";
+        RefreshRuntime.injectIntoGlobalHook(window);
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+        window.__vite_plugin_react_preamble_installed__ = true;
+      </script>
+      <script type="module" src="{{ LOCAL_FRONTEND_SERVER }}/@vite/client"></script>
+    {% elif RUN_MODE != "dev_components" %}
+      <!-- In production: Load css from built files -->
+      {% for css_asset in default_vite_assets.css_files %}
+        <link rel="stylesheet" href="/routelit/{{ css_asset }}">
+      {% endfor %}
+    {% endif %}
+
+    {% if RUN_MODE == "prod" %}
+      <link rel="stylesheet" href="https://esm.sh/routelit-client@0.5.3/dist/client.css">
+    {% endif %}
+
+    {% if RUN_MODE == "dev_components" and LOCAL_COMPONENTS_SERVER %}
+      <script type="module">
+        import RefreshRuntime from "{{ LOCAL_COMPONENTS_SERVER }}/@react-refresh";
+        RefreshRuntime.injectIntoGlobalHook(window);
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+        window.__vite_plugin_react_preamble_installed__ = true;
+      </script>
+      <script type="module" src="{{ LOCAL_COMPONENTS_SERVER }}/@vite/client"></script>
+    {% else %}
+      {% for assets_group in vite_assets %}
+        {% for asset in assets_group.css_files %}
+          <link rel="stylesheet" href="/routelit/{{ assets_group.package_name }}/{{ asset }}">
+        {% endfor %}
+      {% endfor %}
+    {% endif %}
+
+    {{ extra_head_content | safe }}
+  </head>
+  <body>
+    <input id="routelit-data" type="hidden" value="{{ ROUTELIT_DATA }}" />
+    <div id="root">
+      <div style="text-align: center; padding: 2rem">
+        Loading application...
+      </div>
+    </div>
+
+    {% if RUN_MODE == "prod" %}
+      <script type="importmap">
+        {{ importmap_json | safe }}
+      </script>
+      <script type="module">
+        import { RoutelitClient } from "routelit-client";
+        const client = RoutelitClient || window.RoutelitClient;
+        client.renderApp();
+      </script>
+    {% endif %}
+
+    {% if RUN_MODE == "dev_client" and LOCAL_FRONTEND_SERVER %}
+      <script type="module" src="{{ LOCAL_FRONTEND_SERVER }}/src/main.tsx"></script>
+    {% endif %}
+
+    {% if RUN_MODE == "dev_components" and LOCAL_COMPONENTS_SERVER %}
+      <script type="module" src="{{ LOCAL_COMPONENTS_SERVER }}/src/setup-dev.ts"></script>
+    {% else %}
+      <!-- In production: Load components js from built files -->
+      {% for assets_group in vite_assets %}
+        {% for asset in assets_group.js_files %}
+        <script type="module" src="/routelit/{{ assets_group.package_name }}/{{ asset }}"></script>
+        {% endfor %}
+      {% endfor %}
+    {% endif %}
+
+    {{ extra_body_content | safe }}
+  </body>
+</html>
