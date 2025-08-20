@@ -1,0 +1,68 @@
+# DynamoFL Core Python Client
+
+- This is a dynamofl package built by DynamoAI to be used with DynamoAI System
+- It's a wrapper to interact with DynamoAI APIs. Example
+  - Create a model/AI System, Dataset, Test
+  - View Test Details
+  - Generate Billing Reports
+
+# Installation
+
+```
+$ pip install dynamofl
+```
+
+# Usage
+
+```
+from dynamofl import DynamoFL
+
+api_key = os.environ["API_KEY"]
+api_host = os.environ["API_HOST"]
+
+dfl = DynamoFL(token=api_key, host=api_host)
+
+```
+
+# Version Compatability
+
+- DynamoAI has its own releases, and the deployed system knows what release version it's at (applicable from 3.21.0)
+  - So for systems older than 3.21.0, we don't do a compatibility check
+- There are certain changes that are not backward compatible, hence the SDK might not be compatible with all the versions of the DynamoAI System
+- The SDK is smart enough to validate at the time of initialization as to whether it's compatible with the DynamoAI system or not and accordingly raise an error if it's incompatible
+
+## What SDK Version was this compatibility engine introduced in?
+
+- `0.1.0`
+- Since the version compatibility engine is introduced in this version, the previous versions won't raise any error even if incompatible so we'd recommend you to upgrade to atleast 0.1.0 version of the sdk
+
+## What to do when the SDK is incompatible with the DynamoAI system being used with it?
+
+We recommend using the compatible version of the sdk with the DynamoAI system you're running using the table below
+
+## SDK Version Compatibility
+
+As mentioned above, we didn't have a compatibility engine before so the versions before 0.1.0 won't throw an error at instantiation even if they're incompatible
+
+| SDK Version | Compatible DynamoAI System Version |
+| ----------- | ---------------------------------- |
+| 0.1.X       | <= 3.21.X                          |
+| 0.2.X       | <= 3.23.X                          |
+
+# Changelog
+
+### 0.1.1
+
+- Removes the `ALLOWED_PII_CLASSES` validation from the sdk and rely on DynamoAI platform solely for the validation
+  - This will introduce a delay in the feedback around valid PII classes that can be used for the attacks
+  - So, please refer to the documentation to see what classes you can use for validation based on the DynamoAI release that you're at!
+  - But it's for the longer good as the lesser the business logic in the core sdk, the lower chances of it being incompatible with the DynamoAI product release
+- Make GPU parameter truly optional for system policy compliance tests
+
+### 0.1.2 & 0.1.3
+
+- Allow patch updates for requests package while preventing minor and major version updates
+
+### 0.2.0
+
+- Adds compatibility with the new releases
