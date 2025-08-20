@@ -1,0 +1,118 @@
+name: Publish Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: patch
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+      push:
+        description: Push tags to remote
+        required: false
+        default: false
+        type: boolean
+      run_e2e:  
+        description: Run end to end tests
+        required: false
+        default: false
+        type: boolean
+      infra:
+        description: An infra to use. Empty creates one.
+        required: false
+        type: string
+      include_mac_arm64:
+        description: Include the mac arm64 build
+        required: false
+        default: false
+        type: boolean
+jobs:
+
+  quality:
+    name: Test
+    uses: ./.github/workflows/quality.yml
+    secrets: inherit
+
+  unit_test:
+    name: Test
+    uses: ./.github/workflows/test_unit.yml
+    secrets: inherit
+
+  integration_test:
+    name: Test
+    uses: ./.github/workflows/test_integration.yml
+    secrets: inherit
+    with:
+      environment: qa-aws
+      enabled: ${{ inputs.run_e2e }}
+      logs: true
+      infra: ${{ inputs.infra }}
+
+  version:
+    name: Version
+    uses: ./.github/workflows/version.yml
+    secrets: inherit
+    needs: [quality, unit_test, integration_test]
+    with:
+      action: ${{ inputs.action }}
+      push: ${{ inputs.push }}
+
+  package:
+    name: Publish
+    uses: ./.github/workflows/package.yml
+    secrets: inherit
+    needs: [version]
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      push: ${{ inputs.push }}
+
+  image:
+    name: Publish
+    uses: ./.github/workflows/image.yml
+    secrets: inherit
+    needs: [version]
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      push: ${{ inputs.push }}
+
+  installer:
+    name: Publish
+    uses: ./.github/workflows/installer.yml
+    secrets: inherit
+    needs: [version]
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      push: true # just pushes to artifacts
+      include_mac_arm64: ${{ inputs.include_mac_arm64 }}
+
+  docs:
+    name: Docs
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
+    needs: [version]
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      push: ${{ inputs.push }}
+  
+  release:
+    name: Release
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    needs: [version, package, installer, image, docs]
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      push: ${{ inputs.push }}
+
+  homebrew:
+    name: Release
+    uses: ./.github/workflows/homebrew.yml
+    secrets: inherit
+    needs: [version, release]
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      push: ${{ inputs.push }}

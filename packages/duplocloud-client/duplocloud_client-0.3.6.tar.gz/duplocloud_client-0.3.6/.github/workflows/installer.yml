@@ -1,0 +1,177 @@
+name: Pyinstaller
+
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Push the artifact to github. 
+        required: false
+        default: true
+        type: boolean
+      tag:
+        description: The git tag to build on
+        required: false
+        type: string
+      include_mac_arm64:
+        description: Include the mac arm64 build
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      push:
+        description: Push the artifact to github. 
+        required: false
+        default: true
+        type: boolean
+      tag:
+        description: The git tag to build on
+        required: false
+        type: string
+      include_mac_arm64:
+        description: Include the mac arm64 build
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      GH_APP_KEY:
+        description: GitHub App private key
+        required: true
+jobs:
+  installer:
+    name: Pyinstaller
+    runs-on: ${{ matrix.os.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - name: windows
+          runs-on: windows-latest
+          multiarch: false
+          arch: amd64
+        - name: linux
+          runs-on: ubuntu-latest
+          multiarch: true
+          arch: amd64
+        - name: darwin
+          runs-on: macos-latest
+          multiarch: false
+          arch: amd64
+    env:
+      PY_VERSION: ${{ vars.PY_VERSION }}
+    steps:
+
+    - name: Get Tag Name
+      id: info
+      shell: bash
+      env:
+        OS: ${{ matrix.os.name }}
+        ARCH: ${{ matrix.os.arch }}
+        GIT_TAG: ${{ inputs.tag }}
+      run: |
+        if [ -z "${GIT_TAG}" ]; then
+          GIT_TAG=${GITHUB_REF#refs/*/}
+        fi
+        VERSION="${GIT_TAG#v*}"
+        NAME="duploctl-${VERSION}-${OS}"
+        echo "GIT_TAG=${GIT_TAG}" >> $GITHUB_OUTPUT
+        echo "NAME=${NAME}" >> $GITHUB_OUTPUT
+
+    - name: Setup
+      id: setup
+      uses: duplocloud/duploctl/.github/actions/setup@main
+      with:
+        ref: ${{ inputs.tag }}
+        app-id: ${{ vars.GH_APP_ID }}
+        private-key: ${{ secrets.GH_APP_KEY }}
+        python-version: ${{ env.PY_VERSION }}
+        install: ".[build]"
+    
+    - name: Pyinstaller
+      id: installer
+      if: matrix.os.multiarch == false
+      run: pyinstaller scripts/installer.spec
+
+    # Use buildx to build the bin target which has the binary inside
+    # then output the binary to the dist folder
+    # see the docker-compose.yaml for the bake target
+    - name: Buildx MultiArch Installer
+      if: matrix.os.multiarch
+      id: installer-multiarch
+      uses: duplocloud/actions/build-image@main
+      env:
+        GIT_TAG: ${{ steps.info.outputs.GIT_TAG }}
+      with:
+        type: bake
+        target: duploctl-bin
+
+    - name: View Files
+      run: ls dist
+
+    - name: Single Artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.os.multiarch == false && inputs.push
+      with:
+        name: ${{ steps.info.outputs.NAME }}-${{ matrix.os.arch }}
+        path: dist
+
+    - name: Amd Artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.os.multiarch && inputs.push
+      with:
+        name: ${{ steps.info.outputs.NAME }}-amd64
+        path: dist/${{ matrix.os.name }}_amd64
+
+    - name: Arm Artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.os.multiarch && inputs.push
+      with:
+        name: ${{ steps.info.outputs.NAME }}-arm64
+        path: dist/${{ matrix.os.name }}_arm64
+
+  installer_darwin_arm64:
+    name: Pyinstaller for Mac Arm64
+    if: inputs.include_mac_arm64
+    runs-on:
+    - self-hosted
+    - darwin
+    - arm64
+    env:
+      PY_VERSION: ${{ vars.PY_VERSION }}
+    steps:
+    - name: Get Tag Name
+      id: info
+      shell: bash
+      env:
+        OS: darwin
+        ARCH: arm64
+        GIT_TAG: ${{ inputs.tag }}
+      run: |
+        if [ -z "${GIT_TAG}" ]; then
+          GIT_TAG=${GITHUB_REF#refs/*/}
+        fi
+        VERSION="${GIT_TAG#v*}"
+        NAME="duploctl-${VERSION}-${OS}"
+        echo "GIT_TAG=${GIT_TAG}" >> $GITHUB_OUTPUT
+        echo "NAME=${NAME}" >> $GITHUB_OUTPUT
+
+    - name: Setup
+      id: setup
+      uses: duplocloud/duploctl/.github/actions/setup@main
+      with:
+        ref: ${{ inputs.tag }}
+        app-id: ${{ vars.GH_APP_ID }}
+        private-key: ${{ secrets.GH_APP_KEY }}
+        python-version: ${{ env.PY_VERSION }}
+        install: ".[build]"
+    
+    - name: Pyinstaller
+      id: installer
+      run: pyinstaller scripts/installer.spec
+
+    - name: Single Artifact
+      uses: actions/upload-artifact@v4
+      if: inputs.push
+      with:
+        name: ${{ steps.info.outputs.NAME }}-arm64
+        path: dist
