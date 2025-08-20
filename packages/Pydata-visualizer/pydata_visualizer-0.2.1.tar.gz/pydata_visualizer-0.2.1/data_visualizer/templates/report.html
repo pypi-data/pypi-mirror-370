@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Profile Report</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --primary-light: #3b82f6;
+            --secondary-color: #64748b;
+            --background-color: #f8fafc;
+            --card-background: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+            --border-light: #f1f5f9;
+            --warning-color: #f59e0b;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* --- Navigation Bar --- */
+        .main-nav {
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 0 1rem;
+        }
+
+        .nav-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .nav-links {
+            display: flex;
+            list-style: none;
+            overflow-x: auto;
+        }
+
+        .nav-links a {
+            display: block;
+            padding: 1rem 1.25rem;
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: color 0.2s ease, border-bottom-color 0.2s ease;
+            white-space: nowrap;
+            border-bottom: 2px solid transparent;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            font-weight: 400;
+        }
+
+        /* Layout Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr; /* Default to single column */
+            gap: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+            margin-bottom: 0; /* Removed margin-bottom to rely on grid gap */
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .card-badge {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        /* Segmented Controls */
+        .segmented-control {
+            display: flex;
+            gap: 0.5rem;
+            background-color: var(--background-color);
+            padding: 0.25rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
+        }
+
+        .segmented-control button {
+            flex-shrink: 0;
+            padding: 0.5rem 1rem;
+            border: none;
+            background-color: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.2s ease-in-out;
+            font-size: 0.875rem;
+        }
+
+        .segmented-control button.active {
+            background-color: var(--card-background);
+            color: var(--primary-color);
+            font-weight: 600;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .content-pane { display: none; }
+        .content-pane.active { display: block; }
+
+        /* Statistics Tables */
+        .stats-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .stats-table td {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-light);
+            vertical-align: top;
+        }
+
+        .stats-table tr:last-child td { border-bottom: none; }
+        .stats-table td:first-child {
+            font-weight: 500;
+            color: var(--text-secondary);
+            width: 40%;
+        }
+        .stats-table td:last-child {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+        }
+
+        /* Variables Section */
+        .variables-container {
+            display: grid;
+            grid-template-columns: 1fr; /* Mobile first */
+            gap: 2rem;
+        }
+
+        .variables-sidebar {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            height: 60vh;
+            max-height: 400px;
+        }
+
+        .search-container {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        #variable-search {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--background-color);
+            font-size: 0.875rem;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        #variable-search:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .variable-list {
+            list-style: none;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .variable-item {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            border-radius: 6px;
+            margin-bottom: 0.25rem;
+            transition: all 0.15s ease;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        .variable-item:hover {
+            background: var(--background-color);
+            color: var(--text-primary);
+        }
+        .variable-item.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .variable-content {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            height: 60vh;
+            max-height: 500px;
+        }
+
+        .variable-details {
+            display: none;
+            padding: 2rem;
+            height: 100%;
+            overflow-y: auto;
+        }
+        .variable-details.active { display: block; }
+
+        .variable-header h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 1.5rem;
+        }
+        
+        .variable-header code {
+            background: var(--background-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: var(--primary-color);
+        }
+
+        /* Section Headers */
+        .section-header {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 2rem 0 1rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .section-header::before {
+            content: '';
+            width: 3px;
+            height: 16px;
+            background: var(--primary-color);
+            border-radius: 2px;
+        }
+
+        /* Images & DataFrames */
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin: 1rem 0;
+        }
+
+        .dataframe-container { 
+            overflow: auto;
+            max-height: 400px;
+        }
+        .dataframe {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .dataframe th {
+            background: var(--background-color);
+            font-weight: 600;
+            padding: 1rem 0.75rem;
+            text-align: left;
+            border-bottom: 2px solid var(--border-color);
+            position: sticky;
+            top: 0;
+        }
+        .dataframe td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-light);
+            font-family: var(--font-mono);
+        }
+        .dataframe tr:last-child td { border-bottom: none; }
+        .dataframe tr:hover { background: var(--background-color); }
+
+        /* Gemini Button & AI Insights */
+        .gemini-button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            margin-top: 1.5rem;
+        }
+        .gemini-button:hover {
+            background: var(--primary-light);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+        .gemini-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .ai-insights-container {
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 1rem auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Overview Metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1.5rem;
+        }
+        .metric-card {
+            background: var(--card-background);
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-color);
+        }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        .metric-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Alerts */
+        .alert-card { border-left: 4px solid var(--warning-color); }
+        .alert-item {
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .alert-item:last-child { border-bottom: none; }
+        .alert-type { font-weight: 600; color: var(--warning-color); }
+        .alert-message { color: var(--text-secondary); margin-top: 0.25rem; }
+        
+        /* Utility */
+        .hidden { display: none; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mt-4 { margin-top: 1rem; }
+        .font-semibold { font-weight: 600; }
+
+        /* --- Responsive Design --- */
+        @media (min-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .full-width {
+                grid-column: 1 / -1;
+            }
+            .variables-container {
+                grid-template-columns: 280px 1fr;
+            }
+            .variables-sidebar, .variable-content {
+                height: 70vh;
+                max-height: none;
+            }
+        }
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            h1 { font-size: 1.75rem; }
+            .dashboard-grid { gap: 1rem; }
+            .card { padding: 1rem; }
+            .variable-details { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="main-nav">
+        <div class="nav-content">
+            <ul class="nav-links">
+                <li><a href="#overview-section">Overview</a></li>
+                <li><a href="#variables-section">Variables</a></li>
+                <li><a href="#alerts-section">Alerts</a></li>
+                <li><a href="#correlations-section">Correlations</a></li>
+                <li><a href="#sample-section">Sample Data</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>Data Profile Report</h1>
+            <p class="subtitle">Comprehensive Dataset Analysis</p>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Overview Section -->
+            <div id="overview-section" class="card full-width">
+                <div class="card-header">
+                    <h2 class="card-title">Dataset Overview</h2>
+                    <span class="card-badge">Summary</span>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">{{ profile.overview.num_Row }}</div>
+                        <div class="metric-label">Total Observations</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{{ profile.overview.num_Columns }}</div>
+                        <div class="metric-label">Variables</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{{ profile.overview.duplicated_rows }}</div>
+                        <div class="metric-label">Duplicate Rows</div>
+                    </div>
+                     <div class="metric-card">
+                        <div class="metric-value">{{ "%.2f"|format(profile.overview.missing_percentage) }}</div>
+                        <div class="metric-label">Missing value %</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Variables Section -->
+            <div id="variables-section" class="card full-width" style="padding: 0; border: none; background: transparent; box-shadow: none;">
+                <div class="variables-container">
+                    <div class="variables-sidebar">
+                        <div class="search-container">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="variable-search" onkeyup="filterVariables()" placeholder="Search variables...">
+                        </div>
+                        <ul class="variable-list">
+                            {% for var_name in profile.variables.keys() %}
+                                <li class="variable-item" onclick="showVariable('{{ var_name }}')" data-variable="{{ var_name }}">
+                                    {{ var_name }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="variable-content">
+                        {% for var_name, details in profile.variables.items() %}
+                            <div id="var-{{ var_name }}" class="variable-details">
+                                <div class="variable-header">
+                                    <h3>Variable: <code>{{ var_name }}</code></h3>
+                                </div>
+                                
+                                <div class="section-header">Statistical Summary</div>
+                                <table class="stats-table">
+                                    {% for stat_key, stat_value in details.items() %}
+                                        {% if stat_key not in ['plot_base64', 'value_counts', 'value_counts_top_10', 'alerts', 'value_counts_top_5'] %}
+                                            <tr>
+                                                <td>{{ stat_key | replace('_', ' ') | title }}</td>
+                                                <td>{% if stat_value is number and stat_value is not integer %}{{ "%.3f"|format(stat_value) }}{% else %}{{ stat_value }}{% endif %}</td>
+                                            </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                </table>
+                                
+                                {% if details.value_counts or details.value_counts_top_10 or details.value_counts_top_5 %}
+                                    <div class="section-header mt-4">Value Distribution</div>
+                                    <table class="stats-table">
+                                        {% set counts = details.value_counts or details.value_counts_top_10 or details.value_counts_top_5 %}
+                                        {% for value, count in counts.items() %}
+                                            <tr>
+                                                <td>{{ value }}</td>
+                                                <td>{{ count }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </table>
+                                {% endif %}
+
+                                <button class="gemini-button" id="gemini-btn-{{ var_name }}" onclick="generateAiInsights('{{ var_name }}')">
+                                    ✨ Generate AI Insights
+                                </button>
+                                <div class="ai-insights-container hidden" id="ai-insights-{{ var_name }}">
+                                    <div class="section-header mb-2">AI-Powered Insights</div>
+                                    <div class="loading-spinner hidden" id="loader-{{ var_name }}"></div>
+                                    <div id="ai-content-{{ var_name }}"></div>
+                                </div>
+
+                                {% if details.plot_base64 %}
+                                    <div class="section-header mt-4">Distribution Plot</div>
+                                    <img src="{{ details.plot_base64 }}" alt="Distribution plot for {{ var_name }}">
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alerts Section -->
+            <div id="alerts-section" class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Data Quality Alerts</h2>
+                    <span class="card-badge">Issues</span>
+                </div>
+                {% set has_alerts = false %}
+                {% set alerts_found = [] %}
+                
+                {% for var_name, details in profile.variables.items() %}
+                    {% if details.alerts and details.alerts|length > 0 %}
+                        {% set _ = alerts_found.append(1) %}
+                        <div class="alert-card" style="padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                            <h4 class="font-semibold mb-2">Variable: <code>{{ var_name }}</code></h4>
+                            {% for alert in details.alerts %}
+                                {% if alert.alert_type and alert.message %}
+                                    <div class="alert-item">
+                                        <div class="alert-type">{{ alert.alert_type | replace('_', ' ') | upper }}</div>
+                                        <div class="alert-message">{{ alert.message }}</div>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+
+                {% if alerts_found|length == 0 %}
+                    <p style="padding: 1rem;">No data quality issues detected.</p>
+                {% endif %}
+            </div>
+
+            <!-- Correlations Section -->
+            <div id="correlations-section" class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Correlation Analysis</h2>
+                    <span class="card-badge">Relationships</span>
+                </div>
+                {% if profile.Correlations_Plots and profile.Correlations_Plots.keys() | length > 0 %}
+                    <div class="segmented-control" data-content-id="correlation-content">
+                        {% for corr_name in profile.Correlations_Plots.keys() %}
+                            <button data-target="corr-{{ loop.index }}">{{ corr_name | title }}</button>
+                        {% endfor %}
+                    </div>
+                    <div id="correlation-content">
+                        {% for corr_name, plot_string in profile.Correlations_Plots.items() %}
+                            <div id="corr-{{ loop.index }}" class="content-pane">
+                                <img src="{{ plot_string }}" alt="Correlation plot for {{ corr_name }}" style="display: block; margin: auto;">
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p>No correlation plots were generated.</p>
+                {% endif %}
+            </div>
+
+            <!-- Sample Data Section -->
+            <div id="sample-section" class="card full-width">
+                <div class="card-header">
+                    <h2 class="card-title">Data Sample</h2>
+                    <span class="card-badge">Preview</span>
+                </div>
+                {% if profile.Sample_data %}
+                    <div class="segmented-control" data-content-id="sample-content">
+                        <button data-target="sample-head">First 10 Rows</button>
+                        <button data-target="sample-tail">Last 10 Rows</button>
+                    </div>
+                    <div id="sample-content">
+                        <div id="sample-head" class="content-pane dataframe-container">
+                            {{ profile.Sample_data.Head | safe }}
+                        </div>
+                        <div id="sample-tail" class="content-pane dataframe-container">
+                            {{ profile.Sample_data.Tail | safe }}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+
+    <script id="profile-data" type="application/json">
+        {{ profile | tojson | safe }}
+    </script>
+
+    <script>
+        // --- DATA LOADING ---
+        const rawJsonText = document.getElementById('profile-data').textContent;
+        const cleanJsonText = rawJsonText.replace(/nan/gi, 'null').replace(/infinity/gi, 'null').replace(/-infinity/gi, 'null');
+        const profileData = JSON.parse(cleanJsonText);
+
+        // --- UI INITIALIZATION & CONTROL ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Activate the first variable by default
+            const firstVariable = document.querySelector('.variable-item');
+            if (firstVariable) {
+                showVariable(firstVariable.getAttribute('data-variable'));
+            }
+
+            // Setup segmented controls
+            document.querySelectorAll('.segmented-control').forEach(control => {
+                const firstButton = control.querySelector('button');
+                if (firstButton) {
+                    activateTab(firstButton); // Activate the first tab by default
+                }
+                control.addEventListener('click', (event) => {
+                    if (event.target.tagName === 'BUTTON') {
+                        activateTab(event.target);
+                    }
+                });
+            });
+        });
+
+        function activateTab(clickedButton) {
+            const control = clickedButton.closest('.segmented-control');
+            const contentWrapperId = control.dataset.contentId;
+            const contentWrapper = document.getElementById(contentWrapperId);
+            const targetId = clickedButton.dataset.target;
+
+            // Update button active state
+            control.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            clickedButton.classList.add('active');
+
+            // Update content visibility
+            if (contentWrapper) {
+                contentWrapper.querySelectorAll('.content-pane').forEach(pane => pane.classList.remove('active'));
+                const targetPane = document.getElementById(targetId);
+                if (targetPane) {
+                    targetPane.classList.add('active');
+                }
+            }
+        }
+
+
+        function showVariable(varName) {
+            document.querySelectorAll('.variable-details').forEach(detail => detail.classList.remove('active'));
+            document.querySelectorAll('.variable-item').forEach(item => item.classList.remove('active'));
+
+            const targetDetail = document.getElementById('var-' + varName);
+            if(targetDetail) targetDetail.classList.add('active');
+            
+            const targetItem = document.querySelector(`.variable-item[data-variable="${varName}"]`);
+            if(targetItem) targetItem.classList.add('active');
+        }
+
+        function filterVariables() {
+            const filter = document.getElementById('variable-search').value.toLowerCase();
+            document.querySelectorAll('.variable-item').forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(filter) ? 'block' : 'none';
+            });
+        }
+
+        // --- GEMINI API INTEGRATION ---
+        async function generateAiInsights(variableName) {
+            const button = document.getElementById(`gemini-btn-${variableName}`);
+            const container = document.getElementById(`ai-insights-${variableName}`);
+            const loader = document.getElementById(`loader-${variableName}`);
+            const content = document.getElementById(`ai-content-${variableName}`);
+
+            button.disabled = true;
+            container.classList.remove('hidden');
+            loader.classList.remove('hidden');
+            content.innerHTML = '';
+
+            const variableDetails = profileData.variables[variableName];
+            const statsSummary = { ...variableDetails };
+            delete statsSummary.plot_base64;
+
+            const prompt = `
+                You are a senior data analyst. Your task is to provide a concise, actionable summary for a single variable from a dataset.
+                Do not talk about the code or the profiling process. Focus on what the data means.
+                Provide your analysis in simple Markdown format.
+
+                Here are the statistics for the variable named "${variableName}":
+                ${JSON.stringify(statsSummary, null, 2)}
+
+                Based on these statistics, please provide:
+                1.  **A brief summary** of the variable's characteristics.
+                2.  **Actionable insights or potential data quality issues** a data scientist should investigate further.
+            `;
+
+            try {
+                const resultText = await callGeminiWithBackoff(prompt);
+                content.innerHTML = simpleMarkdownToHtml(resultText);
+            } catch (error) {
+                content.innerHTML = `<p>Error generating insights. Please try again. ${error.message}</p>`;
+            } finally {
+                loader.classList.add('hidden');
+                button.disabled = false;
+            }
+        }
+
+        async function callGeminiWithBackoff(prompt) {
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }]
+            };
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            
+            let retries = 3;
+            let delay = 1000;
+
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        return result.candidates?.[0]?.content?.parts?.[0]?.text || 'No insights generated.';
+                    }
+                    throw new Error(`API error: ${response.status}`);
+                } catch (error) {
+                    if (i === retries - 1) throw error;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Exponential backoff
+                }
+            }
+            throw new Error('Failed to get response from Gemini API after multiple retries.');
+        }
+
+        function simpleMarkdownToHtml(text) {
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>')
+                .replace(/^/, '<p>')
+                .replace(/$/, '</p>');
+        }
+    </script>
+</body>
+</html>
