@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+"""
+wmagent-resource-control
+
+Utility script for manipulating resource control.
+"""
+
+import os
+import sys
+from argparse import ArgumentParser
+
+from WMCore.Configuration import loadConfigurationFile
+from WMCore.ResourceControl.ResourceControl import ResourceControl
+from WMCore.Services.CRIC.CRIC import CRIC
+from WMCore.WMInit import connectToDB
+
+
+def getTaskTypes(tier0=False):
+    """
+    _getTaskTypes_
+
+    Get the list of task types we are currently using with
+    priorities.
+    """
+    taskTypes = ["Merge",
+                 "Cleanup",
+                 "Harvesting",
+                 "LogCollect",
+                 "Skim",
+                 "Production",
+                 "Processing"]
+
+    if tier0:
+        taskTypes.append("Repack")
+        taskTypes.append("Express")
+
+    return taskTypes
+
+
+def createOptionParser():
+    """
+    _createOptionParser_
+
+    Create an option parser that knows about all the options for manipulating
+    and accessing resource control.
+    """
+    myOptParser = ArgumentParser()
+    myOptParser.add_argument("-p", "--thresholds", dest="printThresholds",
+                             default=False, action="store_true",
+                             help="Print out all known thresholds and site information.")
+    myOptParser.add_argument("--add-Test", dest="addTest", default=False, action="store_true",
+                             help="Add a fake test site to resource control.")
+    myOptParser.add_argument("--add-T1s", dest="addT1s", default=False, action="store_true",
+                             help="Add all of the CMS T1 sites to resource control.")
+    myOptParser.add_argument("--add-T2s", dest="addT2s", default=False, action="store_true",
+                             help="Add all of the CMS T2 sites to resource control.")
+    myOptParser.add_argument("--add-T3s", dest="addT3s", default=False, action="store_true",
+                             help="Add all of the CMS T3 sites to resource control.")
+    myOptParser.add_argument("--add-all-sites", dest="addAllSites", default=False,
+                             action="store_true",
+                             help="Add all of the CMS sites to resource control.")
+    myOptParser.add_argument("--add-one-site", dest="addOneSite",
+                             help="Specify site name you want to add")
+    myOptParser.add_argument("--opportunistic", dest="opportunistic", default=False, action="store_true",
+                             help="To be used with addOneSite, specifying to use the same CPU/storage name.")
+    myOptParser.add_argument("--site-name", dest="siteName",
+                             help="Specify the unique name of the location")
+    myOptParser.add_argument("--pending-slots", dest="pendingSlots",
+                             help="Specify the maximum number of pending slots to use at the site or task type")
+    myOptParser.add_argument("--running-slots", dest="runningSlots",
+                             help="Specify the maximum number of running slots to use at the site or task type")
+    myOptParser.add_argument("--apply-to-all-tasks", dest="allTasks", default=False, action="store_true",
+                             help="Apply site running/pending threshold to all task types")
+    myOptParser.add_argument("--ce-name", dest="ceName",
+                             help="Specify the CEName for the site")
+    myOptParser.add_argument("--pnn", dest="pnn",
+                             help="Specify the PNN for the site")
+    myOptParser.add_argument("--cms-name", dest="cmsName",
+                             help="Specify the name of the site in CRIC")
+    myOptParser.add_argument("--task-type", dest="taskType",
+                             help="Specify the name of the task to add/modify")
+    myOptParser.add_argument("--priority", dest="priority", default=None,
+                             help="Specify the priority of the task across all sites (higher is better)")
+    myOptParser.add_argument("--plugin", dest="plugin",
+                             help="Specify submit plugin to use for specific site")
+    myOptParser.add_argument("--drain", dest="state", action="store_const",
+                             const='Draining', help="Drain the site.")
+    myOptParser.add_argument("--abort", dest="state", action="store_const",
+                             const='Aborted', help="Abort jobs at the site.")
+    myOptParser.add_argument("--down", dest="state", action="store_const",
+                             const='Down', help="Stop submission to the site.")
+    myOptParser.add_argument("--normal", dest="state", action="store_const",
+                             const='Normal', help="Normal operation for the site.")
+    myOptParser.add_argument("--add-disk", dest="addDisk", default=True, action="store_false",
+                             help="Use it to explicitly add the Disk endpoints together with the other T1s")
+
+    return myOptParser
+
+
+def getCMSSiteInfo(pattern):
+    """
+    _getCMSSiteInfo_
+
+    Query CRIC for the site and SE names matching the pattern.  Return a
+    dictionary keyed by site name.
+    """
+    cricObj = CRIC()
+
+    mapping = cricObj.PSNtoPNNMap(pattern)
+    print("Retrieved %i maps from %s" % (len(mapping), cricObj['endpoint']))
+    return mapping
+
+
+def addSites(resourceControl, allSites, ceName, plugin, pendingSlots, runningSlots,
+             tier0Option=False, cmsName=None, state=None):
+    """
+    _addSites_
+
+    Add the given sites to resource control and add tasks as well.
+    """
+    if pendingSlots is None:
+        pendingSlots = 25
+    else:
+        pendingSlots = pendingSlots
+    if runningSlots is None:
+        runningSlots = 25
+    else:
+        runningSlots = runningSlots
+
+    for siteName in allSites:
+        updateSiteInfo(resourceControl, siteName, pendingSlots, runningSlots,
+                       ceName or siteName, allSites[siteName], plugin, cmsName or siteName)
+
+        tasks = getTaskTypes(tier0Option)
+        for task in tasks:
+            updateThresholdInfo(resourceControl, siteName, task, runningSlots, pendingSlots)
+
+    if state:
+        for siteName in allSites:
+            setSiteState(resourceControl, siteName, state)
+
+    return
+
+
+def addPNNs(resourceControl, pattern):
+    """
+    _addPNNs_
+
+    Add the given sites to resource control and add tasks as well.
+    """
+    cricObj = CRIC()
+
+    pnns = cricObj.getAllPhEDExNodeNames(pattern, excludeBuffer=True)
+    print("Retrieved %i PNNs from %s" % (len(pnns), cricObj['endpoint']))
+    resourceControl.insertPNNs(pnns)
+
+    return
+
+
+def printThresholds(resourceControl, desiredSiteName):
+    """
+    _printThresholds_
+
+    Print out the current resource control thresholds.
+    """
+    print("Thresholds and current status for all sites:\n")
+
+    thresholds = resourceControl.listThresholdsForSubmit()
+
+    for siteName in thresholds:
+        if desiredSiteName and desiredSiteName != siteName:
+            continue
+        siteThresholds = thresholds[siteName]
+
+        if len(siteThresholds) < 1:
+            # No thresholds
+            print("No thresholds for site %s" % siteName)
+            continue
+
+        pendingSlots = siteThresholds["total_pending_slots"]
+        runningSlots = siteThresholds["total_running_slots"]
+        pendingJobs = siteThresholds["total_pending_jobs"]
+        runningJobs = siteThresholds["total_running_jobs"]
+        state = siteThresholds["state"]
+        stateMsg = ", Site is %s" % state
+        print("%s - %d running, %d pending, %d running slots total, %d pending slots total%s:" % (
+            siteName, runningJobs, pendingJobs, runningSlots, pendingSlots, stateMsg))
+
+        for task, thres in siteThresholds['thresholds'].items():
+            print("  %s - %d running, %d pending, %d max running, %d max pending, priority %s" %
+                  (task, thres["task_running_jobs"], thres['task_pending_jobs'], thres["max_slots"],
+                   thres["pending_slots"], str(thres.get("priority", 1))))
+            if thres["task_running_jobs"] > 0:
+                taskWorkloads = resourceControl.listWorkloadsForTaskSite(task, siteName)
+                for t in taskWorkloads:
+                    print("    %d - %s" % (t["running"], t["task"]))
+
+        print("")
+
+
+def updateSiteInfo(resourceControl, siteName, pendingSlots=None,
+                   runningSlots=None, ceName=None, pnn=None,
+                   plugin=None, cmsName=None, allTasks=False):
+    """
+    _updateSiteInfo_
+
+    Add a site to the resource control database if it doesn't exist.  Update
+    information about sites in the database if it already exists.
+    """
+    if not resourceControl.listSiteInfo(siteName):
+        if pendingSlots is None or runningSlots is None or ceName is None or pnn is None or plugin is None:
+            print("You must specify the number of pending or running slots, the SE name,")
+            print("the CE name and a plugin when adding a site.")
+            print("Type --help for more information.")
+            sys.exit(1)
+
+        print("Adding %s to the resource control db..." % siteName)
+        if isinstance(pnn, (list, set, tuple)):
+            for singlePNN in pnn:
+                resourceControl.insertSite(siteName=siteName, pendingSlots=int(pendingSlots),
+                                           runningSlots=int(runningSlots),
+                                           pnn=singlePNN, ceName=ceName,
+                                           plugin=plugin, cmsName=cmsName)
+        else:
+            resourceControl.insertSite(siteName=siteName, pendingSlots=int(pendingSlots),
+                                       runningSlots=int(runningSlots),
+                                       pnn=pnn, ceName=ceName,
+                                       plugin=plugin, cmsName=cmsName)
+
+        return
+
+    if pendingSlots is not None or runningSlots is not None:
+        resourceControl.setJobSlotsForSite(siteName=siteName,
+                                           pendingJobSlots=pendingSlots,
+                                           runningJobSlots=runningSlots)
+        if allTasks:
+            tasksWithPriorities = getTaskTypes()
+            for task in tasksWithPriorities:
+                updateThresholdInfo(resourceControl, siteName, task, runningSlots, pendingSlots)
+
+    if pnn is not None:
+        print("It's not possible to change a site's SE name after the site has")
+        print("been added to the database.")
+        sys.exit(1)
+
+    if ceName is not None:
+        print("It's not possible to change a site's CE name after the site has")
+        print("been added to the database.")
+        sys.exit(1)
+
+    return
+
+
+def updateThresholdInfo(resourceControl, siteName, taskType, maxSlots=None, pendingSlots=None):
+    """
+    _updateThresholdInfo_
+
+    Add or update a task threshold in the database.
+    """
+    if not resourceControl.listSiteInfo(siteName):
+        print("You must add the site to the database before you can add")
+        print("thresholds.")
+        print("Type --help for more information.")
+        sys.exit(1)
+
+    if maxSlots is None and pendingSlots is None:
+        print("You must provide either pending or running slots for the task.")
+        print("Type --help for more information.")
+        sys.exit(1)
+
+    resourceControl.insertThreshold(siteName=siteName, taskType=taskType,
+                                    maxSlots=maxSlots, pendingSlots=pendingSlots)
+    return
+
+
+def updateTaskPriority(resourceControl, taskType, priority):
+    """
+    _updateTaskPriority_
+
+    Update the priority of a task in the database, if task
+    doesn't exist then add it.
+    """
+    if taskType is None:
+        print("Sub-task type must be specified when changing priority.")
+        myOptParser.print_help()
+        sys.exit(1)
+    resourceControl.changeTaskPriority(taskType, priority)
+    return
+
+
+def setSiteState(resourceControl, siteName, state):
+    """
+    _setSiteState_
+
+    Set an specific state to a site
+    """
+    if not resourceControl.listSiteInfo(siteName):
+        print("You must add the site to the database before you can change its state")
+        print("Type --help for more information.")
+        sys.exit(1)
+
+    return resourceControl.changeSiteState(siteName, state)
+
+
+myOptParser = createOptionParser()
+options = myOptParser.parse_args()
+
+connectToDB()
+wmConfig = loadConfigurationFile(os.environ['WMAGENT_CONFIG'])
+myResourceControl = ResourceControl(config=wmConfig)
+
+if options.printThresholds:
+    printThresholds(myResourceControl, options.siteName)
+    sys.exit(0)
+else:
+    if options.priority:
+        updateTaskPriority(myResourceControl, options.taskType, options.priority)
+    elif options.addTest:
+        testSite = {'CERN': ['T0_CH_CERN_Disk', 'T2_CH_CERN']}
+        addSites(myResourceControl, testSite, "CERN", "SimpleCondorPlugin",
+                 500, 1, state=options.state)
+    elif options.addT1s:
+        pattern = "T1.*"
+        t1Sites = getCMSSiteInfo(pattern)
+        addSites(myResourceControl, t1Sites, options.ceName, options.plugin,
+                 options.pendingSlots, options.runningSlots, state=options.state)
+        addPNNs(myResourceControl, pattern=pattern)
+    elif options.addT2s:
+        pattern = "T2.*"
+        t2Sites = getCMSSiteInfo(pattern)
+        addSites(myResourceControl, t2Sites, options.ceName, options.plugin,
+                 options.pendingSlots, options.runningSlots, state=options.state)
+        addPNNs(myResourceControl, pattern=pattern)
+    elif options.addT3s:
+        pattern = "T3.*"
+        t3Sites = getCMSSiteInfo(pattern)
+        addSites(myResourceControl, t3Sites, options.ceName, options.plugin,
+                 options.pendingSlots, options.runningSlots, state=options.state)
+        addPNNs(myResourceControl, pattern=pattern)
+    elif options.addAllSites:
+        pattern = ".*"
+        allSites = getCMSSiteInfo(pattern)
+        addSites(myResourceControl, allSites, options.ceName, options.plugin,
+                 options.pendingSlots, options.runningSlots, state=options.state)
+        addPNNs(myResourceControl, pattern=pattern)
+    elif options.addOneSite:
+        if options.opportunistic:
+            # it's a dict key'ed by the CPU resource and value is the storage name
+            oneSite = {options.addOneSite: [options.addOneSite]}
+        else:
+            oneSite = getCMSSiteInfo(options.addOneSite)
+        addSites(myResourceControl, oneSite, options.ceName, options.plugin,
+                 options.pendingSlots, options.runningSlots, state=options.state)
+    elif options.siteName is None:
+        print("You must specify a site name.")
+        myOptParser.print_help()
+        sys.exit(1)
+    elif options.state is not None:
+        setSiteState(myResourceControl, options.siteName, options.state)
+        sys.exit(0)
+    elif options.taskType is None:
+        pnn = options.pnn
+        if options.pnn:
+            pnn = options.pnn.strip().split(',')
+        updateSiteInfo(myResourceControl, options.siteName, options.pendingSlots,
+                       options.runningSlots, options.ceName, pnn,
+                       options.plugin, options.cmsName, options.allTasks)
+        sys.exit(0)
+    else:
+        taskType = options.taskType.strip().split(',')
+        updateThresholdInfo(myResourceControl, options.siteName,
+                            taskType, options.runningSlots,
+                            options.pendingSlots)
+        sys.exit(0)
