@@ -1,0 +1,2 @@
+class ClientControllerType:
+    HTTP = "http"
