@@ -1,0 +1,325 @@
+.. -*- coding: utf-8 -*-
+.. :Project:   SoL -- Introduction
+.. :Created:   gio 9 ott 2008 11:40:17 CET
+.. :Author:    Lele Gaifax <lele@metapensiero.it>
+.. :License:   GNU General Public License version 3 or later
+.. :Copyright: © 2008-2010, 2013-2016, 2018-2020, 2024, 2025 Lele Gaifax
+..
+
+=====================
+ Scarry On Lin{e|ux}
+=====================
+
+-------------------------------------------------------------
+Powerful and complete solution to manage Carrom championships
+-------------------------------------------------------------
+
+:version: 5
+:author: Lele Gaifax <lele@metapensiero.it>
+:license: GPLv3
+:status: |pipeline| |coverage|
+
+.. |pipeline| image:: https://gitlab.com/metapensiero/SoL/badges/master/pipeline.svg
+   :target: https://gitlab.com/metapensiero/SoL/pipelines/
+   :alt: CI build status
+
+.. |coverage| image:: https://gitlab.com/metapensiero/SoL/badges/master/coverage.svg
+   :target: https://gitlab.com/metapensiero/SoL/pipelines/
+   :alt: Overall test coverage
+
+This project contains some tools that make it easier the organization of a championship of
+Carrom_ tournaments using either a variant of the `Swiss system`__, the `Knockout system`__ or
+even `all play all`__ events.
+
+__ https://en.wikipedia.org/wiki/Swiss-system_tournament
+__ https://en.wikipedia.org/wiki/Single-elimination_tournament
+__ https://en.wikipedia.org/wiki/Round-robin_tournament
+
+The main component is a Pyramid_ application serving two distinct user interfaces:
+
+1. A very light, read only view of the whole database, where you can actually browse
+   thru the clubs, championships, tourneys, players and ratings. You can see it in action on
+   the public ``SoL`` instance at https://sol5.metapensiero.it/lit/.
+
+2. A complete ExtJS_ based desktop-like application, that exposes all the functionalities
+   described below__ in an easy to manage interface.
+
+__ Goals_
+
+.. _Carrom: https://en.wikipedia.org/wiki/Carrom
+.. _Pyramid: https://trypyramid.com/
+.. _ExtJS: https://www.sencha.com/products/extjs/
+
+.. contents:: :depth: 2
+
+
+Goals
+=====
+
+These are the key points:
+
+1. Multilingual application
+
+   Scarry__ spoke only Italian, because the i18n mechanism in ``Delphi`` (and in general under
+   ``M$ Windows``) sucks. Most of the code was written and commented in Italian too, and that
+   made it very difficult to get foreign contributions.
+
+   __ https://sol5.metapensiero.it/static/manual/#brief-history
+
+2. Multiuser
+
+   There is a *super user* (named “admin” by default) that can do everything, in particular
+   create other *normal users*, who can then log in and manage her own tournaments, but can't
+   change information owned by other users.
+
+   ``SoL`` also implements an optional *self registration* procedure.
+
+3. Real database
+
+   ``Scarry`` used ``Paradox`` tables, but we are in the third millennium, now: ``SoL`` uses a
+   real, even if simple and light, ``SQL`` database under its skin.
+
+4. Easy to use
+
+   The application is usually driven by computer-illiterated guys, so little to no surprises.
+
+5. Easy to deploy
+
+   Gods know how many hours went in building f*cking installers with BDE__ goodies!
+
+   __ https://en.wikipedia.org/wiki/Borland_Database_Engine
+
+6. Bring back the fun
+
+   Programming in ``Python`` is just that, since the beginning!
+
+
+High level description
+----------------------
+
+The application implements the following features:
+
+* basic tables editing, like adding a new player, opening a new championship, manually tweaking
+  the scores, and so on;
+
+* handle a single tourney
+
+  a. compose a list of `competitors`: usually this is just a single player, but there are two
+     people in doubles, or more (teams)
+
+  b. set up the first round, made up of `matches`, each pairing two distinct `competitors`: if
+     the tournament is associated with a `rating` this considers the Glicko2__ rate of each
+     player, otherwise uses a random pairing; either way, the tournament secretary is able to
+     manually change the combinations
+
+  c. print the game sheets, where the player will write the scores
+
+  d. possibly show a countdown, to alert the end of the game
+
+  e. insert the score of each match
+
+  f. compute the new ranking
+
+  g. print the current ranking
+
+  h. possibly offer a way to withdraw some competitors, or to add a new competitor
+
+  i. compute the next round
+
+  j. repeat steps c. thru i. usually up to seven rounds
+
+  k. possibly offer a way to go back, delete last round, correct a score and repeat
+
+  l. if required, play up to three final rounds between the first two competitors
+
+  m. recompute the ranking, assigning prizes
+
+  n. update the `rating` the tournament is associated to
+
+* handle a championship of tourneys
+
+  * each tourney is associated to one championship
+
+  * print the championship ranking
+
+* data exchange, to import/export whole tourneys in a portable way
+
+__ https://en.wikipedia.org/wiki/Glicko_rating_system
+
+
+Installation and Setup
+======================
+
+The very first requirement to install an instance of ``SoL`` on your own machine is getting
+``Python`` 3.10 or better\ [#]_. This step obviously depends on the operating system you are
+using: on most ``GNU/Linux`` distributions it is already available\ [#]_, for example on
+``Debian`` and derivatives like ``Ubuntu`` the following command will do the task::
+
+  $ apt-get install python3
+
+If instead you are using ``M$ Windows``, you should select the right installer from the
+downloads__ page on https://www.python.org/.
+
+Another recommended, although optional, add-on is the `DejaVu fonts`__ set, to support a rather
+wide range of `glyphs`__ when producing the ``PDF`` printouts.
+
+On ``GNU/Linux`` it's a matter of executing the following command
+
+::
+
+  $ apt-get install fonts-dejavu
+
+or equivalent for your distribution, while on ``M$ Windows`` you need to download__ them and
+extract the archive in the right location which usually is ``C:\Windows\Fonts``.
+
+__ https://www.python.org/downloads/windows/
+__ https://dejavu-fonts.github.io/
+__ https://en.wikipedia.org/wiki/Glyph
+__ https://sourceforge.net/projects/dejavu/files/dejavu/2.37/dejavu-fonts-ttf-2.37.zip
+
+
+The good old way
+----------------
+
+1. Install ``SoL`` using ``pip``::
+
+    pip install SoL
+
+   that will download the latest version of ``SoL`` from PyPI__ and all its dependencies as well
+
+   __ https://pypi.org/project/SoL/
+
+2. Install ExtJS_ 4.2.1::
+
+    python3 -m metapensiero.extjs.desktop
+
+3. Create a standard config file::
+
+    soladmin create-config config.ini
+
+   and edit it as appropriate; you can also directly specify the name and the password of the
+   *super user* (by default the name is ``admin`` and the password will be asked
+   interactively)::
+
+    soladmin create-config --admin differentone --password str4nge
+
+4. Setup the database::
+
+    soladmin initialize-db config.ini
+
+5. Load official data::
+
+    soladmin restore config.ini
+
+6. Run the application server::
+
+    pserve config.ini
+
+7. Enjoy!
+   ::
+
+    firefox http://localhost:6996/
+
+   or, for poor ``M$Window`` users or just because using ``Python`` makes you
+   happier::
+
+    python -m webbrowser http://localhost:6996/
+
+
+Development
+===========
+
+Since version 4 the development has been moved to GitLab__.
+
+The complete sources can be downloaded with the following command::
+
+    git clone https://gitlab.com/metapensiero/SoL.git
+
+I recommend using a *virtual environment* to keep you isolated from the system packages::
+
+    python3 -m venv env
+    source env/bin/activate
+
+After that, you can setup a development environment by executing the command::
+
+    pip install -r requirements/development.txt
+
+that in particular will install ``SoL`` in `editable mode`__.
+
+__ https://setuptools.pypa.io/en/latest/userguide/development_mode.html
+
+You must then install the required ``ExtJS`` 4 sources executing::
+
+    python -m metapensiero.extjs.desktop --src
+
+At this point, you can bootstrap a new database issuing::
+
+    make development.db
+
+and then start the server with::
+
+    make serve
+
+If you are a developer, you are encouraged to create your own `fork` of the software and
+possibly open a `pull request`: I will happily merge your changes!
+
+You can run the tests suite with either
+
+::
+
+    make test
+
+or with a more specific
+
+::
+
+    pytest tests/models
+
+__ https://gitlab.com/metapensiero/SoL
+
+Nowadays I tend to prefer NixOS__ and it's `package manager`__, and unsurprisingly ``SoL`` is
+quite well integrated in that world. An alternative way to do the above is
+
+::
+
+   nix develop
+   make test
+
+__ https://nixos.org/
+__ https://nixos.org/learn/
+
+
+I18N / L10N
+-----------
+
+Currently ``SoL`` is translated in English\ [#]_, French\ [#]_ and Italian. If you know other
+languages and want to contribute, do not hesitate to contact me and I'll be more than happy to
+get you going.
+
+
+Feedback and support
+--------------------
+
+If you run in troubles, or want to suggest something, or simply a desire of saying *“Thank
+you”* raises up, feel free to contact me via email as ``lele at metapensiero dot it``.
+
+Consider also joining the `dedicated mailing list`__ where you can get in contact with other
+users of the application. There is also an `issues tracker`__ where you can open a new tickets
+about bugs or enhancements.
+
+__ https://groups.google.com/d/forum/sol-users
+__ https://gitlab.com/metapensiero/SoL/issues
+
+-----
+
+.. [#] As of this writing I'm using version 3.12 and I'd recommend using that, but SoL used to
+       work great with any version higher than 3.4.
+
+.. [#] In fact it may even be already installed!
+
+.. [#] The are actually two distinct catalogs, to take into account US and UK variants.
+
+.. [#] Nobody is taking care of the French catalog nowadays, so it is currently very partial
+
+.. [#] ``GNU Emacs`` comes to mind of course, but there are zillions of them: start looking at
+       the `gettext page <https://en.wikipedia.org/wiki/Gettext>`_ on Wikipedia.

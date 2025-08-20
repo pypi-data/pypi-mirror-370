@@ -1,0 +1,261 @@
+.. -*- coding: utf-8 -*-
+.. :Project:   SoL
+.. :Created:   dom 29 dic 2013 10:32:04 CET
+.. :Author:    Lele Gaifax <lele@metapensiero.it>
+.. :License:   GNU General Public License version 3 or later
+.. :Copyright: © 2014, 2015, 2018, 2024 Lele Gaifax
+..
+
+.. _gestione valutazioni glicko:
+
+Gestione valutazioni Glicko
+---------------------------
+
+.. index::
+   pair: Gestione; Valutazioni Glicko
+
+Dalla versione 3 di SoL è stata introdotta la gestione delle valutazioni dei giocatori secondo
+il `sistema Glicko`__, primariamente per permettere di eliminare la componente *casuale* nella
+generazione degli abbinamenti per il primo turno nei tornei *importanti*.
+
+In poche parole, la valutazione dei giocatori calcolata con questo sistema rappresenta la
+probabilità di vittoria reciproca: un giocatore con valutazione 2200 molto probabilmente
+vincerà scontrandosi con un giocatore con una valutazione 1700.
+
+__ http://it.wikipedia.org/wiki/Sistema_Glicko
+
+Quando un torneo viene associato a una certa *valutazione Glicko*, la generazione dei turni
+viene effettuata tenendo conto della *valutazione corrente* di ciascun giocatore.
+
+.. contents::
+
+
+Voci del menu
+~~~~~~~~~~~~~
+
+Oltre alle :ref:`azioni standard <pulsanti-standard>` il menu contiene
+queste voci:
+
+:guilabel:`Tornei`
+  Apre la :ref:`gestione dei tornei <gestione tornei>` che utilizzano
+  la valutazione selezionata
+
+:guilabel:`Giocatori`
+  Apre le :ref:`valutazioni dei giocatori <valutazioni giocatori>` secondo
+  la valutazione selezionata
+
+:guilabel:`Ricalcola`
+  Ricalcola l'intera valutazione selezionata, riesaminando tutti i
+  risultati di tutti i tornei che la utilizzano
+
+:guilabel:`Scarica`
+  Permette di scaricare i dati di tutti i tornei che utilizzano la
+  valutazione selezionata
+
+:guilabel:`Assegna`
+  Assegna la responsabilità delle valutazioni selezionate: è possibile selezionare una o più
+  valutazioni tenendo premuto il tasto :kbd:`Ctrl` ed estendere la selezione premendo il tasto
+  :kbd:`Shift`
+
+
+Inserimento e modifica
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. index::
+   pair: Inserimento e modifica; Valutazioni Glicko
+
+Descrizione
++++++++++++
+
+Ogni valutazione è identificata da una :guilabel:`descrizione` univoca, cioè non è possibile
+inserire due diverse valutazioni con la medesima descrizione.
+
+Livello
++++++++
+
+Il :guilabel:`livello` stabilisce in sostanza l'*importanza* della valutazione e la sua
+*attendibilità*.
+
+.. note:: SoL 5 ha introdotto un :ref:`limite superiore <max livello valutazione>` al livello
+          di valutazioni accessibili da un particolare utente, per evitare abusi. Solo una
+          manciata di utenti sono abilitati a creare e utilizzare il livello più alto, indicato
+          solo per eventi *internazionali*: se hai effettivamente bisogno di organizzare quel
+          tipo di tornei, per favore chiedi all'*amministratore*.
+
+.. _eredità valutazioni:
+
+Eredita
++++++++
+
+Se :guilabel:`eredita` è attivo, allora quando in un torneo associato a una certa valutazione
+viene stabilita la valutazione di ciascun concorrente, viene usata la più recente nella
+valutazione di riferimento **oppure** in una a livello *superiore*. Al contrario, se è
+disattivo, la ricerca è limitata esclusivamente alla valutazione di riferimento.
+
+Tau
++++
+
+Il :guilabel:`tau` è il coefficiente primario per pilotare il calcolo della valutazione
+nell'algoritmo Glicko2.
+
+Valutazione, deviazione e volatilità
+++++++++++++++++++++++++++++++++++++
+
+La :guilabel:`valutazione`, la :guilabel:`deviazione` e la :guilabel:`volatilità` sono i valori
+di default della valutazione per un giocatori che partecipi per la prima volta a un torneo
+associato alla valutazione.
+
+Match outcome
++++++++++++++
+
+Il :guilabel:`match outcome` determina la formula usata per calcolare l'`outcome` dei due
+avversari in un particolare match e può assumere i seguenti valori:
+
+``Standard Glicko``
+  è incluso solo per ragioni storiche e non dovrebbe essere usato dal momento che non
+  è particolarmente adatto al gioco del Carrom:
+
+  .. math::
+
+      O_{1}=\begin{cases}
+      1& \text{se $S_{1} > S_{2}$},\\
+      0.5& \text{se $S_{1} = S_{2}$},\\
+      0& \text{se $S_{1} < S_{2}$}.
+      \end{cases}
+
+``Formula di Guido``
+  è la formula elaborata da Guido Truffelli considerando le caratteristiche del Carrom,
+  approvata dal dott. Glickman stesso:
+
+  .. math::
+
+     O_{1} = S_{1} / (S_{1} + S_{2})
+
+``Esponenziale sulla differenza pedine``
+  è un tentativo di tenere in considerazione la differenza pedine, in modo tale che un
+  giocatore ottenga un outcome migliore se vince per ``20—15`` piuttosto che per ``4—3``:
+
+  .. math::
+
+      O_{1}=\begin{cases}
+      1& \text{se $S_{1}-S_{2} > 22$},\\
+      0& \text{se $S_{1}-S_{2} < -22$},\\
+      1 / (1 + e^{-0.3 (S_{1} - S_{2})})& \text{altrimenti}.
+      \end{cases}
+
+Valutazione minima e massima
+++++++++++++++++++++++++++++
+
+La :guilabel:`valutazione minima` e la :guilabel:`valutazione massima` sono i valori estremi
+utilizzati per *interpolare* la valutazione dei giocatori *esordienti* (che non hanno cioè
+alcuna valutazione precedente), qualora vi fossero **meno** di due giocatori già
+valutati. Tipicamente questo succede al primo torneo inserito in una nuova valutazione,
+specialmente se :guilabel:`eredita` è disattivato.
+
+.. important:: Questi valori risultano modificabili solo dall'amministratore del sistema: di
+               norma **non** devono essere modificati, se non da chi sa come e perché farlo,
+               oppure per fare esperimenti.
+
+               In ogni caso, modificando questi valori rende necessario il ricalcolo della
+               valutazione.
+
+Club
+++++
+
+Il :guilabel:`club`, se assegnato, indica che la valutazione potrà essere utilizzata solo dai
+tornei organizzati dal medesimo club. Se lasciato in bianco, qualsiasi torneo potrà
+utilizzarla.
+
+Responsabile
+++++++++++++
+
+Il :guilabel:`responsabile` generalmente indica l'utente che ha inserito quella particolare
+valutazione: i dati della valutazione potranno essere modificati solo da lui (oltre che
+dall'*amministratore* del sistema.).
+
+
+Valutazioni storiche
+~~~~~~~~~~~~~~~~~~~~
+
+Le valutazioni storiche possono essere caricate con lo strumento a linea di comando ``soladmin
+load-historical-rating`` che accetta le seguenti opzioni e richiede due parametri posizionali,
+rispettivamente il file di configurazione e un URL del file contenente le valutazioni:
+
+--date         Data fittizia, di default 1900-01-01
+--deviation    Valore della deviazione, per default 100, oppure una formula per calcolarla a
+               partire da altri campi
+--volatility   Valore della volatilità, di default 0.006, oppure una formula per calcolarla a
+               partire da altri campi
+--rate         Formula per calcolare la valutazione del giocatore, se il valore nel file
+               necessita qualche correzione
+--description  Descrizione della valutazione
+--level        Il livello della valutazione, 0 di default: 0=storica, 1=internazionale,
+               2=nazionale, 3=regionale, 4=amatoriale
+--inherit      Specifica se le valutazioni di un giocatore verranno ereditate dalle altre
+               valutazioni allo stesso livello o superiore, False di default
+--map          Specifica una corrispondenza tra il nome del campo interno (SoL) e quello
+               esterno
+--encoding     Codifica del file CSV, di default UTF-8
+--tsv          Specifica che i campi sono separati da TAB, non da virgole
+--dry-run      Mostra solo il risultato, non caricare i dati nel database
+
+Il file contenente i dati può essere specificato sia con un URL tipo
+``http://sito.it/percorso/dati.txt`` oppure come ``file:///tmp/locale.txt`` se risiede sul
+filesystem locale.
+
+Il testo specificato può contenere o dei `campi separati da virgole` oppure `campi separati dal
+carattere TAB` (se viene specificata l'opzione ``--tsv``). Se non viene specificato
+diversamente con l'opzione ``--encoding`` viene assunta la codifica UTF-8.
+
+La prima riga del file è considerata come `intestazione` che specifica i nomi delle singole
+colonne mentre ciascuna riga rimanente contiene la valutazione di un singolo giocatore.
+
+Ogni riga deve contenere almeno i campi ``firstname``, ``lastname`` e ``nickname`` che
+identificano univocamente un particolare giocatore e opzionalmente i campi ``sex`` e ``club``,
+rispettivamente il suo sesso e il club per cui gioca. Ovviamente ci deve essere il campo
+``rate`` con il valore della valutazione storica del giocatore. Questi sono i nomi usati
+internamente, ma con l'opzione ``--map`` è possibile specificare delle associazioni arbitrarie
+con gli effettivi campi contenuti nel file.
+
+Come esempio, i seguenti dati
+
+::
+
+    id,cognome,nome,nomignolo,valutazione,partite_giocate,club,sesso
+    1,Gaifas,EMANUELE,,1000,30,,Scarambol Club Rovereto,M
+    2,Rossi,Paolo,,1468,6,Scarambol Club Rovereto,M
+    3,Verdi,Giuseppe,,1427,34,Italian Carrom Federation,M
+    4,Bianchi,Stefania,,1495,7,,F
+
+possono essere caricati con il seguente comando::
+
+    soladmin load-historical-rating \
+             --map lastname=cognome \
+             --map firstname=nome \
+             --map nickname=nomignolo \
+             --map rate=valutazione \
+             --map partite_giocate \
+             --map club \
+             --map sex=sesso \
+             --deviation "350.0 / (10.0 - 9.0*exp(-partite_giocate / 60.0))" \
+             --description "Historical rating" \
+             --dry-run \
+             config.ini /tmp/giocatori.csv
+
+che dovrebbe produrre qualcosa del tipo::
+
+    Loading ratings from file:///tmp/players.csv...
+    Gaifas Emanuele “lele” (Scarambol Club Rovereto): rate=1000 deviation=77 volatility=0.006
+    NEW Rossi Paolo (Scarambol Club Rovereto): rate=1468 deviation=188 volatility=0.006
+    NEW Verdi Giuseppe (Italian Carrom Federation): rate=1427 deviation=71 volatility=0.006
+    NEW Bianchi Stefania (None): rate=1495 deviation=175 volatility=0.006
+
+dove puoi notare che:
+
+a. l'opzione ``--dry-run`` mostra solo cosa succederebbe, senza alterare il database
+b. i nomi dei giocatori vengono *normalizzati*, vale a dire ``EMANUELE`` diventa ``Emanuele``
+c. i nuovi giocatori sono automaticamente inseriti nel database
+d. il valore della deviazione viene calcolato a partire dal numero di match giocati
+
+Quando sei soddisfatto, ometti l'opzione ``--dry-run`` e i dati verranno effettivamente
+caricati.
