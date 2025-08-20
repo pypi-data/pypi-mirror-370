@@ -1,0 +1,87 @@
+{% load django_listing %}
+
+<form{{ attached_form.attrs }} method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {% gethiddens_listing listing without="page,sort" %}
+    {% block hiddens %}
+        {% for name, value in listing.form_input_hiddens.items %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+    {% endblock %}
+
+    {% with attached_form.get_form as form %}
+
+        {% if attached_form.display_errors and form.non_field_errors %}
+            <ul class="errorlist nonfield">
+            {% for error in form.non_field_errors %}
+                <li><span class="listing-icon-attention"></span> {{error}}</li>
+            {% endfor %}
+            </ul>
+        {% endif %}
+        <div class="form-fields"><div class="form-fields-inner">
+        {% for row in attached_form.dynamic_layout %}
+            <div class="form-row d-lg-flex">
+                {% for field_name in row %}
+                    {% is_str field_name as standard_field %}
+                    {% if standard_field %}
+                        {% get_form_field form field_name as field %}
+                        {% get_attachedform_col attached_form field_name as col %}
+                        {% if field %}
+                            <div class="form-field {{ field_name }} cls-{{ col.get_type }}{% if attached_form.display_errors and field.errors %} errors{% endif %}">
+                                {% if attached_form.display_errors and field.errors %}<span class="listing-icon-attention"></span> {{ field.errors }}{% endif %}
+                                <div class="label_input {{ col.form_field_input_container_css }}">
+                                    {% if col.reverse_form_label_tag %}
+                                        {{ field }}{{ field.label_tag }}{% if field.field.required %}<span class="asteriskField">*</span>{% endif %}
+                                        {% if not col.no_mass_op %}
+                                            <input type="checkbox" name="{{ field_name }}_mass_op" value="checked" class="mass-op-cb" style="display: none">
+                                        {% endif %}
+                                    {% else %}
+                                        {% if not col.no_mass_op %}
+                                            <input type="checkbox" name="{{ field_name }}_mass_op" value="checked" class="mass-op-cb" style="display: none">
+                                        {% endif %}
+                                        {{ field.label_tag }}{% if field.field.required %}<span class="asteriskField">*</span>{% endif %}
+                                        {{ field }}
+                                    {% endif %}
+                                </div>
+                                {% if ending %}<span class="ending">{{ ending }}</span>{% endif %}
+                                {% if field.help_text %}
+                                    <p class="help">{{ field.help_text|safe }}</p>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        {{ field_name }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endfor %}
+        </div></div>
+
+        <div class="form-buttons">
+            <div class="form-buttons-lines">
+                {% for buttons_line in attached_form.buttons %}
+                <div class="form-buttons-line">
+                    {% for action,label,icon,attrs in buttons_line %}
+                        {% if action == "_" %}
+                            <div class="spacer"></div>
+                        {% else %}
+                            <button{{ attrs }}>
+                                <span class="button-icon-label">
+                                <span class="button-extra-top"></span>
+                                {% if icon %}
+                                    <span class="button-icon"><span class="{{ icon }}"></span></span>
+                                {% endif %}
+                                <span class="button-extra-middle"></span>
+                                {% if label %}
+                                    <span class="button-label">{{ label|safe }}</span>
+                                {% endif %}
+                                <span class="button-extra-bottom"></span>
+                                </span>
+                            </button>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endwith %}
+</form>
