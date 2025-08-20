@@ -1,0 +1,101 @@
+
+[![Latest Release](https://git.coopdevs.org/coopdevs/som-connexio/zoho/zoho-somconnexio-python-client/-/badges/release.svg)](https://git.coopdevs.org/coopdevs/som-connexio/zoho/zoho-somconnexio-python-client/-/releases)
+[![pipeline status](https://git.coopdevs.org/coopdevs/som-connexio/zoho/zoho-somconnexio-python-client/badges/main/pipeline.svg)](https://git.coopdevs.org/coopdevs/som-connexio/zoho/zoho-somconnexio-python-client/-/commits/main)
+[![coverage report](https://git.coopdevs.org/coopdevs/som-connexio/zoho/zoho-somconnexio-python-client/badges/main/coverage.svg)](https://git.coopdevs.org/coopdevs/som-connexio/zoho/zoho-somconnexio-python-client/-/commits/main)
+
+:warning: WORK IN PROGRESS :warning:
+
+This library is a Python wrapper for accessing Somconnexio's Zoho.
+
+## Resources
+
+* CRMLeads
+
+## Installation
+
+```commandline
+$ pip install zoho-somconnexio-python-client
+```
+
+## Configuration Environment
+
+You need define the Zoho CRM_CLIENT_ID, CRM_ORGANIZATION_ID, CRM_CLIENT_SECRET and ZOHO_CRM_STORE as environment variables. You need define:
+
+```
+ZOHO_CRM_CLIENT_ID=<YOUR CLIENT ID>
+ZOHO_CRM_CLIENT_SECRET=<YOUR CLIENT SECRET>
+ZOHO_CRM_ORGANIZATION_ID=<YOUR ORGANIZATION>
+ZOHO_CRM_STORE=<YOUR PATH TO STORE TOKEN & LAYOUTS>
+
+```
+
+If this envvars are not defined, a exception will be raised with the name of the envvar not defined.
+
+## Development
+
+### Setup environment
+
+1. Install `pyenv`
+```sh
+curl https://pyenv.run | bash
+```
+2. Build the Python version
+```sh
+pyenv install  3.11.9
+```
+3. Create a virtualenv
+```sh
+pyenv virtualenv 3.11.9 zoho-somconnexio-python-client
+```
+4. Activate virtualenv
+```sh
+pyenv activate zoho-somconnexio-python-client
+```
+5. Install dependencies
+```sh
+pyenv exec pip install -r requirements-dev.txt
+```
+6. Install pre-commit hooks
+```sh
+pyenv exec pre-commit install
+```
+
+### Run tests
+
+To run the test you can run:
+
+```
+$ tox
+```
+
+Also you can run only the tests running:
+
+```
+$ pytest .
+```
+
+and if you want the coverage info:
+
+```
+$ pytest --cov .
+```
+
+### Formatting
+
+We use [pre-commit](https://pre-commit.com/) to execute [Black](https://github.com/psf/black) as formatter.
+
+
+### Release process
+
+Update CHANGELOG.md following this steps:
+
+1. Add any entries missing from merged merge requests.
+1. Duplicate the `[Unreleased]` header.
+1. Replace the second `Unreleased` with a version number followed by the current date. Copy the exact format from previous releases.
+
+Then, you can release and publish the package to PyPi:
+
+1. Update the `__version__` var in `__init__.py` matching the version you specified in the CHANGELOG.
+1. Open a merge request with these changes for the team to approve
+1. Merge it, add a git tag on that merge commit and push it.
+1. Once the pipeline has successfully passed, go approve the `publish` step.
