@@ -1,0 +1,1448 @@
+Class and Function Documentation (Text Version)
+================================================
+
+PACKAGE: talkpipe.app.chatterlang_serve
+---------------------------------------
+
+Source Class: ChatterlangServerSegment
+  Chatterlang Name: chatterlangServer
+  Base Classes: AbstractSource
+  Docstring:
+    Segment for receiving JSON data via FastAPI with configurable form
+  Parameters:
+    port: Union[int, str] = 9999
+    host: str = '0.0.0.0'
+    api_key: str = None
+    require_auth: bool = False
+    form_config: Union[str, Dict[str, Any]] = None
+
+
+PACKAGE: talkpipe.chatterlang.compiler
+--------------------------------------
+
+Segment Class: Accum
+  Chatterlang Name: accum
+  Base Classes: io.AbstractSegment
+  Docstring:
+    Accumulates items from the input stream both in an internal buffer and in the specified variable.  
+    This is useful for accumulating the results of running the pipeline multiple times.     
+    
+    Args:
+        variable (Union[VariableName, str], optional): The name of the variable to store the accumulated data in. Defaults to None.
+        reset (bool, optional): Whether to reset the accumulator each time the segment is run. Defaults to True.
+  Parameters:
+    variable: Union[VariableName, str] = None
+    reset: bool = True
+
+Segment Class: Snippet
+  Chatterlang Name: snippet
+  Base Classes: io.AbstractSegment
+  Docstring:
+    A segment that loads a chatterlang script from a file and compiles it, after which it
+    functions as a normal segment that can be integrated into a pipeline.
+    
+    Args:
+        file (str): The path to the chatterlang script file.
+        runtime (RuntimeComponent, optional): The runtime component to use. Defaults to None.
+  Parameters:
+    script_source: str
+
+
+PACKAGE: talkpipe.data.email
+----------------------------
+
+Source Function: readEmail
+  Chatterlang Name: readEmail
+  Docstring:
+    A source that monitors an email inbox and yields new unread emails.
+    
+    This source periodically checks for new unread emails, marks them as read,
+    and yields their content and metadata. It connects using IMAP and can be
+    configured to poll at specific intervals.
+    
+    Args:
+        poll_interval_minutes (int, optional): Minutes between email checks. Defaults to 10.
+        folder (str, optional): Mailbox folder to check. Defaults to 'INBOX'.
+        mark_as_read (bool, optional): Whether to mark emails as read. Defaults to True.
+        limit (int, optional): Maximum number of emails to fetch per check. Defaults to 100. 
+            if -1, fetch all.
+        imap_server (str, optional): IMAP server address. If None, uses config.
+        email_address (str, optional): Email address. If None, uses config.
+        password (str, optional): Password. If None, uses config.
+        
+    Yields:
+        dict: Email metadata and content including:
+            - message_id: Unique message ID
+            - subject: Email subject
+            - from: Sender address
+            - to: Recipient address(es)
+            - cc: CC address(es)
+            - date: Datetime object of when email was sent
+            - date_str: Date string from email header
+            - plain_text: Plain text content if available
+            - html_content: HTML content if available
+            - headers: Dictionary of all email headers
+            - raw_email: Full raw email content
+  Parameters:
+    poll_interval_minutes = 10
+    folder = 'INBOX'
+    mark_as_read = True
+    limit = 100
+    unseen_only = True
+    imap_server = None
+    email_address = None
+    password = None
+
+Segment Function: sendEmail
+  Chatterlang Name: sendEmail
+  Docstring:
+    Send emails for each item in the input iterable using SMTP.
+    
+    This function processes a list of items and sends an email for each one, using the specified
+    fields for subject and body content. It supports both HTML and plain text email formats.
+    
+    Args:
+        subject_field (str): Field name in the item to use as email subject
+        body_fields (list[str]): List of field names to include in email body
+        sender_email (str, optional): Sender's email address. If None, uses config value
+        recipient_email (str, optional): Recipient's email address. If None, uses config value
+        smtp_server (str, optional): SMTP server address. Defaults to 'smtp.gmail.com'
+        port (int, optional): SMTP server port. Defaults to 587
+    
+    Yields:
+        item: Returns each processed item after sending its corresponding email
+    
+    Raises:
+        AssertionError: If subject_field or body_fields are None
+        ValueError: If required fields are missing in items
+    
+    Example:
+        >>> items = [{'title': 'Hello', 'content': 'World'}]
+        >>> for item in sendEmail(items, 'title', ['content'], 'sender@email.com', 'recipient@email.com'):
+        ...     print(f"Processed {item}")
+    
+    Notes:
+        - Requires valid SMTP credentials in config
+        - Supports HTML formatting in email body
+        - Uses TLS encryption for email transmission
+  Parameters:
+    subject_field
+    body_fields
+    sender_email
+    recipient_email
+    smtp_server = None
+    port = 587
+
+
+PACKAGE: talkpipe.data.extraction
+---------------------------------
+
+Segment Class: FileExtractor
+  Chatterlang Name: extract
+  Base Classes: AbstractSegment
+  Docstring:
+    A class for extracting text content from different file types.
+    
+    This class implements the AbstractSegment interface and provides functionality to extract
+    text content from various file formats using registered extractors. It supports multiple
+    file formats and can be extended with additional extractors.
+    
+    Attributes:
+        _extractors (dict): A dictionary mapping file extensions to their corresponding extractor functions.
+    
+    Methods:
+        register_extractor(file_extension: str, extractor): Register a new file extractor for a specific extension.
+        extract(file_path: Union[str, PosixPath]): Extract content from a single file.
+        transform(input_iter): Transform an iterator of file paths into an iterator of their contents.
+    
+    Example:
+        >>> extractor = FileExtractor()
+        >>> content = extractor.extract("document.txt")
+        >>> for text in extractor.transform(["file1.txt", "file2.docx"]):
+        ...     print(text)
+    
+    Raises:
+        Exception: When trying to extract content from a file with an unsupported extension.
+
+Segment Function: listFiles
+  Chatterlang Name: listFiles
+  Docstring:
+    Lists files matching given patterns (potentially with wildcards) and yields their paths.
+    
+    Args:
+        patterns (Iterable[str]): Iterable of file patterns or paths (supports wildcards like *, ?, []).
+        full_path (bool): Whether to yield full absolute paths or just filenames.
+    
+    Yields:
+        str: File paths (absolute if full_path=True, filenames if full_path=False).
+    
+    
+    Raises:
+        None: This function does not raise exceptions for non-matching patterns.
+  Parameters:
+    full_path: bool = True
+
+Segment Function: readdocx
+  Chatterlang Name: readdocx
+  Docstring:
+    Read and extract text from Microsoft Word (.docx) files.
+    
+    If an item is a directory, it will scan the directory (recursively by default)
+    and read all .docx files.
+    
+    Args:
+        items (Iterable[str]): Iterable of file or directory paths.
+        recursive (bool): Whether to scan directories recursively for .docx files.
+    
+    Yields:
+        str: The full text content of each document with paragraphs joined by spaces
+    
+    Raises:
+        FileNotFoundError: If a path does not exist.
+        IOError: If there is an error reading any of the files.
+
+Segment Function: readtxt
+  Chatterlang Name: readtxt
+  Docstring:
+    Reads text files from given file paths or directories and yields their contents.
+    
+    If an item is a directory, it will scan the directory (recursively by default)
+    and read all .txt files.
+    
+    Args:
+        items (Iterable[str]): Iterable of file or directory paths.
+        recursive (bool): Whether to scan directories recursively for .txt files.
+    
+    Yields:
+        str: The contents of each text file.
+    
+    Raises:
+        FileNotFoundError: If a path does not exist.
+        IOError: If there is an error reading any of the files.
+
+
+PACKAGE: talkpipe.data.html
+---------------------------
+
+Segment Function: downloadURLSegment
+  Chatterlang Name: downloadURL
+  Docstring:
+    Download a URL segment and return its content.
+    
+    This function is a wrapper around downloadURL that specifically handles URL segments.
+    It attempts to download content from the specified URL with configurable error handling
+    and timeout settings.
+    
+    Args:
+        fail_on_error (bool, optional): If True, raises exceptions on download errors.
+            If False, returns None on errors. Defaults to True.
+        timeout (int, optional): The timeout in seconds for the download request. 
+            Defaults to 10 seconds.
+    
+    Returns:
+        bytes|None: The downloaded content as bytes if successful, None if fail_on_error
+            is False and an error occurs.
+    
+    Raises:
+        Various exceptions from downloadURL function when fail_on_error is True and
+        an error occurs during download.
+  Parameters:
+    fail_on_error = True
+    timeout = 10
+    user_agent = None
+
+Segment Function: htmlToTextSegment
+  Chatterlang Name: htmlToText
+  Docstring:
+    Converts HTML content to text segment.
+    
+    This function takes HTML content and converts it to plain text format.
+    If cleanText is enabled, the resulting text will also be cleaned so it 
+    tries to retain only the main body content.
+    
+    Args:
+        raw (str): The raw HTML content to be converted
+        cleanText (bool, optional): Whether to clean and normalize the output text. Defaults to True.
+        field (str): The field name to be used for the segment. If None, assuming the incoming item is html.
+        append_as (str): The name of the field to append the text to.  If None, just pass on the cleaned text.
+    
+    Returns:
+        str: The extracted text content from the HTML
+    
+    See Also:
+        htmlToText: The underlying function used for HTML to text conversion
+  Parameters:
+    cleanText = True
+
+
+PACKAGE: talkpipe.data.mongo
+----------------------------
+
+Segment Class: MongoInsert
+  Chatterlang Name: mongoInsert
+  Base Classes: core.AbstractSegment
+  Docstring:
+    Insert items from the input stream into a MongoDB collection.
+    
+    For each item received, this segment inserts it into the specified MongoDB collection
+    and then yields the item back to the pipeline. This allows for both persisting data
+    and continuing to process it in subsequent pipeline stages.
+    
+    Args:
+        connection_string (str, optional): MongoDB connection string. If not provided,
+            will attempt to get from config using the key "mongo_connection_string".
+        database (str): Name of the MongoDB database to use.
+        collection (str): Name of the MongoDB collection to use.
+        field (str, optional): Field to extract from each item for insertion. 
+            If not provided, inserts the entire item. Default is "_".
+        fields (str, optional): Comma-separated list of fields to extract and include in the 
+            document, in the format "field1:name1,field2:name2". If provided, this creates a 
+            new document with the specified fields. Cannot be used with 'field' parameter.
+        append_as (str, optional): If provided, adds the MongoDB insertion result
+            to the item using this field name. Default is None.
+        create_index (str, optional): If provided, creates an index on this field.
+            Default is None.
+        unique_index (bool, optional): If True and create_index is provided, 
+            creates a unique index. Default is False.
+  Parameters:
+    connection_string: Optional[str] = None
+    database: Optional[str] = None
+    collection: Optional[str] = None
+    field: str = '_'
+    fields: Optional[str] = None
+    append_as: Optional[str] = None
+    create_index: Optional[str] = None
+    unique_index: bool = False
+
+Segment Class: MongoSearch
+  Chatterlang Name: mongoSearch
+  Base Classes: core.AbstractSegment
+  Docstring:
+    Search a MongoDB collection and yield results.
+    
+    This segment performs a query against a MongoDB collection and yields
+    the matching documents one by one as they are returned from the database.
+    
+    Args:
+        field(str): the field in the incoming item to use as a query.  Defaults is "_"
+        connection_string (str, optional): MongoDB connection string. If not provided,
+            will attempt to get from config using the key "mongo_connection_string".
+        database (str): Name of the MongoDB database to use.
+        collection (str): Name of the MongoDB collection to use.
+        project (str, optional): JSON string defining the projection for returned documents.
+            Default is None (returns all fields).
+        sort (str, optional): JSON string defining the sort order. Default is None.
+        limit (int, optional): Maximum number of results to return per query. Default is 0 (no limit).
+        skip (int, optional): Number of documents to skip. Default is 0.
+        append_as (str, optional): If provided, adds the MongoDB results to the incoming item
+            using this field name. If not provided, the results themselves are yielded.
+        as_list (bool, optional): If True and append_as is provided, all results are collected
+            into a list and appended to the incoming item. Default is False.
+  Parameters:
+    field: str = '_'
+    connection_string: Optional[str] = None
+    database: Optional[str] = None
+    collection: Optional[str] = None
+    project: Optional[str] = None
+    sort: Optional[str] = None
+    limit: int = 0
+    skip: int = 0
+    append_as: Optional[str] = None
+
+
+PACKAGE: talkpipe.data.rss
+--------------------------
+
+Source Function: rss_source
+  Chatterlang Name: rss
+  Docstring:
+    Generator function that monitors and yields new entries from an RSS feed.
+    
+    This function continuously monitors an RSS feed at the specified URL and yields new entries
+    as they become available. It uses a SQLite database to keep track of previously seen entries
+    to avoid duplicates.
+    
+    Args:
+        url (str): The URL of the RSS feed to monitor.  If None, the URL is read from the config using
+            the key "RSS_URL"
+        db_path (str, optional): Path to the SQLite database file for storing entry history.
+            Defaults to ':memory:' for an in-memory database.
+        poll_interval_minutes (int, optional): Number of minutes to wait between polling
+            the RSS feed for updates. Defaults to 10 minutes.
+    
+    Yields:
+        dict: New entries from the RSS feed, containing feed item data.
+    
+    Example:
+        >>> for entry in rss_source("http://example.com/feed.xml"):
+        ...     print(entry["title"])
+  Parameters:
+    url: str
+    db_path: str = ':memory:'
+    poll_interval_minutes: int = 10
+
+
+PACKAGE: talkpipe.llm.chat
+--------------------------
+
+Segment Class: LlmExtractTerms
+  Chatterlang Name: llmExtractTerms
+  Base Classes: AbstractLLMGuidedGeneration
+  Docstring:
+    For each piece of text read from the input stream, extract terms from the text.
+    
+    The system prompt must be provided and should explain the nature of the terms. For 
+    example, a system_prompt might be:
+    
+    <pre>Extract keywords from the following text.</pre>
+    
+    See the LLMPrompt segment for more information on the other arguments.
+
+Segment Class: LLMPrompt
+  Chatterlang Name: llmPrompt
+  Base Classes: AbstractSegment
+  Docstring:
+    Interactive, optionally multi-turn, chat with an llm.
+    
+    Reads prompts from the input stream and emits responses from the llm.
+    The model name and source can be specified in three different ways.  If
+    explicitly included in the constructor, those values will be used.  If not,
+    the values will be loaded from environment variables (TALKPIPE_default_model_name
+    and TALKPIPE_default_source).  If those are not set, the values will be loaded
+    from the configuration file (~/.talkpipe.toml).  If none of those are set, an 
+    error will be raised.
+    
+    Args:
+        model (str, optional): The name of the model to chat with. Defaults to None.
+        source (ModelSource, optional): The source of the model. Defaults to None. Valid values are "openai" and "ollama."
+        system_prompt (str, optional): The system prompt for the model. Defaults to "You are a helpful assistant.".
+        multi_turn (bool, optional): Whether the chat is multi-turn. Defaults to True.
+        pass_prompts (bool, optional): Whether to pass the prompts through to the output. Defaults to False.
+        field (str, optional): The field in the input item containing the prompt. Defaults to None.
+        append_as (str, optional): The field to append the response to. Defaults to None.
+        temperature (float, optional): The temperature to use for the model. If not specified, no temperature parameter will be passed to the model.
+        output_format (BaseModel, optional): A class used for guided generation. Defaults to None.
+  Parameters:
+    model: str = None
+    source: str = None
+    system_prompt: str = 'You are a helpful assistant.'
+    multi_turn: bool = True
+    pass_prompts: bool = False
+    field: Optional[str] = None
+    append_as: Optional[str] = None
+    temperature: float = None
+    output_format: BaseModel = None
+
+Segment Class: LlmScore
+  Chatterlang Name: llmScore
+  Base Classes: AbstractLLMGuidedGeneration
+  Docstring:
+    For each piece of text read from the input stream, compute a score and an explanation for that score.
+    
+    The system prompt must be provided and should explain the range of the score (which must be 
+    a range of integers) and the meaning of the score. For example, a system_prompt might be:
+    
+    <pre>Score the following text according to how relevant it is to canines, where 0 mean unrelated and 10 
+    means highly related.</pre>
+    
+    See the LLMPrompt segment for more information on the other arguments.
+
+
+PACKAGE: talkpipe.llm.embedding
+-------------------------------
+
+Segment Class: LLMEmbed
+  Chatterlang Name: llmEmbed
+  Base Classes: AbstractSegment
+  Docstring:
+    Read strings from the input stream and emit an embedding for each string using a language model.
+    
+    This segment creates vector embeddings from text using the specified embedding model.
+    It can extract text from a specific field in structured data or process the input directly.
+    
+    Attributes:
+        embedder: The embedding adapter instance that performs the actual embedding.
+        field: Optional field name to extract text from structured input.
+        append_as: Optional field name to append embeddings to the original item.
+  Parameters:
+    model: str = None
+    source: str = None
+    field: Optional[str] = None
+    append_as: Optional[str] = None
+
+
+PACKAGE: talkpipe.operations.filtering
+--------------------------------------
+
+Segment Function: distinctBloomFilter
+  Chatterlang Name: distinctBloomFilter
+  Docstring:
+    Filter items using a Bloom Filter to yield only distinct elements based on specified fields.
+    
+    A Bloom Filter is a space-efficient probabilistic data structure used to test whether 
+    an element is a member of a set. False positive matches are possible, but false 
+    negatives are not.
+    
+    Args:
+        items (iterable): Input items to filter.
+        capacity (int): Expected number of items to be added to the Bloom Filter.
+        error_rate (float): Acceptable false positive probability (between 0 and 1).
+        field_list (str, optional): Dot-separated string of nested fields to use for 
+            distinctness check. Defaults to "_" which uses the entire item.
+    
+    Yields:
+        item: Items that have not been seen before according to the Bloom Filter.
+    
+    Example:
+        >>> items = [{"id": 1, "name": "John"}, {"id": 2, "name": "John"}]
+        >>> list(distinctBloomFilter(items, 1000, 0.01, "name"))
+        [{'id': 1, 'name': 'John'}]  # Only first item with name "John" is yielded
+    
+    Note:
+        Due to the probabilistic nature of Bloom Filters, there is a small chance
+        of false positives (items incorrectly identified as duplicates) based on
+        the specified error_rate.
+  Parameters:
+    capacity
+    error_rate
+    field_list = '_'
+
+
+PACKAGE: talkpipe.operations.matrices
+-------------------------------------
+
+Segment Class: ReduceTSNE
+  Chatterlang Name: reduceTSNE
+  Base Classes: AbstractSegment
+  Docstring:
+    Use t-SNE to reduce dimensionality of provided matrix.
+    
+    This segment reduces the dimensionality of the provided matrix using t-SNE 
+    (t-Distributed Stochastic Neighbor Embedding).
+    
+    Parameters:
+        n_components: The dimension of the space to embed into. Default is 2.
+        perplexity: The perplexity is related to the number of nearest neighbors used
+            in other manifold learning algorithms. Larger datasets usually require a
+            larger perplexity. Default is 30.
+        early_exaggeration: Controls how tight natural clusters in the original 
+            space are in the embedded space. Default is 12.0.
+        learning_rate: The learning rate for t-SNE. Default is 200.0.
+        max_iter: Maximum number of iterations for the optimization. Default is 1000.
+        metric: Distance metric for t-SNE. Default is 'euclidean'.
+        random_state: Random state for reproducibility.
+        **tsne_kwargs: Additional keyword arguments to pass to TSNE.
+  Parameters:
+    n_components: Optional[int] = 2
+    perplexity: float = 30.0
+    early_exaggeration: float = 12.0
+    learning_rate: float = 200.0
+    max_iter: int = 1000
+    metric: str = 'euclidean'
+    random_state: Optional[int] = None
+
+Segment Class: ReduceUMAP
+  Chatterlang Name: reduceUMAP
+  Base Classes: AbstractSegment
+  Docstring:
+    Use UMAP to reduce dimensionality of provided matrix.
+    
+    This segment reduces the dimensionality of the provided matrix using UMAP.
+    
+    Parameters:
+        n_components: The dimension of the space to embed into. Default is 2.
+        n_neighbors: Size of local neighborhood. Default is 15.
+        min_dist: Minimum distance between embedded points. Default is 0.1.
+        metric: Distance metric for UMAP. Default is 'euclidean'.
+        random_state: Random state for reproducibility.
+        **umap_kwargs: Additional keyword arguments to pass to UMAP.
+  Parameters:
+    n_components: Optional[int] = 2
+    n_neighbors: int = 15
+    min_dist: float = 0.1
+    metric: str = 'euclidean'
+    random_state: Optional[int] = None
+    n_epochs: int = None
+
+
+PACKAGE: talkpipe.operations.signatures
+---------------------------------------
+
+Segment Class: SignSegment
+  Chatterlang Name: sign
+  Base Classes: core.AbstractSegment
+  Docstring:
+    Sign items using a private key.
+    
+    This segment signs each item in the input stream using RSA-PSS with SHA-256.
+  Parameters:
+    private_key
+    message_field = '_'
+    password = None
+    append_as = None
+    encode_signature = True
+
+Segment Class: VerifySegment
+  Chatterlang Name: verify
+  Base Classes: core.AbstractSegment
+  Docstring:
+    Verify signatures on items using a public key.
+    
+    This segment verifies the signature on each item in the input stream using RSA-PSS with SHA-256.
+  Parameters:
+    public_key
+    message_field = '_'
+    signature_field = 'signature'
+    append_as = None
+
+
+PACKAGE: talkpipe.operations.thread_ops
+---------------------------------------
+
+Segment Function: threadedSegment
+  Chatterlang Name: threaded
+  Docstring:
+    Links the input stream to a threaded queue system.
+    
+    This segment takes an input stream and links it to a threaded queue system.
+    It starts the queue system and then starts yielding from the queue.  That way
+    the upstream units don't have to wait for the downstream segments to draw 
+    from them.
+
+
+PACKAGE: talkpipe.operations.transforms
+---------------------------------------
+
+Segment Function: fill_null
+  Chatterlang Name: fillNull
+  Docstring:
+    Fills null (None) values in a sequence of dictionaries with specified defaults.
+    
+    This generator function processes dictionaries by replacing None values with either
+    a general default value or specific values for named fields.
+    
+    Args:
+        items: An iterable of dictionaries to process.
+        default (str, optional): The default value to use for any None values not 
+            specified in kwargs. Defaults to ''.
+        **kwargs: Field-specific default values. Each keyword argument specifies a
+            field name and the default value to use for that field.
+    
+    Yields:
+        dict: The processed dictionary with None values replaced by defaults.
+    
+    Raises:
+        AssertionError: If any item in the input is not a dictionary.
+        TypeError: If any item doesn't support item assignment using square brackets.
+    
+    Examples:
+        >>> data = [{'a': None, 'b': 1}, {'a': 2, 'b': None}]
+        >>> list(fill_null(data, default='N/A'))
+        [{'a': 'N/A', 'b': 1}, {'a': 2, 'b': 'N/A'}]
+        
+        >>> list(fill_null(data, b='EMPTY'))
+        [{'a': None, 'b': 1}, {'a': 2, 'b': 'EMPTY'}]
+  Parameters:
+    default = ''
+
+Segment Class: MakeLists
+  Chatterlang Name: makeLists
+  Base Classes: AbstractSegment
+  Docstring: (none)
+  Parameters:
+    num_items: Optional[int] = None
+    cumulative: bool = False
+    field: str = '_'
+    ignoreNone: bool = False
+
+Segment Function: regex_replace
+  Chatterlang Name: regexReplace
+  Docstring:
+    Transform items by applying regex pattern replacement.
+    
+    This segment transforms items by applying a regex pattern replacement to either
+    the entire item (if field="_") or a specific field of the item.
+    
+    Args:
+        items (Iterable): Input items to transform.
+        pattern (str): Regular expression pattern to match.
+        replacement (str): Replacement string for matched patterns.
+        field (str, optional): Field to apply transformation to. Use "_" for entire item. Defaults to "_".
+    
+    Yields:
+        Union[str, dict]: Transformed items. Returns string if field="_", otherwise returns modified item dict.
+    
+    Raises:
+        TypeError: If extracted value is not a string or if item is not subscriptable when field != "_".
+    
+    Examples:
+        >>> list(regex_replace(["hello world"], r"world", "everyone"))
+        ['hello everyone']
+        
+        >>> list(regex_replace([{"text": "hello world"}], r"world", "everyone", field="text"))
+        [{'text': 'hello everyone'}]
+  Parameters:
+    pattern
+    replacement
+    field = '_'
+
+
+PACKAGE: talkpipe.pipe.basic
+----------------------------
+
+Segment Function: appendAs
+  Chatterlang Name: appendAs
+  Docstring:
+    Appends the specified fields to the input item.
+    
+    Equivalent to toDict except that that item is modified with the new key/value pairs 
+    rather than a new dictionary returned.
+    
+    Assumes that the input item can has items assigned using bracket notation ([]).
+  Parameters:
+    field_list: str
+
+Segment Class: Cast
+  Chatterlang Name: cast
+  Base Classes: AbstractSegment
+  Docstring:
+    Casts the input data to a specified type.
+    
+    The type can be specified by passing a type object or a string representation of the type.
+    The cast will optionally fail silently if the data cannot be cast to the specified type.
+    This lets this segment also be used as a filter to remove data that cannot be cast.
+    The cast occurs by calling the type object on the data.  
+  Parameters:
+    cast_type: Union[type, str]
+    fail_silently: bool = True
+
+Segment Function: concat
+  Chatterlang Name: concat
+  Docstring:
+    Concatenates specified fields from each item with a delimiter.
+    
+        Args:
+            items: Iterable of input items to process
+            fields: String specifying fields to extract and concatenate
+            delimiter (str, optional): String to insert between concatenated fields. Defaults to "
+    
+    "
+            append_as (str, optional): If specified, adds concatenated result as new field with this name. 
+                                    Defaults to None.
+    
+        Yields:
+            If append_as is specified, yields the original item with concatenated result added as new field.
+            Otherwise, yields just the concatenated string.
+        
+  Parameters:
+    fields
+    delimiter = '\n\n'
+    append_as = None
+
+Segment Class: ConfigureLogger
+  Chatterlang Name: configureLogger
+  Base Classes: AbstractSegment
+  Docstring:
+    Configures loggers based on the provided logger levels and files.
+    
+    This segment configures loggers based on the provided logger levels and files.
+    The logger levels are specified as a string in the format "logger:level,logger:level,...".
+    The logger files are specified as a string in the format "logger:file,logger:file,...".
+    
+    It configures when the script is compiled or the object is instantiated and never again 
+    after that.  It passes the input data through unchanged.
+    
+    Args:
+        logger_levels (str): Logger levels in format 'logger:level,logger:level,...'
+        logger_files (str): Logger files in format 'logger:file,logger:file,...'
+  Parameters:
+    logger_levels: Optional[str] = None
+    logger_files: Optional[str] = None
+
+Segment Function: copy_segment
+  Chatterlang Name: copy
+  Docstring:
+    A segment that creates a shallow copy of each item in the input iterable.
+    
+    This can be used to create a defensive copy of items in the pipline, ensuring that modifications
+    to the items do not affect the original items in the input stream.  
+    
+    Args:
+        items (Iterable): An iterable of items to copy.
+
+Segment Function: deep_copy_segment
+  Chatterlang Name: deepCopy
+  Docstring:
+    A segment that creates a deep copy of each item in the input iterable.
+    
+    This can be used to create a defensive copy of items in the pipeline, ensuring that modifications
+    to the items do not affect the original items in the input stream.
+    Args:
+        items (Iterable): An iterable of items to copy.
+
+Segment Class: DescribeData
+  Chatterlang Name: describe
+  Base Classes: AbstractSegment
+  Docstring:
+    Returns a dictionary of all attributes of the input data.
+    
+    This is useful mostly for debugging and understanding the 
+    structure of the data.
+
+Segment Class: EvalExpression
+  Chatterlang Name: lambda
+  Base Classes: AbstractSegment
+  Docstring:
+    Evaluate a Python expression on each item in the input stream.
+    
+    This segment pre-compiles the expression during initialization for efficiency 
+    and then applies it to each item during transformation. Expressions are evaluated
+    in a restricted environment for security.
+    
+    The item is available in expressions as 'item'. If the item is a dictionary,
+    its fields can be accessed directly as variables in the expression.
+    
+    Args:
+        expression: The Python expression to evaluate
+        field: If provided, extract this field from each item before evaluating
+        append_as: If provided, append the result to each item under this field name
+        fail_on_error: If True, raises exceptions when evaluation fails. If False, logs errors and returns None
+  Parameters:
+    expression: str
+    field: Optional[str] = '_'
+    append_as: Optional[str] = None
+    fail_on_error: bool = True
+
+Segment Function: everyN
+  Chatterlang Name: everyN
+  Docstring:
+    Yields every nth item from the input stream.
+    
+    Args:
+        items: Iterable of items to process
+        n: Number of items to skip between each yield
+    
+    Yields:
+        Every nth item from the input stream.
+  Parameters:
+    n
+
+Source Function: exec
+  Chatterlang Name: exec
+  Docstring:
+    Execute a command and yields each line passed to stdout as an item.
+  Parameters:
+    command: str
+
+Segment Function: fillTemplate
+  Chatterlang Name: fillTemplate
+  Docstring:
+    Fill a template string with values from the input item.
+    
+    Args:
+        item: The input item containing values to fill the template
+        template (str): The template string with placeholders for values
+    
+    Returns:
+        str: The filled template string
+  Parameters:
+    template: str
+    fail_on_missing: bool = True
+    default: Optional[Any] = ''
+
+Segment Class: FilterExpression
+  Chatterlang Name: lambdaFilter
+  Base Classes: AbstractSegment
+  Docstring:
+    Filter items from the input stream based on a Python expression.
+    
+    This segment pre-compiles the expression during initialization for efficiency 
+    and then applies it to each item during transformation. Expressions are evaluated
+    in a restricted environment for security.
+    
+    The item is available in expressions as 'item'. If the item is a dictionary,
+    its fields can be accessed directly as variables in the expression.
+    
+    Args:
+        expression: The Python expression to evaluate
+        field: If provided, extract this field from each item before evaluating
+        fail_on_error: If True, raises exceptions when evaluation fails. If False, logs errors and returns None
+  Parameters:
+    expression: str
+    field: Optional[str] = '_'
+    fail_on_error: bool = True
+
+Segment Function: firstN
+  Chatterlang Name: firstN
+  Docstring:
+    Yields the first n items from the input stream.
+    Args:
+        n (int): The number of items to yield.
+    Yields:
+        The first n items from the input stream.
+  Parameters:
+    n: int = 1
+
+Segment Function: flatten
+  Chatterlang Name: flatten
+  Docstring:
+    Flattens a nested list of items.
+    
+    Args:
+        items: Iterable of items to flatten
+    
+    Yields:
+        Flattened list of items
+
+Segment Class: FormattedItem
+  Chatterlang Name: formatItem
+  Base Classes: AbstractSegment
+  Docstring:
+        Generate formatted output for specified fields in "Property: Value" format.
+        
+        This segment takes each input item and generates one formatted string output 
+        containing all specified fields. Each field is in the format "Label: Value".
+        
+        Args:
+            field_list (str): Comma-separated list of field:label pairs. 
+                             Format: "field1:Label1,field2:Label2" or just "field1,field2"
+            format_type (str): Type of formatting to apply ("auto", "text", "json", "clean")
+            wrap_width (int): Width for text wrapping (default: 80)
+            fail_on_missing (bool): Whether to fail if a field is missing (default: False)
+            separator (str): Separator between property and value (default: ": ")
+            field_separator (str): Separator between different fields (default: "
+    ")
+        
+        Yields:
+            str: One formatted string per input item containing all fields
+        
+  Parameters:
+    field_list: str
+    wrap_width: int = 80
+    fail_on_missing: bool = False
+    field_name_separator: str = ': '
+    field_separator: str = '\n'
+    item_suffix: str = ''
+
+Segment Class: Hash
+  Chatterlang Name: hash
+  Base Classes: AbstractSegment
+  Docstring:
+    Hashes the input data using the specified algorithm.
+    
+    This segment hashes the input data using the specified algorithm.
+    Strings will be encoded and hashed.  All other datatypes wil be hashed using either pickle or repr().
+    
+    Args:
+        algorithm (str): Hash algorithm to use.  Options include SHA1, SHA224, SHA256, SHA384, SHA512, SHA-3, and MD5.
+        use_repr (bool): If True, the repr() version of the input data is hashed.  If False, the input data is hashed via 
+            pickling.  Using repr() will handle all object, even those that can't be pickled and won't be subject to
+            changes in pickling formats.  But the pickled version will include more state and generally be more reliable.
+  Parameters:
+    algorithm: str = 'MD5'
+    use_repr = False
+    field_list: str = '_'
+    append_as = None
+    fail_on_missing: bool = True
+
+Segment Function: isIn
+  Chatterlang Name: isIn
+  Docstring:
+    Filters items based on whether a field contains a specified value.
+    
+    Args:
+        items: Iterable of items to filter
+        field: Field name to check for value
+        value: Value to check for in the field
+    
+    Yields:
+        Items where the specified field contains the specified value.
+  Parameters:
+    field
+    value
+
+Segment Function: isNotIn
+  Chatterlang Name: isNotIn
+  Docstring:
+    Filters items based on whether a field does not contain a specified value.
+    
+    Args:
+        field: Field name to check for value
+        value: Value to check for in the field
+    
+    Yields:
+        Items where the specified field does not contain the specified value.
+  Parameters:
+    field
+    value
+
+Segment Function: longestStr
+  Chatterlang Name: longestStr
+  Docstring:
+    Finds the longest string among specified fields in the input item.  If 
+    a field is not present or is not a string, it is ignored.  If two or more
+    fields have the same length, the first one encountered is returned.  If
+    none of the specified fields are present, and emptry string is yielded.
+    Args:
+        items: The input items
+        field_list (str): Comma-separated list of fields to check for longest string
+    Yields:
+        The longest string found in the specified fields of the input items.
+  Parameters:
+    field_list
+    append_as = None
+
+Segment Function: progressTicks
+  Chatterlang Name: progressTicks
+  Docstring:
+    Prints a tick marks to help visualize progress.
+    
+    Prints a tick mark for each tick_count items processed. If eol_count is specified, it will print a new line after every eol_count tick marks.
+    If print_count is True, it will print the total count of items processed at the end of each line and at the end.
+    
+    Args:
+        items (Iterable): An iterable of items to process.
+        tick (str): The character to print as a tick mark. Defaults to '.'.
+        tick_count (int): The number of items to process before printing a tick mark. Defaults to 10.
+        eol_count (Optional[int]): The number of tick marks to print before starting a new line. If None, no new line is printed. Defaults to 10.
+        print_count (bool): If True, prints the count of items processed at the end of each line and at the end.
+    Yields:
+        The original items from the input iterable.
+  Parameters:
+    tick: str = '.'
+    tick_count: int = 10
+    eol_count: Optional[int] = 10
+    print_count: bool = False
+
+Segment Function: sleep
+  Chatterlang Name: sleep
+  Docstring:
+    Sleep for a specified number of seconds.
+    
+    Args:
+        items (Iterable): An iterable of items to process.
+        seconds (int): The number of seconds to sleep.
+    
+    Yields:
+        None: This segment does not yield any items; it simply sleeps.
+  Parameters:
+    seconds: int
+
+Segment Function: slice
+  Chatterlang Name: slice
+  Docstring:
+    Slices a sequence using start and end indices.
+    
+    This function takes a sequence and a range string in the format "start:end" to slice the sequence.
+    Both start and end indices are optional.
+    
+    Args:
+        item: Any sequence that supports slicing (e.g., list, string, tuple)
+        range (str, optional): String in format "start:end" where both start and end are optional.
+            For example: "2:5", ":3", "4:", ":" are all valid. Defaults to None.
+    
+    Returns:
+        The sliced sequence containing elements from start to end index.
+        If range is None, returns a full copy of the sequence.
+    
+    Examples:
+        >>> slice([1,2,3,4,5], "1:3")
+        [2, 3]
+        >>> slice("hello", ":3")
+        "hel"
+        >>> slice([1,2,3,4,5], "2:")
+        [3, 4, 5]
+  Parameters:
+    range = None
+
+Segment Class: ToDataFrame
+  Chatterlang Name: toDataFrame
+  Base Classes: AbstractSegment
+  Docstring:
+    Drain all items from the input stream and emit a single DataFrame.
+    
+    The input data stream should be composed of dictionaries, where each 
+    dictionary represents a row in the DataFrame.
+
+Segment Class: ToDict
+  Chatterlang Name: toDict
+  Base Classes: AbstractSegment
+  Docstring:
+    Creates a dictionary from the input data.
+  Parameters:
+    field_list: str = '_'
+    fail_on_missing: bool = True
+    default: Optional[Any] = None
+
+Segment Class: ToList
+  Chatterlang Name: toList
+  Base Classes: AbstractSegment
+  Docstring:
+    Drains the input stream and emits a list of all items.
+
+
+PACKAGE: talkpipe.pipe.io
+-------------------------
+
+Segment Function: dumpsJsonl
+  Chatterlang Name: dumpsJsonl
+  Docstring:
+    Drains the input stream and dumps each item as a jsonl string.
+        
+
+Source Function: echo
+  Chatterlang Name: echo
+  Docstring:
+    A source that generates input from a string.
+    
+    This source will generate input from a string, splitting it on a delimiter.
+  Parameters:
+    data
+    delimiter
+
+Segment Function: loadsJsonl
+  Chatterlang Name: loadsJsonl
+  Docstring:
+    Reads each item from the input stream, interpreting it as a jsonl string. 
+        
+        
+
+Segment Class: Log
+  Chatterlang Name: log
+  Base Classes: AbstractSegment
+  Docstring:
+    An operation that logs each item from the input stream.
+  Parameters:
+    level: Optional[str] = 'INFO'
+    field_list: Optional[str] = None
+    log_name: Optional[str] = None
+
+Segment Class: Print
+  Chatterlang Name: print
+  Base Classes: AbstractSegment
+  Docstring:
+    An operation prints and passes on each item from the input stream.
+  Parameters:
+    pprint: Optional[bool] = False
+    field_list: Optional[str] = None
+
+Source Class: Prompt
+  Chatterlang Name: prompt
+  Base Classes: AbstractSource
+  Docstring:
+    A source that generates input from a prompt.
+    
+    This source will generate input from a prompt until the user enters an EOF.
+    It is for creating interactive pipelines.  It uses prompt_toolkit under the
+    hood to provide a nice prompt experience.
+
+Segment Function: readJsonl
+  Chatterlang Name: readJsonl
+  Docstring:
+    Reads each item from the input stream as a path to a jsonl file. Loads each line of
+    each file as a json object and yields each individually.
+
+Segment Function: writePickle
+  Chatterlang Name: writePickle
+  Docstring:
+    Writes each item into a pickle file. If first_only is True, only the first item is written.
+    In any event, all items are yielded.
+    
+    Args:
+        fname (str): The name of the file to write.
+        first_only (bool): If True, only the first item in the input stream is written.
+  Parameters:
+    fname: str
+    field: Optional[str] = None
+    first_only: bool = False
+
+Segment Function: writeString
+  Chatterlang Name: writeString
+  Docstring:
+    Writes each item into a files after casting it to a string.
+    
+    Args:
+        fname (str): The name of the file to write.
+        new_line (bool): If True, a new line will be written after each item.
+        first_only (bool): If True, the segment will write only the first item in the input stream.
+            In any event, all items will be yielded.
+  Parameters:
+    fname: str
+    field: Optional[str] = None
+    new_line = True
+    first_only: bool = False
+
+
+PACKAGE: talkpipe.pipe.math
+---------------------------
+
+Source Function: arange
+  Chatterlang Name: range
+  Docstring:
+    Generate a range of integers between lower (inclusive) and upper (exclusive)
+    
+    This segment wraps the built-in range function, allowing you to specify
+    the lower and upper bounds of the range. The range is inclusive of the
+    lower bound and exclusive of the upper bound.
+    
+    Args:
+        lower (int): Lower bound of the range (inclusive)
+        upper (int): Upper bound of the range (exclusive)
+  Parameters:
+    lower
+    upper
+
+Segment Class: eq
+  Chatterlang Name: eq
+  Base Classes: AbstractComparisonFilter
+  Docstring:
+    Filter items where a specified field's value equals a number.
+    
+    For each item passed in, this segment yields only those where the value of the specified field
+    is equal to the given number n.  
+    
+    Args:
+        items: Iterable of items to filter
+        field: String representing the field/property to compare.  Note that
+          an underscore "_" can be used to refer to the item itself.
+        n: Item to compare against
+    
+    Yields:
+        Items where the specified field's value equals n
+    
+    Raises:
+        AttributeError: If the specified field is missing from any item
+  Parameters:
+    field: str
+    n: Any
+
+Segment Class: gt
+  Chatterlang Name: gt
+  Base Classes: AbstractComparisonFilter
+  Docstring:
+    Filter items where a specified field's value is greater than a number.
+    
+    For each item passed in, this segment yields only those where the value of the specified field
+    is greater than the given number n.
+    
+    Args:
+        items: Iterable of items to filter
+        field: String representing the field/property to compare.  Note that
+          an underscore "_" can be used to refer to the item itself.
+        n: Number to compare against
+    
+    Yields:
+        Items where the specified field's value is greater than n
+    
+    Raises:
+        AttributeError: If the specified field is missing from any item
+  Parameters:
+    field: str
+    n: Any
+
+Segment Class: gte
+  Chatterlang Name: gte
+  Base Classes: AbstractComparisonFilter
+  Docstring:
+    Filter items where a specified field's value is greater than or equal to a number.
+    
+    For each item passed in, this segment yields only those where the value of the specified field
+    is greater than or equal to the given number n.
+    
+    Args:
+        items: Iterable of items to filter
+        field: String representing the field/property to compare.  Note that
+          an underscore "_" can be used to refer to the item itself.
+        n: Number to compare against
+    
+    Yields:
+        Items where the specified field's value is greater than or equal to n
+    
+    Raises:
+        AttributeError: If the specified field is missing from any item
+  Parameters:
+    field: str
+    n: Any
+
+Segment Class: lt
+  Chatterlang Name: lt
+  Base Classes: AbstractComparisonFilter
+  Docstring:
+    Filters items based on a field value being less than a specified number.
+    
+    For each item passed in, this segment yields items where the 
+    specified field value is less than the given number n.
+    
+    Args:
+        items (iterable): An iterable of items to filter
+        field: String representing the field/property to compare.  Note that
+          an underscore "_" can be used to refer to the item itself.
+        n (numeric): The number to compare against
+    
+    Yields:
+        item: Items where the specified field value is less than n
+    
+    Raises:
+        AttributeError: If the specified field does not exist on an item (due to fail_on_missing=True)
+  Parameters:
+    field: str
+    n: Any
+
+Segment Class: lte
+  Chatterlang Name: lte
+  Base Classes: AbstractComparisonFilter
+  Docstring:
+    Filter items where a specified field's value is less than or equal to a number.
+    
+    For each item passed in, this segment yields only those where the value of the specified field
+    is less than or equal to the given number n.
+    
+    Args:
+        items: Iterable of items to filter
+        field: String representing the field/property to compare.  Note that
+          an underscore "_" can be used to refer to the item itself.
+        n: Number to compare against
+    
+    Yields:
+        Items where the specified field's value is less than or equal to n
+    
+    Raises:
+        AttributeError: If the specified field is missing from any item
+  Parameters:
+    field: str
+    n: Any
+
+Segment Class: neq
+  Chatterlang Name: neq
+  Base Classes: AbstractComparisonFilter
+  Docstring:
+    Filter items where a specified field's value does not equal a number.
+    
+    For each item passed in, this segment yields only those where the value of the specified field
+    is not equal to the given number n.
+    
+    Args:
+        items: Iterable of items to filter
+        field: String representing the field/property to compare.  Note that
+          an underscore "_" can be used to refer to the item itself.
+        n: Item to compare against
+    
+    Yields:
+        Items where the specified field's value does not equal n
+    
+    Raises:
+        AttributeError: If the specified field is missing from any item
+  Parameters:
+    field: str
+    n: Any
+
+Source Function: randomInts
+  Chatterlang Name: randomInts
+  Docstring:
+    Generate n random integers between lower and upper.
+  Parameters:
+    n: int
+    lower
+    upper
+
+Segment Function: scale
+  Chatterlang Name: scale
+  Docstring:
+    Scale each item in the input stream by the multiplier.
+  Parameters:
+    multiplier: Union[int, float]
+
+
+PACKAGE: talkpipe.search.simplevectordb
+---------------------------------------
+
+Segment Function: add_vector
+  Chatterlang Name: addVector
+  Docstring:
+    Segment to add a vector to the SimpleVectorDB.
+    
+    Args:
+        item: The item containing the vector data.
+        vector_field: The field containing the vector data.
+        vector_id: Optional custom ID for the vector.
+        metadata_field_list: Optional metadata field list.
+        dimension: Expected dimension of the vector (optional).
+    
+    Returns:
+        The ID of the added vector.
+  Parameters:
+    path
+    vector_field: str = '_'
+    vector_id: Optional[str] = None
+    metadata_field_list: Optional[str] = None
+    overwrite: bool = False
+
+Segment Function: search_vector
+  Chatterlang Name: searchVector
+  Docstring:
+    Segment to search for similar vectors in the SimpleVectorDB.
+    Args:
+        vector_field: The field containing the vector data.
+        top_k: Number of top results to return.
+        search_metric: Similarity metric ("cosine" or "euclidean").
+        search_method: Search method ("brute-force", "brute-force-heap", or "k-means").
+        path: Optional path to a saved vector database.
+    Yields:
+        List of SearchResult objects.
+  Parameters:
+    path: str
+    vector_field = '_'
+    top_k: int = 5
+    all_results_at_once: bool = False
+    append_as: Optional[str] = None
+    continue_on_error: bool = True
+    search_metric: str = 'cosine'
+    search_method: str = 'brute-force'
+
+
+PACKAGE: talkpipe.search.whoosh
+-------------------------------
+
+Segment Function: indexWhoosh
+  Chatterlang Name: indexWhoosh
+  Docstring:
+    Index documents using Whoosh full-text indexing.
+    
+    Args:
+        items: Iterator of items to index
+        index_path (str): Path to the Whoosh index directory.
+        field_list (list[str]): List of fields to index.
+        yield_doc (bool): If True, yield each indexed document. Otherwise yield the original item.
+        continue_on_error (bool): If True, continue processing other documents when one fails.
+        overwrite (bool): If True, clear existing index before indexing.
+        commit_seconds (int): If > 0, commit changes if it has been this many seconds since the last commit.
+  Parameters:
+    index_path: str
+    field_list: list[str] = ['_:content']
+    yield_doc = False
+    continue_on_error = True
+    overwrite = False
+    commit_seconds: int = -1
+
+Segment Function: searchWhoosh
+  Chatterlang Name: searchWhoosh
+  Docstring:
+    Search documents using Whoosh full-text indexing.
+    
+    Args:
+        queries: Iterator of query strings
+        index_path (str): Path to the Whoosh index directory.
+        limit (int): Maximum number of results to return for each query. Defaults to 100.
+        all_results_at_once (bool): If True, yield all results at once. Otherwise, yield one result at a time.
+        continue_on_error (bool): If True, continue with next query when one fails.
+        reload_seconds (int): If > 0, reload the index if the last search was at least this many seconds ago.
+  Parameters:
+    index_path: str
+    limit: int = 100
+    all_results_at_once: bool = False
+    continue_on_error = True
+    reload_seconds: int = 60
+    field: str = '_'
+    append_as: Optional[str] = None
+
+

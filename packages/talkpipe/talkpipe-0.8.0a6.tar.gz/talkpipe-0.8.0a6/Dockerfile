@@ -1,0 +1,28 @@
+FROM python:3.11
+
+# Set working directory
+WORKDIR /app
+
+# Install the basics of the scientific computing stack for analytics
+RUN pip install numpy pandas matplotlib scikit-learn scipy
+
+COPY . .
+
+# Create a data directory under the app directory
+RUN mkdir -p /app/data
+
+# Declare /usr/src/app/data as a volume
+VOLUME /app/data
+
+COPY pyproject.toml README.md LICENSE ./
+COPY src/ src/
+COPY tests/ tests/
+COPY .git/ .git/
+
+RUN pip install --upgrade pip
+RUN pip install -e .[dev]
+RUN pytest --log-cli-level=DEBUG
+RUN rm -fr .git
+RUN rm -fr tests
+
+CMD ["python", "-m", "talkpipe.app.chatterlang_script", "--load-module", "data/custom_module.py", "--env", "TALKPIPE_SCRIPT"]
