@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会员管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .sidebar {
+            background-color: #343a40;
+            min-height: 100vh;
+        }
+        .sidebar .nav-link {
+            color: #adb5bd;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: #fff;
+            background-color: #495057;
+        }
+        .main-content {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin: 20px;
+            padding: 20px;
+        }
+        .status-badge {
+            font-size: 0.8em;
+        }
+        .btn-group-sm .btn {
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 侧边栏 -->
+            <nav class="col-md-2 d-none d-md-block sidebar">
+                <div class="position-sticky pt-3">
+                    <h5 class="text-white text-center mb-4">会员管理系统</h5>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" onclick="showSection('membership-types')">
+                                <i class="bi bi-card-list"></i> 会员类型管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('user-memberships')">
+                                <i class="bi bi-people"></i> 用户会员管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('active-memberships')">
+                                <i class="bi bi-check-circle"></i> 活跃会员
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('expired-memberships')">
+                                <i class="bi bi-x-circle"></i> 过期会员
+                            </a>
+                        </li>
+                    </ul>
+                    <hr class="text-white">
+                    <div class="text-center">
+                        <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                            <i class="bi bi-box-arrow-right"></i> 退出登录
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- 主内容区域 -->
+            <main class="col-md-10 ms-sm-auto">
+                <!-- 登录区域 -->
+                <div id="login-section" class="main-content">
+                    <h2>管理员登录</h2>
+                    <form id="loginForm">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">用户名</label>
+                            <input type="text" class="form-control" id="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">密码</label>
+                            <input type="password" class="form-control" id="password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">登录</button>
+                    </form>
+                </div>
+
+                <!-- 会员类型管理 -->
+                <div id="membership-types-section" class="main-content" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2>会员类型管理</h2>
+                        <button class="btn btn-primary" onclick="showAddMembershipTypeModal()">
+                            <i class="bi bi-plus"></i> 添加会员类型
+                        </button>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>名称</th>
+                                    <th>描述</th>
+                                    <th>天数</th>
+                                    <th>价格</th>
+                                    <th>状态</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="membershipTypesTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 用户会员管理 -->
+                <div id="user-memberships-section" class="main-content" style="display: none;">
+                    <h2>用户会员管理</h2>
+                    
+                    <div class="mb-3">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <input type="number" class="form-control" id="searchUserId" placeholder="输入用户ID">
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-primary" onclick="searchUserMemberships()">
+                                    <i class="bi bi-search"></i> 搜索
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户ID</th>
+                                    <th>会员类型</th>
+                                    <th>开始时间</th>
+                                    <th>结束时间</th>
+                                    <th>状态</th>
+                                    <th>是否有效</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userMembershipsTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 活跃会员 -->
+                <div id="active-memberships-section" class="main-content" style="display: none;">
+                    <h2>活跃会员列表</h2>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户ID</th>
+                                    <th>会员类型</th>
+                                    <th>开始时间</th>
+                                    <th>结束时间</th>
+                                    <th>剩余天数</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activeMembershipsTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 过期会员 -->
+                <div id="expired-memberships-section" class="main-content" style="display: none;">
+                    <h2>过期会员列表</h2>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户ID</th>
+                                    <th>会员类型</th>
+                                    <th>开始时间</th>
+                                    <th>结束时间</th>
+                                    <th>过期天数</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expiredMembershipsTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 添加/编辑会员类型模态框 -->
+    <div class="modal fade" id="membershipTypeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="membershipTypeModalTitle">添加会员类型</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="membershipTypeForm">
+                        <input type="hidden" id="membershipTypeId">
+                        <div class="mb-3">
+                            <label for="membershipTypeName" class="form-label">名称</label>
+                            <input type="text" class="form-control" id="membershipTypeName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="membershipTypeDescription" class="form-label">描述</label>
+                            <textarea class="form-control" id="membershipTypeDescription" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="membershipTypeDuration" class="form-label">天数</label>
+                            <input type="number" class="form-control" id="membershipTypeDuration" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="membershipTypePrice" class="form-label">价格</label>
+                            <input type="number" step="0.01" class="form-control" id="membershipTypePrice" required>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="membershipTypeActive" checked>
+                                <label class="form-check-label" for="membershipTypeActive">
+                                    启用
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveMembershipType()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 更新会员状态模态框 -->
+    <div class="modal fade" id="membershipStatusModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">更新会员状态</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="membershipStatusForm">
+                        <input type="hidden" id="membershipId">
+                        <div class="mb-3">
+                            <label for="membershipStatus" class="form-label">状态</label>
+                            <select class="form-select" id="membershipStatus" required>
+                                <option value="ACTIVE">活跃</option>
+                                <option value="INACTIVE">非活跃</option>
+                                <option value="SUSPENDED">暂停</option>
+                                <option value="CANCELLED">取消</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="membershipStatusNotes" class="form-label">备注</label>
+                            <textarea class="form-control" id="membershipStatusNotes" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="updateMembershipStatus()">更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let currentToken = '';
+        let currentSection = 'membership-types';
+
+        // API基础地址 - 请根据实际情况修改
+        const API_BASE = 'http://localhost:8000';
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查是否已登录
+            const token = localStorage.getItem('adminToken');
+            if (token) {
+                currentToken = token;
+                showMainContent();
+                loadMembershipTypes();
+            } else {
+                showLoginSection();
+            }
+
+            // 登录表单提交
+            document.getElementById('loginForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                login();
+            });
+        });
+
+        // 显示登录区域
+        function showLoginSection() {
+            document.getElementById('login-section').style.display = 'block';
+            hideAllMainSections();
+        }
+
+        // 显示主内容
+        function showMainContent() {
+            document.getElementById('login-section').style.display = 'none';
+            showSection(currentSection);
+        }
+
+        // 隐藏所有主要区域
+        function hideAllMainSections() {
+            const sections = [
+                'membership-types-section',
+                'user-memberships-section', 
+                'active-memberships-section',
+                'expired-memberships-section'
+            ];
+            sections.forEach(id => {
+                document.getElementById(id).style.display = 'none';
+            });
+        }
+
+        // 显示指定区域
+        function showSection(sectionName) {
+            hideAllMainSections();
+            currentSection = sectionName;
+            
+            // 更新导航状态
+            document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            switch(sectionName) {
+                case 'membership-types':
+                    document.getElementById('membership-types-section').style.display = 'block';
+                    document.querySelector('[onclick="showSection(\'membership-types\')"]').classList.add('active');
+                    loadMembershipTypes();
+                    break;
+                case 'user-memberships':
+                    document.getElementById('user-memberships-section').style.display = 'block';
+                    document.querySelector('[onclick="showSection(\'user-memberships\')"]').classList.add('active');
+                    break;
+                case 'active-memberships':
+                    document.getElementById('active-memberships-section').style.display = 'block';
+                    document.querySelector('[onclick="showSection(\'active-memberships\')"]').classList.add('active');
+                    loadActiveMemberships();
+                    break;
+                case 'expired-memberships':
+                    document.getElementById('expired-memberships-section').style.display = 'block';
+                    document.querySelector('[onclick="showSection(\'expired-memberships\')"]').classList.add('active');
+                    loadExpiredMemberships();
+                    break;
+            }
+        }
+
+        // 登录
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok && data.access_token) {
+                    currentToken = data.access_token;
+                    localStorage.setItem('adminToken', currentToken);
+                    showMainContent();
+                    showAlert('登录成功', 'success');
+                } else {
+                    showAlert('登录失败：' + (data.detail || '未知错误'), 'error');
+                }
+            } catch (error) {
+                showAlert('登录失败：' + error.message, 'error');
+            }
+        }
+
+        // 退出登录
+        function logout() {
+            currentToken = '';
+            localStorage.removeItem('adminToken');
+            showLoginSection();
+            showAlert('已退出登录', 'info');
+        }
+
+        // API请求封装
+        async function apiRequest(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            if (currentToken) {
+                headers['Authorization'] = `Bearer ${currentToken}`;
+            }
+            
+            const response = await fetch(`${API_BASE}${url}`, {
+                ...options,
+                headers
+            });
+            
+            if (response.status === 401) {
+                logout();
+                throw new Error('登录已过期，请重新登录');
+            }
+            
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '请求失败');
+            }
+            
+            return data;
+        }
+
+        // 加载会员类型列表
+        async function loadMembershipTypes() {
+            try {
+                const data = await apiRequest('/membership-types/admin/all?include_disabled=true');
+                displayMembershipTypes(data.data);
+            } catch (error) {
+                showAlert('加载会员类型失败：' + error.message, 'error');
+            }
+        }
+
+        // 显示会员类型
+        function displayMembershipTypes(membershipTypes) {
+            const tbody = document.getElementById('membershipTypesTable');
+            tbody.innerHTML = '';
+            
+            membershipTypes.forEach(type => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${type.id}</td>
+                    <td>${type.name}</td>
+                    <td>${type.description || '-'}</td>
+                    <td>${type.duration_days}</td>
+                    <td>¥${type.price}</td>
+                    <td>
+                        <span class="badge ${type.is_active ? 'bg-success' : 'bg-secondary'}">
+                            ${type.is_active ? '启用' : '禁用'}
+                        </span>
+                    </td>
+                    <td>${new Date(type.created_at).toLocaleString()}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="editMembershipType(${type.id})">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deleteMembershipType(${type.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 显示添加会员类型模态框
+        function showAddMembershipTypeModal() {
+            document.getElementById('membershipTypeModalTitle').textContent = '添加会员类型';
+            document.getElementById('membershipTypeForm').reset();
+            document.getElementById('membershipTypeId').value = '';
+            new bootstrap.Modal(document.getElementById('membershipTypeModal')).show();
+        }
+
+        // 编辑会员类型
+        async function editMembershipType(id) {
+            try {
+                const data = await apiRequest(`/membership-types/admin/${id}`);
+                const type = data.data;
+                
+                document.getElementById('membershipTypeModalTitle').textContent = '编辑会员类型';
+                document.getElementById('membershipTypeId').value = type.id;
+                document.getElementById('membershipTypeName').value = type.name;
+                document.getElementById('membershipTypeDescription').value = type.description || '';
+                document.getElementById('membershipTypeDuration').value = type.duration_days;
+                document.getElementById('membershipTypePrice').value = type.price;
+                document.getElementById('membershipTypeActive').checked = type.is_active;
+                
+                new bootstrap.Modal(document.getElementById('membershipTypeModal')).show();
+            } catch (error) {
+                showAlert('获取会员类型详情失败：' + error.message, 'error');
+            }
+        }
+
+        // 保存会员类型
+        async function saveMembershipType() {
+            const id = document.getElementById('membershipTypeId').value;
+            const isEdit = !!id;
+            
+            const data = {
+                name: document.getElementById('membershipTypeName').value,
+                description: document.getElementById('membershipTypeDescription').value,
+                duration_days: parseInt(document.getElementById('membershipTypeDuration').value),
+                price: parseFloat(document.getElementById('membershipTypePrice').value),
+                is_active: document.getElementById('membershipTypeActive').checked
+            };
+            
+            try {
+                if (isEdit) {
+                    await apiRequest(`/membership-types/admin/${id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(data)
+                    });
+                    showAlert('会员类型更新成功', 'success');
+                } else {
+                    await apiRequest('/membership-types/admin/', {
+                        method: 'POST',
+                        body: JSON.stringify(data)
+                    });
+                    showAlert('会员类型创建成功', 'success');
+                }
+                
+                bootstrap.Modal.getInstance(document.getElementById('membershipTypeModal')).hide();
+                loadMembershipTypes();
+            } catch (error) {
+                showAlert('保存失败：' + error.message, 'error');
+            }
+        }
+
+        // 删除会员类型
+        async function deleteMembershipType(id) {
+            if (!confirm('确定要删除这个会员类型吗？')) {
+                return;
+            }
+            
+            try {
+                await apiRequest(`/membership-types/admin/${id}`, {
+                    method: 'DELETE'
+                });
+                showAlert('会员类型删除成功', 'success');
+                loadMembershipTypes();
+            } catch (error) {
+                showAlert('删除失败：' + error.message, 'error');
+            }
+        }
+
+        // 搜索用户会员
+        async function searchUserMemberships() {
+            const userId = document.getElementById('searchUserId').value;
+            if (!userId) {
+                showAlert('请输入用户ID', 'warning');
+                return;
+            }
+            
+            try {
+                const data = await apiRequest(`/memberships/admin/user/${userId}`);
+                displayUserMemberships(data.data);
+            } catch (error) {
+                showAlert('搜索失败：' + error.message, 'error');
+            }
+        }
+
+        // 显示用户会员
+        function displayUserMemberships(memberships) {
+            const tbody = document.getElementById('userMembershipsTable');
+            tbody.innerHTML = '';
+            
+            memberships.forEach(membership => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${membership.id}</td>
+                    <td>${membership.user_id}</td>
+                    <td>${membership.membership_type_name}</td>
+                    <td>${new Date(membership.start_time).toLocaleString()}</td>
+                    <td>${new Date(membership.end_time).toLocaleString()}</td>
+                    <td>
+                        <span class="badge ${getStatusBadgeClass(membership.status)}">
+                            ${membership.status}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge ${membership.is_valid ? 'bg-success' : 'bg-danger'}">
+                            ${membership.is_valid ? '有效' : '无效'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm" onclick="showUpdateMembershipStatusModal(${membership.id}, '${membership.status}')">
+                            <i class="bi bi-pencil"></i> 更新状态
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 加载活跃会员
+        async function loadActiveMemberships() {
+            try {
+                const data = await apiRequest('/memberships/admin/active/all');
+                displayActiveMemberships(data.data);
+            } catch (error) {
+                showAlert('加载活跃会员失败：' + error.message, 'error');
+            }
+        }
+
+        // 显示活跃会员
+        function displayActiveMemberships(memberships) {
+            const tbody = document.getElementById('activeMembershipsTable');
+            tbody.innerHTML = '';
+            
+            memberships.forEach(membership => {
+                const endDate = new Date(membership.end_time);
+                const today = new Date();
+                const remainingDays = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${membership.id}</td>
+                    <td>${membership.user_id}</td>
+                    <td>${membership.membership_type_name}</td>
+                    <td>${new Date(membership.start_time).toLocaleString()}</td>
+                    <td>${new Date(membership.end_time).toLocaleString()}</td>
+                    <td>
+                        <span class="badge ${remainingDays > 7 ? 'bg-success' : remainingDays > 0 ? 'bg-warning' : 'bg-danger'}">
+                            ${remainingDays > 0 ? remainingDays + '天' : '已过期'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm" onclick="showUpdateMembershipStatusModal(${membership.id}, '${membership.status}')">
+                            <i class="bi bi-pencil"></i> 更新状态
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 加载过期会员
+        async function loadExpiredMemberships() {
+            try {
+                const data = await apiRequest('/memberships/admin/expired/all');
+                displayExpiredMemberships(data.data);
+            } catch (error) {
+                showAlert('加载过期会员失败：' + error.message, 'error');
+            }
+        }
+
+        // 显示过期会员
+        function displayExpiredMemberships(memberships) {
+            const tbody = document.getElementById('expiredMembershipsTable');
+            tbody.innerHTML = '';
+            
+            memberships.forEach(membership => {
+                const endDate = new Date(membership.end_time);
+                const today = new Date();
+                const expiredDays = Math.ceil((today - endDate) / (1000 * 60 * 60 * 24));
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${membership.id}</td>
+                    <td>${membership.user_id}</td>
+                    <td>${membership.membership_type_name}</td>
+                    <td>${new Date(membership.start_time).toLocaleString()}</td>
+                    <td>${new Date(membership.end_time).toLocaleString()}</td>
+                    <td>
+                        <span class="badge bg-danger">
+                            ${expiredDays}天前
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm" onclick="showUpdateMembershipStatusModal(${membership.id}, '${membership.status}')">
+                            <i class="bi bi-pencil"></i> 更新状态
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 显示更新会员状态模态框
+        function showUpdateMembershipStatusModal(membershipId, currentStatus) {
+            document.getElementById('membershipId').value = membershipId;
+            document.getElementById('membershipStatus').value = currentStatus;
+            document.getElementById('membershipStatusNotes').value = '';
+            new bootstrap.Modal(document.getElementById('membershipStatusModal')).show();
+        }
+
+        // 更新会员状态
+        async function updateMembershipStatus() {
+            const membershipId = document.getElementById('membershipId').value;
+            const status = document.getElementById('membershipStatus').value;
+            const notes = document.getElementById('membershipStatusNotes').value;
+            
+            try {
+                await apiRequest(`/memberships/admin/${membershipId}/status`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        status: { value: status },
+                        notes: notes
+                    })
+                });
+                
+                showAlert('会员状态更新成功', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('membershipStatusModal')).hide();
+                
+                // 刷新当前视图
+                switch(currentSection) {
+                    case 'user-memberships':
+                        if (document.getElementById('searchUserId').value) {
+                            searchUserMemberships();
+                        }
+                        break;
+                    case 'active-memberships':
+                        loadActiveMemberships();
+                        break;
+                    case 'expired-memberships':
+                        loadExpiredMemberships();
+                        break;
+                }
+            } catch (error) {
+                showAlert('更新状态失败：' + error.message, 'error');
+            }
+        }
+
+        // 获取状态徽章样式
+        function getStatusBadgeClass(status) {
+            switch(status) {
+                case 'ACTIVE': return 'bg-success';
+                case 'INACTIVE': return 'bg-secondary';
+                case 'SUSPENDED': return 'bg-warning';
+                case 'CANCELLED': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        }
+
+        // 显示提示消息
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'info' ? 'info' : 'success'} alert-dismissible fade show position-fixed`;
+            alertDiv.style.top = '20px';
+            alertDiv.style.right = '20px';
+            alertDiv.style.zIndex = '9999';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alertDiv);
+            
+            // 3秒后自动消失
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
