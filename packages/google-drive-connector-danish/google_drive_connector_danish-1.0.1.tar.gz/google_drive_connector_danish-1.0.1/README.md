@@ -1,0 +1,175 @@
+# 📌 GoogleDriveConnector – Python Google Drive API Helper
+
+## Overview
+`GoogleDriveConnector` is a Python class that makes it easy to interact with **Google Drive API v3**.  
+It allows you to:
+- Authenticate with Google Drive using OAuth 2.0 credentials
+- List files and folders
+- Upload files/folders
+- Download files/folders
+- Create folders
+- Delete files/folders  
+
+This class removes the complexity of working with the raw API and provides **simple methods** for common tasks.
+
+---
+
+## 🛠 Installation
+pip install google-api-python-client 
+default included in the above package:
+if not installed in any way. try to install using pip with each
+google-auth 
+google-auth-oauthlib
+
+in case .env is used
+python-dotenv
+
+---
+
+## 🔑 Google Drive API Setup
+1. Go to **Google Cloud Console** → https://console.cloud.google.com  
+2. Create a project and enable **Google Drive API**.  
+3. Create **OAuth 2.0 Client ID** credentials.  
+4. Get the following:
+   - GOOGLE_CLIENT_ID
+   - GOOGLE_CLIENT_SECRET
+   - GOOGLE_ACCESS_TOKEN
+   - GOOGLE_REFRESH_TOKEN
+   - GOOGLE_REDIRECT_URI
+   - TOKEN_URI
+   - SCOPES
+
+---
+
+Load them in your code:
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+---
+
+## 🚀 Example Usage
+from google_drive_connector import GoogleDriveConnector
+import os
+from dotenv import load_dotenv
+
+# Load credentials from .env
+load_dotenv()
+
+gdrive = GoogleDriveConnector(
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    access_token=os.getenv("GOOGLE_ACCESS_TOKEN"),
+    refresh_token=os.getenv("GOOGLE_REFRESH_TOKEN"),
+    token_uri=os.getenv("TOKEN_URI"),
+    scopes=os.getenv("SCOPES")
+)
+
+# 📄 List first 5 files
+files = gdrive.list_files(page_size=5)
+print(files)
+
+# 📤 Upload a file
+file_id = gdrive.upload_file("example.txt", mime_type="text/plain")
+print("Uploaded File ID:", file_id)
+
+# 📥 Download a file
+gdrive.download_file(file_id, "downloaded_example.txt")
+
+# 📁 Create a folder
+folder_id = gdrive.create_folder("My Folder")
+print("Folder ID:", folder_id)
+
+---
+
+## 📚 Methods & Parameters
+
+### __init__(client_id, client_secret, access_token, refresh_token, token_uri, scopes)
+Initialize the connector with OAuth 2.0 credentials.  
+Parameters:
+- client_id *(str, required)* → Google OAuth Client ID.
+- client_secret *(str, required)* → Google OAuth Client Secret.
+- access_token *(str, required)* → Short-lived OAuth access token.
+- refresh_token *(str, required)* → Long-lived refresh token.
+- token_uri *(str, required)* → Token endpoint URI (`https://oauth2.googleapis.com/token`).
+- scopes *(str or list, required)* → Google Drive API scopes. Default: None.
+
+---
+
+### list_files(page_size=10)
+List files in Google Drive.  
+Parameters:
+- page_size *(int, optional)* → Number of files to list.  
+Default: `10`  
+Max: `1000` (Google API limit)  
+Returns: list[dict] → Each dict contains file metadata like `id`, `name`, `mimeType`.
+
+---
+
+### upload_file(file_path, mime_type=None, folder_id=None)
+Upload a local file to Google Drive.  
+Parameters:
+- file_path *(str, required)* → Path to local file.
+- mime_type *(str, optional)* → File MIME type. Default: Auto-detected.
+- folder_id *(str, optional)* → Destination folder ID. Default: root.  
+Returns: str → File ID.
+
+---
+
+### download_file(file_id, destination_path)
+Download a file from Google Drive.  
+Parameters:
+- file_id *(str, required)* → Google Drive file ID.
+- destination_path *(str, required)* → Local path for saving file.  
+Returns: str → Path to downloaded file.
+
+---
+
+### create_folder(folder_name, parent_id=None)
+Create a folder in Google Drive.  
+Parameters:
+- folder_name *(str, required)* → Name of the new folder.
+- parent_id *(str, optional)* → Parent folder ID. Default: root.  
+Returns: str → Folder ID.
+
+---
+
+### delete_file(file_id)
+Delete a file or folder from Google Drive.  
+Parameters:
+- file_id *(str, required)* → File or folder ID.  
+Returns: bool → True if successful.
+
+---
+
+### download_folder(folder_id, destination_path)
+Download all files inside a folder.  
+Parameters:
+- folder_id *(str, required)* → Folder ID.
+- destination_path *(str, required)* → Local directory path.  
+Returns: bool → True if successful.
+
+---
+
+### upload_folder(local_folder_path, drive_folder_id=None)
+Upload all files from a local folder to Google Drive.  
+Parameters:
+- local_folder_path *(str, required)* → Path to local folder.
+- drive_folder_id *(str, optional)* → Destination folder ID. Default: root.  
+Returns: bool → True if successful.
+
+---
+
+## ⚠ Limitations
+- Requires **pre-generated OAuth tokens** (Access + Refresh).
+- Access token expires quickly; refresh token is needed for renewal.
+- Google API quota limits apply.
+- Cannot directly **share files** (sharing API must be added separately).
+## 📦 Installation
+
+Clone the repo and install dependencies:
+
+```bash
+git clone https://github.com/your-repo/google-drive-connector.git
+cd google-drive-connector
+pip install -r requirements.txt
