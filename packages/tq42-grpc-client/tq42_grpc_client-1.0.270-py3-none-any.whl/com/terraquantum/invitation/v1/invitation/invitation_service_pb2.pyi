@@ -1,0 +1,11 @@
+from com.terraquantum.invitation.v1.invitation import generate_new_invitation_token_request_pb2 as _generate_new_invitation_token_request_pb2
+from com.terraquantum.invitation.v1.invitation import get_invitation_request_pb2 as _get_invitation_request_pb2
+from com.terraquantum.invitation.v1.invitation import get_valid_invitation_request_pb2 as _get_valid_invitation_request_pb2
+from com.terraquantum.invitation.v1.invitation import invitation_pb2 as _invitation_pb2
+from com.terraquantum.invitation.v1.invitation import invitation_token_pb2 as _invitation_token_pb2
+from com.terraquantum.invitation.v1.invitation import resend_organization_member_invitation_request_pb2 as _resend_organization_member_invitation_request_pb2
+from com.terraquantum.invitation.v1.invitation import cancel_organization_member_invitation_request_pb2 as _cancel_organization_member_invitation_request_pb2
+from google.protobuf import descriptor as _descriptor
+from typing import ClassVar as _ClassVar
+
+DESCRIPTOR: _descriptor.FileDescriptor
