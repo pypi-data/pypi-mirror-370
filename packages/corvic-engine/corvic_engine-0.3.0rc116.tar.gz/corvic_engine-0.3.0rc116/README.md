@@ -1,0 +1,1 @@
+# Corvic Engine [![CI](https://github.com/corvicai/corvic-engine/actions/workflows/ci.yaml/badge.svg)](https://github.com/corvicai/corvic-engine/actions/workflows/ci.yaml) [![Python Version](https://img.shields.io/badge/python-3.11%20|%203.12-blue)](https://www.python.org/downloads/release/python-3110/)
