@@ -1,0 +1,10 @@
+export namespace ExceptionType {
+    let EXCEPTION: 0;
+    let IO_EXCEPTION: 1;
+    let FILE_NOT_FOUND_EXCEPTION: 2;
+    let RUNTIME_EXCEPTION: 3;
+    let ARITHMETIC_EXCEPTION: 4;
+    let ILLEGAL_ARGUMENT_EXCEPTION: 5;
+    let INDEX_OUT_OF_BOUNDS_EXCEPTION: 6;
+    let NULL_POINTER_EXCEPTION: 7;
+}

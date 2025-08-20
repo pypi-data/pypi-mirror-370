@@ -1,0 +1,15 @@
+export namespace Type {
+    let JAVONET_COMMAND: 0;
+    let JAVONET_STRING: 1;
+    let JAVONET_INTEGER: 2;
+    let JAVONET_BOOLEAN: 3;
+    let JAVONET_FLOAT: 4;
+    let JAVONET_BYTE: 5;
+    let JAVONET_CHAR: 6;
+    let JAVONET_LONG_LONG: 7;
+    let JAVONET_DOUBLE: 8;
+    let JAVONET_UNSIGNED_LONG_LONG: 9;
+    let JAVONET_UNSIGNED_INTEGER: 10;
+    let JAVONET_NULL: 11;
+    let JAVONET_VOID: 12;
+}
