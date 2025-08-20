@@ -1,0 +1,235 @@
+name: loss
+type: dag
+schedule_interval: "1 * * * *"
+start_date: "{{ var('start_date') }}"
+catchup: "{{ var('catchup') }}"
+template_search_path:
+  - "${ ROOT_PATH }/${ DAG_FOLDER }/includes/stock/stock_loss"
+max_active_runs: "{{ var('max_active_runs') }}"
+render_template_as_native_obj: true
+default_args:
+  owner:
+    - "de@mail.com"
+    - "de-on-call@mail.com"
+  depends_on_past: false
+  retries: 1
+  retry_delay: { "minutes": 1 }
+tasks:
+  - task: start
+    op: empty
+
+  - task: copy_last_modified_blob
+    upstream: start
+    # TODO: Change this operator value, `op: gcs_copy_files_time_range_operator`.
+#    op: dags.service_utils.custom_operator.GCSCopyFilesTimeRangeOperator
+    op: gcs_copy_files_time_range_operator
+    source_bucket: "cjnext-pos-admin"
+    source_prefix: "stock-loss/"
+    destination_bucket: "{{ var('bucket_name') }}"
+    destination_prefix: "pre-landing/stock_loss/{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('year=%Y/month=%m/day=%d/hour=%H') }}"
+    timespan_start: "{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('%Y-%m-%d %H:00:00') }}"
+    timespan_end: "{{ data_interval_end.in_timezone('Asia/Bangkok').strftime('%Y-%m-%d %H:00:00') }}"
+    timezone: "Asia/Bangkok"
+    soft_fail: true
+    replace: false
+    match_glob: "*/*/{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('%Y/%m/%d') }}/*?"
+    inlets:
+      - platform: gcs
+        name: "cjnext-pos-admin/stock-loss/"
+        env: {{ env("AIRFLOW_ENV") }}
+    outlets:
+      - platform: gcs
+        name: "{{ var('bucket_name') }}/pre-landing"
+        env: {{ env("AIRFLOW_ENV") }}
+
+
+  - group: query_stock_loss_and_copy
+    upstream: start
+    tasks:
+      - task: check_backfill_bq
+        op: airflow.providers.google.cloud.operators.bigquery.BigQueryInsertJobOperator
+        location: "asia-southeast1"
+        gcp_conn_id: "google_cloud_default"
+        configuration:
+          query:
+            query: "bigquery_sql/check_backfill_stock_loss.sql"
+            useLegacySql: false
+            queryParameters:
+              - name: "start_interval"
+                parameterType: { "type": "STRING" }
+                parameterValue:
+                  value: "{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('%Y-%m-%d %H:00:00%z') }}"
+              - name: "end_interval"
+                parameterType: { "type": "STRING" }
+                parameterValue:
+                  value: "{{ data_interval_end.in_timezone('Asia/Bangkok').strftime('%Y-%m-%d %H:00:00%z') }}"
+        params:
+          bucket_prefix: "stock-loss/"
+          full_table_name: "cj-next-prod.pos_admin.stock-loss-prd"
+          stock_temp_table_name: "{{ var('project_id') }}.pos_admin_tmp.stock-loss-prd"
+
+      - task: get_backfill_full_path
+        upstream: check_backfill_bq
+        op: "airflow.providers.google.cloud.operators.bigquery.BigQueryGetDataOperator"
+        table_project_id: "{{ task_instance.xcom_pull(task_ids='check_backfill_bq', key='bigquery_table')['project_id'] }}"
+        dataset_id: "{{ task_instance.xcom_pull(task_ids='check_backfill_bq', key='bigquery_table')['dataset_id'] }}"
+        table_id: "{{ task_instance.xcom_pull(task_ids='check_backfill_bq', key='bigquery_table')['table_id'] }}"
+        job_project_id: "{{ var('project_id') }}"
+        selected_fields: "file_path"
+        max_results: 100000
+        use_legacy_sql: false
+        location: "asia-southeast1"
+
+      - task: copy_backfill_blob_to_gcs
+        upstream: get_backfill_full_path
+        op: "airflow.providers.google.cloud.transfers.gcs_to_gcs.GCSToGCSOperator"
+        source_bucket: "cjnext-pos-admin"
+        source_objects: "{{ task_instance.xcom_pull(task_ids='get_backfill_full_path') | unnested_list }}"
+        destination_bucket: "{{ var('bucket_name') }}"
+        destination_object: "pre-landing/stock_loss/{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('year=%Y/month=%m/day=%d/hour=%H') }}"
+        delimiter: "*.json"
+
+  - task: check_blob_exist
+    upstream:
+      - copy_last_modified_blob
+      - query_stock_loss_and_copy
+    op: airflow.providers.google.cloud.sensors.gcs.GCSObjectsWithPrefixExistenceSensor
+    trigger_rule: all_done
+    bucket: "{{ var('bucket_name') }}"
+    prefix: "pre-landing/stock_loss/{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('year=%Y/month=%m/day=%d/hour=%H') }}"
+    soft_fail: true
+    timeout: 5
+    poke_interval: 5
+
+  # TODO: This Group will change to custom Task Operator.
+  - group: concat_file_into_landing
+    upstream: check_blob_exist
+    tasks:
+      - task: generate_uris
+        op: ...
+        bucket: "{{ var('bucket_name') }}"
+        prefix: "pre-landing/stock_loss/{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('year=%Y/month=%m/day=%d/hour=%H') }}"
+        all_uris_path: "pre-landing/stock_loss/{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('year=%Y/month=%m/day=%d/hour=%H') }}/all_uris.txt"
+
+      - task: make_slices
+        upstream: generate_uris
+        op: ...
+        bucket: "{{ var('bucket_name') }}"
+        all_uris_path: "pre-landing/stock_loss/{{ data_interval_start.in_timezone('Asia/Bangkok').strftime('year=%Y/month=%m/day=%d/hour=%H') }}/all_uris.txt"
+        batch_size: {{ var('batch_size') }}
+
+      - task: concat_slice
+        upstream: make_slices
+        op: ...
+        expand: true
+        expand_params:
+          batch: "{{ task_instance.xcom_pull(task_ids='make_slices') | unnested_list }}"
+
+  - group: stock_loss
+    upstream: concat_file_into_landing
+    tasks:
+      - group: transforming
+        tasks:
+          - task: "dp_pyspark_job"
+            op: airflow.providers.cncf.kubernetes.operators.spark_kubernetes.SparkKubernetesOperator
+            application_file: "assets/stock_loss_spark_job.yml"
+            params:
+              spark_app_name: "stock_loss-tf"
+              dp_pyspark_job: file_transform
+              json_config_path: "gs://{{ var('bucket_name') }}/configs/stock_loss/stock_loss_transforming.json"
+              task_macro_datetime: data_interval_start
+              task_datetime_format: "%Y-%m-%d %H:%M:%S%z"
+              task_macro_timezone: "Asia/Bangkok"
+              dp_pyspark_version: "{{ var('dp_pyspark_version') }}"
+              driver_core: 1
+              driver_core_request: "200m"
+              driver_core_limit: "600m"
+              driver_memory: "1536m"
+              executor_core: 2
+              executor_core_request: "200m"
+              executor_core_limit: "700m"
+              executor_instance: 1
+              executor_memory: "2048m"
+            do_xcom_push: true
+            kubernetes_conn_id: "kube_spark_conn"
+
+          - task: "dp_pyspark_monitor"
+            upstream: "dp_pyspark_job"
+            op: airflow.providers.cncf.kubernetes.sensors.spark_kubernetes.SparkKubernetesSensor
+            application_name: "{{ task_instance.xcom_pull(task_ids='dp_pyspark_job')['metadata']['name'] }}"
+            attach_log: false
+            mode: "poke"
+            poke_interval: 60
+            soft_fail: false
+            exponential_backoff: false
+            kubernetes_conn_id: "kube_spark_conn"
+            inlets:
+              - platform: gcs
+                name: "{{ var('bucket_name') }}/pre-landing/stock-loss"
+                env: { { env("AIRFLOW_ENV") } }
+            outlets:
+              - platform: gcs
+                name: "{{ var('bucket_name') }}/transforming/stock-loss"
+                env: { { env("AIRFLOW_ENV") } }
+
+      - group: validating
+        upstream: transforming
+        tasks:
+          - task: "dp_pyspark_job"
+            op: airflow.providers.cncf.kubernetes.operators.spark_kubernetes.SparkKubernetesOperator
+            application_file: "assets/stock_loss_spark_job.yml"
+            params:
+              spark_app_name: "stock_loss-val"
+              dp_pyspark_job: single_datasource_ge_validation
+              json_config_path: "gs://{{ var('bucket_name') }}/configs/stock_loss/stock_loss_validating.json"
+              task_macro_datetime: data_interval_start
+              task_datetime_format: "%Y-%m-%d %H:%M:%S%z"
+              task_macro_timezone: "Asia/Bangkok"
+              dp_pyspark_version: "{{ var('dp_pyspark_version') }}"
+              driver_core: 1
+              driver_core_request: "200m"
+              driver_core_limit: "600m"
+              driver_memory: "1024m"
+              executor_core: 1
+              executor_core_request: "100m"
+              executor_core_limit: "200m"
+              executor_instance: 1
+              executor_memory: "768m"
+              ttl: 420
+            do_xcom_push: true
+            kubernetes_conn_id: "kube_spark_conn"
+
+          - task: "dp_pyspark_monitor"
+            upstream: "dp_pyspark_job"
+            op: airflow.providers.cncf.kubernetes.sensors.spark_kubernetes.SparkKubernetesSensor
+            application_name: "{{ task_instance.xcom_pull(task_ids='dp_pyspark_job')['metadata']['name'] }}"
+            attach_log: false
+            mode: "poke"
+            poke_interval: 60
+            soft_fail: false
+            exponential_backoff: false
+            kubernetes_conn_id: "kube_spark_conn"
+            inlets:
+              - platform: gcs
+                name: "{{ var('bucket_name') }}/transforming/stock-loss"
+                env: { { env("AIRFLOW_ENV") } }
+
+      - task: sync_transforming_table_to_bigquery
+        upstream: validating
+        op: airflow_common.custom_operators.iceberg.iceberg_to_bigquery.IcebergToBigquery
+        iceberg_table_uri: "gs://{{ var('bucket_name') }}/transforming/stock_loss"
+        bigquery_full_table_name: "{{ var('project_id') }}.stock_transforming.stock_loss"
+        biglake_connection_id: "projects/{{ var('project_id') }}/locations/asia-southeast1/connections/stock_loss_transforming_iceberg_connection"
+        bq_location: "asia-southeast1"
+        schema_json_file_path: "schema/stock_loss.json"
+
+  - group: stock_loss_sku_list
+    upstream: concat_file_into_landing
+    tasks:
+      - ...
+
+  - task: end
+    upstream:
+      - stock_loss
+      - stock_loss_sku_list
+    op: empty

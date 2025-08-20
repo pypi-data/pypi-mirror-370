@@ -1,0 +1,42 @@
+name: count
+type: dag
+schedule_interval: "1 * * * *"
+authors: ["de-team"]
+template_search_path: ${ ROOT_PATH }/${ DAG_FOLDER }/includes/stock/stock_count
+max_active_runs: {{ var('max_active_runs') }}
+render_template_as_native_obj: true
+tags:
+  - "dom:stock"
+  - "src-type:json"
+  - "src-sys:pos-admin"
+  - "stor-type:iceberg"
+  - "sched-type:hourly"
+  - "proc:spark"
+tasks:
+  - task: start
+    op: empty
+
+  - group: stock_count_pipeline
+    upstream: start
+    tasks:
+      - task: start
+        op: empty
+
+      - group: backfill
+        tasks:
+          - task: get_backfill_from_gbq
+
+      - group: gbq
+        tasks:
+          - task: check_backfill_bq
+            op: bigquery_insert_job
+            params:
+              location: asia-southeast1
+              conn: google_cloud_default
+              configuration:
+                ...
+
+  - task: end
+    upstream:
+      - stock_count_pipeline
+    op: empty
