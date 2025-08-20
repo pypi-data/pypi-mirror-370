@@ -1,0 +1,236 @@
+on:
+  release:
+    types: [published]
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: 1.85.0
+          rustflags: ""
+      - name: Run tests
+        run: |
+          export CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG=true
+          python -m venv env
+          source env/bin/activate
+          python -m pip install 'maturin>=1.8.6,<1.9' pytest numpy
+          python -m maturin develop --jobs 2
+          pytest
+          cargo test
+
+  linux:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target: [x86_64, aarch64, armv7]  # x86 disabled for now
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1.45.0
+        with:
+          rust-toolchain: 1.85.0
+          target: ${{ matrix.target }}
+          args: --release --verbose --jobs 2 --out dist -i python3.10 -i python3.11 -i python3.12 -i python3.13
+          # sccache: 'true'
+          manylinux: '2_28'
+          # https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
+          before-script-linux: |
+            # If we're running on rhel centos, install needed packages.
+            if command -v yum &> /dev/null; then
+                yum update -y && yum install -y gcc perl-core openssl openssl-devel pkgconfig libatomic llvm-toolset
+
+                # If we're running on i686 we need to symlink libatomic
+                # in order to build openssl with -latomic flag.
+                # if [[ ! -d "/usr/lib64" ]]; then
+                #    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
+                # fi
+
+                # make sure we have pip (https://github.com/PyO3/maturin-action/issues/249)
+                python3 -m ensurepip
+            else
+                # If we're running on debian-based system.
+                apt update -y && apt-get install -y gcc-multilib libssl-dev openssl pkg-config libclang-dev python3-pip
+            fi
+
+            # https://github.com/rust-cross/manylinux-cross/issues/40
+            # https://github.com/rust-cross/manylinux-cross?tab=readme-ov-file#environment-variables
+            # https://github.com/rust-lang/rust-bindgen/issues/1229
+            # https://docs.rs/cc/latest/cc/#external-configuration-via-environment-variables
+
+            echo "arch details $TARGET_CC $TARGET_AR $TARGET_CXX $TARGET_SYSROOT $CFLAGS $CXXFLAGS $RUSTFLAGS $BINDGEN_EXTRA_CLANG_ARGS"
+
+            printenv
+
+            # Required to make Parasail build
+            export CMAKE_POLICY_VERSION_MINIMUM="3.5"
+
+            if [[ ! -z "$TARGET_CC" ]]; then
+              export CC="$TARGET_CC"
+              export AR="$TARGET_AR"
+              export CXX="$TARGET_CXX"
+              export BINDGEN_EXTRA_CLANG_ARGS="--sysroot $TARGET_SYSROOT"
+            else
+              export CFLAGS="-Wno-error"
+              export CXXFLAGS="-Wno-error"
+              export BINDGEN_EXTRA_CLANG_ARGS="-Wno-error"
+            fi
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist
+
+  # windows:
+  #   runs-on: ubuntu-24.04
+  #   strategy:
+  #     matrix:
+  #       target: [x86_64-pc-windows-gnu]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     # - name: Install OpenSSL (Windows)
+  #     #   shell: powershell
+  #     #   run: |
+  #     #     echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+  #     #     vcpkg install openssl:${{ matrix.target }}-windows-static-md
+  #     - name: Build wheels
+  #       uses: PyO3/maturin-action@v1
+  #       with:
+  #         rust-toolchain: 1.85.0
+  #         target: ${{ matrix.target }}
+  #         args: --release --verbose --jobs 2 --out dist -i python3.10 -i python3.11 -i python3.12 -i python3.13
+  #         # sccache: 'true'
+  #         before-script-linux: |
+  #           sudo apt-get update -y && sudo apt-get install -y g++-mingw-w64-x86-64 gcc-mingw-w64-x86-64
+  #     - name: Upload wheels
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: wheels-windows-${{ matrix.target }}
+  #         path: dist
+
+  # windows:
+  #   runs-on: windows-latest
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         # - { sys: mingw64, env: x86_64 }
+  #         - { sys: ucrt64,  env: ucrt-x86_64 }
+
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up MSYS2 MinGW-W64
+  #       uses: msys2/setup-msys2@v2
+  #       with:
+  #         msystem: ${{matrix.sys}}
+  #         update: false
+  #         install: >-
+  #           mingw-w64-${{matrix.env}}-autotools
+  #           mingw-w64-${{matrix.env}}-bzip2
+  #           mingw-w64-${{matrix.env}}-curl
+  #           mingw-w64-${{matrix.env}}-libdeflate
+  #           mingw-w64-${{matrix.env}}-toolchain
+  #           mingw-w64-${{matrix.env}}-tools-git
+  #           mingw-w64-${{matrix.env}}-xz
+  #           mingw-w64-${{matrix.env}}-zlib
+  #           mingw-w64-${{matrix.env}}-cmake
+  #           mingw-w64-${{matrix.env}}-ninja
+  #           mingw-w64-${{matrix.env}}-rust
+  #           mingw-w64-${{matrix.env}}-python
+  #           mingw-w64-${{matrix.env}}-python-maturin
+  #     - name: Build
+  #       shell: msys2 {0}
+  #       run: |
+  #         export PATH="/mingw64/bin:$PATH:/c/Program Files/Git/bin"
+  #         export RUST_BACKTRACE=1
+  #         export PARASAIL_NO_VENDOR=1
+
+  #         echo "${LD_LIBRARY_PATH}"
+
+  #         git clone https://github.com/davidlougheed/parasail
+  #         cd parasail
+  #         mkdir build
+  #         cd build
+  #         cmake -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON ..
+  #         # -DINT64_LITERAL_SUFFIX_I64=0 -DINT64_LITERAL_SUFFIX_LL=1
+  #         cat config.h
+  #         echo "----------------"
+  #         cmake --build . --target parasail
+  #         export LD_LIBRARY_PATH="$(pwd):${LD_LIBRARY_PATH}"
+  #         ls -lh
+  #         cd ../..
+
+  #         maturin build --release --verbose --jobs 2 --out dist
+  #     - name: Upload wheels
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: wheels-windows-w64
+  #         path: dist
+
+  macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          rust-toolchain: 1.85.0
+          target: ${{ matrix.target }}
+          args: --release --verbose --jobs 2 --out dist -i python3.10 -i python3.11 -i python3.12 -i python3.13
+          # sccache: 'true'
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist
+
+  sdist:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          rust-toolchain: 1.85.0
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  release:
+    name: Release
+    runs-on: ubuntu-24.04
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
+    needs: [test, linux, macos, sdist] # windows,
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: wheels
+          pattern: wheels-*
+          merge-multiple: 'true'
+      - name: Publish to PyPI
+        uses: PyO3/maturin-action@v1
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: upload
+          args: --non-interactive --skip-existing wheels/*
+          rust-toolchain: 1.85.0
