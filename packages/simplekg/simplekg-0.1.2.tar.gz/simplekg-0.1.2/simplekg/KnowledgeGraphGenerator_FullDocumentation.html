@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Knowledge Graph Generator - Full Documentation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; color: #333; }
+        h1, h2, h3 { color: #004080; }
+        code { background: #f4f4f4; padding: 2px 5px; border-radius: 4px; }
+        pre { background: #f4f4f4; padding: 10px; border-radius: 6px; overflow-x: auto; }
+        .section { margin-bottom: 40px; }
+    </style>
+</head>
+<body>
+
+<h1>Knowledge Graph Generator – Full Process Documentation</h1>
+
+<h2>1. Prepare a Text</h2>
+<p>Begin with a source text that will be used to generate a Knowledge Graph (KG).</p>
+
+<h2>2. Initialize a KnowledgeGraphGenerator Object</h2>
+<pre><code>kggen = kg.KnowledgeGraphGenerator(
+    model="openai/gpt-4o",
+    api_key=os.getenv("OPENAI_API_KEY")
+)
+</code></pre>
+
+<p><b>Steps 3–5</b> generate a KG tailored to the specific text. While these graphs remain faithful to the source,
+they are difficult to compare across texts since entities and relations are context-specific.</p>
+
+<h2>3. Initialize a New Graph</h2>
+<p>- If a text is provided, the function resets internal variables for new graph generation.<br>
+- If a JSON path is provided, it loads an existing graph:</p>
+<pre><code>kggen.init_graph(path=f"../../Ramban/json/{file_name}_c{chunk_size}.json")</code></pre>
+
+<h2>4. Extract Entities</h2>
+<p>Uses an LLM to extract entities from the text. This function automatically calls <code>init_graph</code>, so Step 3 is not required if you call this function directly.</p>
+<p>You need to load the text file into a variable and provide it to the function.</p>
+<p>The <code>chunk_size</code> parameter determines how the text is analyzed:</p>
+<ul>
+<li><code>chunk_size=0</code>: process the text as a single chunk (may dilute context).</li>
+<li><code>chunk_size&gt;0</code>: split into multiple chunks, generate subgraphs, and merge them.</li>
+</ul>
+<pre><code>kggen.extract_entities(text=text, chunk_size=chunk_size)</code></pre>
+<p>See Appendix A: Context Dilution for details.</p>
+
+<h2>5. Extract Relations</h2>
+<p>Uses an LLM to extract relations between the discovered entities.</p>
+<pre><code>kggen.extract_relations()</code></pre>
+
+<h2>6. Converting Entities to Concepts</h2>
+<p>Step 4 may produce duplicate entities with the same meaning (due to orthographic, morphological, or synonymic variation). 
+This step uses an LLM to merge them into <b>concepts</b>, where each concept has:</p>
+<ul>
+<li>A canonical name</li>
+<li>Several alternate names</li>
+</ul>
+
+<h2>7. Relation Normalization</h2>
+<p>Step 5 may produce multiple relations with the same meaning. The package supports several approaches:</p>
+
+<h3>7.1 Using LLM to Merge Relations into Predicates</h3>
+<p>The LLM groups similar relations, assigns each cluster a canonical predicate, and lists alternative labels.</p>
+<ul>
+<li><b>Advantage</b>: Increases internal similarity within a text graph.</li>
+<li><b>Pitfall</b>: Different texts may generate different predicates, complicating comparison.</li>
+</ul>
+<pre><code>kggen.relations2ontology(["LLM"])</code></pre>
+
+<h3>7.2 Align Relations to an Ontology</h3>
+<p>Provide a known ontology (full or partial). The system compares embeddings of detected relations to ontology relations 
+and selects the closest match.</p>
+<ul>
+<li><b>Advantage</b>: Produces unified terminology for easier graph comparison.</li>
+<li><b>Pitfall</b>: Reduces granularity and may incorrectly assign some relations.</li>
+</ul>
+<pre><code>kggen.relations2ontology(["SKOS"])</code></pre>
+
+<h3>7.3 LLM Validation of Step 7.2</h3>
+<p><i>(Planned)</i>: Use an LLM to confirm or correct embedding-based ontology mappings.</p>
+
+<h3>7.4 Multiple Ontologies</h3>
+<p>Provide multiple ontologies to overcome limitations of a single one. Each relation is mapped to the best matching relation across ontologies.</p>
+<pre><code>kggen.relations2ontology(["CIDOC_CRM", "SKOS", "DUBLIN_CORE"])</code></pre>
+
+<h2>8. Visualization</h2>
+<p>Convert the normalized KG into a specific ontology and export to HTML for visualization:</p>
+<pre><code>ontology = "SKOS"  # Use "MIX" to visualize multiple ontologies
+kggen.graph2Ontology(ontology)
+viz = kggen.visualize(f"../../Ramban/vis/{file_name}_c{chunk_size}_ontology_{ontology}.html")</code></pre>
+
+<hr>
+
+<h2>Appendix A: Context Dilution in Long Texts</h2>
+<p>When an LLM processes a long passage, attention is divided across many topics, leading to:</p>
+<ul>
+<li>Merging related concepts into broader categories.</li>
+<li>Omission of fine-grained entities in favor of higher-level abstractions.</li>
+<li>Loss of local detail.</li>
+</ul>
+<p>Shorter segments yield finer-grained concepts, but less global coherence.</p>
+
+<h2>Appendix B: Normalizing</h2>
+
+<h3>Entities → Concepts</h3>
+<p>Entities are grouped into higher-level concepts. See <code>entities2concepts</code> for more details.</p>
+
+<h3>Relations</h3>
+<p>Extracted predicates may vary in form:</p>
+<pre><code>"is placed on"
+"is part of"
+"contains"
+"dwells on"
+"is above"
+"is in"
+</code></pre>
+
+<h3>Common Issues</h3>
+<ul>
+<li>Variability in phrasing</li>
+<li>Hebrew/English mix</li>
+<li>Morphological or tense variation</li>
+<li>Synonyms</li>
+<li>Directional ambiguity</li>
+</ul>
+
+<h3>Normalization Strategy</h3>
+<ol>
+<li>Define a canonical predicate vocabulary, aligned to SKOS or custom properties:
+<ul>
+<li><code>skos:broader / skos:narrower</code> → hierarchical</li>
+<li><code>skos:related</code> → associative</li>
+<li><b>Custom properties</b> (e.g., <code>ex:contains</code>, <code>ex:isIn</code>, <code>ex:dwellsOn</code>)</li>
+</ul></li>
+
+<li>Group variants into canonical predicates:
+<ul>
+<li>Canonical: <code>contains</code> → Variants: <i>is in, is placed in</i></li>
+<li>Canonical: <code>isPartOf</code> → Variants: <i>is part of, belongs to</i></li>
+<li>Canonical: <code>isAbove</code> → Variants: <i>is over, stands upon</i></li>
+</ul></li>
+</ol>
+
+<h3>Methods</h3>
+<ul>
+<li>LLM grouping with granularity (LOW, MEDIUM, HIGH).</li>
+<li>Embedding-based clustering, followed by LLM-generated canonical naming.</li>
+</ul>
+
+<h2>Reference Ontologies</h2>
+
+<h3>Dublin Core</h3>
+<pre><code>dcterms:isPartOf
+dcterms:hasPart
+dcterms:isVersionOf
+dcterms:hasVersion
+dcterms:isFormatOf
+dcterms:hasFormat
+dcterms:references
+dcterms:isReferencedBy
+dcterms:relation
+</code></pre>
+
+<h3>SKOS</h3>
+<pre><code>skos:broader
+skos:narrower
+skos:related
+skos:exactMatch
+skos:closeMatch
+skos:broadMatch
+skos:narrowMatch
+skos:relatedMatch
+</code></pre>
+
+<h3>CIDOC CRM (selected)</h3>
+<pre><code>P1_is_identified_by
+P2_has_type
+P3_has_note
+P4_has_time_span
+P5_consists_of
+P7_took_place_at
+P8_took_place_on_or_within
+P10_falls_within
+P11_had_participant
+P12_occurred_in_the_presence_of
+P13_destroyed
+P14_carried_out_by
+P15_was_influenced_by
+P16_used_specific_object
+P17_was_motivated_by
+P19_was_intended_use_of
+P20_had_specific_purpose
+P21_had_general_purpose
+P25_moved
+P26_moved_to
+P27_moved_from
+P31_has_modified
+P35_has_identified
+P37_assigned
+P38_deassigned
+P39_measured
+P40_observed_dimension
+P43_has_dimension
+P90_has_value
+P94_has_created
+P96_by_mother
+P97_from_father
+P98_brought_into_life
+P100_was_death_of
+P102_has_title
+P104_is_subject_to
+P105_right_held_by
+P127_has_broader_term
+</code></pre>
+
+<h2>Ontology Mapping Process</h2>
+<p>The system maps relations into existing ontologies:</p>
+<ul>
+<li>Takes any ontology embedding file (SKOS, Dublin Core, CIDOC CRM, or custom).</li>
+<li>Embeds raw relations from the graph.</li>
+<li>Computes cosine similarity between relation embeddings and ontology embeddings.</li>
+<li>Assigns each raw relation to its closest ontology relation.</li>
+<li>Builds structured <code>Predicate</code> objects with:
+<ul>
+<li><b>prefLabel_en</b>: ontology relation label (e.g., <code>skos:broader</code>, <code>dcterms:isPartOf</code>)</li>
+<li><b>altLabels_en</b>: list of raw variants mapped to this label</li>
+<li><b>mapping_examples</b>: examples of input relations assigned here</li>
+</ul></li>
+</ul>
+
+</body>
+</html>
