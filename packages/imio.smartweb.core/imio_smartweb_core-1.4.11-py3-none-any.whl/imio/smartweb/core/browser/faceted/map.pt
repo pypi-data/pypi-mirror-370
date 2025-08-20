@@ -1,0 +1,103 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en"
+      xmlns:tal="http://xml.zope.org/namespaces/tal"
+      xmlns:metal="http://xml.zope.org/namespaces/metal"
+      xmlns:i18n="http://xml.zope.org/namespaces/i18n"
+      metal:use-macro="context/main_template/macros/master"
+      i18n:domain="collective.faceted.map">
+
+<body>
+<metal:content-core fill-slot="content-core">
+  <metal:block define-macro="content-core">
+    <div tal:define="
+        folderContents folderContents | python:context.getFolderContents();
+        Batch python:modules['Products.CMFPlone'].Batch;
+        b_start python:request.get('b_start', 0);
+        batch python:isinstance(folderContents, Batch) and folderContents or Batch(folderContents, 100, int(b_start), orphan=2);
+        self nocall:context/@@faceted-map;
+        map_view context/@@faceted-map-geojson;">
+
+      <div metal:use-macro="context/batch_macros/macros/navigation"/>
+
+      <div class="eea-preview-items">
+
+        <div id="faceted-results-items" class="" data-geojson=""
+             tal:define="thumb_scale view/get_thumb_scale_list;
+                         images_orientation context/orientation | nothing;
+                         orientation_class python:images_orientation and f'display-{images_orientation}' or ''"
+             tal:attributes="data-geojson python:map_view.data_geo(batch);
+                             class string:no-map ${orientation_class}">
+        <tal:entries repeat="brain batch">
+          <tal:entry tal:define="obj brain/getObject|nothing"
+                     tal:condition="python:obj is not None">
+
+
+            <div class=""
+                 tal:define="portal_type brain/portal_type|string:;"
+                 tal:attributes="data-index python:self.get_index(brain);
+                                 class python:self.css_class(brain)">
+              <a tal:define="description brain/Description|string:;
+                             title brain/pretty_title_or_id|string:;
+                             is_image brain/has_leadimage;
+                             url brain/getURL|string:#"
+                 tal:attributes="href url;
+                                 title title">
+
+                <div class="items-content">
+                  <div class="geo-item-image">
+                    <img style="border: none"
+                         tal:condition="is_image"
+                         tal:attributes="src python:self.get_scale_url(obj);"/>
+                  </div>
+                  <div class="geo-item-text">
+                    <div class="geo-item-title" tal:content="brain/pretty_title_or_id|string:">Title</div>
+                    <div class="geo-item-description" tal:content="description"></div>
+                  </div>
+                </div>
+              </a>
+            </div>
+
+          </tal:entry>
+        </tal:entries>
+        <span tal:condition="not: batch/sequence_length"
+              class="table_faceted_no_results"
+              i18n:domain="plone"
+              i18n:translate="description_no_results_found">No results were found.</span>
+        </div>
+      </div>
+      <script type="text/javascript">
+        var refresh_map = function() {
+            var data = $("#faceted-results-items").attr("data-geojson");
+            if ( typeof data != "undefined"  && data ) {
+              data = JSON.parse(data);
+              $('#faceted-map-container').trigger('leaflet.refresh', data);
+              window.dispatchEvent(new Event('resize'));
+        }};
+
+        jQuery(document).ready(function($) {
+          $("#faceted-map-container").insertAfter($("#faceted-results"));
+          $(Faceted.Events).bind(Faceted.Events.AJAX_QUERY_SUCCESS, function() {
+              refresh_map();
+          });
+
+          refresh_map();
+
+          $('.faceted-map-item').hover(
+            function() {
+              $('#faceted-map-container').trigger('leaflet.openPopup', $(this).data('index'));
+            },
+            function() {
+              $('#faceted-map-container').trigger('leaflet.closePopup', $(this).data('index'));
+            }
+          );
+        });
+      </script>
+
+      <div metal:use-macro="context/batch_macros/macros/navigation"/>
+
+    </div>
+
+  </metal:block>
+</metal:content-core>
+</body>
+</html>
+
