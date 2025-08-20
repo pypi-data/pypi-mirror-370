@@ -1,0 +1,331 @@
+# SimCLR Pre-training Configuration - Continue Training Example
+# This configuration shows how to continue training from a pre-trained model
+
+[data]
+# Data directories and settings
+labeled_data_dir = "/home/jackyko/Projects/neutrophils/Neutrophils-Maturation-Trainer/data_kirpc602_local/classified_neutrophils_tiff"
+unlabeled_data_dir = "/home/jackyko/Projects/neutrophils/Neutrophils-Maturation-Trainer/data_kirpc602_local/unclassified_neutrophils_tiff"
+label_file = "/home/jackyko/Projects/neutrophils/Neutrophils-Maturation-Trainer/data_kirpc602_local/cell_labels_tiff.csv"
+
+# Image processing settings
+image_size = 69  # Size for 3D volumes (69x69x69)
+use_mip = false  # Set to true for 2D Maximum Intensity Projection
+batch_size = 12
+inference_batch_size = 64  # Batch size for inference
+
+# Debug settings
+debug_samples_per_class = 5  # Limit samples per class in debug mode
+debug_unlabeled_samples = 10  # Limit unlabeled samples in debug mode
+
+[model]
+# Model architecture settings
+encoder_type = "resnet3d"  # Type of encoder: resnet3d, simple_cnn, etc.
+embedding_dim = 128  # Dimension of final embeddings
+hidden_dim = 256  # Hidden dimension in projection head
+use_projection_head = true  # Whether to use projection head
+
+# Dynamic Feature Extractor Configuration
+[model.feature_extractor]
+architecture_type = "resnet"  # Options: "resnet", "densenet", "efficientnet", "custom"
+depth = "standard"  # Options: "shallow", "standard", "deep", "custom"
+
+[model.conv_blocks]
+kernel_size = [3, 3, 3]  # For 3D: [3, 3, 3], for 2D: [3, 3]
+activation = { name = "leaky_relu", alpha = 0.1 }
+padding = "same"
+use_batch_norm = true
+use_residual = true
+conv_layers = 2  # Number of convolution layers in each block
+
+filters = [32, 64, 128, 256]  # Progressive filter increase
+strides = [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2]]  # Downsampling strategy
+residual_kernel_size = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]  # Residual projection kernels
+kernel_initializer = "he_normal"
+bias_initializer = "zeros"
+
+dropout_rate = 0.0
+use_squeeze_excitation = false
+se_reduction_ratio = 16
+use_spatial_attention = false
+
+[model.conv_blocks.residual_scaling]
+strategy = "fixed_scaling"
+
+[model.conv_blocks.residual_scaling.params]
+alpha = 0.5
+momentum = 0.99
+epsilon = 1e-6
+min_scale = 0.1
+max_scale = 2.0
+scale = 0.5
+
+[model.projection_head]
+layers = [
+    { units = 512, activation = { name = "relu" }, dropout = 0.1, use_batch_norm = true },
+    { units = 256, activation = { name = "relu" }, dropout = 0.1, use_batch_norm = true },
+    { units = 128, activation = "none", dropout = 0.0, use_batch_norm = false }
+]
+kernel_initializer = "he_normal"
+bias_initializer = "zeros"
+final_layer_normalization = "l2"
+
+[model.advanced]
+use_gradient_checkpointing = false
+mixed_precision_compatible = true
+normalization_type = "batch_norm"
+use_weight_standardization = false
+stochastic_depth_rate = 0.0
+
+[model.variants]
+use_bottleneck_blocks = false
+bottleneck_expansion = 4
+use_depthwise_separable = false
+use_inverted_residuals = false
+channel_shuffle = false
+
+use_multi_scale_features = false
+multi_scale_levels = [2, 3, 4]
+feature_fusion_method = "concatenate"
+
+[model.regularization]
+l1_reg = 0.0
+l2_reg = 1e-4
+conv_dropout = 0.0
+projection_dropout = 0.1
+use_dropblock = false
+dropblock_rate = 0.1
+dropblock_size = 7
+cutout_compatible = true
+
+# Pre-trained Model Loading Configuration - ENABLED FOR CONTINUE TRAINING
+[pretrained]
+# Enable pre-trained model loading
+use_pretrained = false
+
+# Path to pre-trained model file (.keras format)
+# UPDATE THIS PATH TO YOUR ACTUAL PRE-TRAINED MODEL
+model_path = "/home/jackyko/Projects/neutrophils/Neutrophils-Maturation-Trainer/output_simclr_pretrain/models/20250622_183001/simclr_encoder_epoch_10.keras"
+
+# Loading strategy options:
+# - "full": Load complete model including weights and architecture
+# - "weights_only": Load only weights (architecture must match)
+# - "encoder_only": Load only encoder part (for transfer learning)
+# - "feature_extractor_only": Load only feature extractor weights
+loading_strategy = "full"
+
+# Whether to freeze loaded layers during training
+freeze_loaded_layers = false
+
+# Layers to freeze (if freeze_loaded_layers is true)
+freeze_layers = "none"  # "all", "encoder", "feature_extractor", "projection_head", ["layer1", "layer2"]
+
+# Fine-tuning configuration
+[pretrained.fine_tuning]
+# Enable fine-tuning mode (lower learning rate, different training strategy)
+enable_fine_tuning = true
+
+# Fine-tuning learning rate (typically lower than from-scratch training)
+fine_tuning_lr = 1e-4
+
+# Number of epochs to keep layers frozen before unfreezing
+freeze_epochs = 0
+
+# Gradual unfreezing strategy
+gradual_unfreezing = false
+unfreeze_schedule = [
+    { epoch = 10, layers = ["projection_head"] },
+    { epoch = 20, layers = ["encoder"] },
+    { epoch = 30, layers = ["feature_extractor"] }
+]
+
+# Layer-wise learning rate scaling for fine-tuning
+use_layer_wise_lr = false
+
+[pretrained.fine_tuning.layer_lr_multipliers]
+feature_extractor = 0.1
+encoder = 0.5
+projection_head = 1.0
+
+# Validation and compatibility checks
+[pretrained.validation]
+# Strict architecture matching (fail if architectures don't match exactly)
+strict_architecture_matching = true
+
+# Allow shape mismatches for certain layers (useful for different embedding dimensions)
+allow_shape_mismatch = false
+shape_mismatch_layers = ["embeddings", "projection_head"]
+
+# Verify model compatibility before loading
+verify_compatibility = true
+
+# Print detailed loading information
+verbose_loading = true
+
+# Backup original model before loading (safety feature)
+create_backup = false
+backup_path = ""
+
+[training]
+# Training hyperparameters
+epochs = 5
+learning_rate = 0.0001 
+optimizer_type = "adam"
+temperature = 0.1
+loss_function = "nt_xent"
+mixed_precision = false
+use_fit_method = true  # Enable model.fit()
+steps_per_epoch = "all"  # "all" or integer value to limit steps per epoch
+
+[training.advanced]
+use_gradient_clipping = true
+gradient_clip_norm = 1.0
+gradient_clip_value = 0.5
+
+use_lr_schedule = true
+lr_schedule_type = "cosine"
+warmup_epochs = 5  # Reduced warmup for continue training
+warmup_method = "linear"
+min_learning_rate = 1e-7
+restart_cycles = 1
+
+[training.lr_schedule]
+cosine_alpha = 0.1
+cosine_restarts = false
+restart_multiplier = 2.0
+
+exponential_decay_rate = 0.96
+exponential_decay_steps = 1000
+exponential_staircase = false
+
+step_boundaries = [15, 30, 45]  # Adjusted for shorter training
+step_decay_rate = 0.1
+
+polynomial_power = 1.0
+polynomial_cycle = false
+
+early_stopping = true
+patience = 10  # Reduced patience for continue training
+min_delta = 0.001
+monitor_metric = "contrastive_loss"
+restore_best_weights = true
+
+[training.loss]
+nt_xent_temperature = 0.1
+nt_xent_similarity_metric = "cosine"
+nt_xent_memory_efficient = true
+
+nce_temperature = 0.1
+nce_negative_sampling_ratio = 1.0
+nce_similarity_metric = "cosine"
+nce_memory_efficient = true
+
+supervised_contrastive_temperature = 0.1
+supervised_contrastive_weight = 0.0
+
+use_multi_loss = false
+loss_weights = { nt_xent = 1.0, supervised = 0.0 }
+
+[training.optimizer]
+[training.optimizer.adam]
+beta_1 = 0.9
+beta_2 = 0.999
+epsilon = 1e-7
+amsgrad = false
+weight_decay = 1e-4
+
+[training.optimizer.sgd]
+momentum = 0.9
+nesterov = true
+weight_decay = 1e-4
+
+[training.optimizer.rmsprop]
+rho = 0.9
+momentum = 0.0
+epsilon = 1e-7
+centered = false
+weight_decay = 1e-4
+
+[training.optimizer.adamw]
+beta_1 = 0.9
+beta_2 = 0.999
+epsilon = 1e-7
+weight_decay = 0.01
+
+[training.strategies]
+use_curriculum_learning = false
+curriculum_strategy = "easy_to_hard"
+curriculum_epochs = 20
+
+use_progressive_training = false
+progressive_stages = [
+    { epochs = 10, image_size = 32 },
+    { epochs = 20, image_size = 48 },
+    { epochs = 20, image_size = 69 }
+]
+
+use_momentum_contrast = false
+momentum_coefficient = 0.999
+queue_size = 65536
+
+use_ema = false
+ema_decay = 0.999
+ema_start_epoch = 5
+
+[augmentation]
+negative_sampling_ratio = 1.0
+same_class_positive_ratio = 0.8
+
+[augmentation.strong_augmentation]
+order = ["noise", "rotate", "zoom", "offset", "blur"]
+
+[augmentation.strong_augmentation.noise]
+std_factor = 0.15
+
+[augmentation.strong_augmentation.rotate]
+degree_max = 120
+
+[augmentation.strong_augmentation.zoom]
+zoom_factor = 0.1
+
+[augmentation.strong_augmentation.offset]
+px_max = 5
+
+[augmentation.strong_augmentation.blur]
+kernel_sz = 3
+
+[augmentation.weak_augmentation]
+order = ["noise", "rotate", "zoom", "offset"]
+
+[augmentation.weak_augmentation.noise]
+std_factor = 0.05
+
+[augmentation.weak_augmentation.rotate]
+degree_max = 45
+
+[augmentation.weak_augmentation.zoom]
+zoom_factor = 0.03
+
+[augmentation.weak_augmentation.offset]
+px_max = 2
+
+[output]
+# Output and logging settings
+output_dir = "/home/jackyko/Projects/neutrophils/Neutrophils-Maturation-Trainer/output_simclr_pretrain"
+save_frequency = 1 # Save model every N epochs
+log_frequency = 1 # Log metrics every N epochs
+tensorboard_step_frequency = 1
+
+save_best_only = true
+monitor_metric = "contrastive_loss"
+metric_mode = "min"
+max_checkpoints_to_keep = 5  # Maximum number of checkpoint files to keep
+
+[visualization]
+visualize_embeddings = false
+
+[debug_config]
+samples_per_class = 250
+debug_epochs = 3
+debug_batch_size = 12
+debug_unlabeled_samples = 100
+enable_debug_in_script = true # Force debug mode in helper scripts
