@@ -1,0 +1,77 @@
+include:
+  - project: "ghsc/esi/esi-templates"
+    ref: main
+    file:
+      - ".setup_conda.yml"
+      - ".rules.yml"
+      - ".default_rules.yml"
+      - ".deploy_rules.yml"
+      - ".run_tests.yml"
+      - ".deploy_to_testpypi_by_tag.yml"
+      - ".deploy_to_pypi_by_tag.yml"
+
+default:
+  image: code.usgs.gov:5001/devops/images/usgs/python:3.12-build
+  tags:
+    - build
+  before_script:
+    - !reference [.conda, before_script]
+
+stages:
+  - build
+  - test
+  - deploy
+
+Try Installing:
+  rules:
+    - !reference [.default, rules]
+  script:
+    - pip install -e .[dev,test,all]
+  stage: build
+
+Run Tests & Coverage:
+  rules:
+    - !reference [.default, rules]
+
+  script:
+    - pip install -e .[dev,test,all]
+    - apt install unzip
+    - mkdir -p "$HOME"/.strec/data
+    - mkdir -p "$HOME"/.strec/data/slabs
+    - strec_cfg update --datafolder "$HOME"/.strec/data --gcmt
+    - curl -o "$HOME"/.strec/data/slabs/slab2.zip https://earthquake.usgs.gov/s3/earthquake-slab2/slab2.zip
+    - unzip "$HOME"/.strec/data/slabs/slab2.zip -d "$HOME"/.strec/data/slabs
+    - rm -rf "$HOME"/.strec/data/slabs/slab2.zip
+    - pytest --cov=shakemap_modules --cov-report term --cov-report xml:coverage.xml --junitxml junit.xml
+  # extends: .run-tests
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+      junit: junit.xml
+  stage: test
+
+Deploy to TestPyPi:
+  rules:
+    - !reference [.deploy, rules]
+
+  before_script:
+    - pip install -e .[dev,test,build,all]
+
+  extends: .deploy-to-testpypi-by-tag
+
+  stage: deploy
+Deploy to PyPi:
+  needs:
+    - job: Deploy to TestPyPi
+  rules:
+    - !reference [.deploy, rules]
+
+  before_script:
+    - pip install -e .[dev,test,build,all]
+
+  extends: .deploy-to-pypi-by-tag
+
+  stage: deploy
