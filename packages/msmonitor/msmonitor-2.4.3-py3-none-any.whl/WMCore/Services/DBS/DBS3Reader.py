@@ -1,0 +1,1044 @@
+#!/usr/bin/env python
+"""
+_DBSReader_
+
+Readonly DBS Interface
+
+"""
+from __future__ import print_function, division
+
+from builtins import object, str, bytes
+from future.utils import viewitems
+
+from Utils.Utilities import decodeBytesToUnicode, encodeUnicodeToBytesConditional
+
+import logging
+from collections import defaultdict
+
+from RestClient.ErrorHandling.RestClientExceptions import HTTPError
+from dbs.apis.dbsClient import DbsApi
+from dbs.exceptions.dbsClientException import dbsClientException
+from retry import retry
+
+from Utils.IteratorTools import grouper, makeListElementsUnique
+from Utils.PythonVersion import PY2
+from WMCore.Services.DBS.DBSErrors import DBSReaderError, formatEx3
+from WMCore.Services.DBS.DBSUtils import dbsListFileParents, dbsListFileLumis, \
+    dbsBlockOrigin, dbsParentFilesGivenParentDataset
+
+
+### Needed for the pycurl comment, leave it out for now
+# from WMCore.Services.pycurl_manager import getdata as multi_getdata
+
+
+def remapDBS3Keys(data, stringify=False, **others):
+    """Fields have been renamed between DBS2 and 3, take fields from DBS3
+    and map to DBS2 values
+    """
+    mapping = {'num_file': 'NumberOfFiles', 'num_files': 'NumberOfFiles', 'num_event': 'NumberOfEvents',
+               'num_block': 'NumberOfBlocks', 'num_lumi': 'NumberOfLumis',
+               'event_count': 'NumberOfEvents', 'run_num': 'RunNumber',
+               'file_size': 'FileSize', 'block_size': 'BlockSize',
+               'file_count': 'NumberOfFiles', 'logical_file_name': 'LogicalFileName',
+               'adler32': 'Adler32', 'check_sum': 'Checksum', 'md5': 'Md5',
+               'block_name': 'BlockName', 'lumi_section_num': 'LumiSectionNumber'}
+
+    mapping.update(others)
+    formatFunc = lambda x: encodeUnicodeToBytesConditional(x, condition=PY2 and stringify)
+    for name, newname in viewitems(mapping):
+        if name in data:
+            data[newname] = formatFunc(data[name])
+    return data
+
+
+@retry(tries=3, delay=1)
+def getDataTiers(dbsUrl):
+    """
+    Function to retrieve all the datatiers from DBS.
+    NOTE: to be used with some caching (MemoryCacheStruct)
+    :param dbsUrl: the DBS URL string
+    :return: a list of strings/datatiers
+    """
+    dbs = DbsApi(dbsUrl)
+    return [tier['data_tier_name'] for tier in dbs.listDataTiers()]
+
+
+# emulator hook is used to swap the class instance
+# when emulator values are set.
+# Look WMQuality.Emulators.EmulatorSetup module for the values
+# @emulatorHook
+class DBS3Reader(object):
+    """
+    _DBSReader_
+
+    General API for reading data from DBS
+    """
+
+    def __init__(self, url, logger=None, parallel=None, **contact):
+        """
+        DBS3Reader constructor
+
+        :param url: url of DBS server
+        :param logger: logger to be used by this class
+        :param parallel: optional parameter to specify parallel execution of some APIs
+        You may pass any true value, e.g. True or 1. The parallel APIs are:
+        listDatasetFileDetails, listFileBlockLocation, getParentFilesGivenParentDataset
+        :param contact: optional parameters to pass to DbsApi class
+        """
+
+        # instantiate dbs api object
+        try:
+            self.dbsURL = url.replace("cmsweb.cern.ch", "cmsweb-prod.cern.ch")
+            self.dbs = DbsApi(self.dbsURL, **contact)
+            self.logger = logger or logging.getLogger(self.__class__.__name__)
+            self.parallel = parallel
+        except Exception as ex:
+            msg = "Error in DBSReader with DbsApi\n"
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+    def _getLumiList(self, blockName=None, lfns=None, validFileOnly=1):
+        """
+        currently only take one lfn but dbs api need be updated
+        """
+        try:
+            if blockName:
+                lumiLists = self.dbs.listFileLumis(block_name=blockName, validFileOnly=validFileOnly)
+            elif lfns:
+                lumiLists = []
+                for slfn in grouper(lfns, 50):
+                    lumiLists.extend(self.dbs.listFileLumiArray(logical_file_name=slfn))
+            else:
+                # shouldn't call this with both blockName and lfns empty
+                # but still returns empty dict for that case
+                return {}
+        except Exception as ex:
+            msg = "Error in "
+            msg += "DBSReader.listFileLumiArray(%s)\n" % lfns
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        lumiDict = {}
+        for lumisItem in lumiLists:
+            lumiDict.setdefault(lumisItem['logical_file_name'], [])
+            item = {}
+            item["RunNumber"] = lumisItem['run_num']
+            item['LumiSectionNumber'] = lumisItem['lumi_section_num']
+            if lumisItem.get('event_count', None) is not None:
+                item['EventCount'] = lumisItem['event_count']
+            lumiDict[lumisItem['logical_file_name']].append(item)
+            # TODO: add key for lumi and event pair.
+        return lumiDict
+
+    def checkDBSServer(self):
+        """
+        check whether dbs server is up and running
+        returns {"dbs_instance": "prod/global", "dbs_version": "3.3.144"}
+        """
+        try:
+            return self.dbs.serverinfo()
+        except Exception as ex:
+            msg = "Error in "
+            msg += "DBS server is not up: %s" % self.dbsURL
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+    def listPrimaryDatasets(self, match='*'):
+        """
+        _listPrimaryDatasets_
+
+        return a list of primary datasets, The full dataset name must be provided
+        pattern based mathcing is no longer supported.
+        If no expression is provided, all datasets are returned
+        """
+        try:
+            result = self.dbs.listPrimaryDatasets(primary_ds_name=match)
+        except Exception as ex:
+            msg = "Error in DBSReader.listPrimaryDataset(%s)\n" % match
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        result = [x['primary_ds_name'] for x in result]
+        return result
+
+    def matchProcessedDatasets(self, primary, tier, process):
+        """
+        _matchProcessedDatasets_
+
+        return a list of Processed datasets
+        """
+        result = []
+        try:
+            datasets = self.dbs.listDatasets(primary_ds_name=primary, data_tier_name=tier, detail=True)
+        except dbsClientException as ex:
+            msg = "Error in DBSReader.listProcessedDatasets(%s)\n" % primary
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        for dataset in datasets:
+            dataset = remapDBS3Keys(dataset, processed_ds_name='Name')
+            dataset['PathList'] = [dataset['dataset']]
+            if dataset['Name'] == process:
+                result.append(dataset)
+        return result
+
+    def listRuns(self, dataset=None, block=None):
+        """
+        it gets list of DbsRun object but for our purpose
+        only list of number is collected.
+        DbsRun (RunNumber,
+                NumberOfEvents,
+                NumberOfLumiSections,
+                TotalLuminosity,
+                StoreNumber,
+                StartOfRungetLong,
+                EndOfRun,
+                CreationDate,
+                CreatedBy,
+                LastModificationDate,
+                LastModifiedBy
+                )
+        """
+        runs = []
+        try:
+            if block:
+                results = self.dbs.listRuns(block_name=block)
+            else:
+                results = self.dbs.listRuns(dataset=dataset)
+        except dbsClientException as ex:
+            msg = "Error in DBSReader.listRuns(%s, %s)\n" % (dataset, block)
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+        for x in results:
+            runs.extend(x['run_num'])
+        return runs
+
+    def listRunLumis(self, dataset=None, block=None):
+        """
+        It gets a list of DBSRun objects and returns the number of lumisections per run
+        DbsRun (RunNumber,
+                NumberOfEvents,
+                NumberOfLumiSections,
+                TotalLuminosity,
+                StoreNumber,
+                StartOfRungetLong,
+                EndOfRun,
+                CreationDate,
+                CreatedBy,
+                LastModificationDate,
+                LastModifiedBy
+                )
+        """
+        # Pointless code in python3
+        block = decodeBytesToUnicode(block)
+        dataset = decodeBytesToUnicode(dataset)
+
+        try:
+            if block:
+                results = self.dbs.listRuns(block_name=block)
+            else:
+                results = self.dbs.listRuns(dataset=dataset)
+        except dbsClientException as ex:
+            msg = "Error in DBSReader.listRuns(%s, %s)\n" % (dataset, block)
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        # send runDict format as result, this format is for sync with dbs2 call
+        # which has {run_number: num_lumis} but dbs3 call doesn't return num Lumis
+        # So it returns {run_number: None}
+        # TODO: After DBS2 is completely removed change the return format more sensible one
+
+        runDict = {}
+        for x in results:
+            for runNumber in x["run_num"]:
+                runDict[runNumber] = None
+        return runDict
+
+    def listProcessedDatasets(self, primary, dataTier='*'):
+        """
+        _listProcessedDatasets_
+
+        return a list of Processed datasets for the primary and optional
+        data tier value
+
+        """
+        try:
+            result = self.dbs.listDatasets(primary_ds_name=primary, data_tier_name=dataTier)
+        except dbsClientException as ex:
+            msg = "Error in DBSReader.listProcessedDatasets(%s)\n" % primary
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        result = [x['dataset'].split('/')[2] for x in result]
+        return result
+
+    def listDatasetFiles(self, datasetPath):
+        """
+        _listDatasetFiles_
+
+        Get list of files for dataset
+
+        """
+        return [x['logical_file_name'] for x in self.dbs.listFileArray(dataset=datasetPath)]
+
+    def listDatatiers(self):
+        """
+        _listDatatiers_
+
+        Get a list of datatiers known by DBS.
+        """
+        return [tier['data_tier_name'] for tier in self.dbs.listDataTiers()]
+
+    def listDatasetFileDetails(self, datasetPath, getParents=False, getLumis=True, validFileOnly=1):
+        """
+        TODO: This is completely wrong need to be redone. or be removed - getting dataset altogether
+        might be to costly
+
+        _listDatasetFileDetails_
+
+        Get list of lumis, events, and parents for each file in a dataset
+        Return a dict where the keys are the files, and for each file we have something like:
+            { 'NumberOfEvents': 545,
+              'BlockName': '/HighPileUp/Run2011A-v1/RAW#dd6e0796-cbcc-11e0-80a9-003048caaace',
+              'Lumis': {173658: [8, 12, 9, 14, 19, 109, 105]},
+              'Parents': [],
+              'Checksum': '22218315',
+              'Adler32': 'a41a1446',
+              'FileSize': 286021145,
+              'ValidFile': 1
+            }
+
+        """
+        fileDetails = self.getFileListByDataset(dataset=datasetPath, validFileOnly=validFileOnly, detail=True)
+        blocks = set()  # the set of blocks of the dataset
+        # Iterate over the files and prepare the set of blocks and a dict where the keys are the files
+        files = {}
+        for f in fileDetails:
+            blocks.add(f['block_name'])
+            files[f['logical_file_name']] = remapDBS3Keys(f, stringify=True)
+            files[f['logical_file_name']]['ValidFile'] = f['is_file_valid']
+            files[f['logical_file_name']]['Lumis'] = {}
+            files[f['logical_file_name']]['Parents'] = []
+
+        # parallel execution for listFileParents and listFileLumis APIs
+        if self.parallel:
+            if getParents:
+                block_parents = dbsListFileParents(self.dbsURL, blocks)
+                for blockName, parents in block_parents.items():
+                    for p in parents:
+                        if p['logical_file_name'] in files:  # invalid files are not there if validFileOnly=1
+                            files[p['logical_file_name']]['Parents'].extend(p['parent_logical_file_name'])
+            if getLumis:
+                block_file_lumis = dbsListFileLumis(self.dbsURL, blocks)
+                for blockName, file_lumis in block_file_lumis.items():
+                    for f in file_lumis:
+                        if f['logical_file_name'] in files:  # invalid files are not there if validFileOnly=1
+                            if f['run_num'] in files[f['logical_file_name']]['Lumis']:
+                                files[f['logical_file_name']]['Lumis'][f['run_num']].extend(f['lumi_section_num'])
+                            else:
+                                files[f['logical_file_name']]['Lumis'][f['run_num']] = f['lumi_section_num']
+            return files
+
+        # Iterate over the blocks and get parents and lumis
+        for blockName in blocks:
+            # get the parents
+            if getParents:
+                parents = self.dbs.listFileParents(block_name=blockName)
+                for p in parents:
+                    if p['logical_file_name'] in files:  # invalid files are not there if validFileOnly=1
+                        files[p['logical_file_name']]['Parents'].extend(p['parent_logical_file_name'])
+
+            if getLumis:
+                # get the lumis
+                file_lumis = self.dbs.listFileLumis(block_name=blockName)
+                for f in file_lumis:
+                    if f['logical_file_name'] in files:  # invalid files are not there if validFileOnly=1
+                        if f['run_num'] in files[f['logical_file_name']]['Lumis']:
+                            files[f['logical_file_name']]['Lumis'][f['run_num']].extend(f['lumi_section_num'])
+                        else:
+                            files[f['logical_file_name']]['Lumis'][f['run_num']] = f['lumi_section_num']
+
+        return files
+
+    def crossCheck(self, datasetPath, *lfns):
+        """
+        _crossCheck_
+
+        For the dataset provided, check that the lfns listed all exist
+        in the dataset.
+
+        Return the list of lfns that are in the dataset
+        """
+        allLfns = []
+        try:
+            for fileDict in self.dbs.listFileArray(dataset=datasetPath, validFileOnly=1, detail=False):
+                allLfns.append(fileDict['logical_file_name'])
+        except Exception as exc:
+            msg = "Error in DBSReader.crossCheck({}) with {} lfns.".format(datasetPath, len(lfns))
+            msg += "\nDetails: {}\n".format(formatEx3(exc))
+            raise DBSReaderError(msg) from None
+        setOfAllLfns = set(allLfns)
+        setOfKnownLfns = set(lfns)
+        return list(setOfAllLfns.intersection(setOfKnownLfns))
+
+    def crossCheckMissing(self, datasetPath, *lfns):
+        """
+        _crossCheckMissing_
+
+        As cross check, but return value is a list of files that
+        are *not* known by DBS
+        """
+        allLfns = []
+        try:
+            for fileDict in self.dbs.listFileArray(dataset=datasetPath, validFileOnly=1, detail=False):
+                allLfns.append(fileDict['logical_file_name'])
+        except Exception as exc:
+            msg = "Error in DBSReader.crossCheckMissing({}) with {} lfns.".format(datasetPath, len(lfns))
+            msg += "\nDetails: {}\n".format(formatEx3(exc))
+            raise DBSReaderError(msg) from None
+        setOfAllLfns = set(allLfns)
+        setOfKnownLfns = set(lfns)
+        knownFiles = setOfAllLfns.intersection(setOfKnownLfns)
+        unknownFiles = setOfKnownLfns.difference(knownFiles)
+        return list(unknownFiles)
+
+    def getDBSSummaryInfo(self, dataset=None, block=None):
+        """
+        Get dataset summary includes # of files, events, blocks and total size
+        """
+        if dataset:
+            self.checkDatasetPath(dataset)
+        try:
+            if block:
+                summary = self.dbs.listFileSummaries(block_name=block, validFileOnly=1)
+            else:
+                summary = self.dbs.listFileSummaries(dataset=dataset, validFileOnly=1)
+        except Exception as ex:
+            msg = "Error in DBSReader.getDBSSummaryInfo(%s, %s)\n" % (dataset, block)
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        if not summary:  # missing data or all files invalid
+            return {}
+
+        result = remapDBS3Keys(summary[0], stringify=True)
+        result['path'] = dataset if dataset else ''
+        result['block'] = block if block else ''
+        return result
+
+    def listFileBlocks(self, dataset, blockName=None):
+        """
+        _listFileBlocks_
+
+        Retrieve a list of fileblock names for a dataset
+
+        """
+        self.checkDatasetPath(dataset)
+        args = {'dataset': dataset, 'detail': False}
+        if blockName:
+            args['block_name'] = blockName
+            args['detail'] = True
+        try:
+            blocks = self.dbs.listBlocks(**args)
+        except dbsClientException as ex:
+            msg = "Error in DBSReader.listFileBlocks(%s)\n" % dataset
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        result = [x['block_name'] for x in blocks]
+
+        return result
+
+    def blockExists(self, fileBlockName):
+        """
+        _blockExists_
+
+        Check to see if block with name provided exists in the DBS
+        Instance.
+
+        Return True if exists, False if not
+
+        """
+        self.checkBlockName(fileBlockName)
+        try:
+
+            blocks = self.dbs.listBlocks(block_name=fileBlockName)
+        except Exception as ex:
+            msg = "Error in "
+            msg += "DBSReader.blockExists(%s)\n" % fileBlockName
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        if len(blocks) == 0:
+            return False
+        return True
+
+    def listFilesInBlock(self, fileBlockName, lumis=True, validFileOnly=1):
+        """
+        _listFilesInBlock_
+
+        Get a list of files in the named fileblock
+        TODO: lumis can be false when lumi splitting is not required
+        However WMBSHelper expect file['LumiList'] to get the run number
+        so for now it will be always true.
+        We need to clean code up when dbs2 is completely deprecated.
+        calling lumis for run number is expensive.
+        """
+        result = []
+        if not self.blockExists(fileBlockName):
+            msg = "DBSReader.listFilesInBlock(%s): No matching data"
+            raise DBSReaderError(msg % fileBlockName) from None
+
+        try:
+            files = self.dbs.listFileArray(block_name=fileBlockName, validFileOnly=validFileOnly, detail=True)
+        except dbsClientException as ex:
+            msg = "Error in "
+            msg += "DBSReader.listFilesInBlock(%s)\n" % fileBlockName
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        if not files:
+            # there are no valid files in this block, stop here!
+            return result
+
+        if lumis:
+            lumiDict = self._getLumiList(blockName=fileBlockName, validFileOnly=validFileOnly)
+
+        for fileInfo in files:
+            if lumis:
+                fileInfo["LumiList"] = lumiDict[fileInfo['logical_file_name']]
+            result.append(remapDBS3Keys(fileInfo, stringify=True))
+        return result
+
+    def listFilesInBlockWithParents(self, fileBlockName, lumis=True, validFileOnly=1):
+        """
+        _listFilesInBlockWithParents_
+
+        Get a list of files in the named fileblock including
+        the parents of that file.
+        TODO: lumis can be false when lumi splitting is not required
+        However WMBSHelper expect file['LumiList'] to get the run number
+        so for now it will be always true.
+
+        """
+        if not self.blockExists(fileBlockName):
+            msg = "DBSReader.listFilesInBlockWithParents(%s): No matching data"
+            raise DBSReaderError(msg % fileBlockName) from None
+
+        try:
+            # TODO: shoud we get only valid block for this?
+            files = self.dbs.listFileParents(block_name=fileBlockName)
+            fileDetails = self.listFilesInBlock(fileBlockName, lumis, validFileOnly)
+
+        except dbsClientException as ex:
+            msg = "Error in "
+            msg += "DBSReader.listFilesInBlockWithParents(%s)\n" % (
+                fileBlockName,)
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        childByParents = defaultdict(list)
+        for f in files:
+            # Probably a child can have more than 1 parent file
+            for fp in f['parent_logical_file_name']:
+                childByParents[fp].append(f['logical_file_name'])
+
+        parentsLFNs = list(childByParents)
+
+        if len(parentsLFNs) == 0:
+            msg = "Error in "
+            msg += "DBSReader.listFilesInBlockWithParents(%s)\n There is no parents files" % (
+                fileBlockName)
+            raise DBSReaderError(msg) from None
+
+        parentFilesDetail = []
+        # TODO: slicing parentLFNs util DBS api is handling that.
+        # Remove slicing if DBS api handles
+        for pLFNs in grouper(parentsLFNs, 50):
+            parentFilesDetail.extend(self.dbs.listFileArray(logical_file_name=pLFNs, detail=True))
+
+        if lumis:
+            parentLumis = self._getLumiList(lfns=parentsLFNs)
+
+        parentsByLFN = defaultdict(list)
+
+        for pf in parentFilesDetail:
+            parentLFN = pf['logical_file_name']
+            dbsFile = remapDBS3Keys(pf, stringify=True)
+            if lumis:
+                dbsFile["LumiList"] = parentLumis[parentLFN]
+
+            for childLFN in childByParents[parentLFN]:
+                parentsByLFN[childLFN].append(dbsFile)
+
+        for fileInfo in fileDetails:
+            fileInfo["ParentList"] = parentsByLFN[fileInfo['logical_file_name']]
+
+        return fileDetails
+
+    def lfnsInBlock(self, fileBlockName):
+        """
+        _lfnsInBlock_
+
+        LFN list only for block, details = False => faster query
+
+        """
+        if not self.blockExists(fileBlockName):
+            msg = "DBSReader.lfnsInBlock(%s): No matching data"
+            raise DBSReaderError(msg % fileBlockName) from None
+
+        try:
+            lfns = self.dbs.listFileArray(block_name=fileBlockName, validFileOnly=1, detail=False)
+            return lfns
+        except dbsClientException as ex:
+            msg = "Error in "
+            msg += "DBSReader.listFilesInBlock(%s)\n" % fileBlockName
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+    def listFileBlockLocation(self, fileBlockNames):
+        """
+        _listFileBlockLocation_
+
+        Get origin_site_name of a block
+
+        """
+
+        singleBlockName = None
+        if isinstance(fileBlockNames, (str, bytes)):
+            singleBlockName = fileBlockNames
+            fileBlockNames = [fileBlockNames]
+
+        for block in fileBlockNames:
+            self.checkBlockName(block)
+
+        locations = {}
+        node_filter = set(['UNKNOWN', None])
+
+        blocksInfo = {}
+        try:
+            if self.parallel:
+                data = dbsBlockOrigin(self.dbsURL, fileBlockNames)
+                for block, items in data.items():
+                    blocksInfo.setdefault(block, [])
+                    for blockInfo in items:
+                        blocksInfo[block].append(blockInfo['origin_site_name'])
+            else:
+                for block in fileBlockNames:
+                    blocksInfo.setdefault(block, [])
+                    # there should be only one element with a single origin site string ...
+                    for blockInfo in self.dbs.listBlockOrigin(block_name=block):
+                        blocksInfo[block].append(blockInfo['origin_site_name'])
+        except dbsClientException as ex:
+            msg = "Error in DBS3Reader: self.dbs.listBlockOrigin(block_name=%s)\n" % fileBlockNames
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        for block in fileBlockNames:
+            valid_nodes = set(blocksInfo.get(block, [])) - node_filter
+            locations[block] = list(valid_nodes)
+
+        # returning single list if a single block is passed
+        if singleBlockName:
+            return locations[singleBlockName]
+
+        return locations
+
+    def getFileBlock(self, fileBlockName):
+        """
+        Retrieve a list of files in the block; a flag whether the
+        block is still open or not; and it used to resolve the block
+        location via PhEDEx.
+
+        :return: a dictionary in the format of:
+            {"PhEDExNodeNames" : [],
+             "Files" : { LFN : Events }}
+        """
+        result = {"PhEDExNodeNames": [],  # FIXME: we better get rid of this line!
+                  "Files": self.listFilesInBlock(fileBlockName)}
+        return result
+
+    def getFileBlockWithParents(self, fileBlockName):
+        """
+        Retrieve a list of parent files in the block; a flag whether the
+        block is still open or not; and it used to resolve the block
+        location via PhEDEx.
+
+        :return: a dictionary in the format of:
+            {"PhEDExNodeNames" : [],
+             "Files" : { LFN : Events }}
+        """
+        fileBlockName = decodeBytesToUnicode(fileBlockName)
+
+        if not self.blockExists(fileBlockName):
+            msg = "DBSReader.getFileBlockWithParents(%s): No matching data"
+            raise DBSReaderError(msg % fileBlockName) from None
+
+        result = {"PhEDExNodeNames": [],  # FIXME: we better get rid of this line!
+                  "Files": self.listFilesInBlockWithParents(fileBlockName)}
+        return result
+
+    def listBlockParents(self, blockName):
+        """
+        Return a list of parent blocks for a given child block name
+        """
+        # FIXME: note the different returned data structure
+        result = []
+        self.checkBlockName(blockName)
+        blocks = self.dbs.listBlockParents(block_name=blockName)
+        result = [block['parent_block_name'] for block in blocks]
+        return result
+
+    def blockToDatasetPath(self, blockName):
+        """
+        _blockToDatasetPath_
+
+        Given a block name, get the dataset Path associated with that
+        Block.
+
+        Returns the dataset path, or None if not found
+
+        """
+        self.checkBlockName(blockName)
+        try:
+            blocks = self.dbs.listBlocks(block_name=blockName, detail=True)
+        except Exception as ex:
+            msg = "Error in "
+            msg += "DBSReader.blockToDatasetPath(%s)\n" % blockName
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        if blocks == []:
+            return None
+
+        pathname = blocks[-1].get('dataset', None)
+        return pathname
+
+    def listDatasetLocation(self, datasetName):
+        """
+        _listDatasetLocation_
+
+        List the origin SEs where there is at least a block of the given
+        dataset.
+        """
+        self.checkDatasetPath(datasetName)
+
+        locations = set()
+        try:
+            blocksInfo = self.dbs.listBlockOrigin(dataset=datasetName)
+        except dbsClientException as ex:
+            msg = "Error in DBSReader: dbsApi.listBlocks(dataset=%s)\n" % datasetName
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+        if not blocksInfo:  # no data location from dbs
+            return list(locations)
+
+        for blockInfo in blocksInfo:
+            if blockInfo.get("origin_site_name", None) not in ['UNKNOWN', None]:
+                locations.add(blockInfo['origin_site_name'])
+
+        return list(locations)
+
+    def checkDatasetPath(self, pathName):
+        """
+        This method raises an exception for any invalid dataset name
+        and datasets unknown to DBS. Otherwise None is returned.
+        """
+        if pathName in ("", None):
+            raise DBSReaderError("Invalid Dataset Path name: => %s <=" % pathName) from None
+        else:
+            try:
+                result = self.dbs.listDatasets(dataset=pathName, dataset_access_type='*')
+                if len(result) == 0:
+                    raise DBSReaderError("Dataset %s doesn't exist in DBS %s" % (pathName, self.dbsURL)) from None
+            except (dbsClientException, HTTPError) as ex:
+                msg = "Error in "
+                msg += "DBSReader.checkDatasetPath(%s)\n" % pathName
+                msg += "%s\n" % formatEx3(ex)
+                raise DBSReaderError(msg) from None
+        return
+
+    def checkBlockName(self, blockName):
+        """
+         _checkBlockName_
+        """
+        if blockName in ("", "*", None):
+            raise DBSReaderError("Invalid Block name: => %s <=" % blockName) from None
+
+    def getFileListByDataset(self, dataset, validFileOnly=1, detail=True):
+
+        """
+        _getFileListByDataset_
+
+        Given a dataset, retrieves all blocks, lfns and number of events (among other
+        not really important info).
+        Returns a list of dict.
+        """
+
+        try:
+            fileList = self.dbs.listFileArray(dataset=dataset, validFileOnly=validFileOnly, detail=detail)
+            return fileList
+        except dbsClientException as ex:
+            msg = "Error in "
+            msg += "DBSReader.getFileListByDataset(%s)\n" % dataset
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+    def listDatasetParents(self, childDataset):
+        """
+        list the the parents dataset path given childDataset
+        """
+        try:
+            parentList = self.dbs.listDatasetParents(dataset=childDataset)
+            return parentList
+        except Exception as ex:
+            msg = "Error in "
+            msg += "DBSReader.listDatasetParents(%s)\n" % childDataset
+            msg += "%s\n" % formatEx3(ex)
+            raise DBSReaderError(msg) from None
+
+    # def getListFilesByLumiAndDataset(self, dataset, files):
+    #     "Unsing pycurl to get all the child parents pair for given dataset"
+    #
+    #     urls = ['%s/data/dbs/fileparentbylumis?block_name=%s' % (
+    #              self.dbsURL, b["block_name"]) for b in self.dbs.listBlocks(dataset=dataset)]
+    #
+    #     data = multi_getdata(urls, ckey(), cert())
+    #     rdict = {}
+    #     for row in data:
+    #         try:
+    #             data = json.loads(row['data'])
+    #             rdict[req] = data['result'][0]  # we get back {'result': [workflow]} dict
+    #         except Exception as exp:
+    #             print("ERROR: fail to load data as json record, error=%s" % str(exp))
+    #             print(row)
+    #     return rdict
+
+    def getParentFilesGivenParentDataset(self, parentDataset, childLFNs):
+        """
+        returns parent files for given childLFN when DBS doesn't have direct parent child relationship in DB
+        Only use this for finding missing parents
+
+        :param parentDataset: parent dataset for childLFN
+        :param childLFN: a file in child dataset
+        :return: set of parent files for childLFN
+        """
+        fInfo = self.dbs.listFileLumiArray(logical_file_name=childLFNs)
+        if self.parallel:
+            return dbsParentFilesGivenParentDataset(self.dbsURL, parentDataset, fInfo)
+
+        parentFiles = defaultdict(set)
+        for f in fInfo:
+            pFileList = self.dbs.listFiles(dataset=parentDataset, run_num=f['run_num'], lumi_list=f['lumi_section_num'])
+            pFiles = set([x['logical_file_name'] for x in pFileList])
+            parentFiles[f['logical_file_name']] = parentFiles[f['logical_file_name']].union(pFiles)
+        return parentFiles
+
+    def getParentFilesByLumi(self, childLFN):
+        """
+        get the parent file's lfns by lumi (This might not be the actual parentage relations in DBS just parentage by Lumis).
+        use for only specific lfn for validating purpose, for the parentage fix use findAndInsertMissingParentage
+        :param childLFN:
+        :return: list of dictionary with parent files for given child LFN and parent dataset
+        [{"ParentDataset": /abc/bad/ddd, "ParentFiles": [alf, baf, ...]]
+        """
+        childDatasets = self.dbs.listDatasets(logical_file_name=childLFN)
+        result = []
+        for i in childDatasets:
+            parents = self.dbs.listDatasetParents(dataset=i["dataset"])
+            for parent in parents:
+                parentFiles = self.getParentFilesGivenParentDataset(parent['parent_dataset'], childLFN)
+                result.append({"ParentDataset": parent['parent_dataset'], "ParentFiles": list(parentFiles[childLFN])})
+        return result
+
+    def insertFileParents(self, childBlockName, childParentsIDPairs, missingFiles=0):
+        """
+        For a given block name, inject its child/parent file id relationship
+        :param childBlockName: child block name
+        :param childParentsIDPairs: list of list child and parent file ids, i.e. [[1,2], [3,4]...]
+                dbs validate child ids from the childBlockName
+        :param missingFiles: an integer with the number of children files missing parents
+        :return: None
+        """
+        self.logger.debug("Going to insert parentage for child_parent_id_list: %s",
+                          childParentsIDPairs)
+        return self.dbs.insertFileParents({"block_name": childBlockName,
+                                           "child_parent_id_list": childParentsIDPairs,
+                                           "missing_files": missingFiles})
+
+    def listBlocksWithNoParents(self, childDataset):
+        """
+        Given a dataset name, list all its blocks, fetch their parentage
+        blocks and return a set of blocks without any parentage information.
+        :param childDataset: string with a dataset name
+        :return: set of child blocks with no parentBlock
+        """
+        allBlocks = self.dbs.listBlocks(dataset=childDataset)
+        blockNames = []
+        for block in allBlocks:
+            blockNames.append(block['block_name'])
+        parentBlocks = self.dbs.listBlockParents(block_name=blockNames)
+
+        cblock = set()
+        for pblock in parentBlocks:
+            cblock.add(pblock['this_block_name'])
+
+        noParentBlocks = set(blockNames) - cblock
+        return noParentBlocks
+
+    def listFilesWithNoParents(self, childBlockName):
+        """
+        :param childBlockName:
+        :return:
+        """
+        allFiles = self.dbs.listFiles(block_name=childBlockName)
+        parentFiles = self.dbs.listFileParents(block_name=childBlockName)
+
+        allFileNames = set()
+        for fInfo in allFiles:
+            allFileNames.add(fInfo['logical_file_name'])
+
+        cfile = set()
+        for pFile in parentFiles:
+            cfile.add(pFile['logical_file_name'])
+
+        noParentFiles = allFileNames - cfile
+        return list(noParentFiles)
+
+    def fixMissingParentageDatasets(self, childDataset, insertFlag=True):
+        """
+        :param childDataset: child dataset need to set the parentage correctly.
+        :return: blocks which failed to insert parentage. for retry
+        """
+        parentDatasets = self.listDatasetParents(childDataset)
+        self.logger.info("Parent datasets for %s are: %s", childDataset, parentDatasets)
+        # parentDatasets format is
+        # [{'this_dataset': '/SingleMuon/Run2016D-03Feb2017-v1/MINIAOD',
+        #   'parent_dataset_id': 13265209,
+        #   'parent_dataset': '/SingleMuon/Run2016D-23Sep2016-v1/AOD'}]
+        if not parentDatasets:
+            self.logger.warning("No parent dataset found for child dataset %s", childDataset)
+            return {}
+
+        parentFlatData = self.getParentDatasetTrio(childDataset)
+
+        blocks = self.listBlocksWithNoParents(childDataset)
+        failedBlocks = []
+        self.logger.info("Found %d blocks without parentage information", len(blocks))
+        for blockName in blocks:
+            try:
+                listChildParent, countMissingFiles = self._compileParentageList(blockName, parentFlatData)
+                # insert block parentage information to DBS
+                if insertFlag and any(listChildParent):
+                    self.insertFileParents(blockName, listChildParent, countMissingFiles)
+                    self.logger.info("Parentage information successfully added to DBS for block %s", blockName)
+                else:
+                    self.logger.warning("No parentage information added to DBS for block %s", blockName)
+            except Exception as ex:
+                self.logger.exception(
+                        "Parentage update failed for block %s with error %s", blockName, str(ex))
+                failedBlocks.append(blockName)
+
+        return failedBlocks
+
+    def _compileParentageList(self, blockName, parentRunLumi):
+        """
+        Method to find out child and parent file relationship based
+        on their run/lumi tuples.
+        :param blockName: string with the child block name
+        :param parentRunLumi: a set like {(1, 53): 3077147397, (1, 54): 3077147397, (1, 27): 3077147397
+        :return: a list of child/parent file id tuples and a set of children files
+            that are missing parent files, e.g.
+            [[3077147917, 3077148037], [3077147917, 3077148037], 123
+        """
+        self.logger.info("Compiling parentage list for block: %s", blockName)
+        # fetch run/lumi and file ids for the child block name
+        childFlatData = self.getChildBlockTrio(blockName)
+
+        self.logger.debug("Block name: %s has this run/lumi/file id information: %s",
+                          blockName, childFlatData)
+        listChildParent = []
+
+        # first resolve parentage for all common runLumi pairs between childBlock and parentDataset
+        withParents = set()
+        for runLumi in childFlatData.keys() & parentRunLumi.keys():
+            childFileId = childFlatData[runLumi]
+            withParents.add(childFileId)
+            parentFileId = parentRunLumi[runLumi]
+            listChildParent.append([childFileId, parentFileId])
+
+        # the next for loop will find all the children files with missing parents
+        # and set their parent file id to -1 instead, unless that child id already has
+        # a valid parent file for other lumi(s)
+        missingParents = set()
+        for runLumi in childFlatData.keys() - parentRunLumi.keys():
+            childFileId = childFlatData[runLumi]
+            msg = "Child file id: %s, with run/lumi: %s, has no match in the parent dataset. "
+            if childFileId in withParents:
+                msg += "It does have parent files for other run/lumis though."
+                self.logger.warning(msg, childFileId, runLumi)
+                continue
+            missingParents.add(childFileId)
+            listChildParent.append([childFileId, -1])
+            msg += "Adding it with -1 parentage information to DBS."
+            self.logger.warning(msg, childFileId, runLumi)
+        self.logger.debug("Files with parent: %s, without: %s, non-unique tuples: %d",
+                         withParents, missingParents, len(listChildParent))
+
+        # now find out files missing parent that do not have any other parent
+        missingParents = missingParents - withParents
+        # and make it a unique list of child/parent file ids
+        listChildParent = makeListElementsUnique(listChildParent)
+
+        self.logger.info("Block: %s has %d child/parent tuples and it is missing %d files",
+                         blockName, len(listChildParent), len(missingParents))
+        return listChildParent, len(missingParents)
+
+    def getParentDatasetTrio(self, childDataset):
+        """
+        Provided a dataset name, return all the parent dataset information, such as:
+          - file ids, run number and lumi section
+        NOTE: This API is meant to be used by the StepChainParentage thread only!!!
+        :param childDataset: name of the child dataset
+        :return: A dictionary using (run, lumi) tuples as keys and fileIds as values
+                 {(1, 5110): 2746490237,
+                  (1, 5959): 2746487877,
+                  (1, 5990): 2746487877,
+                  ...}
+        """
+        # the call to DBS from bellow will return data in the following format of:
+        # {554307997: [[1, 557179], [1, 557178],...
+        # such that: key is file id, in each list is [run_number, lumi_section_numer].
+        parentFullInfo = self.dbs.listParentDSTrio(dataset=childDataset)
+
+        parentFlatData = {}
+        for parentDataset in parentFullInfo:
+            for fileId in parentDataset:
+                for runLumiPair in parentDataset[fileId]:
+                    parentFlatData[tuple(runLumiPair)] = fileId
+        return parentFlatData
+
+    def getChildBlockTrio(self, childBlock):
+        """
+        Provided a block name, return all block contents information, such as:
+          - file ids, run number and lumi section
+        NOTE: This API is meant to be used by the StepChainParentage thread only!!!
+        :param chilBlock: name of the child block
+        :return: A dictionary using (run, lumi) tuples as keys and fileIds as values
+                 {(1, 5110): 2746490237,
+                  (1, 5959): 2746487877,
+                  (1, 5990): 2746487877,
+                  ...}
+        """
+        # the call to DBS from bellow will return data in the following format of:
+        # {554307997: [[1, 557179], [1, 557178],...
+        # such that: key is file id, in each list is [run_number, lumi_section_numer].
+        childBlockInfo = self.dbs.listBlockTrio(block_name=childBlock)
+
+        childFlatData = {}
+        for childBlock in childBlockInfo:
+            for fileId in childBlock:
+                for runLumiPair in childBlock[fileId]:
+                    childFlatData[tuple(runLumiPair)] = fileId
+        return childFlatData
