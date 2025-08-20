@@ -1,0 +1,3 @@
+MAXLEN = 80
+XPAD = 3
+YPAD = 1
