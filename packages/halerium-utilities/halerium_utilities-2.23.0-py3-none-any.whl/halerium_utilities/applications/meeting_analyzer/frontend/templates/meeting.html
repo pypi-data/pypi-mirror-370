@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="description" content="" />
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    <link rel="shortcut icon" href="{{ url_for('static', path='/img/hal.png')}}" />
+    <link href="{{ url_for('static', path='/style/main.css') }}" rel="stylesheet" />
+    <link href="{{ url_for('static', path='/style/meeting.css') }}" rel="stylesheet" />
+    <link href="{{ url_for('static', path='/style/dropdownComponent.css') }}" rel="stylesheet" />
+    <link href="{{ url_for('static', path='/style/progressBar.css') }}" rel="stylesheet" />
+    <title>Halerium Meetings</title>
+
+</head>
+
+<body>
+    <div class="flex col fw fh xc yc">
+        <div class="flex container col fw" style="justify-content: space-between;">
+            <div class="flex row logoContainer" style="justify-content: space-between;">
+                <div class="flex col">
+                    <div class="logo"></div>
+                    <div class="subheader">Meeting Intelligence</div>
+                </div>
+                <div class="flex row">
+                    <a href="{{ url_for('index') }}" class="btnNavigator">Start Over</a>
+                    <a href="{{ chatbot_link }}" target="_blank" class="btnNavigator">Go to Chatbot</a>
+                </div>
+            </div>
+            <div class="flex col xc yc fw">
+                <div class="dropdown">
+                    <div class="dropdownButton" id="dropdownButton">
+                        <div class="dropdownText">
+                            <img class="dropdownImage"
+                                src="{{ url_for('static', path='/img/icon-record-black.svg') }}" /> Select an Audio
+                            Input Device
+                        </div>
+                        <div class="dropdownArrow" id="dropdownArrow"></div>
+                    </div>
+                    <div class="dropdownMenu">
+                        <!-- options are filled via js -->
+                    </div>
+                </div>
+                <div class="flex row-hard fw">
+                    <canvas class="waveVisCanvas" id="audioVisualizer">
+                    </canvas>
+                    <div id="overlayRecordingPaused" class="overlayRecordingPaused">Recording paused</div>
+                    <button id="btnPauseResumeRecording" class="btnPauseResumeRecording"></button>
+                </div>
+                <button id="btnRecordMeeting" class="btnPrimary fw">Record Meeting</button>
+                <div class="busy-progress" id="busyProgress" style="display:none;">
+                    <div class="busy-bar" id="busyBar"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+<script type="module" crossorigin="use-credentials">
+    import { AudioRecorder } from "{{ url_for('static', path='/scripts/audio-recorder.js') }}";
+    import { AudioDevicesHandler } from "{{ url_for('static', path='/scripts/audio-devices-handler.js') }}";
+    import { DropdownComponent } from "{{ url_for('static', path='/scripts/dropdown-component.js') }}";
+    import { AudioVisualizer } from "{{ url_for('static', path='/scripts/audio-visualizer.js') }}";
+    import { WebSocketHandler } from "{{ url_for('static', path='/scripts/websocket-handler.js') }}";
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        // create an audio visualizer object
+        const av = new AudioVisualizer(document.getElementById("audioVisualizer"));
+
+        // global list for selected audio devices
+        let selectedAudioDevices = new Set()
+        selectedAudioDevices.add('default');
+
+        // create an audio recorder object
+        const wsAudioHandler = new WebSocketHandler("{{ session_id }}/record", async (message) => {
+
+            // do nothing
+            console.log('Message from server: ', message);
+        });
+
+        const ar = new AudioRecorder(selectedAudioDevices, wsAudioHandler);
+        ar.listenToAudioStream();
+
+        // get the audio devices from the browser
+        const audioDevicesHandler = new AudioDevicesHandler();
+        const audioDevices = await audioDevicesHandler.asyncGetAudioInputDevices();
+
+        new DropdownComponent(audioDevices, function (event) {
+            // get the event's target
+            const target = event.target;
+
+            // get the value of the target
+            const value = target.value;
+
+            // get the checked state of the target
+            const checked = target.checked;
+
+            // if audio device is selected, add it to the global storage
+            if (selectedAudioDevices.has(value)) {
+                console.log('Removing audio device: ', value);
+                selectedAudioDevices.delete(value);
+            } else {
+                console.log('Adding audio device: ', value);
+                selectedAudioDevices.add(value);
+            }
+
+            if (selectedAudioDevices.size > 0) {
+                document.getElementById("btnRecordMeeting").disabled = false;
+                document.getElementById("btnRecordMeeting").classList.remove("disabled");
+                document.getElementById("btnRecordMeeting").innerHTML = "Record Meeting";
+
+                // update the audio listener with the selected audio devices
+                ar.stopListening();
+                ar.listenToAudioStream();
+            } else {
+                console.error('No audio devices selected');
+                document.getElementById("btnRecordMeeting").disabled = true;
+                document.getElementById("btnRecordMeeting").innerHTML = "Select an audio device...";
+                document.getElementById("btnRecordMeeting").classList.add("disabled");
+
+                // stop the audio listener
+                ar.stopListening();
+            }
+        });
+
+
+        // register the event listener for buttons
+        document.getElementById("btnRecordMeeting").addEventListener("click", async () => {
+            document.getElementById("btnRecordMeeting").disabled = true;
+
+            if (ar.isRecordingVoice()) {
+                // stop recording the voice
+                ar.stopRecordingVoice();
+
+                // stop the audio listener
+                ar.stopListening();
+
+                // stop the audio visualizer
+                av.stopDrawing();
+
+                // change the recording button text and enable the dropdown
+                // document.getElementById("btnRecordMeeting").innerHTML = "Processing recording...";
+                // document.getElementById("btnRecordMeeting").classList.add("disabled");
+
+                // hide the pause/resume button
+                document.getElementById("btnPauseResumeRecording").classList.remove("showButton");
+                document.getElementById("btnPauseResumeRecording").innerHTML = "";
+
+                // show the busy progress bar
+                document.getElementById("busyProgress").style.display = "flex";
+
+                // hide the recording button
+                document.getElementById("btnRecordMeeting").style.display = "none";
+
+                // request the transcript
+                const transcript = await fetch("{{ session_id }}/transcribe", {
+                    method: 'get'
+                }).then(response => response.json()).then(data => {
+                    // if status == "success", redirect to the analysis page
+                    if (data.status == "success") {
+                        console.log('transcription was successful');
+
+                        // build redirect url
+                        const deepLink = window.location.href.split('/').slice(0, -1).join('/');
+                        window.location.href = `${deepLink}/{{ session_id }}/analyze_transcript`;
+
+                        // else redirect to the error page
+                    } else {
+                        console.error('Error in transcribing the audio');
+                        window.location.href = "{{ url_for('success') }}?deep_link=None&success=false";
+                    }
+                });
+
+
+            } else {
+                // start recording the voice
+                ar.sendAudioStreamViaWebsocket();
+
+                // change the recording button text and disable the dropdown
+                document.getElementById("btnRecordMeeting").innerHTML = "Stop, Transcribe and Analyze";
+                document.getElementById("dropdownButton").disabled = true;
+                document.getElementById("dropdownButton").style.backgroundColor = "#ccc";
+
+                // show the pause/resume button
+                document.getElementById("btnPauseResumeRecording").innerHTML = "&#x23F8;";
+                document.getElementById("btnPauseResumeRecording").classList.add("showButton");
+                document.getElementById("btnRecordMeeting").disabled = false;
+            }
+        });
+
+        document.getElementById("btnPauseResumeRecording").addEventListener("click", () => {
+            if (ar.isRecordingVoice()) {
+                ar.pauseRecordingVoice();
+                document.getElementById("btnPauseResumeRecording").innerHTML = "&#x23FA;";
+                document.getElementById("overlayRecordingPaused").classList.add("showOverlay");
+            } else {
+                ar.resumeRecordingVoice();
+                document.getElementById("btnPauseResumeRecording").innerHTML = "&#x23F8;";
+                document.getElementById("overlayRecordingPaused").classList.remove("showOverlay");
+            }
+        });
+    });
+
+</script>
+
+</html>

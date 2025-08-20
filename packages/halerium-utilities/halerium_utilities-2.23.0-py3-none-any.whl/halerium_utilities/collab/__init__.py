@@ -1,0 +1,1 @@
+from halerium_utilities.collab.collab_board import CollabBoard
