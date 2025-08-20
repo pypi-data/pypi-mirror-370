@@ -1,0 +1,14 @@
+-  **v5.3.1** - 2025/08/19 - Warning issued if time is outside the range of lookup tables for parallax or for satellites. Satellite lookup algorithm restored for unequal steps.
+-  **v5.3** - 2025/08/01 - Parallax calculation by an ephemeris table becomes default, but old Kepler calculation still available. Extension to terrestrial parallax. Input times can be given in JD or HJD. Correction of parallax calculation including light travel time. Optimizations in satellite lookup table. Sanity checks for event coordinates and satellite ephemerides tables before parallax calculations.
+-  **v5.2** - 2025/06/29 - Functions for Binary Source - Binary Lens microlensing.
+-  **v5.1.1** - 2025/06/19 - Corrected small bug in satellite parallax.
+-  **v5.1** - 2025/06/11 - Astrometry for multiple lenses.
+-  **v5.0.2** - 2025/06/10 - Minor improvement in satellite table reading. Possibility to turn off secondary source or lens.
+-  **v5.0.1** - 2025/04/30 - Default value for lens_mass_luminosity_exponent = 4.0; Small bug corrected in BinSourceAstroLightCurveXallarap
+-  **v5.0** - 2025/04/14 - Revision and correction of ghost image test and safety distance from planetary caustics. Incorporation of optimizations for high.mag events by Jiyuan Zhang. Revision of the BinaryMagSafe. Introduction of the function MultiMag2, including tree-decision between point-source and extended source (not available for nopoly); Fail-safe magnification calculations against irreducible numerical errors; Limb darkening for multiple lenses. Functions for astrometric trajectories of sources and lenses; old light curve functions now call new functions. Image contours are now directly available in Python.
+-  **v4.2.1** - 2025/2/6 - Parabolic correction set back to arithmetic mean
+-  **v4.2** - 2025/1/19 - Change installation from setuptools to scikit-build-core. ESPL table automatically set on import and loaded when needed. New coefficients for polynomial in Binary Lensing; Polynomial roots are calculated after sorting from smallest to largest; Old parabolic correction calculated with harmonic mean; Contours with too large theoretical error are recalculated at different radii.
+-  **v4.1.2** - 2024/11/22 - Bug corrected in TripleLightCurve for far sources.
+-  **v4.1.1** - 2024/10/14 - Bug corrected in Keplerian orbit calculation; TriplLightCurveParallax included also for single-time calculation.
+-  **v4.1** - 2024/09/28 - All functions collected in only one file VBMicrolensingLibrary; Factor 3 speed-up due to inline complex functions and optimizations in polynomial calculations; Increased stability for high-mag calculations with new patch in BinaryMagSafe.
+-  **v4.0** - 2024/07/10 - First release
