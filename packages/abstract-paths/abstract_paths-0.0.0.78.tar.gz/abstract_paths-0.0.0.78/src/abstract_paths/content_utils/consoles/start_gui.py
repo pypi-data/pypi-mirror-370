@@ -1,0 +1,4 @@
+from finderConsole import *
+
+
+startReactFinderShell()
