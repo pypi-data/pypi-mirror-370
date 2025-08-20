@@ -1,0 +1,155 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en"
+      xmlns:tal="http://xml.zope.org/namespaces/tal"
+      xmlns:metal="http://xml.zope.org/namespaces/metal"
+      xmlns:i18n="http://xml.zope.org/namespaces/i18n"
+      lang="en"
+      metal:use-macro="context/@@main_template/macros/master"
+      i18n:domain="plone">
+<body>
+
+<metal:main fill-slot="content-core">
+<metal:content-core define-macro="content-core">
+<tal:def tal:define="items view/items;">
+  <tal:if tal:define="show_section python: can_edit_sections or items"
+          tal:condition="show_section">
+    <metal:macro use-macro="context/@@sections_macros/section_edition" />
+  </tal:if>
+
+  <div class="container section-container"
+       id=""
+       tal:define="images_orientation context/orientation | nothing;
+                   orientation_class python:images_orientation and f'display-{images_orientation}' or ''"
+       tal:attributes="id string:container-section-${context/id};
+                       class string:container section-container ${orientation_class}">
+
+  <tal:if tal:define="show_section python: can_edit_sections or items"
+          tal:condition="show_section">
+  <div class=""
+     tal:define="nb_class string:nb-items-batch-${context/nb_results_by_batch};"
+     tal:attributes="class nb_class">
+
+    <metal:macro use-macro="context/@@sections_macros/section_title" />
+
+    <p tal:replace="structure context/@@description" />
+
+    <div tal:define="collapse_klass python: 'collapse' if context.collapsible_section else ''"
+         tal:attributes="class string:body-section ${collapse_klass};
+                         id string:body-section-${context/id}">
+
+      <tal:if tal:condition="items">
+
+        <ul class="row"
+            tal:define="only_one_item python: len(sum(items, [])) == 1;
+                        bs_col python: 12 // context.nb_results_by_batch"
+            tal:omit-tag="only_one_item">
+
+          <tal:bcl tal:repeat="batch items">
+
+              <li class="row"
+                  tal:omit-tag="only_one_item"
+                  tal:repeat="item batch"
+                  tal:attributes="class string:col-md-${bs_col}">
+                  <div tal:define="item_has_icon item/has_icon | nothing;
+                                   item_has_image item/has_image;
+                                   no_icon_no_image python:not item_has_image and not item_has_icon;
+                                   smartweb_icons python:context.restrictedTraverse('@@smartwebiconresolver');
+                                   show_lead_image python:getattr(context, 'show_items_lead_image', True);
+                                   portal context/@@plone_portal_state/portal;
+                                   open_in_new_tab python:view.open_in_new_tab(item);"
+                        tal:attributes="class string:table_display ${item/container_id | nothing} ${item/smartweb_type | nothing};"
+                      >
+                      <a tal:attributes="class python:'table_image no-image' if no_icon_no_image else 'table_image';
+                                         title python:view.a_tag_item_title(item);
+                                         href python:view.retrieve_item_url(item);
+                                         target python:'_blank' if (open_in_new_tab and not can_edit_sections) else '';">
+                        <tal:if tal:condition="show_lead_image">
+                            <div class="image d-block is-icon w-100"
+                                 tal:condition="item_has_icon">
+                              <tal:icon tal:replace="structure python:smartweb_icons.tag(item['icon'])" />
+                            </div>
+                            <div class="image d-block is-image w-100"
+                                 tal:condition="python: item_has_image and not item_has_icon"
+                                 tal:attributes="style string:background-image:url(${item/image});
+                                                 class python:'image d-block is-image w-100 {}'.format('bad_scale' if item.get('bad_scale') else '')">
+                              <span tal:condition="python:not view.is_anonymous and item.get('bad_scale')"
+                                    i18n:translate="">Bad scale</span>
+                            </div>
+                            <div class="image d-block w-100"
+                                 tal:condition="no_icon_no_image">
+                              <!-- Empty placeholder tag -->
+                            </div>
+                        </tal:if>
+
+                        <div class="table_category"
+                             tal:condition="item/category | nothing">
+                          <span tal:content="item/category" />
+                        </div>
+
+                        <div class="table_date"
+                             tal:condition="context/show_items_date | context/has_publications | nothing">
+                          <tal:if tal:condition="item/effective | nothing">
+                            <span i18n:translate="">Published</span>
+                            <span class="pat-display-time"
+                                  data-pat-display-time="from-now: true"
+                                  tal:attributes="datetime python:view.datetime_format(item)"/>
+                          </tal:if>
+                          <tal:if tal:condition="item/event_date | nothing">
+                            <tal:def tal:define="event_date item/event_date">
+                              <metal:macro use-macro="context/@@macros/event_date" />
+                            </tal:def>
+                          </tal:if>
+                          <tal:if tal:condition="item/publication_datetime | nothing">
+                            <span class="publication_datetime" tal:content="python:view.datetime_format(item,'publication_datetime')"/>
+                          </tal:if>
+                        </div>
+                        <div tal:condition="view/display_container_title"
+                             class="auth_source_container_title"
+                             tal:content="item/container_title | nothing">
+                        </div>
+                        <div class="table_title">
+                          <span tal:content="item/title" />
+                        </div>
+
+                        <div class="table_description"
+                             tal:condition="context/show_items_description | nothing">
+                          <p tal:content="item/description" />
+                        </div>
+
+                        <div class="item_infos"
+                             tal:condition="item/item_infos | nothing"
+                             tal:content="item/item_infos"/>
+                      </a>
+                  <!-- publication : attached file-->
+                    <a 
+                    class="publication_attached_file"
+                    tal:condition="item/publication_attached_file | nothing"
+                    tal:attributes="href item/publication_attached_file/download"
+                        tal:content="item/publication_attached_file/filename"
+                        target="_blank" ></a>
+
+                  </div>
+              </li>
+
+          </tal:bcl>
+
+        </ul>
+
+        <div class="see_all"
+             tal:condition="context/link_text | nothing">
+           <a href="#"
+              tal:attributes="href view/see_all_url"
+              tal:content="context/link_text"></a>
+        </div>
+
+      </tal:if>
+
+    </div>
+  </div>
+  </tal:if>
+  </div>
+</tal:def>
+</metal:content-core>
+</metal:main>
+
+</body>
+</html>
