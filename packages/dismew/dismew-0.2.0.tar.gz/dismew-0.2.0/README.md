@@ -1,0 +1,84 @@
+# Dismew
+
+A debugger for Logstash's Grok parsing language. Supports all ecs-v1 patterns (AWS, Java, Firewalls, etc.) listed [here](https://github.com/logstash-plugins/logstash-patterns-core/tree/main/patterns/ecs-v1). This is suitable solution to those who have a more terminal-centric workflow in their work, you can e.g. create a shortcut to launch the program from you editor, as if it were part of it.
+
+## Installation
+
+Use [Pipx](https://pipx.pypa.io/latest/installation/) to run it in an isolated environment (recommended)
+
+```bash
+pipx install dismew
+```
+
+or with pip
+
+```bash
+pip install dismew
+```
+
+## Example
+
+![example-v0.1.0](https://codeberg.org/spuzkov/dismew/raw/branch/main/examples/dismew-v0.1.0-example.png)
+
+## Things I that need completion before V1 can be released
+
+- [ ] Add pattern suggestions
+
+- [ ] Faster everything
+
+- [ ] Highlighting for matches
+
+- [x] Support both full matching and partial
+
+- [ ] Allow to continue from previous state, meaning pattern, sample and outcome stay as they were on program launch.
+
+- [ ] Display hints on how to fix broken pattern
+
+- [ ] Documentation on patterns with examples, so that user can easily check what patterns suits their usecase.
+
+## Develop
+
+Project management is with [Hatch](https://hatch.pypa.io/1.12/).
+
+Clone this repository
+
+```bash
+git clone https://codeberg.org/spuzkov/dismew.git
+cd dismew
+```
+
+Create an environment
+
+```bash
+hatch env create
+```
+
+Attach to the environment
+
+```bash
+hatch shell
+```
+
+Open new terminal window/pane/tab for debugging, and run
+
+```bash
+textual console
+```
+
+Run in debugging mode
+
+```bash
+textual run --dev /src/dismew/app.py
+```
+
+## Contributing
+
+All contributions are welcome (except those that have been made with LLMs).
+Please respect this request of **not** contributing generated code.
+
+### What ways you can contribute
+
+- Write issues
+- Create feature requests
+- Write code
+- Anything you can think of really
