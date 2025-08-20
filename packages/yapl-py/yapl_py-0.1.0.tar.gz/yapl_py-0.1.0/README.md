@@ -1,0 +1,65 @@
+# yapl-py
+
+Python port of YAPL (Yet Another Prompt Language) renderer.
+
+## Installation
+
+- From PyPI (once published):
+  pip install yapl-py
+
+- From source (editable):
+  pip install -e .
+
+## Usage
+
+See tests in `tests/` for examples of loading and rendering templates programmatically.
+
+Basic example:
+
+```python
+from yapl_py import YAPL, YAPLOptions, WhitespaceOptions
+
+yapl = YAPL(YAPLOptions(
+    baseDir="/path/to/prompts",
+    strictPaths=True,
+    whitespace=WhitespaceOptions(trimBlocks=True, lstripBlocks=True, dedentBlocks=True),
+))
+
+prompt = yapl.render("prompts/examples/conditional-agent.md.yapl", {
+    "user_type": "expert",
+    "domain": "TypeScript",
+    "include_examples": True,
+})
+print(prompt.content)
+```
+
+## Development
+
+- Run tests:
+  pytest -q
+
+- Build the package locally:
+  python -m pip install build
+  python -m build
+
+Artifacts will be generated under `dist/`.
+
+## Releasing to PyPI
+
+This repository includes a GitHub Actions workflow at `.github/workflows/publish.yml` that builds and publishes the package to PyPI when you push a Git tag that starts with `v` (for example, `v0.1.0`).
+
+Steps:
+1) Create a PyPI API token (User settings -> API tokens) with project-wide or scoped permissions.
+2) In your GitHub repository settings, add a repository secret named `PYPI_API_TOKEN` and paste the token value.
+3) Create and push a tag:
+   git tag v0.1.0
+   git push origin v0.1.0
+
+The workflow will:
+- Check out the repository
+- Build sdist and wheel
+- Publish to PyPI using `pypa/gh-action-pypi-publish`
+
+## License
+
+Specify your license here, e.g. MIT.
