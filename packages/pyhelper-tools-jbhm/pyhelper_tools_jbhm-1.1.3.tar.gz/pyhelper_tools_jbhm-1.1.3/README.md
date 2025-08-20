@@ -1,0 +1,99 @@
+# Helper Library
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/pyhelper-tools-jbhm?style=for-the-badge&label=PyPI&color=blue)](https://pypi.org/project/pyhelper-tools-jbhm/)
+[![es](https://img.shields.io/badge/lang-es-yellow.svg)](README.es.md)
+[![fr](https://img.shields.io/badge/lang-fr-blue.svg)](README.fr.md)
+[![de](https://img.shields.io/badge/lang-de-green.svg)](README.de.md)
+[![ru](https://img.shields.io/badge/lang-ru-purple.svg)](README.ru.md)
+[![tr](https://img.shields.io/badge/lang-tr-orange.svg)](README.tr.md)
+[![zh](https://img.shields.io/badge/lang-zh-black.svg)](README.zh.md)
+[![it](https://img.shields.io/badge/lang-it-lightgrey.svg)](README.it.md)
+[![pt](https://img.shields.io/badge/lang-pt-brightgreen.svg)](README.pt.md)
+[![sv](https://img.shields.io/badge/lang-sv-blue.svg)](README.sv.md)
+
+## 📖 Overview
+
+PyHelper is a comprehensive Python toolkit designed to simplify common data handling, visualization, and utility tasks. It provides:
+
+- Statistical analysis functions
+- Data visualization tools
+- File handling utilities
+- Syntax checking capabilities
+- Multi-language support
+
+## ✨ Features
+
+### 📊 Data Visualization
+
+- Horizontal/vertical bar charts (`hbar`, `vbar`)
+- Pie charts (`pie`)
+- Box plots (`boxplot`)
+- Histograms (`histo`)
+- Heatmaps (`heatmap`)
+- Data tables (`table`)
+
+### 📈 Statistical Analysis
+
+- Central tendency measures (`get_media`, `get_median`, `get_moda`)
+- Dispersion measures (`get_rank`, `get_var`, `get_desv`)
+- Data normalization (`normalize`)
+- Conditional column creation (`conditional`)
+
+### 🛠 Utilities
+
+- File search and loading (`call`)
+- Enhanced switch-case system (`Switch`, `AsyncSwitch`)
+- Syntax checking (`PythonFileChecker`, `check_syntax`)
+- Multi-language support (`set_language`, `t`)
+- Help system (`help`)
+
+## 🌍 Multi-language Support
+
+The library supports multiple languages. Change the language with:
+
+```python
+from helper import set_language
+
+set_language("en")  # English
+set_language("es")  # Spanish
+set_language("fr")  # French
+set_language("de")  # German
+set_language("ru")  # Russian
+set_language("tr")  # Turkish
+set_language("zh")  # Chinese
+set_language("it")  # Italian
+set_language("pt")  # Portuguese
+set_language("sv")  # Swedish
+```
+
+You can also add your own translations by creating a lang.json file and using the load_user_translations() function:
+
+```python
+from helper import load_user_translations
+
+# Load custom translations from lang.json (default path)
+load_user_translations()
+
+# Or specify a custom path
+load_user_translations("path/to/your/translations.json")
+```
+
+Example lang.json structure:
+
+```json
+{
+    "your_key": {
+    "en": "English translation",
+    "es": "Spanish translation",
+    "fr": "French translation",
+    "de": "German translation",
+    "ru": "Russian translation",
+    "tr": "Turkish translation",
+    "zh": "Chinese translation",
+    "it": "Italian translation",
+    "pt": "Portuguese translation",
+    "sv": "Swedish translation"
+  }
+}
+```
