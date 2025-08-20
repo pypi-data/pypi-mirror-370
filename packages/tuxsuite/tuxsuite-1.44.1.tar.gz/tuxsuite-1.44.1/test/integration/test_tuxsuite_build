@@ -1,0 +1,52 @@
+#!/bin/sh
+
+. ${0%/*}/test_helper.sh
+
+tuxsuite_build="tuxsuite build --git-repo https://github.com/torvalds/linux.git --git-ref master --target-arch arm64 --kconfig defconfig --toolchain gcc-9"
+
+test_build_pass() {
+    api_v1 --build-failure-rate=0
+    run ${tuxsuite_build}
+    assertEquals 0 "$status"
+}
+
+test_build_fail() {
+    api_v1 --build-failure-rate=100
+    run ${tuxsuite_build}
+    assertEquals 1 "$status"
+}
+
+test_build_pass_download() {
+    api_v1 --build-failure-rate=0
+    run ${tuxsuite_build} --download
+    assertEquals 0 "$status"
+    assertTrue "test -f */status.json"
+    assertTrue "test -f */kernel.config"
+    assertTrue "test -f */zImage"
+}
+
+test_build_fail_show_logs() {
+    api_v1 --build-failure-rate=100
+    run ${tuxsuite_build} --show-logs
+    assertEquals 1 "$status"
+    assertTrue 'prints build log' 'echo "${output}" | grep -q error:'
+}
+
+test_build_fail_show_logs_only_on_failure() {
+    api_v1 --build-failure-rate=0 --build-warnings-rate=0
+    run ${tuxsuite_build} --show-logs
+    assertEquals 0 "$status"
+    assertFalse 'does not print build log' 'echo "${output}" | grep -q "log line"'
+}
+
+test_retry_on_infrastructure_error() {
+    api_v1 --infrastructure-failure-rate=100
+    run ${tuxsuite_build}
+    assertEquals 1 "$status"
+    assertTrue 'retries' 'echo "${output}" | grep -c "retrying (attempt 2/3)"'
+    assertTrue 'retries' 'echo "${output}" | grep -c "retrying (attempt 3/3)"'
+    assertEquals 'retries/queued' 3 "$(echo "${output}" | grep -c "Queued:")"
+    assertEquals 'retries/building' 3 "$(echo "${output}" | grep -c "Building:")"
+}
+
+. shunit2

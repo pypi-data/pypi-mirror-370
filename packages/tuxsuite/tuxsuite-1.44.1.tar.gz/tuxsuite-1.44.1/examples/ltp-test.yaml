@@ -1,0 +1,38 @@
+fragments: &fragments
+  - &frag-base https://gitlab.com/Linaro/lkft/kernel-fragments/-/raw/main/lkft.config
+  - &frag-crypto https://gitlab.com/Linaro/lkft/kernel-fragments/-/raw/main/lkft-crypto.config
+  - &frag-distro https://gitlab.com/Linaro/lkft/kernel-fragments/-/raw/main/distro-overrides.config
+  - &frag-systemd https://gitlab.com/Linaro/lkft/kernel-fragments/-/raw/main/systemd.config
+  - &frag-virtio https://gitlab.com/Linaro/lkft/kernel-fragments/-/raw/main/virtio.config
+
+# debian rootfs
+rootfs-debian-testing-arm64: &rootfs-debian-testing-arm64 https://storage.tuxboot.com/debian/bookworm/arm64/rootfs.ext4.xz
+rootfs-debian-testing-x86_64: &rootfs-debian-testing-x86_64 https://storage.tuxboot.com/debian/bookworm/amd64/rootfs.ext4.xz
+
+# LTP Overlays
+ltp-debian-bookworm-arm64: &ltp-debian-bookworm-arm64 https://storage.tuxboot.com/overlays/debian/bookworm/arm64/ltp/20230929/ltp.tar.xz
+ltp-debian-bookworm-x86_64: &ltp-debian-bookworm-x86_64 https://storage.tuxboot.com/overlays/debian/bookworm/amd64/ltp/20230929/ltp.tar.xz
+
+boot-timeout-arm64: &boot-timeout-arm64 30
+boot-timeout-x86: &boot-timeout-x86 15
+
+ltp-smoke-timeout: &ltp-smoke-timeout 15
+
+version: 1
+name: Build kernel and run LTP tests.
+description: Build and test linux kernel with LTP's suites
+jobs:
+- name: arm64-tests
+  builds:
+    - build_name: gcc-13-build
+      target_arch: arm64
+      toolchain: gcc-13
+      kconfig: [ defconfig, *frag-base, *frag-crypto, *frag-distro, *frag-systemd, *frag-virtio, CONFIG_SYN_COOKIES=y, CONFIG_SCHEDSTATS=y ]
+  tests:
+    - device: qemu-arm64
+      boot_args: rw
+      parameters: {SKIPFILE: "skipfile-lkft.yaml"}
+      rootfs: *rootfs-debian-testing-arm64
+      overlay: [ *ltp-debian-bookworm-arm64 ]
+      tests: [ltp-smoke]
+      timeouts: { "boot": *boot-timeout-arm64, "ltp-smoke": *ltp-smoke-timeout }

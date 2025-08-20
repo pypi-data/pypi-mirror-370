@@ -1,0 +1,33 @@
+fragments: &fragments
+  - &frag-systemd https://gitlab.com/Linaro/lkft/kernel-fragments/-/raw/main/systemd.config
+
+# debian rootfs
+rootfs-debian-testing-arm64: &rootfs-debian-testing-arm64 https://storage.tuxboot.com/debian/bookworm/arm64/rootfs.ext4.xz
+rootfs-debian-testing-x86_64: &rootfs-debian-testing-x86_64 https://storage.tuxboot.com/debian/bookworm/amd64/rootfs.ext4.xz
+
+boot-timeout-arm64: &boot-timeout-arm64 30
+boot-timeout-x86: &boot-timeout-x86 15
+
+kselftest-arm64-timeout: &kselftest-arm64-timeout 60
+
+version: 1
+name: Build kernel and kselftest.
+description: Build and test linux kernel with kselftest-arm64 suite
+jobs:
+- name: arm64-gcc-config-kselftest
+  builds:
+    - build_name: clang-gcc-kselftest
+      target_arch: arm64
+      toolchain: gcc-13
+      make_variables:
+        TARGETS: arm64
+      targets: ["dtbs", "headers", "kernel", "kselftest", "modules"]
+      kconfig: [ defconfig, *frag-systemd ]
+  tests:
+    - device: qemu-arm64
+      boot_args: rw
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", KSELFTEST: "$BUILD/kselftest.tar.xz"}
+      rootfs: *rootfs-debian-testing-arm64
+      tests: [kselftest-arm64]
+      sharding: 4
+      timeouts: { "boot": *boot-timeout-arm64, "kselftest-arm64": *kselftest-arm64-timeout }

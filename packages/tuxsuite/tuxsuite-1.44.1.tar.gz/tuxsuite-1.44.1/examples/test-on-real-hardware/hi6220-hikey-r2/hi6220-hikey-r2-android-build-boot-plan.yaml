@@ -1,0 +1,29 @@
+# tuxsuite plan submit --git-repo https://gitlab.com/ltsk/kernels/hikey-4.4.git --git-ref lts-4.4.y-hikey hi6220-hikey-r2-android-build-boot-plan.yaml --lab https://lkft.validation.linaro.org --lava-test-plans-project lkft-android
+
+lkftfragments: &lkftfragments
+  - &frag-lkft-base https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft.config
+  - &frag-lkft-crypto https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft-crypto.config
+  - &frag-lkft-distro https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/distro-overrides.config
+  - &frag-lkft-systemd https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/systemd.config
+  - &frag-lkft-virtio https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/virtio.config
+
+version: 1
+name: hi6220-hikey-r2 build and boot test.
+description: Demonstrate a build and boot test with hi6220-hikey via real hardware
+jobs:
+- name: arm64-lkftconfig-dut
+  builds:
+    - build_name: gcc-8-lkftconfig
+      target_arch: arm64
+      toolchain: gcc-8
+      kconfig: [ defconfig, *frag-lkft-base, *frag-lkft-crypto, *frag-lkft-distro, *frag-lkft-systemd, *frag-lkft-virtio, CONFIG_ARM64_MODULE_PLTS=y,CONFIG_SYN_COOKIES=y, CONFIG_SCHEDSTATS=y, CONFIG_RCU_TORTURE_TEST=m ]
+  tests:
+    - device: hi6220-hikey-r2
+      lava_test_plans_project: lkft-android
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      parameters:
+        DEPLOY_OS: oe
+        BOOT_URL: https://storage.tuxsuite.com/public/demo/demo/oebuilds/2WytESnvvT4tODlAGWvBEs64BvB/images/hikey/boot-0.0+AUTOINC+2d8c108bf0-ed8112606c-r0-hikey-20231019120011.uefi.img
+      dtb: hisilicon/hi6220-hikey.dtb
+      rootfs: https://storage.tuxsuite.com/public/demo/demo/oebuilds/2WytESnvvT4tODlAGWvBEs64BvB/images/hikey/rpb-console-image-lkft-hikey-20231019120011.rootfs.ext4.gz

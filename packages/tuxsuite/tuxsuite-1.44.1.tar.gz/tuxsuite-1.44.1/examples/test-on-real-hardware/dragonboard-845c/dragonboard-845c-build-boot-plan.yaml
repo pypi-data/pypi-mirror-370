@@ -1,0 +1,27 @@
+# tuxsuite plan submit dragonboard-845c-build-boot-plan.yaml --lab https://lkft.validation.linaro.org --lava-test-plans-project lkft
+
+lkftfragments: &lkftfragments
+  - &frag-lkft-base https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft.config
+  - &frag-lkft-crypto https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft-crypto.config
+  - &frag-lkft-distro https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/distro-overrides.config
+  - &frag-lkft-systemd https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/systemd.config
+  - &frag-lkft-virtio https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/virtio.config
+
+version: 1
+name: dragonboard-845c build and boot test.
+description: Demonstrate a build and boot test with dragonboard-845c via real hardware
+jobs:
+- name: arm-lkftconfig-dut
+  builds:
+    - build_name: gcc-11-lkftconfig
+      target_arch: arm64
+      toolchain: gcc-11
+      kconfig: [ defconfig, *frag-lkft-base, *frag-lkft-crypto, *frag-lkft-distro, *frag-lkft-systemd, *frag-lkft-virtio, CONFIG_ARM64_MODULE_PLTS=y, CONFIG_SYN_COOKIES=y, CONFIG_SCHEDSTATS=y ]
+  tests:
+    - device: dragonboard-845c
+      lava_test_plans_project: lkft-android
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      parameters: {DEPLOY_OS: "debian"}
+      dtb: qcom/sdm845-db845c.dtb
+      rootfs: https://storage.tuxboot.com/debian/20230714/bookworm/arm64/rootfs.ext4.xz

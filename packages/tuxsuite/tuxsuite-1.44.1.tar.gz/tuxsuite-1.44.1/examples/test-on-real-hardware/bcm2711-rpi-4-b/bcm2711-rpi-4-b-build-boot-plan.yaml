@@ -1,0 +1,27 @@
+# tuxsuite plan submit bcm2711-rpi-4-b-build-boot-plan.yaml --lab https://lkft.validation.linaro.org --lava-test-plans-project lkft
+
+lkftfragments: &lkftfragments
+  - &frag-lkft-base https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft.config
+  - &frag-lkft-crypto https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft-crypto.config
+  - &frag-lkft-distro https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/distro-overrides.config
+  - &frag-lkft-systemd https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/systemd.config
+  - &frag-lkft-virtio https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/virtio.config
+
+version: 1
+name: bcm2711-rpi-4-b build and boot test.
+description: Demonstrate a build and boot test with bcm2711-rpi-4-b via real hardware
+jobs:
+- name: bcm2711-rpi-4-b-build
+  builds:
+    - build_name: gcc-11-lkftconfig
+      target_arch: arm64
+      toolchain: gcc-11
+      kconfig: [ defconfig, *frag-lkft-base, *frag-lkft-crypto, *frag-lkft-distro, *frag-lkft-systemd, *frag-lkft-virtio, CONFIG_ARM64_MODULE_PLTS=y, CONFIG_SYN_COOKIES=y, CONFIG_SCHEDSTATS=y ]
+  tests:
+    - device: bcm2711-rpi-4-b
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      parameters: {DEPLOY_OS: "debian"}
+      dtb: broadcom/bcm2711-rpi-4-b.dtb
+      rootfs: https://storage.tuxboot.com/debian/20230714/bookworm/arm64/rootfs.tar.xz

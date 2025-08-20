@@ -1,0 +1,292 @@
+# tuxsuite plan submit x15-build-ltp-plan.yaml --lab https://lkft.validation.linaro.org --lava-test-plans-project lkft
+
+lkftfragments: &lkftfragments
+  - &frag-lkft-base https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft.config
+  - &frag-lkft-crypto https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/lkft-crypto.config
+  - &frag-lkft-distro https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/distro-overrides.config
+  - &frag-lkft-systemd https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/systemd.config
+  - &frag-lkft-virtio https://raw.githubusercontent.com/Linaro/meta-lkft/kirkstone/meta/recipes-kernel/linux/files/virtio.config
+
+rootfs-debian-testing-arm: &rootfs-debian-testing-arm https://storage.tuxboot.com/debian/bookworm/armhf/rootfs.ext4.xz
+
+ltp-debian-bookworm-arm: &ltp-debian-bookworm-arm https://storage.tuxboot.com/overlays/debian/bookworm/armhf/ltp/20230516/ltp.tar.xz
+
+boot-timeout-arm: &boot-timeout-arm 30
+
+ltp-commands-timeout: &ltp-commands-timeout 40
+ltp-containers-timeout: &ltp-containers-timeout 25
+ltp-controllers-timeout: &ltp-controllers-timeout 80
+ltp-crypto-timeout: &ltp-crypto-timeout 30
+ltp-cve-timeout: &ltp-cve-timeout 50
+ltp-fs_bind-timeout: &ltp-fs_bind-timeout 40
+ltp-fs-timeout: &ltp-fs-timeout 40
+ltp-fs_perms_simple-timeout: &ltp-fs_perms_simple-timeout 10
+ltp-fsx-timeout: &ltp-fsx-timeout 10
+ltp-hugetlb-timeout: &ltp-hugetlb-timeout 20
+ltp-math-timeout: &ltp-math-timeout 50
+ltp-mm-timeout: &ltp-mm-timeout 40
+ltp-pty-timeout: &ltp-pty-timeout 10
+ltp-sched-timeout: &ltp-sched-timeout 30
+ltp-syscalls-timeout: &ltp-syscalls-timeout 50
+ltp-tracing-timeout: &ltp-tracing-timeout 30
+ltp-smoke-timeout: &ltp-smoke-timeout 10
+
+version: 1
+name: x15 build and ltp tests.
+description: Demonstrate a build and ltp tests with x15 via real hardware
+jobs:
+- name: arm-lkftconfig-ltp
+  builds:
+    - build_name: gcc-12-lkftconfig
+      target_arch: arm
+      toolchain: gcc-12
+      kconfig: [ defconfig, *frag-lkft-base, *frag-lkft-crypto, *frag-lkft-distro, *frag-lkft-systemd, *frag-lkft-virtio, CONFIG_ARM_TI_CPUFREQ=y, CONFIG_SERIAL_8250_OMAP=y, CONFIG_POSIX_MQUEUE=y, CONFIG_OF=y, CONFIG_SYN_COOKIES=y, CONFIG_SCHEDSTATS=y, CONFIG_AHCI_DWC=y, CONFIG_KFENCE=n ]
+  tests:
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-cap_bounds]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-commands]
+      sharding: 4
+      timeouts: { "boot": *boot-timeout-arm, "ltp-commands": *ltp-commands-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-containers]
+      timeouts: { "boot": *boot-timeout-arm, "ltp-containers": *ltp-containers-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-crypto]
+      timeouts: { "boot": *boot-timeout-arm, "ltp-crypto": *ltp-crypto-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-cve]
+      sharding: 10
+      timeouts: { "boot": *boot-timeout-arm, "ltp-cve": *ltp-cve-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-filecaps]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-fs]
+      sharding: 6
+      timeouts: { "boot": *boot-timeout-arm, "ltp-fs": *ltp-fs-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-hugetlb]
+      timeouts: { "boot": *boot-timeout-arm, "ltp-hugetlb": *ltp-hugetlb-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-io]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-ipc]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-math]
+      sharding: 4
+      timeouts: { "boot": *boot-timeout-arm, "ltp-math": *ltp-math-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-mm]
+      sharding: 6
+      timeouts: { "boot": *boot-timeout-arm, "ltp-mm": *ltp-mm-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-pty]
+      timeouts: { "boot": *boot-timeout-arm, "ltp-pty": *ltp-pty-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-sched]
+      sharding: 4
+      timeouts: { "boot": *boot-timeout-arm, "ltp-sched": *ltp-sched-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-securebits]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-syscalls]
+      sharding: 10
+      timeouts: { "boot": *boot-timeout-arm, "ltp-syscalls": *ltp-syscalls-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-tracing]
+      sharding: 4
+      timeouts: { "boot": *boot-timeout-arm, "ltp-tracing": *ltp-tracing-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-controllers]
+      sharding: 10
+      timeouts: { "boot": *boot-timeout-arm, "ltp-controllers": *ltp-controllers-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-fcntl-locktests]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-fs_bind]
+      sharding: 5
+      timeouts: { "boot": *boot-timeout-arm, "ltp-fs_bind": *ltp-fs_bind-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-fs_perms_simple]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-fsx]
+      timeouts: { "boot": *boot-timeout-arm, "ltp-fsx": *ltp-fsx-timeout }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-nptl]
+      timeouts: { "boot": *boot-timeout-arm }
+    - device: x15
+      lava_test_plans_project: lkft
+      lab: https://lkft.validation.linaro.org
+      boot_args: rw
+      dtb: am57xx-beagle-x15.dtb
+      parameters: {SKIPFILE: "skipfile-lkft.yaml", DEPLOY_OS: "debian"}
+      rootfs: *rootfs-debian-testing-arm
+      overlay: [ *ltp-debian-bookworm-arm ]
+      tests: [ltp-smoke]
+      timeouts: { "boot": *boot-timeout-arm, "ltp-smoke": *ltp-smoke-timeout }
