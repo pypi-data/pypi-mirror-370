@@ -1,0 +1,173 @@
+from .domain import (
+    Size,
+    Dimension,
+    Video,
+    VideoProperties,
+    VideoSourceType,
+    RgbColor,
+    Color,
+    ThemeColorType,
+    SolidFill,
+    ShapeBackgroundFill,
+    OutlineFill,
+    Weight,
+    Outline,
+    DashStyle,
+    ShadowTransform,
+    BlurRadius,
+    Shadow,
+    ShadowType,
+    RectanglePosition,
+    CropProperties,
+    ColorStop,
+    RecolorName,
+    Recolor,
+    ImageProperties,
+    PropertyState,
+    StretchedPictureFill,
+    PageBackgroundFill,
+    PredefinedLayout,
+    ColorScheme,
+    ThemeColorPair,
+    Line,
+    LineProperties,
+    WordArt,
+    SheetsChart,
+    SheetsChartProperties,
+    SpeakerSpotlight,
+    SpeakerSpotlightProperties,
+    Group,
+    Unit,
+    AffineTransform,
+)
+from .text import AutoText, AutoTextType, ShapeProperties, TextElement
+from .presentation import Presentation
+from .page.page import (
+    Layout,
+    LayoutProperties,
+    Master,
+    MasterProperties,
+    NotesMaster,
+    Page,
+)
+from .page.slide import Slide
+from .page.notes import Notes, NotesProperties
+from .page.slide_properties import SlideProperties
+from .page.base import BasePage, PageProperties, PageType
+from .element.base import ElementKind
+from .client import initialize_credentials, GoogleAPIClient
+from .request.request import (
+    CreateParagraphBulletsRequest,
+    InsertTextRequest,
+    UpdateTextStyleRequest,
+    DeleteTextRequest,
+    CreateShapeRequest,
+    UpdateShapePropertiesRequest,
+    UpdateImagePropertiesRequest,
+    ReplaceImageRequest,
+    CreateSlideRequest,
+    UpdateSlidePropertiesRequest,
+    UpdateSlidesPositionRequest,
+    UpdatePagePropertiesRequest,
+    DeleteObjectRequest,
+    DuplicateObjectRequest,
+)
+from .request.domain import Range, RangeType, TableCellLocation
+
+from ._version import __version__, __version_info__
+
+__all__ = [
+    # Version info
+    "__version__",
+    "__version_info__",
+    "GoogleAPIClient",
+    # Domain objects
+    "Size",
+    "Dimension",
+    "TextElement",
+    "Video",
+    "VideoProperties",
+    "VideoSourceType",
+    "RgbColor",
+    "Color",
+    "ThemeColorType",
+    "SolidFill",
+    "ShapeBackgroundFill",
+    "OutlineFill",
+    "Weight",
+    "Outline",
+    "DashStyle",
+    "ShadowTransform",
+    "BlurRadius",
+    "Shadow",
+    "ShadowType",
+    "RectanglePosition",
+    "ShapeProperties",
+    "CropProperties",
+    "ColorStop",
+    "RecolorName",
+    "Recolor",
+    "ImageProperties",
+    "PropertyState",
+    "StretchedPictureFill",
+    "PageBackgroundFill",
+    "AutoText",
+    "AutoTextType",
+    "PredefinedLayout",
+    "ColorScheme",
+    "ThemeColorPair",
+    "Line",
+    "LineProperties",
+    "WordArt",
+    "SheetsChart",
+    "SheetsChartProperties",
+    "SpeakerSpotlight",
+    "SpeakerSpotlightProperties",
+    "Group",
+    "Unit",
+    "AffineTransform",
+    # Presentation
+    "Presentation",
+    # Pages
+    "Layout",
+    "LayoutProperties",
+    "Master",
+    "MasterProperties",
+    "NotesMaster",
+    "Page",
+    "Notes",
+    "NotesProperties",
+    "Slide",
+    "SlideProperties",
+    "BasePage",
+    "PageProperties",
+    "PageType",
+    # Elements
+    "ElementKind",
+    # Client
+    "initialize_credentials",
+    # Requests
+    "CreateParagraphBulletsRequest",
+    "InsertTextRequest",
+    "UpdateTextStyleRequest",
+    "DeleteTextRequest",
+    "CreateShapeRequest",
+    "UpdateShapePropertiesRequest",
+    "UpdateImagePropertiesRequest",
+    "ReplaceImageRequest",
+    "CreateSlideRequest",
+    "UpdateSlidePropertiesRequest",
+    "UpdateSlidesPositionRequest",
+    "UpdatePagePropertiesRequest",
+    "DeleteObjectRequest",
+    "DuplicateObjectRequest",
+    "Range",
+    "RangeType",
+    "TableCellLocation",
+]
+
+# Rebuild models to resolve forward references after all imports
+UpdateSlidePropertiesRequest.model_rebuild()
+UpdatePagePropertiesRequest.model_rebuild()
+UpdateShapePropertiesRequest.model_rebuild()
+UpdateImagePropertiesRequest.model_rebuild()
