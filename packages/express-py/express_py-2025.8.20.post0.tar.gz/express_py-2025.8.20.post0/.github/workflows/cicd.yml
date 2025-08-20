@@ -1,0 +1,90 @@
+name: Continuous Testing and Publication from 'main'
+
+on: [push]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run-linter:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version:
+          - 3.10.x
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Checkout actions repository
+        uses: actions/checkout@v4
+        with:
+          repository: Exabyte-io/actions
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          path: actions
+
+      - name: Run ruff linter
+        uses: ./actions/py/lint
+        with:
+          python-version: ${{ matrix.python-version }}
+
+  run-tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version:
+          - 3.10.x
+          - 3.11.x
+          - 3.12.x
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Checkout actions repository
+        uses: actions/checkout@v4
+        with:
+          repository: Exabyte-io/actions
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          path: actions
+
+      - name: Run tests
+        uses: ./actions/py/test
+        with:
+          # to use `pip install ".[all]"` instead of `".[tests]"`
+          pip-install-group-name: all
+          python-version: ${{ matrix.python-version }}
+          unit-test-directory: tests/unit
+          integration-test-directory: tests/integration
+
+
+  publish:
+    needs: [run-linter, run-tests]
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'main'
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Checkout actions repository
+        uses: actions/checkout@v4
+        with:
+          repository: Exabyte-io/actions
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          path: actions
+
+      - name: Publish release
+        uses: ./actions/py/publish
+        with:
+          python-version: 3.10.13
+          github-token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          pypi-api-token: ${{ secrets.PYPI_API_TOKEN }}
