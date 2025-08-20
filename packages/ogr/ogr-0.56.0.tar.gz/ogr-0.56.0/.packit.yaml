@@ -1,0 +1,115 @@
+---
+# We want to use both instances for all upstream jobs including the `propose-downstream` one.
+# For downstream, we need to pick just one instance (`stg` in our case)
+# and redefine it for the `koji_build` and `bodhi_update` jobs.
+packit_instances: ["prod", "stg"]
+specfile_path: fedora/python-ogr.spec
+# https://packit.dev/docs/configuration/#top-level-keys
+downstream_package_name: python-ogr
+upstream_project_url: https://github.com/packit/ogr
+issue_repository: https://github.com/packit/ogr
+
+# we are setting this so we can use packit from ogr's dist-git
+# packit can't know what's the upstream name when running from distgit
+upstream_package_name: ogr
+copy_upstream_release_description: true
+actions:
+  # we need this b/c `git archive` doesn't put all the metadata in the tarball:
+  #   LookupError: setuptools-scm was unable to detect version for '/builddir/build/BUILD/ogr-0.11.1'.
+  #   Make sure you're either building from a fully intact git repository or PyPI tarballs.
+  create-archive:
+    - python3 -m build --sdist --outdir ./fedora/
+    - bash -c "ls -1t ./fedora/*.tar.gz | head -n 1"
+  get-current-version:
+    - hatch version
+
+srpm_build_deps:
+  - python3-build
+  - hatch
+  - python3-hatch-vcs
+
+jobs:
+  - job: propose_downstream
+    trigger: release
+    dist_git_branches:
+      fedora-all: {}
+      epel-10:
+        fast_forward_merge_into:
+          - epel-10-branched
+
+  - job: copr_build
+    trigger: pull_request
+    targets:
+      - fedora-all
+      - fedora-all-aarch64
+      - epel-10-all
+    additional_repos:
+      - "copr://packit/packit-dev"
+  - job: tests
+    trigger: pull_request
+    targets:
+      - fedora-all
+      - epel-10-all
+    tf_extra_params:
+      environments:
+        - artifacts:
+            - type: repository-file
+              id: https://copr.fedorainfracloud.org/coprs/packit/packit-dev/repo/fedora-$releasever/packit-packit-dev-fedora-$releasever.repo
+
+  - job: upstream_koji_build
+    trigger: pull_request
+    scratch: True
+    targets:
+      - fedora-development
+      - epel-10
+
+  - job: copr_build
+    trigger: commit
+    branch: main
+    targets:
+      - fedora-all
+      - fedora-all-aarch64
+      - epel-10-all
+    project: packit-dev
+    list_on_homepage: True
+    preserve_project: True
+
+  - job: copr_build
+    trigger: commit
+    branch: stable
+    targets:
+      - fedora-stable
+      - fedora-stable-aarch64
+    project: packit-stable
+    list_on_homepage: True
+    preserve_project: True
+
+  - job: copr_build
+    trigger: release
+    targets:
+      - fedora-all
+      - fedora-all-aarch64
+      - epel-10-all
+    project: packit-releases
+    list_on_homepage: True
+    preserve_project: True
+
+  - job: pull_from_upstream
+    trigger: release
+    dist_git_branches:
+      fedora-all: {}
+      epel-10:
+        fast_forward_merge_into:
+          - epel-10-branched
+
+  # downstream automation:
+  - job: koji_build
+    trigger: commit
+    packit_instances: ["stg"]
+    allowed_pr_authors: ["packit-stg", "packit"]
+    sidetag_group: packit-specfile-ogr-releases
+    dependents:
+      - packit
+    dist_git_branches:
+      - fedora-all
+      - epel-10-all
