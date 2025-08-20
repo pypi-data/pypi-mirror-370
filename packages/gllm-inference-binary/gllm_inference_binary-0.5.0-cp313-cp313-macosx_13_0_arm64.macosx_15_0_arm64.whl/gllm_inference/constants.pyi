@@ -1,0 +1,7 @@
+from _typeshed import Incomplete
+
+DEFAULT_AZURE_OPENAI_API_VERSION: str
+DOCUMENT_MIME_TYPES: Incomplete
+GOOGLE_SCOPES: Incomplete
+HEX_REPR_LENGTH: int
+HTTP_STATUS_CODE_PATTERNS: Incomplete
