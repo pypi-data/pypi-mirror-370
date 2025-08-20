@@ -1,0 +1,132 @@
+syntax = "proto3";
+package pretransform;
+
+import "tasks.proto";
+
+/// Pre transform spec messages
+message PreTransformSpecOpts {
+  optional uint32 row_limit = 1;
+  bool preserve_interactivity = 2;
+  repeated PreTransformVariable keep_variables = 3;
+  string local_tz = 4;
+  optional string default_input_tz = 5;
+}
+
+message PreTransformSpecRequest {
+  string spec = 1;
+  repeated tasks.InlineDataset inline_datasets = 2;
+  PreTransformSpecOpts opts = 3;
+}
+
+message PreTransformSpecResponse {
+  string spec = 1;
+  repeated PreTransformSpecWarning warnings = 2;
+}
+
+message PreTransformSpecWarning {
+  oneof warning_type {
+    PreTransformRowLimitWarning row_limit = 1;
+    PreTransformBrokenInteractivityWarning broken_interactivity = 2;
+    PreTransformUnsupportedWarning unsupported = 3;
+    PlannerWarning planner = 4;
+  }
+}
+
+message PreTransformRowLimitWarning {
+  repeated tasks.Variable datasets = 1;
+}
+
+message PreTransformBrokenInteractivityWarning {
+  repeated tasks.Variable vars = 1;
+}
+
+message PreTransformUnsupportedWarning {}
+
+/// Pre transform value messages
+message PreTransformVariable {
+  tasks.Variable variable = 1;
+  repeated uint32 scope = 2;
+}
+
+message PreTransformValuesOpts {
+  optional uint32 row_limit = 1;
+  string local_tz = 2;
+  optional string default_input_tz = 3;
+}
+
+message PreTransformValuesRequest {
+  string spec = 1;
+  repeated PreTransformVariable variables = 2;
+  repeated tasks.InlineDataset inline_datasets = 3;
+  PreTransformValuesOpts opts = 4;
+}
+
+message PreTransformValuesResponse {
+  repeated tasks.ResponseTaskValue values = 1;
+  repeated PreTransformValuesWarning warnings = 2;
+}
+
+message PreTransformValuesWarning {
+  oneof warning_type {
+    PreTransformRowLimitWarning row_limit = 1;
+    PlannerWarning planner = 2;
+  }
+}
+
+
+message PreTransformLogicalPlanWarning {
+  oneof warning_type {
+    PlannerWarning planner = 1;
+  }
+}
+
+/// Common pre-transform messages
+message PlannerWarning {
+  string message = 1;
+}
+
+/// Pre Transform Extract Datasets
+message PreTransformExtractDataset {
+  // Result dataset name
+  string name = 1;
+
+  // Result dataset scope
+  repeated uint32 scope = 2;
+
+  // Serialized Arrow record batch in Arrow IPC format
+  bytes table = 3;
+}
+
+message PreTransformExtractOpts {
+  string local_tz = 1;
+  optional string default_input_tz = 2;
+  bool preserve_interactivity = 3;
+  int32 extract_threshold = 4;
+  repeated PreTransformVariable keep_variables = 5;
+}
+
+message PreTransformLogicalPlanOpts {
+  string local_tz = 1;
+  optional string default_input_tz = 2;
+  bool preserve_interactivity = 3;
+  repeated PreTransformVariable keep_variables = 4;
+}
+
+
+message PreTransformExtractWarning {
+  oneof warning_type {
+    PlannerWarning planner = 1;
+  }
+}
+
+message PreTransformExtractResponse {
+  string spec = 1;
+  repeated PreTransformExtractDataset datasets = 2;
+  repeated PreTransformExtractWarning warnings = 3;
+}
+
+message PreTransformExtractRequest {
+  string spec = 1;
+  repeated tasks.InlineDataset inline_datasets = 2;
+  PreTransformExtractOpts opts = 3;
+}
