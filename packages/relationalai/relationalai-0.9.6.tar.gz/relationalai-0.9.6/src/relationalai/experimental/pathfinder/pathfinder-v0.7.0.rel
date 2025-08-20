@@ -1,0 +1,1951 @@
+// Pathfinder package
+
+// utilities (from model/utilities.rel)
+doc"""
+Contains utility methods for working with paths and methods identified as
+of potential general interest (for consideration to be moved to other
+libraries).
+"""
+namespace pathfinder::utilities
+
+doc"""
+    dynamic_prefix_sum[{List}]
+
+Computes sums of each prefix of an enumerated list `List(i, val)` i.e.,
+```
+dynamic_prefix_sum[List, i] = List[1] + ... + List[i].
+```
+Assumes that `List` is a binary predicate: the first attribute takes consecutive integers
+values starting from 1, the second attribute supports addition. Uses a dynamic-programming
+approach that is particularly efficient for large lists.
+"""
+@inline
+def dynamic_prefix_sum({List}, i, val): _dynamic_prefix_sum(List, :result, i, val)
+
+// Implementation of prefix sums using divide-and-conquer approach
+@outline
+module _dynamic_prefix_sum[{List}]
+    // Backward partial sums of exponentially growing lengths.
+    // B[i, j] = List[i - j + 1] + ... + List[i] for j∈{1,2,4,...} s.t. i|j
+    def B(i, 1, val): List(i, val)
+    def B(i, j, val):
+        exists((k) |
+            val = B[i, k] + B[i - k, k] and
+            j = 2 * k and
+            modulo[i, j] = 0
+        )
+
+    // Longest backward partial sum
+    def L[i, j]: (B[i, j], j = max[(k) : B(i, k, _)])
+
+    // Final result
+    def result(i, val): L(i, i, val)
+    def result(i, val): exists((j) | val = L[i, j] + result[i - j])
+end
+
+doc"""
+    linear_prefix_sum[{List}]
+
+Computes sums of each prefix of an enumerated list `List(i, val)` i.e.,
+```
+linear_prefix_sum[List, i] = List[1] + ... + List[i].
+```
+Assumes that `List` is a binary predicate: the first attribute takes consecutive integers
+values starting from 1, the second attribute supports addition. This implementation uses
+the natural linear recursion approach.
+"""
+@inline
+def linear_prefix_sum({List}, i, val): _linear_prefix_sum(List, :result, i, val)
+
+// Implementation of prefix sums using divide-and-conquer approach
+@outline
+module _linear_prefix_sum[{List}]
+    @function
+    def result(i, val) : List(i, val) and i = 1
+    def result(i, val) : exists( (w, v) | result(i-1, w) and List(i, v) and val = w+v )
+end
+
+doc"""
+    hash_paths[{Paths}]
+
+Replaces the edge identifier of every path in the input collection `Paths` with a unique
+_canonical_ identifier of the path. The canonical identifier of a path is computed by
+hashing the path contents. In particular, if the input collection contains repeated
+paths, they will be collapsed into a single path.
+"""
+@inline
+def hash_paths({Paths}, new_id, x...):
+    exists((old_id) | Paths(old_id, x...) and _path_hash_reduce(Paths[old_id], new_id))
+
+// Computes the hash of a path ensuring proper handling of empty (single node) paths
+// and explicitly determining the order of hashing node ids  and edge labels.
+@inline
+def _path_hash_reduce[{Path}] :
+    rel_primitive_reduce[
+        murmurhash3f_with_seed,
+        uint128[0],
+        {(1, hash_reduce[Path[:node]]); (2, hash_reduce[Path[:edge_label]])}
+    ]
+
+
+doc"""
+    hash_reduce[{R}]
+
+Reduces a relation `R` into a single number (UInt128) representing its hash value.
+"""
+@inline
+def hash_reduce[{R}]: rel_primitive_reduce[murmurhash3f_with_seed, uint128[0], hash[R]]
+
+
+doc"""
+    pivot_paths[{R}, {L}]
+
+Pivots paths represented horizontally in a relation to a vertical representation.  The
+input relation `R` must have a fixed arity and the relation `L` is a relation
+with a single tuple of strings to be used as labels for the edges in the path. Naturally,
+`arity(L) = arity(R)-1`. Example usage:
+
+```
+    pivot_paths[{ (1,2,3); (3,2,4) }, {"a", "b"}]
+```
+
+The implementation does not check that `R` is a relation with uniform arity, and that `L`
+is a relation of arity one lesser with a single tuple of strings. Should those
+assumptions be violated, the behavior is undefined.
+"""
+@inline
+def pivot_paths[{R}, {L}]: {
+    _pivot_paths[R, pivot[L], :paths]
+}
+
+// Builds a path set from a horizontal relation of node identifiers and a (vertical) edge of
+// labels relation. The relation `R` must have a fixed arity and the relation `Labels` is a
+// ordered list of strings to be used as labels for the edges in the path.
+@outline
+module _pivot_paths[{R}, {Labels}]
+    def path_count { count[R] }
+    def path_length { arity[R] }
+    def sorted_paths { sort[R] }
+    def dom_paths { range[1, path_count, 1] }
+    module paths[i in dom_paths]
+        def node(j, n): {
+            range(0, path_length-1, 1, j) and
+            pivot(sorted_paths[i], j+1, n)
+        }
+        def edge_label(j, l): {
+            range(1, path_length - 1, 1, j) and
+            Labels(j, l)
+        }
+    end
+end
+
+
+doc"""
+    canonical_index[i, j]
+
+Defines the canonical index of a pair of positive integers `(i, j)` by mapping it
+(bijectively) onto the set of positive integers. Its formulation proves that ℕ₊ ~ ℕ₊×ℕ₊.
+
+The principle of the enumeration is visualized on the fragment below.
+
+```
+      ↑
+      +--+
+    5 |11|
+      +--+--+
+    4 | 7|12|
+      +--+--+--+
+m  3 | 4| 8|13|
+      +--+--+--+--+
+    2 | 2| 5| 9|14|
+      +--+--+--+--+--+
+    1 | 1| 3| 6|10|15|
+      ∙--+--+--+--+--+-→
+        1  2  3  4  5
+              n
+```
+"""
+@inline
+def canonical_index[m, n]: {
+    m + ((m + n - 2) * (m + n - 1 ) ÷ 2)
+}
+
+doc"""
+    reindex_nodes[{Paths}, path]
+
+Implementations of the `find_paths` methods index the nodes by their distance from the
+source node, thus enumerating them starting from 0.  In Rel, however, it is customary to
+enumerate lists starting from index 1.
+"""
+@outline
+module reindex_nodes[{Paths}, path]
+    def node(i in Int64, v): Paths(path, :node, i-1, v)
+    def edge_label(i, lab): Paths(path, :edge_label, i, lab)
+end
+
+doc"""
+    reindex_edges[{Paths}, path]
+
+Implementations of the `find_paths` methods index the edges starting from 1. The following
+method reindexes the edges starting from 0.
+"""
+@outline
+module reindex_edges[{Paths}, path]
+    def node(i in Int64, v): Paths(path, :node, i, v)
+    def edge_label(i, lab): Paths(path, :edge_label, i+1, lab)
+end
+
+doc"""
+    KleenePlus[{R}]
+
+Higher-order Kleene star operator defining the transitive closure of the given binary
+relation `R`.
+"""
+@outline
+def KleenePlus({R}, x, y):
+    R(x, y) or exists((z) | KleenePlus(R, x, z) and R(z, y))
+
+doc"""
+    KleeneStar[{N}, {R}]
+
+Higher-order Kleene star operator defining the transitive and reflexive closure of the
+given binary relation `R` on the set of nodes `N` (the domain).
+"""
+@inline
+def KleeneStar({N}, {R}, x, y): (x = y and N(x)) or KleenePlus(R, x, y)
+
+end // namespace pathfinder::utilities
+
+// _internal/utilities (from model/_internal/utilities.rel)
+namespace pathfinder::_internal::utilities
+
+from ::pathfinder::utilities import
+    hash_paths, reindex_nodes, reindex_edges, dynamic_prefix_sum, linear_prefix_sum
+
+//
+// Return a single tuple deterministically from the relation `R`.
+//
+@inline
+def some[{R}]: top[1, R, 1]
+
+@inline
+def invert_pg({PG}, q, p, a, v, u): PG(p, q, a, u, v)
+
+doc"""
+    module walks_count[{Edge}, {Target}, {Config}]
+
+## Inputs
+  Target  : target nodes `u`
+  Edge    : `(u, v, a)`, denoting edge `u --> v` with label `a`
+  Config  : configuration parameters
+            Config[:semantics] ∈ { :shortest_paths, :walks }
+
+## Outputs
+  num_walks : num_walks[u] is the number of shortest walks for the
+              shortest_paths semantics, or the number of walks for
+              all the other semantics, from u to a node in Target
+"""
+@inline
+def walks_count[{Edge}, {Target}, {Config}]: {
+    if_then_else[
+        Config(:semantics, :shortest_paths),
+        _walks_count[:shortest_paths, Edge, Target],
+        _walks_count[:max_path_length, Edge, Target]
+    ]
+}
+
+
+@outline
+module _walks_count[:shortest_paths, {Edge}, {Target}]
+
+    def num_walks[u]: (1, Target(u))
+    def num_walks[u]: sum[[v, a]: num_walks[v] where Edge(u, v, a)]
+
+end // _walks_count[:shortest_paths]
+
+
+@outline
+module _walks_count[:max_path_length, {Edge}, {Target}]
+
+    // boundary(u) holds if u does not have any outgoing edges.
+    def boundary(u): Target(u) and not Edge(u, _, _)
+    def boundary(u): Edge(_, u, _) and not Edge(u, _, _)
+
+
+    // num_walks counts the number of walks from a node u using dynamic programming from
+    // the nodes in the boundary. For a non-boundary node that is not a target node,
+    // the number of walks is equal to the sum of the number of walks from its
+    // children. For a non-boundary node that is a target node, the number of walks
+    // is equal to the sum of the number of walks from its children plus one, as
+    // there is one walk that ends in u.
+    def num_walks[u]: (1, boundary(u) and Target(u))
+    def num_walks[u]: (0, boundary(u) and not Target(u))
+    def num_walks[u]:
+        sum[[v, a] : num_walks[v] where Edge(u, v, a)] + 1 where not boundary(u) and Target(u)
+    def num_walks[u]:
+        sum[[v, a] : num_walks[v] where Edge(u, v, a)] where not boundary(u) and not Target(u)
+
+end // _walks_count[:max_path_length]
+
+
+doc"""
+    enumeration_helpers[{Edge}, {Source}, {Target}, {USP_Node_To_Node}, {NSP}, {Config}]
+
+## Inputs
+  Edge    : (uu, vv, a), denoting edge uu --> vv with label a
+  Source  : source nodes `uu`
+  Target  : target nodes `vv`
+  USP_Node_To_Node : mapping that convert uu to u
+  NSP     : NSP[uu] is the number of shortest walks for the shortest_paths semantics, or
+            the number of walks for all the other semantics, from uu to a node in Target
+  Config  : configuration parameters
+            Config[:path_enum_partials] ∈ { :linear, :dynamic}
+
+## Outputs
+  paths       : If the selector is :all, then paths is the set of all shortest paths
+                from Source to Target for the shortest_paths semantics, and all walks
+                from Source to Target of length at most Config[:max_path_length]
+                for the walks semantics.
+                If the selector is :limit, then paths is the set with the first
+                Config[:path_count] shortest paths from Source to Target for
+                the shortest_paths semantics, and the set with the first
+                Config[:path_count] walks from Source to Target of length at most
+                Config[:max_path_length] for the walks semantics.
+  total_walks : total number of shortest walks for the shortest_paths semantics,
+                or of walks for all the other semantics, from Source to Target
+"""
+@outline
+module enumeration_helpers[
+    {Edge}, {Source}, {Target}, {USP_Node_To_Node}, {NSP}, {Config}
+]
+
+    // (uu, i, vv, a) : the `i`th outbound edge from `uu` is labeled `a` and goes to `vv`
+    def neighbor(uu, i, vv, a): enumerate({(ww, _a): Edge(uu, ww, _a)}, i, vv, a)
+
+    // Decomposition of number of shortest paths that traverses nodes (and edges).
+    // Edge case is simple and we keep the relative position i of the edge.
+    def edge_nsp(uu, i, val): exists((vv) | val = NSP[vv] and neighbor(uu, i, vv, _))
+
+    // acc_nsp[uu, i] = the total number of shortest paths that traverse the first i
+    // outbound edges of uu.
+    @function
+    def acc_nsp[uu]: { compute_acc_nsp[Config[:path_enum_partials], edge_nsp[uu]] }
+    @inline
+    def compute_acc_nsp[:linear, {EdgeNsp}]: { linear_prefix_sum[EdgeNsp] }
+    @inline
+    def compute_acc_nsp[:dynamic, {EdgeNsp}]: { dynamic_prefix_sum[EdgeNsp] }
+
+
+    // Enumerate all sources, from s[1] to s[k], and then compute
+    //      running_sum[i] := ∑_{j=1}^{i} nsp[s[j]].
+    // Binary prefix-sum is used because the array we are taking the prefix sum of is
+    // expected to be large.
+    def relevant_source(uu) : Source(uu) and NSP(uu, _)
+    def numbered_source { enumerate[relevant_source] }
+    def nsp_from_source[i]: NSP[numbered_source[i]]
+
+
+    def _running_sum { dynamic_prefix_sum[nsp_from_source] }
+
+    def running_sum { (_running_sum, not Config(:selector, :limit)) }
+    def running_sum(uu, v):
+        exists((w) |
+            w = _running_sum[uu] and
+            v = minimum[w, Config[:path_count]] and
+            Config(:selector, :limit)
+        )
+
+    // (uu, i, lo, hi): the path numbers assigned to the i-th outbound edge of uu are in the
+    // interval [lo, hi]
+    def nsp_interval(uu, i, lo, hi) : i = 1 and lo = 1 and acc_nsp(uu, i, hi)
+    def nsp_interval(uu, i, lo, hi) : lo = acc_nsp[uu, i - 1] + 1 and hi = acc_nsp[uu, i]
+
+    // (uu, lo, hi): uu is a source, the path numbers assigned to the shortest paths from uu
+    // to target nodes are in the interval [lo, hi]
+    def source_interval(uu, lo, hi) :
+        uu = numbered_source[1] and lo = 1 and hi = running_sum[1]
+    def source_interval(uu, lo, hi) :
+        exists( (i) |
+            uu = numbered_source[i] and
+            lo = running_sum[i - 1] + 1 and
+            hi = running_sum[i] and
+            lo <= hi
+        )
+
+    def paths_listing(vv, n in Int64, k in Int64, path_num):
+        exists((lo, hi) |
+            k = 0 and
+            source_interval(vv, lo, hi) and
+            range(lo, hi, 1, path_num) and
+            n = path_num - lo + 1
+        )
+    def paths_listing(vv, n in Int64, k in Int64, path_num):
+        exists((m, uu) |
+            paths_listing(uu, m, k - 1, path_num) and
+            path_routing(uu, m, vv, n)
+        )
+
+    def path_routing_with_hashed_label(uu, m, vv, n in Int64, h):
+        exists( (i, lo, hi) |
+            nsp_interval(uu, i, lo, hi) and
+            range(lo, hi, 1, m) and
+            neighbor(uu, i, vv, h) and
+            n = m - lo + 1 // this is the `n`-th path from vv to the targets
+        )
+
+    // We do not need the label to compute `paths_listing`; hence we project it out
+    def path_routing(uu, m, vv, n): path_routing_with_hashed_label(uu, m, vv, n, _)
+
+
+    // -----------------------------------------------------------------------------
+    // Extract the final answer
+    // `paths` contain all shortest paths from S to T that conform to Conn
+    def paths(path_num, :node, k, v):
+        exists((vv) | paths_listing(vv, _, k, path_num) and USP_Node_To_Node[vv] = v)
+    def paths(path_num, :edge_label, k in Int64, label):
+        exists((uu, m) |
+            paths_listing(uu, m, k - 1, path_num) and
+            path_routing_with_hashed_label(uu, m, _, _, label)
+        )
+
+    // Total number of shortest walks for the shortest_paths semantics,
+    // or of walks for all the other semantics, from Source to Target
+    def total_walks { sum[[uu] : (NSP[uu], relevant_source(uu))] }
+
+end // _enumeration_helpers[:shortest_paths]
+
+
+doc"""
+    post_process_paths[{Config}, {Paths}]
+
+Applies all post-processing configuration options to the given set of paths.
+"""
+@inline
+def post_process_paths[{Config}, {Paths}] : _post_process_paths[{Config}, {Paths}, :paths]
+
+@outline
+module _post_process_paths[{Config}, {Paths}]
+    @inline
+    def input_paths { Paths }
+
+    @inline
+    def maybe_reindex_nodes { _reindex_nodes[Config[:node_indexing], input_paths] }
+    @inline
+    def _reindex_nodes[:zero_based, {_Paths}]: { _Paths }
+    @inline
+    def _reindex_nodes[:one_based, {_Paths}]: { reindex_nodes[_Paths] }
+
+    @inline
+    def maybe_reindex_edges { _reindex_edges[Config[:edge_indexing], maybe_reindex_nodes] }
+    @inline
+    def _reindex_edges[:zero_based, {_Paths}]: { reindex_edges[_Paths] }
+    @inline
+    def _reindex_edges[:one_based, {_Paths}]: { _Paths }
+
+    @inline
+    def maybe_hash_paths { _hash_paths[Config[:path_ids], maybe_reindex_edges] }
+    @inline
+    def _hash_paths[:canonical, {_Paths}]: { hash_paths[_Paths] }
+    @inline
+    def _hash_paths[:non_canonical, {_Paths}]: { _Paths }
+
+    @inline
+    def paths { maybe_hash_paths }
+
+end // module _post_process_paths[{Config}, {Paths}]
+
+
+doc"""
+    canonical_path_count[{Paths}]
+
+Count the number of different paths in the set of paths Paths.
+"""
+@inline
+def canonical_path_count[{Paths}]: { _canonical_path_count[{Paths}, :total] }
+
+@outline
+module _canonical_path_count[{Paths}]
+
+    def _hash_paths { hash_paths[Paths] }
+
+    def total { count[(h): _hash_paths(h, _, _, _)] }
+
+end // module _canonical_path_count[{Paths}]
+
+
+//
+// Auxiliary hash value used in recursive path construction to indicate a dummy automaton
+// state. The value is chosen to be different from the hash values of the actual states.
+//
+@function
+def aux_hash { uint128_hash_value_convert[murmurhash3f[murmurhash3f["__auxiliary__"]]] }
+
+end // namespace pathfinder::_internal::utilities
+
+// _internal/any_pair/one-sided (from model/_internal/any_pair/one-sided.rel)
+namespace pathfinder::_internal
+
+doc"""
+ ball[PG_Edge, PG_Source, PG_Target, Config]
+
+## Inputs
+  PG_Edge     : (p, q, a, u, v), denoting (u, p) -> (v, q) with label a
+  PG_Source   : (u, p) denoting that u is a source node with a initial state p
+  PG_Target   : (u, p) denoting that u is a target node with a final state p
+  Config      : configuration parameters
+    Config[:search_radius] ∈ { :bounded, :unbounded }
+    :bounded means the ball is constructed from the source nodes until a target node
+      in the product graph is reached
+    :unbounded means the ball is constructed from the source nodes until no further
+      nodes in the product graph can be reached
+    Config[:max_path_length] specifies the maximum length of the paths to be
+      constructed under walks, simple paths or trails semantics (not to be
+      used under shortest_paths semantics)
+
+
+## Outputs
+  radius           : the radius of the ball
+  usp_node_to_node : mapping that convert uu to u
+  pg_to_usp_node   : mapping that convert (u, p, l) to uu
+  usp_to_pg_node   : mapping that convert uu to (u, p, l)
+  usp_source       : set uu of source nodes
+  usp_target       : set vv of target nodes
+"""
+@outline
+module ball[:any_pair, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def construction {
+        if_then_else[
+            Config(:semantics, :shortest_paths),
+            ball_undef_radius[Config[:search_radius], PG_Edge, PG_Source, PG_Target],
+            ball_def_radius[PG_Edge, PG_Source, PG_Target, Config[:max_path_length]]
+        ]
+    }
+
+    def pg_dist_from_S { construction[:pg_dist_from_S] }
+
+    def radius { construction[:radius] }
+
+    // Give each pg node a number, the corresponding usp node number
+    // usp_to_layered_pg_node[uu] = (u, p, l) if the uu-th node in the ball is (u, p, l)
+    def usp_to_pg_node { enumerate[pg_dist_from_S] }
+
+    @function
+    def usp_node_to_node(vv, v): { usp_to_pg_node(vv, v, _, _) }
+
+    // pg_to_usp_node[u, p, l] = uu if the uu-th node in the ball is (u, p, l)
+    @function @no_inline
+    def pg_to_usp_node(u, p, l, uu): usp_to_pg_node(uu, u, p, l)
+
+    // uu is a source node
+    def usp_source(uu):
+        exists((u, p) | PG_Source(u, p) and pg_to_usp_node(u, p, 0, uu))
+
+    // uu is a target node
+    def usp_target(uu):
+        exists((u, p) | PG_Target(u, p) and pg_to_usp_node(u, p, _, uu))
+
+end // module ball
+
+
+// =========================================================================================
+// The ball is constructed from the source nodes until a target node in the product graph is
+// reached. Returning:
+//  - `pg_dist_from_S[v, q]` is the distance from the closest source node to `(v, q)`.
+//  - `radius` is the distance from the closest target to the source nodes.
+@outline
+module ball_undef_radius[:bounded, {PG_Edge}, {PG_Source}, {PG_Target}]
+
+    // swap the order of the variables to match the expected order of variables
+    @function
+    def pg_dist_from_S(u, p, d): { _dist_from_S(d, u, p) }
+
+    // Iterative process of constructing the S-ball. Uses recursion with non-stratified
+    // negation to simulate while loop iteration: finish_iteration() and finish_loop()
+    // control the execution of the loop.
+    def radius {
+        max[{0;
+            radius;
+            {(radius + 1,
+                finish_iteration() and
+                not finish_loop())
+            }}
+        ]
+    }
+
+    // Predecessor nodes of the source ball
+    @force_dnf
+    def prev_dist_from_S(v, q):
+        exists((u, p) | _dist_from_S(radius - 1, u, p) and PG_Edge(p, q, _, u, v))
+
+    // Extending the source ball (if radius hash been incremented)
+    @force_dnf
+    def _dist_from_S(d, v, q): PG_Source(v, q) and d = 0
+    def _dist_from_S(d, v, q):
+        d = radius and
+        prev_dist_from_S(v, q) and
+        not exists((j) | range(0, radius-1, 1, j) and _dist_from_S(j, v, q))
+    def _dist_from_S(d, v, q): _dist_from_S(d, v, q)
+
+
+    // Iteration is complete if extending the S-ball has been considered
+    @inline
+    def finish_iteration(): _dist_from_S(radius, _, _)
+
+    // Loop is terminated when the S-ball reaches a target node
+    @inline
+    def finish_loop(): exists((u, p) | _dist_from_S(radius, u, p) and PG_Target(u, p))
+
+end // module ball_undef_radius[:bounded]
+
+
+// =========================================================================================
+// The ball is constructed from the source nodes until no further nodes in the product graph
+// can be reached. Returning:
+//  - `pg_dist_from_S[v, q]` is the distance from the closest source node to `(v, q)`.
+//  - `radius` is the distance from the closest target to the source nodes.
+@outline
+module ball_undef_radius[:unbounded, {PG_Edge}, {PG_Source}, {PG_Target}]
+
+    @force_dnf @function
+    def pg_dist_from_S[v, q]: {
+        min[ (len) :
+            PG_Source(v, q) and len = 0
+            or
+            min({[u, p] : pg_dist_from_S[u, p] + 1 where PG_Edge(p, q, _, u, v)}, len)
+        ]
+    }
+
+    def radius { min[[u, p] : pg_dist_from_S[u, p] where PG_Target(u, p)] }
+
+end // module ball_undef_radius[:unbounded]
+
+
+// =========================================================================================
+// The ball of radius Max_Length centered at the source nodes is constructed.
+// In this case, pg_dist_from_S(u, p, d) holds if d <= Max_Length and there exists a walk of
+// length d from the source nodes to (u, p). Hence, pg_dist_from_S is not a function in
+// this case, and the constructed ball is a multiset in the sense that the same node (u, p)
+// can appear multiple times in the ball, each corresponding to a d such that
+// pg_dist_from_S(u, p, d) holds.
+@outline
+module ball_def_radius[{PG_Edge}, {PG_Source}, {PG_Target}, {Max_Length}]
+
+    // swap the order of the variables to match the expected order of variables
+    def pg_dist_from_S(u, p, d): { _dist_from_S(d, u, p) }
+
+    @force_dnf
+    def _dist_from_S(d, v, q): PG_Source(v, q) and d = 0
+    def _dist_from_S(d, v, q):
+        d <= Max_Length and
+        exists((u, p) | _dist_from_S(d - 1, u, p) and PG_Edge(p, q, _, u, v))
+
+    def radius { max[[u, p] : pg_dist_from_S[u, p] where PG_Target(u, p)] }
+
+end // module ball_def_radius
+
+end // namespace pathfinder::_internal
+
+// _internal/any_pair/two-sided (from model/_internal/any_pair/two-sided.rel)
+namespace pathfinder::_internal
+
+doc"""
+    two_sided_balls[PG_Edge, PG_Source, PG_Target]
+
+## Inputs
+  PG_Edge     : (p, q, a, u, v), denoting (u, p) -> (v, q) with label a
+  PG_Source   : (u, p) denoting that u is a source node with initial state p
+  PG_Target   : (u, p) denoting that u is a target node with final state p
+
+## Outputs
+ radius_S        : the radius of the source ball
+ radius_T        : the radius of the target ball
+ usp_to_pg_node  : mapping that convert uu to (u, p, l)
+ pg_to_usp_node  : mapping that convert (u, p, l) to uu
+ usp_source      : set uu of source nodes
+ usp_target      : set vv of target nodes
+ usp_middle      : set uu of nodes where the two balls meet
+"""
+@inline
+def two_sided_balls[:any_pair, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    if_then_else[
+        Config(:semantics, :shortest_paths),
+        _two_sided_balls[:any_pair, :shortest_paths, PG_Edge, PG_Source, PG_Target, Config],
+        _two_sided_balls[:any_pair, :walks, PG_Edge, PG_Source, PG_Target, Config]
+    ]
+}
+
+
+@outline
+module _two_sided_balls[
+    :any_pair, :shortest_paths, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}
+]
+
+    @function
+    def delta { radius_S - radius_T }
+
+    def shifted_pg_dist_to_T(d, v, q):
+        exists((l) | pg_dist_to_T(l, v, q) and d = l + delta)
+
+    @inline
+    def all_pg_nodes(v, q, d):
+        pg_dist_from_S(d, v, q) or shifted_pg_dist_to_T(d, v, q)
+
+    def usp_to_pg_node { enumerate[all_pg_nodes] }
+
+    @function
+    def source_pg_to_usp_node(u, p, d, uu) :
+        usp_to_pg_node(uu, u, p, d) and pg_dist_from_S(d, u, p)
+
+    @function
+    def target_pg_to_usp_node(u, p, d, uu) :
+        usp_to_pg_node(uu, u, p, d) and shifted_pg_dist_to_T(d, u, p)
+
+    @function
+    def usp_node_to_node(vv, v): { usp_to_pg_node(vv, v, _, _) }
+
+    def usp_source(uu) :
+        exists((u, p) | PG_Source(u, p) and uu = source_pg_to_usp_node[u, p, 0])
+
+    def usp_target(uu) :
+        exists((u, p) | PG_Target(u, p) and uu = target_pg_to_usp_node[u, p, delta])
+
+    def usp_middle(uu):
+        exists((u, p) | pg_middle(u, p) and uu = source_pg_to_usp_node[u, p, radius_S])
+
+    // Iterative process of constructing the balls. Uses recursion with non-stratified
+    // negation to simulate while loop iteration: finish_iteration() and finish_loop()
+    // control the execution of the loop.
+    @function
+    def radius_S {
+        max[{0;
+            radius_S;
+            {(radius_S + 1,                      // increment the diameter only if
+                delta_S_size < delta_T_size and  // the ball size increase is smaller
+                finish_iteration() and
+                not finish_loop())
+            }
+        }]
+    }
+
+    @function
+    def radius_T {
+        max[{0;
+            radius_T;
+            {(radius_T + 1,                       // increment the diameter only if
+                delta_S_size >= delta_T_size and  // the ball size increase is smaller
+                finish_iteration() and
+                not finish_loop())}
+        }]
+    }
+
+    // The sizes of the outermost layers of the respective balls at the current iteration
+    @inline
+    def delta_S_size { count[pg_dist_from_S[radius_S]] }
+    @inline
+    def delta_T_size { count[pg_dist_to_T[radius_T]] }
+
+    // Predecessor nodes of the source ball
+    @force_dnf
+    def prev_dist_from_S(v, q):
+        exists((u, p) |
+            pg_dist_from_S(radius_S - 1, u, p) and PG_Edge(p, q, _, u, v)
+        )
+
+    // Extending the source ball (if radius_S hash been incremented)
+    @force_dnf
+    def pg_dist_from_S(d, v, q): PG_Source(v, q) and d = 0
+    def pg_dist_from_S(d, v, q):
+        d = radius_S and
+        prev_dist_from_S(v, q) and
+        not exists((j) | range(0, radius_S - 1, 1, j) and pg_dist_from_S(j, v, q))
+    def pg_dist_from_S(d, v, q): pg_dist_from_S(d, v, q)
+
+    // Predecessor nodes of the target ball
+    @force_dnf
+    def prev_dist_to_T(u, p):
+        exists((v, q) |
+            pg_dist_to_T(radius_T - 1, v, q) and PG_Edge(p, q, _, u, v)
+        )
+
+    // Extending the target ball (if radius_T hash been incremented)
+    @force_dnf
+    def pg_dist_to_T(d, u, p): PG_Target(u, p) and d = 0
+    def pg_dist_to_T(d, u, p):
+        d = radius_T and
+        prev_dist_to_T(u, p) and
+        not exists((j) | range(0, radius_T - 1, 1, j) and pg_dist_to_T(j, u, p))
+    def pg_dist_to_T(d, u, p): pg_dist_to_T(d, u, p)
+
+    // Iteration is complete if extending both balls has been considered
+    def finish_iteration(): delta_S_size > 0 and delta_T_size > 0
+
+    // Loop is terminated when the two balls meet
+    def finish_loop():
+        exists((u, p) |
+            pg_dist_from_S(radius_S, u, p) and pg_dist_to_T(radius_T, u, p)
+        )
+
+    //  Nodes of the product graph where the two balls meet.
+    def pg_middle(u, p): pg_dist_from_S(radius_S, u, p) and pg_dist_to_T(radius_T, u, p)
+
+end // module _two_sided_balls[:any_pair, :shortest_paths]
+
+
+@outline
+module _two_sided_balls[
+    :any_pair, :walks, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}
+]
+
+    @function
+    def delta { Config[:max_path_length] + 1 }
+
+    def shifted_pg_dist_to_T(d, v, q):
+        exists((l) | pg_dist_to_T(l, v, q) and d = l - delta)
+
+    @inline
+    def all_pg_nodes(v, q, d):
+        pg_dist_from_S(d, v, q) or shifted_pg_dist_to_T(d, v, q)
+
+    def usp_to_pg_node { enumerate[all_pg_nodes] }
+
+    @function
+    def source_pg_to_usp_node(u, p, d, uu) :
+        usp_to_pg_node(uu, u, p, d) and pg_dist_from_S(d, u, p)
+
+    @function
+    def target_pg_to_usp_node(u, p, d, uu) :
+        usp_to_pg_node(uu, u, p, d) and shifted_pg_dist_to_T(d, u, p)
+
+    @function
+    def usp_node_to_node(vv, v): { usp_to_pg_node(vv, v, _, _) }
+
+    def usp_source(uu) :
+        exists((u, p) | PG_Source(u, p) and source_pg_to_usp_node(u, p, 0, uu))
+
+    def usp_target(uu) :
+        exists((u, p) |
+            PG_Target(u, p) and
+            (
+                target_pg_to_usp_node(u, p, -1*delta, uu) or
+                source_pg_to_usp_node(u, p, _, uu)
+            )
+        )
+
+    def source_usp_middle(uu) :
+        exists((u, p) | pg_middle(u, p) and source_pg_to_usp_node(u, p, radius_S, uu))
+
+    def target_usp_middle(uu) :
+        exists((u, p) | pg_middle(u, p) and target_pg_to_usp_node(u, p, _, uu))
+
+
+    def radius_S { trunc_divide[Config[:max_path_length] + 1, 2] }
+
+    def radius_T { Config[:max_path_length] - radius_S }
+
+    @force_dnf
+    def pg_dist_from_S(d, v, q): PG_Source(v, q) and d = 0
+    def pg_dist_from_S(d, v, q):
+        d <= radius_S and
+        exists((u, p) | pg_dist_from_S(d - 1, u, p) and PG_Edge(p, q, _, u, v))
+
+    @force_dnf
+    def pg_dist_to_T(d, v, q): PG_Target(v, q) and d = 0
+    def pg_dist_to_T(d, v, q):
+        d <= radius_T and
+        exists((u, p) | pg_dist_to_T(d - 1, u, p) and PG_Edge(q, p, _, v, u))
+
+    //  Nodes of the product graph where the two balls meet.
+    def pg_middle(u, p): pg_dist_from_S(radius_S, u, p) and pg_dist_to_T(_, u, p)
+
+end // module _two_sided_balls[:any_pair, :walks]
+
+end // namespace pathfinder::_internal::any_pair
+
+// _internal/for_each_source/one-sided (from model/_internal/for_each_source/one-sided.rel)
+namespace pathfinder::_internal
+
+doc"""
+ ball[PG_Edge, PG_Source, PG_Target, Config]
+
+## Inputs
+  PG_Edge     : (p, q, a, u, v), denoting (u, p) -> (v, q) with label a
+  PG_Source   : (u, p) denoting that u is a source node with a state p
+  PG_Target   : (u, p) denoting that u is a target node with a state p
+  Config      : configuration parameters
+    Config[:search_radius] ∈ { :bounded, :unbounded }
+    :bounded means the ball is constructed from the source nodes until a target node
+      in the product graph is reached
+    :unbounded means the ball is constructed from the source nodes until no further
+      nodes in the product graph can be reached
+
+## Outputs
+  radius          : the radius of the ball
+  usp_to_pg_node  : mapping that convert uu to (u, p)
+  pg_to_usp_node  : mapping that convert (u, p) to uu
+  dist_from_S     : (d, uu) denotes uu is at distance d from the source nodes
+  usp_source      : set uu of source nodes
+  usp_target      : set vv of target nodes
+"""
+@outline
+module ball[:for_each_source, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    @inline
+    def search_radius { Config[:search_radius] } // :bounded or :unbounded
+
+    def pg_dist_from_S {_ball[search_radius, PG_Edge, PG_Source, PG_Target, :pg_dist_from_S] }
+
+    // Gather all pg nodes and give each of them a number, the corresponding usp node number
+    def all_pg_nodes(v, q) : pg_dist_from_S(_, _, v, q, _)
+
+    // ------------------------------------------------------------------
+    // Computing outputs relations
+
+    // usp_to_pg_node[uu] = (u, p) if uu-th node in all_pg_nodes is (u, p)
+    def usp_to_pg_node { enumerate[all_pg_nodes]}
+
+    // pg_to_usp_node[u,p] = uu if uu-th node in all_pg_nodes is (u, p)
+    @no_inline
+    def pg_to_usp_node(u, p, uu) : usp_to_pg_node(uu, u, p)
+
+    def dist_from_S(ss, d, uu):
+        exists ( (s, o, u, p) |
+            pg_dist_from_S(s, o, u, p, d) and
+            uu = pg_to_usp_node[u, p] and
+            ss = pg_to_usp_node[s, o]
+        )
+
+    def usp_source(uu) : exists((u, p) | PG_Source(u, p) and uu = pg_to_usp_node[u, p])
+
+    def usp_target(uu) :
+        exists((ss, u, p) |
+            PG_Target(u, p) and
+            uu = pg_to_usp_node[u, p] and
+            dist_from_S(ss, radius[ss], uu)
+        )
+
+    @function
+    def radius(ss, d) :
+        exists( (s, o) |
+            _ball(search_radius, PG_Edge, PG_Source, PG_Target, :radius, s, o, d) and
+            ss = pg_to_usp_node[s, o]
+        )
+end // module ball
+
+// =========================================================================================
+// == Config[:search_radius] = :bounded ==
+// For every source node `(s, o)`, a ball is expanded from the source node until a target
+// node in the product graph is reached
+@outline
+module _ball[:bounded, {PG_Edge}, {PG_Source}, {PG_Target}]
+
+    // swap the order of the variables to match the expected order of variables
+    @function
+    def pg_dist_from_S(s, o, u, p, d): { _dist_from_S(s, o, d, u, p) }
+
+    // Iterative process of constructing the S-ball. Uses recursion with non-stratified
+    // negation to simulate while loop iteration: finish_iteration() and finish_loop()
+    // control the execution of the loop.
+    def radius[s,o]: {
+        max[[len] :
+            len = 0 and PG_Source(s, o)
+            or
+            len = radius[s, o]
+            or
+            len = radius[s, o] + 1 and finish_iteration(s, o) and not finish_loop(s, o)
+        ]
+    }
+
+    // Predecessor nodes of the source ball
+    def prev_dist_from_S(s, o, v, q):
+        exists((u, p) | _dist_from_S(s, o, radius[s, o] - 1, u, p) and PG_Edge(p, q, _, u, v))
+
+    // Extending the source ball (if radius hash been incremented)
+    @force_dnf
+    def _dist_from_S(s, o, len, v, q): PG_Source(s, o) and len = 0 and s = v and o = q
+    def _dist_from_S(s, o, len, v, q):
+        len = radius[s, o] and
+        prev_dist_from_S(s, o, v, q) and
+        not exists((j) | range(0, radius[s, o] - 1, 1, j) and _dist_from_S(s, o, j, v, q))
+    def _dist_from_S(s, o, len, v, q): _dist_from_S(s, o, len, v, q)
+
+
+    // Iteration is complete if extending the S-ball has been considered
+    @inline
+    def finish_iteration(s,o): _dist_from_S(s, o, radius[s,o], _, _)
+
+    // Loop is terminated when the S-ball reaches a target node
+    @inline
+    def finish_loop(s, o):
+        exists((u, p) | _dist_from_S(s, o, radius[s,o], u, p) and PG_Target(u, p))
+
+end // module _ball[:bounded, {PG_Edge}, {PG_Source}, {PG_Target}]
+
+// =========================================================================================
+// == Config[:search_radius] = :unbounded ==
+// The ball is constructed from the source nodes until no further nodes in the product graph
+// can be reached. Returning:
+//  - `pg_dist_from_S[s, o, v, q]` = distance from the source node `(s, o)` to `(v, q)`.
+//  - `radius[s,o]` = distance from the closest target to the source `(s, o)`.
+@outline
+module _ball[:unbounded, {PG_Edge}, {PG_Source}, {PG_Target}]
+
+    @force_dnf @function
+    def pg_dist_from_S[s, o, v, q]: {
+        min[[len] :
+            PG_Source(s, o) and s=v and q=o and len = 0
+            or
+            min({[u, p] : pg_dist_from_S[s, o, u, p] + 1 where PG_Edge(p, q, _, u, v)}, len)
+        ]
+    }
+
+    def radius[s, o]: {
+        min[[u, p] : pg_dist_from_S[s, o, u, p] where PG_Target(u, p)]
+    }
+
+end // module _ball[:unbounded, {PG_Edge}, {PG_Source}, {PG_Target}, :unbounded]
+
+end // namespace pathfinder::_internal
+
+// _internal/any_pair/usp (from model/_internal/any_pair/usp.rel)
+namespace pathfinder::_internal
+
+from ::pathfinder::_internal::utilities import invert_pg
+
+// =========================================================================================
+// Config[:search_strategy] = :from_source
+@outline
+module _usp[:any_pair, :from_source, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_ball { ball[:any_pair, PG_Edge, PG_Source, PG_Target, Config] }
+    def radius { the_ball[:radius] }
+    def usp_source { the_ball[:usp_source] }
+    def pg_to_usp_node { the_ball[:pg_to_usp_node] }
+    def usp_node_to_node { the_ball[:usp_node_to_node] }
+
+    def _usp_target { the_ball[:usp_target] }
+    def usp_target {
+        if_then_else[
+            Config(:selector, :limit),
+            top[Config[:path_count], _usp_target, _],
+            _usp_target
+        ]
+    }
+
+
+    def usp_edge {
+        usp_edge_from_pg[:any_pair, PG_Edge, usp_target, pg_to_usp_node, radius, Config]
+    }
+
+end // module _usp[:from_source]
+
+
+// =========================================================================================
+// Config[:search_strategy] = :from_target
+@outline
+module _usp[:any_pair, :from_target, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_ball { ball[:any_pair, invert_pg[PG_Edge], PG_Target, PG_Source, Config] }
+
+    def radius { the_ball[:radius] }
+    // note the inversion of source and target:
+    def usp_target { the_ball[:usp_source] }
+    def pg_to_usp_node { the_ball[:pg_to_usp_node] }
+    def usp_node_to_node { the_ball[:usp_node_to_node] }
+
+    def _usp_source { the_ball[:usp_target] }
+    def usp_source {
+        if_then_else[
+            Config(:selector, :limit),
+            top[Config[:path_count], _usp_source, _],
+            _usp_source
+        ]
+    }
+
+
+    def inverted_usp_edge {
+        usp_edge_from_pg[
+            :any_pair, invert_pg[PG_Edge], usp_source, pg_to_usp_node, radius, Config
+        ]
+    }
+
+    def usp_edge(uu, vv, a): inverted_usp_edge(vv, uu, a)
+
+end // module _usp[:from_target]
+
+
+// =========================================================================================
+// Config[:search_strategy] = :from_both_sides
+@inline
+def _usp[:any_pair, :from_both_sides, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    if_then_else[
+        Config(:semantics, :shortest_paths),
+        _usp_both_sides_sp[:any_pair, PG_Edge, PG_Source, PG_Target, Config],
+        _usp_both_sides_walks[:any_pair, PG_Edge, PG_Source, PG_Target, Config]
+    ]
+}
+
+
+@outline
+module _usp_both_sides_sp[:any_pair, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_balls { two_sided_balls[:any_pair, PG_Edge, PG_Source, PG_Target, Config] }
+    def radius_S { the_balls[:radius_S] }
+    def usp_source { the_balls[:usp_source] }
+    def usp_target { the_balls[:usp_target] }
+    def source_pg_to_usp_node { the_balls[:source_pg_to_usp_node] }
+    def target_pg_to_usp_node { the_balls[:target_pg_to_usp_node] }
+    def usp_node_to_node { the_balls[:usp_node_to_node] }
+
+    def _usp_middle { the_balls[:usp_middle] }
+    def usp_middle {
+        if_then_else[
+            Config(:selector, :limit),
+            top[Config[:path_count], _usp_middle, _],
+            _usp_middle
+        ]
+    }
+
+
+    // ------------------------------------------------------------------
+    // compute the [source to middle] and [target to middle] USP edges
+    def usp_edge_S {
+        usp_edge_from_pg[
+            :any_pair, PG_Edge, usp_middle, source_pg_to_usp_node, radius_S, Config
+        ]
+    }
+
+    def inverted_usp_edge_T {
+        usp_edge_from_pg[
+            :any_pair, invert_pg[PG_Edge], usp_middle, target_pg_to_usp_node, radius_S, Config
+        ]
+    }
+
+    // ------------------------------------------------------------------
+    // Their union is the USP edge set
+    def usp_edge(uu, vv, a): usp_edge_S(uu, vv, a) or inverted_usp_edge_T(vv, uu, a)
+
+end // module _usp_both_sides_sp[:any_pair]
+
+
+@outline
+module _usp_both_sides_walks[:any_pair, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_balls { two_sided_balls[:any_pair, PG_Edge, PG_Source, PG_Target, Config] }
+    def radius_S { the_balls[:radius_S] }
+    def radius_T { the_balls[:radius_T] }
+    def source_pg_to_usp_node { the_balls[:source_pg_to_usp_node] }
+    def target_pg_to_usp_node { the_balls[:target_pg_to_usp_node] }
+    def usp_node_to_node { the_balls[:usp_node_to_node] }
+
+    def usp_source { the_balls[:usp_source] }
+    def usp_target { the_balls[:usp_target] }
+
+    def _source_usp_middle { the_balls[:source_usp_middle] }
+    def _source_usp_middle { usp_target }
+
+    def source_usp_middle {
+        if_then_else[
+            Config(:selector, :limit),
+            top[
+                Config[:path_count],
+                {(uu) : _source_usp_middle(uu) and source_pg_to_usp_node(_, _, _, uu)},
+                _
+            ],
+            _source_usp_middle
+        ]
+    }
+
+    def target_usp_middle { the_balls[:target_usp_middle] }
+
+
+    // ------------------------------------------------------------------
+    // compute the [source to middle] and [target to middle] USP edges
+    def usp_edge_S {
+        usp_edge_from_pg[
+            :any_pair, PG_Edge, source_usp_middle, source_pg_to_usp_node, radius_S, Config
+        ]
+    }
+
+    def inverted_usp_edge_T {
+        usp_edge_from_pg[
+            :any_pair, invert_pg[PG_Edge], target_usp_middle, target_pg_to_usp_node, radius_S, Config
+        ]
+    }
+
+
+    // ------------------------------------------------------------------
+    // Their union is the USP edge set
+    def usp_edge(uu, vv, a): usp_edge_S(uu, vv, a) or inverted_usp_edge_T(vv, uu, a)
+    def usp_edge(uu, vv, a):
+        Config(:semantics, :walks) and
+        exists((ww, u, p) |
+            inverted_usp_edge_T(vv, ww, a) and
+            target_pg_to_usp_node(u, p, _, ww) and
+            source_pg_to_usp_node(u, p, radius_S, uu)
+        )
+
+end // module _usp_both_sides_walks[:any_pair]
+
+
+// =========================================================================================
+// Helper functions for constructing the USP edges form the product graph. There are two
+// configuration parameters to consider:
+// - :on_the_fly means the USP edges are constructed on the fly
+// - :materialized means the product graph is pre-materialized before the USP edges are
+//  constructed
+@inline
+def usp_edge_from_pg[
+    :any_pair, {PG_Edge}, {USP_Target}, {PG_To_USP_Node}, {Radius}, {Config}
+]: {
+    _usp_edge_from_pg[
+        :any_pair,
+        Config[:product_graph],
+        PG_Edge,
+        USP_Target,
+        PG_To_USP_Node,
+        Radius,
+        :usp_edge
+    ]
+}
+
+
+// -----------------------------------------------------------------------------------------
+// Config[:product_graph] = :on_the_fly
+@outline
+module _usp_edge_from_pg[
+    :any_pair, :on_the_fly, {PG_Edge}, {USP_Target}, {PG_To_USP_Node}, {Radius}
+]
+
+    // The USP fragment is obtained by constructing the paths from the source nodes
+    // to the target nodes.
+    def usp_edge { usp_edge_back[_] }
+
+    @force_dnf
+    def start_usp_edge_back(i, uu, vv, a):
+        USP_Target(vv) and
+        exists ( (u, p, v, q) |
+            PG_Edge(p, q, a, u, v) and
+            PG_To_USP_Node[v, q, i + 1] = vv and
+            PG_To_USP_Node[u, p, i] = uu
+        )
+
+    @force_dnf
+    def step_usp_edge_back(i, uu, vv, a):
+        usp_edge_back(i + 1, vv, _, _) and
+        exists ( (u, p, v, q) |
+            PG_Edge(p, q, a, u, v) and
+            PG_To_USP_Node[v, q, i + 1] = vv and
+            PG_To_USP_Node[u, p, i] = uu
+        )
+
+    def usp_edge_back(i, uu, vv, a):
+        start_usp_edge_back(i, uu, vv, a) and i < Radius
+        or
+        step_usp_edge_back(i, uu, vv, a)
+
+end // module _usp_edge_from_pg[:on_the_fly]
+
+
+// -----------------------------------------------------------------------------------------
+// Config[:product_graph] = :materialized
+// The construction is almost identical to that in the path_usp_edge[:materialized] module,
+// thus we do not repeat the comments here.
+@outline
+module _usp_edge_from_pg[
+    :any_pair, :materialized, {PG_Edge}, {USP_Target}, {PG_To_USP_Node}, {Radius}
+]
+
+    @function
+    def _distance(uu, len): PG_To_USP_Node(_, _, len, uu)
+
+    // Pre-construct some relevant automaton edges on the index space
+    @force_dnf
+    def _relevant_automaton_edge(uu, vv, a):
+        exists ( (u, p, v, q, len) |
+            PG_Edge(p, q, a, u, v) and
+            PG_To_USP_Node[u, p, len - 1] = uu and
+            PG_To_USP_Node[v, q, len] = vv
+        )
+
+    // (uu, len) -a-> (vv, len + 1) is an edge, and uu is reachable from S in len steps
+    def _reachable_from_S(vv, uu, len, a):
+        _relevant_automaton_edge(uu, vv, a) and _distance[uu] = len
+
+    // then, keep the edges uu --> vv where vv is reachable from S in len + 1 steps
+    def _candidate_edge(vv, uu, a): exists ( (len) |
+        _reachable_from_S(vv, uu, len, a) and _distance[vv] = len + 1 and len < Radius
+    )
+
+    // The USP fragment is obtained by constructing the paths from the source nodes
+    // to the target nodes. This recursion is now very simple
+    def usp_edge(uu, vv, a):
+        _candidate_edge(vv, uu, a) and USP_Target(vv)
+        or
+        _candidate_edge(vv, uu, a) and usp_edge(vv, _, _)
+
+end // module _usp_edge_from_pg[:materialized]
+
+end // namespace pathfinder::_internal
+
+// _internal/for_each_source/usp (from model/_internal/for_each_source/usp.rel)
+
+namespace pathfinder::_internal
+
+from ::pathfinder::_internal::utilities import invert_pg
+
+
+
+// =========================================================================================
+// Config[:search_strategy] = :from_source
+@outline
+module _usp[:for_each_source, :from_source, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_ball { ball[:for_each_source, PG_Edge, PG_Source, PG_Target, Config] }
+    def dist_from_S { the_ball[:dist_from_S] }
+    def radius { the_ball[:radius] }
+    def usp_source { the_ball[:usp_source] }
+    def usp_target { the_ball[:usp_target] }
+    def pg_to_usp_node { the_ball[:pg_to_usp_node] }
+    def usp_to_pg_node { the_ball[:usp_to_pg_node] }
+
+    def usp_edge {
+        usp_edge_from_pg[:for_each_source, PG_Edge, usp_target, pg_to_usp_node, dist_from_S, radius, Config]
+    }
+
+    def usp_node_to_node(vv, v): { usp_to_pg_node(vv, v, _) }
+
+end // module _usp[:from_source]
+
+// =========================================================================================
+// Helper functions for constructing the USP edges form the product graph
+@inline
+def usp_edge_from_pg[
+    :for_each_source, {PG_Edge}, {USP_Target}, {PG_To_USP_Node}, {Dist_From_S}, {Radius}, {Config}
+]: {
+    path_usp_edge[:for_each_source, Config[:product_graph],
+        PG_Edge, USP_Target, PG_To_USP_Node, Dist_From_S, Radius, :usp_edge
+    ]
+}
+
+// -----------------------------------------------------------------------------------------
+// == Config[:product_graph] = :on_the_fly ==
+// Build the paths backward from the target to the source nodes. We compute the USP edge
+// relation "on the fly", starting from the targets and working our way back to the sources
+// using the `Dist_From_S` relation to guide where to go next.
+@outline
+module path_usp_edge[:for_each_source, :on_the_fly,
+    {PG_Edge}, {USP_Target}, {PG_To_USP_Node}, {Dist_From_S}, {Radius}
+]
+
+    // The USP fragment is obtained by constructing the paths from the source nodes
+    // to the target nodes.
+    def usp_edge { usp_edge_back[_, _] }
+
+    @force_dnf
+    def start_usp_edge_back(uu, vv, a):
+        exists ( (u, p, v, q) |
+            PG_Edge(p, q, a, u, v) and
+            USP_Target(vv) and
+            PG_To_USP_Node[v, q] = vv and
+            PG_To_USP_Node[u, p] = uu
+        )
+
+    @force_dnf
+    def step_usp_edge_back(ss, len, uu, vv, a):
+        exists ( (u, p, v, q) |
+            usp_edge_back(ss, len + 1, vv, _, _) and
+            PG_Edge(p, q, a, u, v) and
+            PG_To_USP_Node[v, q] = vv and
+            PG_To_USP_Node[u, p] = uu
+        )
+
+    def usp_edge_back(ss, len, uu, vv, a):
+        Dist_From_S(ss, len, uu) and start_usp_edge_back(uu, vv, a) and len = Radius[ss] - 1
+        or
+        Dist_From_S(ss, len, uu) and step_usp_edge_back(ss, len, uu, vv, a)
+
+end // module usp_edge[:on_the_fly]
+
+// -----------------------------------------------------------------------------------------
+// == Config[:product_graph] = :materialized ==
+@outline
+module path_usp_edge[:for_each_source, :materialized,
+    {PG_Edge}, {USP_Target}, {PG_To_USP_Node}, {Dist_From_S}, {Radius}
+]
+
+    @function
+    def _distance(ss, uu, len): Dist_From_S(ss, len, uu)
+
+    // Pre-construct some relevant automaton edges on the index space
+    @force_dnf
+    def _relevant_automaton_edge(uu, vv, a):
+        exists ( (u, p, v, q) |
+            PG_Edge(p, q, a, u, v) and
+            PG_To_USP_Node[u, p] = uu and
+            PG_To_USP_Node[v, q] = vv
+        )
+
+    // uu -a-> vv is an edge, and uu is reachable from ss in len steps
+    def _reachable_from_S(ss, vv, uu, len, a):
+        _relevant_automaton_edge(uu, vv, a) and _distance[ss, uu] = len
+
+    // then, keep the edges uu --> vv where vv is reachable from S in len + 1 steps
+    def _candidate_edge(vv, uu, a):
+        exists ( (ss, len) |
+            _reachable_from_S(ss, vv, uu, len, a) and
+            _distance[ss, vv] = len + 1 and
+            len < Radius[ss]
+    )
+
+    // The USP fragment is obtained by constructing the paths from the source nodes
+    // to the target nodes. This recursion is now very simple
+    def usp_edge(uu, vv, a):
+        _candidate_edge(vv, uu, a) and USP_Target(vv)
+        or
+        _candidate_edge(vv, uu, a) and usp_edge(vv, _, _)
+
+end // module usp_edge[:materialized]
+
+end // namespace pathfinder::_internal
+
+// _internal/all (from model/_internal/all.rel)
+namespace pathfinder::_internal
+
+from ::pathfinder::_internal::utilities import
+    walks_count, enumeration_helpers
+
+doc"""
+  all[Group, PG_Edge, PG_Source, PG_Target, Config]
+
+## Inputs
+  Group    : all or for_each_source
+  PG_Edge  : (p, q, a, u, v), denoting (u, p) -> (v, q) with label a
+  PG_Source: (u, p) denoting that u is a source node with state p
+  PG_Target: (u, p) denoting that u is a target node with state p
+  Config   : configuration parameters
+
+## Outputs
+  paths    : all shortest paths from the source nodes to the target nodes in
+             the graph defined by PG_Edge
+"""
+@inline
+def all[{Group}, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    _all[Group, PG_Edge, PG_Source, PG_Target, Config, :paths]
+}
+
+@outline
+module _all[{Group}, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_usp { usp[Group, PG_Edge, PG_Source, PG_Target, Config] }
+
+    def relevant_usp_source { the_usp[:relevant_usp_source] }
+    def relevant_usp_target { the_usp[:relevant_usp_target] }
+    def usp_edge { the_usp[:usp_edge]}
+    def usp_node_to_node { the_usp[:usp_node_to_node] }
+
+
+    // For a node u, num_walks[u] is the number of shortest walks for the shortest_paths
+    // semantics, or the number of walks for all the other semantics, from the node u
+    // to a target node
+    def num_walks { walks_count[usp_edge, relevant_usp_target, Config, :num_walks] }
+
+
+    // paths is the set of all shortest paths from PG_Source PG_Target for the
+    // shortest_paths semantics, and the set of all walks from PG_Source to PG_Target
+    // of length at most Config[:max_path_length] for the walks semantics.
+    def paths { enumeration_helpers[
+            usp_edge,
+            relevant_usp_source,
+            relevant_usp_target,
+            usp_node_to_node,
+            num_walks,
+            Config,
+            :paths
+        ]
+    }
+
+end // module _all
+
+end // namespace pathfinder::_internal
+
+// _internal/usp (from model/_internal/usp.rel)
+namespace pathfinder::_internal
+
+from ::pathfinder::_internal::utilities import invert_pg
+
+doc"""
+    usp[Group, PG_Edge, PG_Source, PG_Target, Config]
+
+## Inputs
+  Group    : all or for_each_source
+  PG_Edge  : (p, q, a, u, v), denoting (u, p) -> (v, q) with label a
+  PG_Source: (u, p) denoting that u is a source node with state p
+  PG_Target: (u, p) denoting that u is a target node with state p
+  Config   : configuration parameters, including
+        Config[:search_strategy] ∈ { :from_source, :from_target, :from_both_sides }
+        Config[:product_graph] ∈ { :materialized, :on_the_fly }
+
+## Outputs
+  relevant_usp_source: USP source nodes uu, a unique numbering for (u, p, l) pairs
+  relevant_usp_target: USP target nodes vv, a unique numbering for (v, q, l) pairs
+  usp_edge           : (uu, vv, a), denoting USP edge uu --> vv with label a
+  usp_node_to_node   : mapping that convert uu to u
+
+## Algorithm
+
+Depending on the configuration parameter `Config[:search_strategy]`, the "union of shortest
+paths" graph is constructed in one of the following ways:
+- `:from_source`: a "ball" / "sphere" is expanded in a breadth-first manner from the source
+nodes until a target node is reached
+- `:from_target`: a "ball" / "sphere" is expanded in a breadth-first manner from the target
+nodes until a source node is reached
+- `:from_both_sides`: two "balls" / "spheres" are expanded from the source and target nodes
+until they meet in the middle
+
+The "ball" modules are responsible for constructing the balls, by computing the mappings
+`usp_to_pg_node` and `pg_to_usp_node` which convert between the USP node numbering and
+the product graph node numbering. We want to operate as much as possible in the USP node
+space, as it is more compact.
+
+The `usp_edge` relation is constructed from the pg_to_usp_node relation via the
+`usp_edge_from_pg` module.
+"""
+@outline
+module usp[{Group}, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    // internal computation:
+    def _the_usp {
+        _usp[Group, Config[:search_strategy], PG_Edge, PG_Source, PG_Target, Config]
+    }
+
+    def _usp_source { _the_usp[:usp_source] }
+    def _usp_target { _the_usp[:usp_target] }
+
+    // exposed API:
+    def usp_edge { _the_usp[:usp_edge]}
+    def usp_node_to_node { _the_usp[:usp_node_to_node] }
+
+    // A source node uu is relevant if it is included in the usp structure.
+    // The additional condition usp_target(uu) is included to handle paths of
+    // length zero, where a source node is relevant because it also serves as
+    // a target node.
+    def relevant_usp_source(uu): {
+        _usp_source(uu) and (_usp_target(uu) or usp_edge(uu, _, _))
+    }
+
+    // A target node uu is relevant if it is included in the usp structure.
+    // The additional condition usp_source(uu) is included to handle paths of
+    // length zero, where a target node is relevant because it also serves as
+    // a source node.
+    def relevant_usp_target(uu): {
+        _usp_target(uu) and (_usp_source(uu) or usp_edge(_, uu, _))
+    }
+
+end // module usp
+
+end // namespace pathfinder::_internal
+
+// _internal/any_pair/single (from model/_internal/any_pair/single.rel)
+namespace pathfinder::_internal
+
+from ::pathfinder::_internal::utilities import
+    some, aux_hash, invert_pg
+
+
+@outline
+module _single[:any_pair, :from_both_sides, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_balls { two_sided_balls[:any_pair, PG_Edge, PG_Source, PG_Target, Config] }
+
+    def pg_dist_from_S { the_balls[:pg_dist_from_S] }
+    def pg_dist_to_T { the_balls[:pg_dist_to_T] }
+    def radius_S { the_balls[:radius_S] }
+
+    @inline
+    def exists_middle {
+        exists((u, p) | pg_dist_from_S(radius_S, u, p) and pg_dist_to_T(_, u, p))
+    }
+
+    def path {
+        if_then_else[
+            exists_middle,
+            _single_two_balls[PG_Edge, pg_dist_from_S, pg_dist_to_T, radius_S, :path],
+            _single_one_ball[PG_Edge, PG_Target, pg_dist_from_S, :path]
+        ]
+    }
+
+end // module _single[:any_pair, :from_both_sides]
+
+
+@outline
+module _single_two_balls[{PG_Edge}, {PG_Dist_From_S}, {PG_Dist_To_T}, {Radius_S}]
+
+    // Construct a single shortest path from the source to the target nodes
+    def path(1, :node, i, v): path_from_S(i, v, _, _) or path_to_T(i, v, _, _)
+    def path(1, :edge_label, i, label):
+        path_from_S(i-1, _, _, label) or path_to_T(i, _, _, label)
+
+
+    def radius_T {
+        max[(i) :
+            exists((u, p) |  PG_Dist_From_S(Radius_S, u, p) and PG_Dist_To_T(i, u, p))
+        ]
+    }
+
+    // Pick a single middle node
+    @function
+    def single_candidate {
+        some[(u, p) :
+            PG_Dist_From_S(Radius_S, u, p) and PG_Dist_To_T(radius_T, u, p)
+        ]
+    }
+
+
+    // Length of the shortest paths from the source to the target nodes
+    def dist_S_to_T { Radius_S + radius_T }
+
+
+    // Build a single shortest path from the source to the the selected middle node
+    // by moving backward along edges in the product graph. With each path node
+    // keep the corresponding node of the product graph.
+    @function
+    def path_from_S[i]:
+        (single_candidate, aux_hash, i = Radius_S) // use dummy pg node `aux_hash`
+
+    @force_dnf
+    def path_from_S[i]:
+        some[
+            (u, p, a): exists((q, v) |
+                PG_Dist_From_S(i, u, p) and
+                PG_Edge(p, q, a, u, v)  and
+                path_from_S(i + 1, v, q, _))
+        ]
+
+
+    // Build the shortest path from the selected middle node to the target node
+    // by moving forward along edges in the product graph. With each path node
+    // keep the corresponding node of the product graph.
+    @function
+    def path_to_T[i]:
+        (single_candidate, aux_hash, i = Radius_S) // use dummy pg node
+
+    @force_dnf
+    def path_to_T[i]:
+        some[
+            (v, q, a): exists((p, u) |
+                PG_Dist_To_T(dist_S_to_T - i, v, q) and
+                PG_Edge(p, q, a, u, v)  and
+                path_to_T(i - 1, u, p, _))
+        ]
+
+end // module _single_from_middle
+
+
+@outline
+module _single_one_ball[{PG_Edge}, {PG_Target}, {PG_Dist_From_S}]
+
+    // Construct a single shortest path from the source to the target nodes
+    def path(1, :node, i, v): _path(i, v, _, _)
+    def path(1, :edge_label, i, label): _path(i-1, _, _, label)
+
+
+     def radius {
+        max[(i) :
+            exists((u, p) | PG_Dist_From_S(i, u, p) and PG_Target(u, p))
+        ]
+    }
+
+
+    @function
+    def _path[i]: (
+        some[(u, p, a) :
+            PG_Dist_From_S[u, p] = radius and PG_Target(u, p) and a = aux_hash
+        ],
+        i = radius
+    )
+    @force_dnf
+    def _path[i]:
+        some[
+            (u, p, a): exists((q, v) |
+                PG_Dist_From_S[u, p] = i and
+                PG_Edge(p, q, a, u, v)  and
+                _path(i + 1, v, q, _))
+        ]
+
+end // module _single_from_middle
+
+
+@outline
+module _single[
+    :any_pair, :from_source, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}
+]
+
+    def the_ball { ball[:any_pair, PG_Edge, PG_Source, PG_Target, Config] }
+
+    def pg_dist_from_S { the_ball[:pg_dist_from_S] }
+    def radius { the_ball[:radius] }
+
+
+    // Construct a single shortest path from the source to the target nodes
+    def path(1, :node, i, v): _path(i, v, _, _)
+    def path(1, :edge_label, i, label): _path(i-1, _, _, label)
+
+    @function
+    def _path[i]: (
+        some[(u, p, a) :
+            pg_dist_from_S[u, p] = radius and PG_Target(u, p) and a = aux_hash
+        ],
+        i = radius
+    )
+    @force_dnf
+    def _path[i]:
+        some[
+            (u, p, a): exists((q, v) |
+                pg_dist_from_S[u, p] = i and
+                PG_Edge(p, q, a, u, v)  and
+                _path(i + 1, v, q, _))
+        ]
+
+end // module _single[:any_pair, :from_source]
+
+
+@outline
+module _single[
+    :any_pair, :from_target, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}
+]
+
+    def the_ball { ball[:any_pair, invert_pg[PG_Edge], PG_Target, PG_Source, Config] }
+
+    def pg_dist_from_S { the_ball[:pg_dist_from_S] }
+    def radius { the_ball[:radius] }
+
+
+    // Construct a single shortest path from the source to the target nodes
+    def path(1, :node, i, v): _path(i, v, _, _)
+    def path(1, :edge_label, i, label): _path(i, _, _, label)
+
+    @function
+    def _path[i]: (
+        some[(u, p, a) :
+            pg_dist_from_S[u, p] = radius and PG_Source(u, p) and a = aux_hash
+        ],
+        i = 0
+    )
+    @force_dnf
+    def _path[i]:
+        some[
+            (u, p, a): exists((q, v) |
+                pg_dist_from_S[u, p] = radius - i and
+                PG_Edge(q, p, a, v, u)  and
+                _path(i - 1, v, q, _))
+        ]
+
+end // module _single[:any_pair, :from_target]
+
+end // namespace pathfinder::_internal
+
+// _internal/single (from model/_internal/single.rel)
+namespace pathfinder::_internal
+
+doc"""
+  single[Group, PG_Edge, PG_Source, PG_Target, Config]
+
+## Inputs
+  Group    : all or for_each_source
+  PG_Edge  : (p, q, a, u, v), denoting (u, p) -> (v, q) with label a
+  PG_Source: (u, p) denoting that u is a source node with state p
+  PG_Target: (u, p) denoting that u is a target node with state p
+  Config   : configuration parameters
+
+## Outputs
+  path     : a single shortest path from the source nodes to the target nodes in
+             the graph defined by PG_Edge
+"""
+@inline
+def single[{Group}, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    _single[
+        Group,
+        Config[:search_strategy],
+        PG_Edge,
+        PG_Source,
+        PG_Target,
+        Config,
+        :path
+    ]
+}
+
+end // namespace pathfinder::_internal
+
+// _internal/limit (from model/_internal/limit.rel)
+namespace pathfinder::_internal
+
+from ::pathfinder::_internal::utilities import
+    walks_count, enumeration_helpers
+
+doc"""
+  limit[Group, PG_Edge, PG_Source, PG_Target, PG_Label, Config]
+
+## Inputs
+  Group    : all or for_each_source
+  PG_Edge  : (p, q, a, u, v), denoting (u, p) -> (v, q) with label a
+  PG_Source: (u, p) denoting that u is a source node with state p
+  PG_Target: (u, p) denoting that u is a target node with state p
+  PG_Label : (a, lab), mapping hash label a to actual label lab of the PG edges
+  Config   : configuration parameters
+
+## Outputs
+  paths   : k shortest paths from the source nodes to the target nodes in
+            the graph defined by PG_Edge, where k = Config[:path_count]
+"""
+@inline
+def limit[{Group}, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    _limit[Group, PG_Edge, PG_Source, PG_Target, Config, :paths]
+}
+
+@outline
+module _limit[{Group}, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def the_usp { usp[Group, PG_Edge, PG_Source, PG_Target, Config] }
+
+    def relevant_usp_source { the_usp[:relevant_usp_source] }
+    def relevant_usp_target { the_usp[:relevant_usp_target] }
+    def usp_edge { the_usp[:usp_edge] }
+    def usp_node_to_node { the_usp[:usp_node_to_node] }
+
+
+    // For a node u, num_walks[u] is the number of shortest walks for the shortest_paths
+    // semantics, or the number of walks for all the other semantics, from the node u
+    // to a target node
+    def num_walks { walks_count[usp_edge, relevant_usp_target, Config, :num_walks] }
+
+
+    // paths is the set with the first Config[:path_count] shortest paths from PG_Source
+    // PG_Target for the shortest_paths semantics, and the set with the first
+    // Config[:path_count] walks from PG_Source to PG_Target of length at most
+    // Config[:max_path_length] for the walks semantics.
+    def paths { enumeration_helpers[
+            usp_edge,
+            relevant_usp_source,
+            relevant_usp_target,
+            usp_node_to_node,
+            num_walks,
+            Config,
+            :paths
+        ]
+    }
+
+end // module _all
+
+end // namespace pathfinder::_internal
+
+// config (from model/config.rel)
+namespace pathfinder
+    module default_config
+        def graph_type {:labeled}
+        def semantics {:shortest_paths}
+        def group {:any_pair}
+        def selector {:all}
+        def path_ids {:non_canonical}
+        def node_indexing {:zero_based}
+        def edge_indexing {:one_based}
+        def debug {:debug_off}
+        def product_graph {:materialized}
+        def search_strategy {:from_both_sides}
+        def path_enum_partials {:dynamic}
+        def search_start_nodes {:multiple}
+        def search_radius {:bounded}
+    end
+
+    @inline
+    def is_valid_config[{Config}]: {
+        empty(config_errors[Config])
+    }
+
+    @inline
+    def config_errors[{Config}]: {
+        "Illegal config keys: %(_print_symbols[_illegal_config_keys[Config]])" where
+        not empty(_illegal_config_keys[Config])
+    }
+
+    @inline
+    def _illegal_config_keys[{Config}]: {
+        diff[first[Config], first[default_config]]
+    }
+
+    @inline
+    def _print_symbols[{L}]: string_join[", ", enumerate[relname_string[L]]]
+
+end
+
+// pathfinder (from model/pathfinder.rel)
+namespace pathfinder
+
+from ::pathfinder::_internal import all, single, limit
+from ::pathfinder::_internal::utilities import post_process_paths
+
+
+def version { "0.7.0" }
+
+doc"""
+
+    find_paths[{Input}, {Config}]
+
+Return paths connecting a set of source nodes to a set of target in a product graph,
+where these parameters are specified in the relation Input:
+    - Input[:pg_source] is the set of source nodes in the product graph
+    - Input[:pg_target] is the set of target nodes in the product graph
+    - Input[:pg_graph] is the product graph
+
+The semantics deciding _which_ paths are returned is determined by the
+configuration Config. The most basic configuration parameters include:
+    - Config[:semantics] ∈ {:simple, :trail, :shortest_path, :walks}, with :shortest_path
+      being the default.
+    - Config[:group] ∈ {:any_pair, :for_each_source, :for_each_pair}, with :any_pair
+      being the default.
+    - Config[:selector] ∈ {:all, :single, :limit, :random, :uniform_random}, will :all
+      being the default.
+
+There are also other configuration parameters that can be used to control the behavior of
+the pathfinder algorithm, mostly for performance reasons. The full list of configuration
+parameters can be found in the documentation.
+
+The output is a set of paths represented vertically with each path having a canonical
+identifier. Namely, the output is a relation paths with two  specializations:
+* paths(path_id, :node, i, v) indicating that the i-th node of the path path_id is v.
+* paths(path_id, :edge_label, i, lab) indicating that the i-th edge of the path path_id
+  is labeled with lab (the edge connects the (i-1)-th and i-th node of the path).
+"""
+@track(:graphlib, :pathfinder_find_paths)
+@outline
+def find_paths[{Input}, {Config}]: {
+    _find_paths[Input[:pg_graph], Input[:pg_source], Input[:pg_target], Config, :paths]
+}
+
+@inline
+module _find_paths[{PG_Edge}, {PG_Source}, {PG_Target}, {Config}]
+
+    def raw_paths {
+        _raw_paths[Config[:selector], PG_Edge, PG_Source, PG_Target, Config]
+    }
+
+    def paths { post_process_paths[Config, raw_paths] }
+
+end // _find_paths[{Conn}, {S}, {T}, {Config}]
+
+@inline
+def _raw_paths[:all, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    all[Config[:group], PG_Edge, PG_Source, PG_Target, Config]
+}
+
+@inline
+def _raw_paths[:single, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    single[Config[:group], PG_Edge, PG_Source, PG_Target, Config]
+}
+
+@inline
+def _raw_paths[:limit, {PG_Edge}, {PG_Source}, {PG_Target}, {Config}]: {
+    limit[Config[:group], PG_Edge, PG_Source, PG_Target, Config]
+}
+
+end // namespace pathfinder

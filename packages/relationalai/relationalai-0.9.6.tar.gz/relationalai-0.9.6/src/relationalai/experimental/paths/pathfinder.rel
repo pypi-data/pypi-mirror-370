@@ -1,0 +1,2560 @@
+// Pathfinder package
+
+// pathfinder/utilities (from model/utilities.rel)
+doc"""
+Contains utility methods for working with paths and methods identified as
+of potential general interest (for consideration to be moved to other
+libraries).
+"""
+namespace pathfinder::utilities
+
+doc"""
+    prefix_sum[{List}]
+
+Computes sums of each prefix of an enumerated list `List(i, val)` i.e.,
+```
+prefix_sum[List, i] = List[1] + ... + List[i].
+```
+Assumes that `List` is a binary predicate: the first attribute takes consecutive integers
+values starting from 1, the second attribute supports addition. Uses an efficient
+divide-and-conquer approach.
+"""
+@inline
+def prefix_sum({List}, i, val): _prefix_sum(List, :result, i, val)
+
+// Implementation of prefix sums using divide-and-conquer approach
+@outline
+module _prefix_sum[{List}]
+    // Backward partial sums of exponentially growing lengths.
+    // B[i, j] = List[i - j + 1] + ... + List[i] for j∈{1,2,4,...} s.t. i|j
+    def B(i, 1, val): List(i, val)
+    def B(i, j, val):
+        exists((k) |
+            val = B[i, k] + B[i - k, k] and
+            j = 2 * k and
+            modulo[i, j] = 0
+        )
+
+    // Longest backward partial sum
+    def L[i, j]: (B[i, j], j = max[(k) : B(i, k, _)])
+
+    // Final result
+    def result(i, val): L(i, i, val)
+    def result(i, val): exists((j) | val = L[i, j] + result[i - j])
+end
+
+doc"""
+    linear_prefix_sum[{List}]
+
+Computes sums of each prefix of an enumerated list `List(i, val)` i.e.,
+```
+prefix_sum[List, i] = List[1] + ... + List[i].
+```
+Assumes that `List` is a binary predicate: the first attribute takes consecutive integers
+values starting from 1, the second attribute supports addition. This implementation uses
+the natural linear recursion approach.
+"""
+@inline
+def linear_prefix_sum({List}, i, val): _linear_prefix_sum(List, :result, i, val)
+
+// Implementation of prefix sums using divide-and-conquer approach
+@outline
+module _linear_prefix_sum[{List}]
+    @function
+    def result(i, val) : List(i, val) and i = 1
+    def result(i, val) : exists( (w, v) | result(i-1, w) and List(i, v) and val = w+v )
+end
+
+doc"""
+    hash_paths[{Paths}]
+
+Replaces the edge identifier of every path in the input collection `Paths` with a unique
+_canonical_ identifier of the path. The canonical identifier of a path is computed by
+hashing the path contents. In particular, if the input collection contains repeated
+paths, they will be collapsed into a single path.
+"""
+@inline
+def hash_paths({Paths}, new_id, x...):
+    exists((old_id) | Paths(old_id, x...) and _path_hash_reduce(Paths[old_id], new_id))
+
+// Computes the hash of a path ensuring proper handling of empty (single node) paths
+// and explicitly determining the order of hashing node ids  and edge labels.
+@inline
+def _path_hash_reduce[{Path}] :
+    rel_primitive_reduce[
+        murmurhash3f_with_seed,
+        uint128[0],
+        {(1, hash_reduce[Path[:node]]); (2, hash_reduce[Path[:edge_label]])}
+    ]
+
+
+doc"""
+    hash_reduce[{R}]
+
+Reduces a relation `R` into a single number (UInt128) representing its hash value.
+"""
+@inline
+def hash_reduce[{R}]: rel_primitive_reduce[murmurhash3f_with_seed, uint128[0], hash[R]]
+
+
+doc"""
+    pivot_paths[{R}, {L}]
+
+Pivots paths represented horizontally in a relation to a vertical representation.  The
+input relation `R` must have a fixed arity and the relation `L` is a relation
+with a single tuple of strings to be used as labels for the edges in the path. Naturally,
+`arity(L) = arity(R)-1`. Example usage:
+
+```
+    pivot_paths[{ (1,2,3); (3,2,4) }, {"a", "b"}]
+```
+
+The implementation does not check that `R` is a relation with uniform arity, and that `L`
+is a relation of arity one lesser with a single tuple of strings. Should those
+assumptions be violated, the behavior is undefined.
+"""
+@inline
+def pivot_paths[{R}, {L}]: {
+    hash_paths[_pivot_paths[R, pivot[L], :paths]]
+}
+
+// Builds a path set from a horizontal relation of node identifiers and a (vertical) edge of
+// labels relation. The relation `R` must have a fixed arity and the relation `Labels` is a
+// ordered list of strings to be used as labels for the edges in the path.
+@outline
+module _pivot_paths[{R}, {Labels}]
+    def path_count { count[R] }
+    def path_length { arity[R] }
+    def sorted_paths { sort[R] }
+    def dom_paths { range[1, path_count, 1] }
+    module paths[i in dom_paths]
+        def node(j, n): {
+            range(1, path_length, 1, j) and
+            pivot(sorted_paths[i], j, n)
+        }
+        def edge_label(j, l): {
+            range(1, path_length - 1, 1, j) and
+            Labels(j, l)
+        }
+    end
+end
+
+
+doc"""
+    canonical_index[i, j]
+
+Defines the canonical index of a pair of positive integers `(i, j)` by mapping it
+(bijectively) onto the set of positive integers. Its formulation proves that ℕ₊ ~ ℕ₊×ℕ₊.
+
+The principle of the enumeration is visualized on the fragment below.
+
+```
+      ↑
+      +--+
+    5 |11|
+      +--+--+
+    4 | 7|12|
+      +--+--+--+
+m  3 | 4| 8|13|
+      +--+--+--+--+
+    2 | 2| 5| 9|14|
+      +--+--+--+--+--+
+    1 | 1| 3| 6|10|15|
+      ∙--+--+--+--+--+-→
+        1  2  3  4  5
+              n
+```
+"""
+@inline
+def canonical_index[m, n]: {
+    m + ((m + n - 2) * (m + n - 1 ) ÷ 2)
+}
+
+
+doc"""
+    KleeneStar[{R}]
+
+Higher-order Kleene star operator defining the transitive and reflexive closure of the
+given binary relation `R`.
+"""
+@outline
+def KleeneStar({R}, x, y):
+    (x = y and (R(x, _) or R(_, x))) or
+    exists((z) | KleeneStar(R, x, z) and R(z, y))
+
+
+doc"""
+    KleenePlus[{R}]
+
+Higher-order Kleene star operator defining the transitive closure of the given binary
+relation `R`.
+"""
+@outline
+def KleenePlus({R}, x, y):
+    R(x, y) or exists((z) | KleenePlus(R, x, z) and R(z, y))
+
+end // namespace pathfinder::utilities
+
+
+// pathfinder (from model/pathfinder.rel)
+namespace pathfinder
+
+from ::pathfinder::utilities import hash_paths
+
+def version { "0.2.0" }
+
+doc"""
+    shortest_paths[group, selection, {PathQuery}, {Source}, {Target}(, {K})]
+
+Returns the shortest paths connecting `Source` nodes to `Target` nodes that follow the
+`PathQuery` predicate. The `group` parameter, can be either `:any` or `:for_each`, and it
+controls whether the output consists of paths whose length is the minimum length of a path
+connecting `:any` pair of source and target nodes, or whether `:for_each` pair of source
+and target nodes their connecting shortest paths are constructed. The `selection` parameter
+can be either `:single`, `:all`, or `:limit`, and it controls the set of paths that are
+returned. The `:single` selection returns a single shortest path (and in `:for_each`
+grouping a single path per source-target pair). The `:all` selection returns all shortest
+paths. The `:limit` allows to indicate the upper bound `K` on the number of paths to return;
+Note that the `shortest_paths` is overloaded for the selection `:limit` and expects the
+value `K` to be provided.
+
+The output is a set of paths represented vertically with each path having a canonical
+identifier. Namely, the output is a relation `paths` with two  specializations:
+* `paths(path_id, :node, i, v)` indicating that the `i`-th node of the path `path_id` is `v`.
+* `paths(path_id, :edge_label, i, lab)` indicating that the `i`-th edge of the path `path_id`
+  is labeled with `lab` (the edge connects the `i`-th and `i+1`-th node of the path).
+"""
+
+@inline
+def shortest_paths[:any, :all, :two_sided, {PQ}, {S}, {T}]:
+    hash_paths[::pathfinder::_internal::any::all[PQ, S, T]]
+@inline
+def shortest_paths[:any, :all, :from_source, {PQ}, {S}, {T}]:
+    ::pathfinder::_internal::any::from_source::all[PQ, S, T]
+@inline
+def shortest_paths[:for_each, :all, :from_source, {PQ}, {S}, {T}]:
+    ::pathfinder::_internal::for_each::from_source::all[PQ, S, T]
+
+
+end // namespace pathfinder
+
+// pathfinder/_internal/utilities (from model/_internal/utilities.rel)
+namespace pathfinder::_internal::utilities
+
+from ::pathfinder::utilities import hash_paths
+
+//
+// Return a single tuple deterministically from the relation `R`.
+//
+@inline
+def some[{R}]: top[1, R, 1]
+
+//
+// Auxiliary hash value used in recursive path construction to indicate a dummy automaton
+// state. The value is chosen to be different from the hash values of the actual states.
+//
+@function
+def aux_hash { uint128_hash_value_convert[murmurhash3f[murmurhash3f["__auxiliary__"]]] }
+
+//
+// Implementations of the shortest_paths methods number the nodes by their distance from the
+// source node, thus enumerating them starting from 0.  In Rel, however, it is customary to
+// enumerate lists starting from index 1.  Refactoring of the present code has been deemed
+// to introduce too much risk if attempted without a good coverage of the test.
+// Consequently, we introduce a post-processing step that reindexes the nodes,  starting
+// from 1 instead of 0. This transformation does introduce an overhead and we plan to remove
+// it in the future by refactoring the code constructing the paths.
+//
+@outline
+module reindex_nodes[{Paths}, path]
+    def node(i, v): Paths(path, :node, i-1, v)
+    def edge_label(i, lab): Paths(path, :edge_label, i, lab)
+end
+
+
+end // namespace pathfinder::_internal::utilities
+
+// pathfinder/_internal/any/balls (from model/_internal/any/balls.rel)
+namespace pathfinder::_internal::any
+
+//
+// balls[{Conn}, {S}, {T}]
+//
+// Constructs a subgraph of the product graph, defined by Conn,  that consists of two
+// "balls", one growing from the source nodes S and the other from the target nodes T.  The
+// balls are constructed by iteratively extending their diameter until they meet at common
+// middle node(s). To avoid explosion of the size of the balls, at each iteration we extend
+// only one of ball choosing the smallest one. There is a hard coded limit on the number of
+// iterations (up to 100).
+//
+// Input parameters:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph; used
+//   to extract a finite automaton FA with a set of states that represents the query.
+// - S: a set of source nodes; Type: (Node)
+// - T: a set of target nodes; Type: (Node)
+//
+// Output (most relevant):
+// - pg: the product graph defined by the FA extracted from the predicate Conn. A _node_ of
+//      the product graph is a pair (p, n) that represents FA reaching node n of the KG in a
+//      state p.  The edge between two nodes of the product graph is labeled with the (hash
+//      value) of the edge label in the KG that connects the two nodes and has a
+//      corresponding transition in A.  An a-labeled edge from (p, u) to (q, v) is
+//      represented as pg(p, q, a, u, v). Type: (State,State,#Label,Node,Node)
+// - label: a function that maps hashed edge labels to their string representation. Using
+//      hashes improves performance drastically. Type: (#Label, String).
+// - source: source nodes of the product graph. Type: (Node,State).
+// - middle: the set of the nodes of the pg where the two balls meet. Type: (Node,State).
+// - target: target nodes of the product graph. Type: (Node,State).
+// - dist_from_S: a relation that holds the distance between a product node (v, q) in the
+//      S-ball to its closest source node. Type: (Int,Node,State).
+// - dist_to_T: a relation that holds the distance between a product node (v, q) in the
+//      T-ball to its closest target node. Type: (Int,Node,State).
+// - radius_X: the diameter of the source X-ball (X is S or T). Type:Int.
+// - dist_S_to_T: the length of the shortest path between the source and target nodes.
+//      Type:Int .
+//
+@outline
+module balls[{Conn}, {S}, {T}]
+
+    // The S-ball starts from the source nodes in the initial state 1 of the automaton
+    @inline
+    def initial_state { 1 }
+
+    @inline
+    def source(u, p): S(u) and p = initial_state
+
+    // The T-ball starts from the target nodes in the final state of the automaton
+    // which are provided by the FFI rel_primitive_product_graph_targets
+    @pipeline
+    def pg_target { rel_primitive_product_graph_targets[Conn] }
+
+    @force_dnf
+    def target(u, p): T(u) and pg_target(p, u)
+
+    // The FFI rel_primitive_product_graph compiles the definition of the product graph
+    @inline
+    def pg { rel_primitive_product_graph[Conn] }
+
+    // This FFI provides the mapping from hash values to the string labels.
+    // (hash values of string labels are used for efficiency reasons)
+    @function
+    def label { rel_primitive_product_graph_labels[Conn] }
+
+    // Hard-coded bound on the maximal number of iterations to avoid runaway computations.
+    @inline
+    def max_number_iterations { 100 }
+
+
+    // Iterative process of constructing the balls. Uses recursion with non-stratified
+    // negation to simulate while loop iteration: finish_iteration() and finish_loop()
+    // control the execution of the loop.
+    @function
+    def radius_S {
+        minimum[
+            max[0;
+                radius_S;
+                {(radius_S + 1,                        // increment the diameter only if
+                    delta_S_size < delta_T_size and  // the ball size increase is smaller
+                    finish_iteration() and
+                    not finish_loop())
+                }
+            ],
+            max_number_iterations]
+    }
+
+    @function
+    def radius_T {
+        minimum[
+            max[0;
+                radius_T;
+                {(radius_T + 1,                         // increment the diameter only if
+                    delta_S_size >= delta_T_size and  // the ball size increase is smaller
+                    finish_iteration() and
+                    not finish_loop())}
+            ],
+            max_number_iterations]
+    }
+
+    // The sizes of the outermost layers of the respective balls at the current iteration
+    @inline
+    def delta_S_size { count[dist_from_S[radius_S]] }
+    @inline
+    def delta_T_size { count[dist_to_T[radius_T]] }
+
+    // Predecessor nodes of the source ball
+    @force_dnf
+    def prev_dist_from_S(v, q):
+        exists((u, p) |
+            dist_from_S(radius_S - 1, u, p) and pg(p, q, _, u, v)
+        )
+
+    // Extending the source ball (if radius_S hash been incremented)
+    @force_dnf
+    def dist_from_S(d, v, q): source(v, q) and d = 0
+    def dist_from_S(d, v, q):
+        d = radius_S and
+        prev_dist_from_S(v, q) and
+        not exists((j) | range(0, radius_S - 1, 1, j) and dist_from_S(j, v, q))
+    def dist_from_S(d, v, q): dist_from_S(d, v, q)
+
+    // Predecessor nodes of the target ball
+    @force_dnf
+    def prev_dist_to_T(u, p):
+        exists((v, q) |
+            dist_to_T(radius_T - 1, v, q) and pg(p, q, _, u, v)
+        )
+
+    // Extending the target ball (if radius_T hash been incremented)
+    @force_dnf
+    def dist_to_T(d, u, p): target(u, p) and d = 0
+    def dist_to_T(d, u, p):
+        d = radius_T and
+        prev_dist_to_T(u, p) and
+        not exists((j) | range(0, radius_T - 1, 1, j) and dist_to_T(j, u, p))
+    def dist_to_T(d, u, p): dist_to_T(d, u, p)
+
+    // Iteration is complete if extending both balls has been considered
+    def finish_iteration(): delta_S_size > 0 and delta_T_size > 0
+
+    // Loop is terminated when the two balls meet
+    def finish_loop():
+        exists((u, p) |
+            dist_from_S(radius_S, u, p) and dist_to_T(radius_T, u, p)
+        )
+
+    //  Nodes of the product graph where the two balls meet.
+    def middle(u, p): dist_from_S(radius_S, u, p) and dist_to_T(radius_T, u, p)
+
+    // The shortest path length is precisely the sum of the two diameters because we
+    // terminate the loop precisely when the two balls meet.
+    @function
+    def dist_S_to_T { radius_S + radius_T }
+
+end // module balls[{Conn}, {S}, {T}]
+
+
+end // namespace pathfinder::_internal::any
+
+// pathfinder/_internal/any/single (from model/_internal/any/single.rel)
+namespace pathfinder::_internal::any
+
+from ::pathfinder::_internal::utilities import ...
+
+// _Single indexes the nodes based on their distance from the source (starting from 0). We
+// reindex them to start from 1, as is common practice in Rel.
+@inline
+def single[{Conn}, {S}, {T}]: { reindex_nodes[_single[Conn, S, T, :paths]] }
+
+//
+// Computes a single shortest path from the set of source nodes S to the set of target nodes
+// T that follows the predicate Conn. The :any grouping selects only the shortest paths
+// among any paths satisfying Conn and connecting a source node to a target node. The path
+// is computed by selecting a middle node and building the two path fragments from the
+// source to the middle node and from the middle node to the target.
+//
+@outline
+module _single[{Conn}, {S}, {T}]
+
+    with balls[Conn, S, T] use
+        pg,                  // product graph. Type: (State,State,#Label,Node,Node)
+        dist_from_S,         // distance from S. Type: (Int,Node,State)
+        dist_to_T,           // distance to T. Type: (Int,Node,State)
+        dist_S_to_T,         // length of shortest path from S to T. Type: Int
+        radius_S,            // S-ball radius. Type: Int
+        middle,              // middle nodes in pg. Type: (Node,State)
+        label                // edge label: Type: (#Label,String)
+
+    def paths(1, :node, i, v): path_from_S(i, v, _, _) or path_to_T(i, v, _, _)
+    def paths[1, :edge_label, i]: label[path_from_S[i-1, _, _]]
+    def paths[1, :edge_label, i]: label[path_to_T[i, _, _]]
+
+    // Pick a single middle node
+    @function
+    def single_candidate { some[middle] }
+
+    // Build the path_from_S(Int, Node, Node, State) from the source to the midway node
+    // going backwards, following edges in the product graph. With each path node keep the
+    // corresponding node of the product graph.
+    @function
+    def path_from_S[i]:
+        (single_candidate, aux_hash, i = radius_S) // use dummy pg node `aux_hash`
+    @force_dnf
+    def path_from_S[i]:
+        some[
+            (u, p, a): exists((q, v) |
+                dist_from_S(i, u, p) and
+                pg(p, q, a, u, v)  and
+                path_from_S(i + 1, v, q, _))
+        ]
+
+    // Build the path fragment from the selected middle node to the target node going
+    // forwards following edges in the product graph (with each path node keep the
+    // corresponding node of the product graph)
+    @function
+    def path_to_T[i]:
+        (single_candidate, aux_hash, i = radius_S) // use dummy pg node
+
+    @force_dnf
+    def path_to_T[i]:
+        some[
+            (v, q, a): exists((p, u) |
+                dist_to_T(dist_S_to_T - i, v, q) and
+                pg(p, q, a, u, v)  and
+                path_to_T(i - 1, u, p, _))
+        ]
+
+end // with balls[Conn, S, T]
+
+end // module _single[{Conn}, {S}, {T}]
+
+
+end // namespace pathfinder::_internal::any
+
+// pathfinder/_internal/any/usp (from model/_internal/any/usp.rel)
+namespace pathfinder::_internal::any
+
+from ::pathfinder::utilities import prefix_sum
+
+//
+// The union of shortest paths (USP) is a subgraph of the product graph that contains only
+// the shortest paths from the set of source nodes to the set of target nodes.  Recall that
+// a node in a product graph is represented as a pair of values (u, p) where u is a node in
+// the source graph and p is a state of the finite automaton capturing the connectivity path
+// query. USP is decorated with additional information that compactly represents the
+// enumeration of the shortest paths that allows an efficient path retrieval.
+//
+// Because of performance considerations, we do not construct the full USP, but only its
+// fragments, and depending on the case we use
+// - usp_cut to construct a part of USP traversing only selected k middle nodes; used
+//   for constructing limit-k shortest paths.
+// - usp_segment to construct a fragment of USP, either from the source nodes
+//   to the middle nodes or from the target nodes to the middle nodes (in inverted
+//   direction).
+
+//
+// Constructs a part of the USP containing the shortest paths going through K middle points,
+// used for limit-k queries. The USP fragment is obtained by identifying the paths
+// traversing K selected middle nodes (obtained from the balls construction).
+//
+// Input:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph
+// - S: a set of source nodes. Type: (Node)
+// - T: a set of target nodes. Type: (Node)
+// - K: the number of middle nodes. Type: Int
+//
+// Output (that we use):
+// - limit_middle: the set of (up to) K middle nodes. Type: (Node,State)
+// - usp_edge: the edges of the USP fragment. Note that it has different signature than
+//   product graph. Namely, Type: (Node,State,Node,State,#Label)
+// Compact representation of the enumeration of the shortest paths
+// - neighbor: enumeration of the outbound edges of USP node.
+//   Type: (Node,State,Int,Node,State,#Label)
+// - nsp: the number of shortest paths from a USP node to target nodes.
+//   Type: (Node,State,Int)
+// - interval: the interval of numbers of shortest paths for source nodes.
+//   Type: (Node,Int,Int)
+// - acc_nsp: the enumeration of the shortest paths going through the outbound edges of a
+//   USP node. Type: (Node,State,Int)
+// - total: the total number of shortest paths from S to T (may be <= K). Type: Int
+//
+@outline
+module usp_cut[{Conn}, {S}, {T}, {K}]
+
+with balls[Conn, S, T] use
+    pg,              // product graph. Type: (State,State,#Label,Node,Node)
+    dist_from_S,     // distance from S. Type: (Int,Node,State)
+    dist_to_T,       // distance to T. Type: (Int,Node,State)
+    dist_S_to_T,     // length of shortest path from S to T. Type: Int
+    radius_S,        // S-ball radius. Type: Int
+    radius_T,        // T-ball radius. Type: Int
+    initial_state,   // initial state of the automaton. Type: Int
+    target,          // target nodes. Type: (Node,State)
+    middle           // middle nodes in pg. Type: (Node,State)
+
+    // Pick k middle nodes
+    def limit_middle { top[K, middle, range[1, K, 1]] }
+
+    // The USP fragment is obtained by constructing the paths from the source nodes to the
+    // middle nodes and from the middle nodes to the target nodes.
+    def usp_edge { usp_edge_back[_]; usp_edge_fwd[_] }
+
+    // Build the paths backward from the middle to the source nodes. We materialize the USP
+    // fragment "on the fly", using recursion where we control the order of evaluation by
+    // introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_back(u, p, v, q, a):
+        pg(p, q, a, u, v) and
+        limit_middle(v, q)
+
+    @force_dnf
+    def step_usp_edge_back(i, u, p, v, q, a):
+        usp_edge_back(i + 1, v, q, _, _, _) and
+        pg(p, q, a, u, v)
+
+    def usp_edge_back(i, u, p, v, q, a):
+        dist_from_S(radius_S - 1, u, p) and
+        start_usp_edge_back(u, p, v, q, a) and
+        i = radius_S - 1
+    def usp_edge_back(i, u, p, v, q, a):
+        step_usp_edge_back(i, u, p, v, q, a) and
+        dist_from_S(i, u, p)
+
+    // Build the paths forward from the middle to the target nodes. We materialize the USP
+    // fragment "on the fly", using recursion where we control the order of evaluation by
+    // introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_fwd(u, p, v, q, a):
+        limit_middle(u, p) and
+        pg(p, q, a, u, v)
+
+    @force_dnf
+    def step_usp_edge_fwd(i, u, p, v, q, a):
+        usp_edge_fwd(i - 1, _, _, u, p, _) and
+        pg(p, q, a, u, v)
+
+    def usp_edge_fwd(i, u, p, v, q, a):
+        start_usp_edge_fwd(u, p, v, q, a) and
+        dist_to_T(radius_T - 1, v, q) and
+        i = radius_S
+    def usp_edge_fwd(i, u, p, v, q, a):
+        step_usp_edge_fwd(i, u, p, v, q, a) and
+        dist_to_T(dist_S_to_T - i - 1, v, q)
+
+    //
+    // An enumeration of relevant shortest paths, represented in a compact manner.
+    //
+
+    // Order the outbound edges of every pg node
+    def neighbor(u, p, i, v, q, a):
+        enumerate({(w, _q, _a): usp_edge(u, p, w, _q, _a)}, i, v, q, a)
+
+    // Compute the number of shortest paths from the given USP node to target nodes
+    def nsp[u, p]: (1, target(u, p))
+    def nsp[u, p]: sum[(v, q, a, w): w = nsp[v, q] and usp_edge(u, p, v, q, a)]
+
+    // Filter out the source nodes that are not connected to a target node with a shortest
+    // path visiting limit_middle. If S and T coincide, USP has no edges and all relevant
+    // source nodes are in limit_middle (those are also target nodes).
+    def relevant_source(u): S(u) and usp_edge(u, initial_state, _, _, _)
+    def relevant_source(u): S(u) and limit_middle(u, initial_state)
+
+    // Order the relevant source nodes
+    def ordered_source { sort[relevant_source] }
+
+    // Decomposition of number of shortest paths that traverses nodes (and edges).
+    // Edge case is simple and we keep the relative position i of the edge.
+    def edge_nsp(u, p, i, val): exists((v, q) | val = nsp[v, q] and neighbor(u, p, i, v, q, _))
+
+    // Node case: an enumeration of the shortest paths going through its outbound edges
+    def acc_nsp[u, p, 0]: (0, usp_edge(u, p, _, _, _))
+    def acc_nsp[u, p]: prefix_sum[edge_nsp[u, p]]
+
+    // Also, relevant source nodes get an interval [a, b] of the shortest paths (up to K)
+    def interval(u, a, b) : 
+        ordered_source(1, u) and a = 1 and b = minimum[nsp[u, initial_state], K]
+        
+    def interval(u, a, b) : 
+        exists((i) | 
+            ordered_source(i, u) and
+            a = running_sum[i - 1] + 1 and 
+            a <= K and 
+            b = minimum[running_sum[i], K])
+            
+    def value_source(i, val): 
+        exists((u) | ordered_source(i, u) and val = nsp[u, initial_state] and i <= K)
+
+    def running_sum { prefix_sum[value_source] }
+
+
+    // The total number of shortest paths from S to T (that go through the K middle nodes)
+    def total { sum[(u, val): relevant_source(u) and val = nsp[u, initial_state]] }
+
+
+end // with balls[Conn, S, T]
+
+end // module usp_cut[{Conn}, {S}, {T}, {K}]
+
+//
+// Constructs a fragment of the USP containing the shortest paths from the set of source
+// nodes to the set of target nodes guided by the distance function and the product graph
+// definition.
+//
+// Input:
+// - Source: a set of pg source nodes. Type: (Node,State)
+// - Target: a set of pg target nodes. Type: (Node,State)
+// - Distance: distance of a pg node from the source. Type: (Int,Node,State)
+// - Length: the length of the shortest path in the USP fragment:
+// - PG: the product graph definition. Type: (State,State,#Label,Node,Node)
+//
+// Output:
+// - usp_edge: the edges of the USP fragment. Note that it has different signature than
+//   product graph. Type: (Node,State,Node,State,#Label)
+// - neighbor: enumeration of the outbound edges of USP node.
+//   Type: (Node,State,Int,Node,State,#Label)
+// - nsp: the number of shortest paths from a USP node to target nodes.
+//   Type: (Node,State,Int)
+// - interval: the interval of numbers of shortest paths for source nodes.
+//   Type: (Node,Int,Int)
+// - acc_nsp: the enumeration of the shortest paths going through consecutive outbound edges
+//   of a USP node. Type: (Node,State,Int,Int)
+//
+@outline
+module usp_segment[{Source}, {Target}, {Distance}, {Length}, {PG}]
+
+    // The USP fragment is obtained by constructing the edges from the source to the target
+    // following the indications of the distance function to capture only the shortest paths
+    def usp_edge(u, p, v, q, a): _usp_edge(_, u, p, v, q, a)
+
+    // The edges are build "on the fly", using recursion where we control the order of
+    // evaluation by introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge(u, p, v, q, a): Distance(Length - 1, u, p) and PG(p, q, a, u, v)
+
+    @force_dnf
+    def step_usp_edge(i, u, p, v, q, a): _usp_edge(i + 1, v, q, _, _, _) and PG(p, q, a, u, v)
+
+    def _usp_edge(i, u, p, v, q, a): start_usp_edge(u, p, v, q, a) and Target(v, q) and i = Length - 1
+    def _usp_edge(i, u, p, v, q, a): step_usp_edge(i, u, p, v, q, a) and Distance(i, u, p)
+
+    //
+    // An enumeration of relevant shortest paths, represented in a compact manner.
+    //
+
+    // Order the outbound edges of every pg node
+    def neighbor(u, p, i, v, q, a):
+        enumerate({(w, s, b): usp_edge(u, p, w, s, b)}, i, v, q, a)
+
+    // Compute the number of shortest paths from the given USP node to target nodes
+    def nsp[u, p]: (1, Target(u, p))
+    def nsp[u, p]: sum[(v, q, a, w): w = nsp[v, q] and usp_edge(u, p, v, q, a)]
+
+    // Filter out the source nodes that are not connected to a target node with a shortest
+    // path. If source and target nodes coincide, USP has no edges.
+    def _ordered_source(u, p): Source(u, p) and usp_edge(u, p, _, _, _)
+    def _ordered_source(u, p): Source(u, p) and Target(u, p)
+
+    def ordered_source { sort[_ordered_source] }
+
+    // Decomposition of number of shortest paths that traverses nodes (and edges).
+    // Edge case is simple and we keep the relative position i of the edge.
+    def edge_nsp(u, p, i, val):
+        exists((v, q) |
+            val = nsp[v, q] and
+            neighbor(u, p, i, v, q, _)
+        )
+
+    // Node case: an enumeration of the shortest paths going through its outbound edges
+    def acc_nsp[u, p, 0]: (0, usp_edge(u, p, _, _, _))
+    def acc_nsp[u, p]: prefix_sum[edge_nsp[u, p]]
+
+    // Relevant source nodes get an interval [a, b] of the shortest paths they originate
+    def interval(u, p, a, b) : 
+        ordered_source(1, u, p) and a = 1 and b = nsp[u, p]
+        
+    def interval(u, p, a, b) : 
+        exists((i) | 
+            ordered_source(i, u, p) and
+            a = running_sum[i - 1] + 1 and 
+            b = running_sum[i])
+            
+    def value_source(i, val): 
+        exists((u, p) | ordered_source(i, u, p) and val = nsp[u, p])
+
+    def running_sum { prefix_sum[value_source] }
+
+end // module usp_segment[{Source}, {Target}, {Distance}, {Length}, {PG}]
+
+
+end // namespace pathfinder::_internal::any
+
+// pathfinder/_internal/any/limit (from model/_internal/any/limit.rel)
+namespace pathfinder::_internal::any
+
+from ::pathfinder::_internal::utilities import reindex_nodes, aux_hash
+
+// _limit indexes the nodes based on their distance from the source (starting from 0). We
+// reindex them to start from 1, as is common practice in Rel.
+@inline
+def limit[{Conn}, {S}, {T}, {K}]: { reindex_nodes[_limit[Conn, S, T, K, :paths]] }
+
+//
+// Computes at most K shortest paths from the set of source nodes S to the set of target
+// nodes T that follow the predicate Conn. The :any grouping selects only the shortest paths
+// among any paths satisfying Conn and connecting a source node to a target node. The paths
+// are computed by selecting K middle node and materializing a fragment of the USP with
+// the shortest paths visiting the selected middle nodes.
+//
+@outline
+module _limit[{Conn}, {S}, {T}, {K}]
+
+    // Use balls to get the automaton's initial state and the edge label map
+    with balls[Conn, S, T] use
+        initial_state, // initial state of the automaton corresponding to Conn. Type: Int
+        label          // edge label. Type: (#Label,String)
+
+    // Compute USP fragment containing only paths traversing K middle nodes
+    with usp_cut[Conn, S, T, K] use
+        limit_middle, // selected middle nodes: (Node,State)
+        nsp,          // number of shortest paths from a USP node to. Type: (Node,State,Int)
+        neighbor,     // enum of outbound USP edges. Type: (Node,State,Int,Node,State,#Label)
+        usp_edge,     // the USP fragment (edges). Type: (Node,State,Int,Node,State,#Label)
+        interval,     // interval of shortest path numbers for source nodes. Type: (Node,Int,Int)
+        acc_nsp       // enum of shortest paths numbers following the order of
+                      // outbound edges, for a given USP node. Type: (Node,State,Int)
+
+    def paths(path_num, :node, i, v): _paths(i, v, _, path_num, _, _)
+    def paths(path_num, :edge_label, i, lab):
+        exists((h) |
+            _paths(i, _, _, path_num, h, _) and label(h, lab)
+        )
+
+
+    // Paths are constructed using their enumeration in the USP fragment.  The path is
+    // routed with the help on the interval assigned to source nodes, and with the neighbor
+    // enumeration and nsp values for subsequent nodes.
+    def _paths(0, v, q, path_num, a, n):
+        exists((c, d) |
+            a = aux_hash and
+            q = initial_state and
+            interval(v, c, d) and
+            range(c, d, 1, path_num) and
+            n = path_num - c + 1
+        )
+    def _paths(i, v, q, path_num, a, n):
+        exists((n2, u, p) |
+            _paths(i - 1, u, p, path_num, _, n2) and
+            route_path(u, p, n2, v, q, a, n)
+        )
+
+    // The path numbers assigned to the i-th outbound edge of u start at this number.
+    def prev_acc_nsp[u, p, i]: acc_nsp[u, p, i - 1]
+
+    // Route the n-th shortest path from (u,p) through (v,q) using an a-edge. Holds for
+    // every path with relative number m among the paths routed through the edge.
+    def route_path(u, p, m, v, q, a, n):
+        exists((i) |
+            range(prev_acc_nsp[u, p, i] + 1, acc_nsp[u, p, i], 1, m) and
+            neighbor(u, p, i, v, q, a) and
+            n = m - prev_acc_nsp[u, p, i]
+        )
+
+    end // with usp_cut[Conn, S, T, K]
+    end // with balls[Conn, S, T]
+
+end // module _limit[{Conn}, {S}, {T}, {K}]
+
+
+end // namespace pathfinder::_internal::any
+
+// pathfinder/_internal/any/utilities (from model/_internal/any/utilities.rel)
+namespace pathfinder::_internal::any
+
+//
+// Inverts the edges of the product graph, allowing to reuse path construction code for
+// forward and backward fragments. An edge (p, q, a, u, v) is inverted to (q, p, a, v, u).
+//
+@inline
+def invert_pg({PG}, q, p, a, v, u): PG(p, q, a, u, v)
+
+
+end // namespace pathfinder::_internal::any
+
+// pathfinder/_internal/any/all (from model/_internal/any/all.rel)
+namespace pathfinder::_internal::any
+
+
+from ::pathfinder::utilities import canonical_index
+from ::pathfinder::_internal::utilities import reindex_nodes, aux_hash
+
+// _all indexes the nodes based on their distance from the source (starting from 0). We
+// reindex them to start from 1, as is common practice in Rel.
+@inline
+def all[{Conn}, {S}, {T}]: reindex_nodes[_all[Conn, S, T, :paths]]
+
+//
+// Computes all shortest paths from the set of source nodes S to the set of target nodes T
+// that follow the predicate Conn. The :any grouping selects only the shortest paths among
+// any paths satisfying Conn and connecting a source node to a target node. The paths are
+// computed by selecting a middle node and building the two path fragments from the source
+// to the middle node and from the middle node to the target.
+//
+@outline
+module _all[{Conn}, {S}, {T}]
+
+    //
+    // Combine source-to-middle and middle-to-target paths
+    //
+    with balls[Conn, S, T] use
+        radius_S,  // S-ball radius. Type: Int
+        label      // edge label. Type: (#Label,String)
+
+        // Each shortest path is obtained by concatenating a fragment from a source node to a
+        // middle node and a fragment from the middle node to the target.
+        def paths(path_num, :node, i, v):
+            exists((path_num_S, path_num_T) |
+                path_num = canonical_index[path_num_S, path_num_T] and
+                (
+                    paths_from_S(i, v, _, path_num_S, _, _)
+                    or
+                    paths_to_T(i, v, _, path_num_T, _, _)
+                ) and
+                connected_fragments(path_num_S, path_num_T)
+            )
+        def paths(path_num, :edge_label, i, lab):
+            exists((path_num_S, path_num_T) |
+                connected_fragments(path_num_S, path_num_T) and
+                path_num = canonical_index[path_num_S, path_num_T] and
+                (
+
+                    exists((h) |
+                        paths_from_S(i,  _, _, path_num_S, h, _) and
+                        label(h, lab)
+                    )
+                    or
+                    exists((h) |
+                        paths_to_T(i - 1, _, _, path_num_T, h,  _) and
+                        label(h, lab)
+                    )
+                )
+            )
+
+        // A source path fragment is compatible with a target path fragment if they meet at a
+        // middle node. Note: the computation of the balls terminates when a middle is reached.
+        def connected_fragments(path_num_S, path_num_T):
+            exists((u, p) |
+                paths_from_S(radius_S, u, p, path_num_S, _, _) and
+                paths_to_T(radius_S, u, p, path_num_T, _, _)
+            )
+
+    end // balls[Conn, S, T]
+
+
+    //
+    // Construct source-to-middle path fragments
+    //
+    with balls[Conn, S, T] use
+        source,       // source nodes. Type: (Node,State)
+        middle,       // middle nodes. Type :(Node,State)
+        dist_from_S,  // distance from S. Type: (Int,Node,State)
+        radius_S,     // S-ball radius. Type: Int
+        pg,           // product graph. Signature: (State,State,#Label,Node,Node)
+        initial_state // initial state of the automaton. Type: Int
+
+    with usp_segment[source, middle, dist_from_S, radius_S, pg] use
+        neighbor,    // enum of outbound USP edges. Type: (Node,State,Int,Node,State,#Label)
+        nsp,         // number of shortest paths from a USP node to. Type: (Node,State,Int)
+        interval,    // interval of shortest path numbers for source nodes. Type: (Node,Int,Int)
+        acc_nsp      // enum of shortest paths numbers following the order of
+                     // outbound edges, for a given USP node. Type: (Node,State,Int)
+
+        // Paths are constructed using their enumeration in the USP fragment.  The path is
+        // routed with the help on the interval assigned to source nodes, and with the neighbor
+        // enumeration and nsp values for subsequent nodes.
+        def paths_from_S(i, v, q, path_num, a, n):
+            exists((c, d) |
+                i = 0 and
+                a = aux_hash and
+                q = initial_state and
+                interval(v, q, c, d) and
+                range(c, d, 1, path_num) and
+                n = path_num - c + 1
+            )
+        def paths_from_S(i, v, q, path_num, a, n):
+            exists((m, u, p) |
+                paths_from_S(i - 1, u, p, path_num, _, m) and
+                route_paths_from_S(u, p, m, v, q, a, n)
+            )
+
+        // The path numbers assigned to the i-th outbound edge of u start at this number.
+        def prev_acc_nsp[u, p, i]: acc_nsp[u, p, i - 1]
+
+        // Route the n-th shortest path from (u,p) through (v,q) using an a-edge. Holds for
+        // every path with relative number m among the paths routed through the edge.
+        def route_paths_from_S(u, p, m, v, q, a, n):
+            exists((i) |
+                range(prev_acc_nsp[u, p, i] + 1, acc_nsp[u, p, i], 1, m) and
+                neighbor(u, p, i, v, q, a) and
+                n = m - prev_acc_nsp[u, p, i]
+            )
+
+    end // compute_usp_segment[source, middle, dist_from_S, radius_S, pg]
+    end // balls[Conn, S, T]
+
+
+    //
+    // Construct middle-to-target path fragments
+    //
+    with balls[Conn, S, T] use
+        target,      // target nodes. Type: (Node,State)
+        middle,      // middle nodes. Type: (Node,State)
+        dist_to_T,   // distance to T. Type: (Int,Node,State)
+        radius_T,    // T-ball radius: Int
+        pg,          // product graph. Type: (State,State,#Label,Node,Node)
+        dist_S_to_T  // length of shortest path from S to T: Int
+
+    with usp_segment[target, middle, dist_to_T, radius_T, invert_pg[pg]] use
+        neighbor, // enum of outbound USP edges. Type: (Node,State,Int,Node,State,#Label)
+        nsp,      // number of shortest paths from a USP node to. Type: (Node,State,Int)
+        interval, // interval of shortest path numbers for source nodes. Type: (Node,Int,Int)
+        acc_nsp   // enum of shortest paths numbers following the order of
+                  // outbound edges, for a given USP node. Type: (Node,State,Int)
+
+        // Paths are constructed using their enumeration in the USP fragment.  The path is
+        // routed with the help on the interval assigned to source nodes, and with the neighbor
+        // enumeration and nsp values for subsequent nodes.
+        def paths_to_T(i, v, q, path_num, a, n):
+            exists((c, d) |
+                i = dist_S_to_T and
+                a = aux_hash and
+                interval(v, q, c, d) and
+                range(c, d, 1, path_num) and
+                n = path_num - c + 1
+            )
+        def paths_to_T(i, v, q, path_num, a, n):
+            exists((m, u, p) |
+                paths_to_T(i + 1, u, p, path_num, _, m) and
+                route_paths_to_T(u, p, m, v, q, a, n)
+            )
+
+        // The path numbers assigned to the i-th outbound edge of u start at this number.
+        def prev_acc_nsp_inv[u, p, i]: acc_nsp[u, p, i - 1]
+
+        // Route the n-th shortest path from (u,p) through (v,q) using an a-edge. Holds for
+        // every path with relative number m among the paths routed through the edge.
+        def route_paths_to_T(u, p, m, v, q, a, n):
+            exists((i) |
+                range(prev_acc_nsp_inv[u, p, i] + 1, acc_nsp[u, p, i], 1, m) and
+                neighbor(u, p, i, v, q, a) and
+                n = m - prev_acc_nsp_inv[u, p, i]
+            )
+
+    end // with usp_segment[target, middle, dist_to_T, radius_T, invert_pg[pg]]
+    end // with balls[Conn, S, T]
+
+end // module _all[{Conn}, {S}, {T}]
+
+
+end // namespace pathfinder::_internal::any
+
+// pathfinder/_internal/for_each/utilities (from model/_internal/for_each/utilities.rel)
+namespace pathfinder::_internal::for_each::utilities
+
+from ::pathfinder::utilities import canonical_index
+
+// `index_target(T, t, i)` holds if `t` is the `i`-th tuple of `T`
+@function @outline
+def index_target({T}, t, i): sort(T, i, t)
+
+
+@function @outline
+def index_target_pair({T}, t, j, val):  
+    exists((i) | val = canonical_index[i, j] and i = index_target[T, t])
+
+end // namespace pathfinder::_internal::for_each::utilities
+
+
+// pathfinder/_internal/for_each/balls (from model/_internal/for_each/balls.rel)
+namespace pathfinder::_internal::for_each
+
+//
+// compute_balls[{Conn}, {S}, {T}]
+//
+// Assuming that S consists of a single node and T = {t_1, ..., t_k}, constructs
+// a subgraph of the product graph, defined by Conn, that consists of "balls" B,
+// B_1, ..., B_k such that B grows from the source node S and B_i grows from
+// target node t_i for each 1 <= i <= k. The balls are constructed by iteratively
+// extending their radius until the intersection of B with each B_i is not empty.
+// To avoid an explosion in the size of the balls, at each iteration, we extend only
+// the source ball or the union of the target balls depending on which is smaller,
+// considering the target nodes whose balls have not yet intersected with the source
+// ball (referred to as "active" target nodes). There is a hardcoded limit on the
+// number of iterations (up to 100).
+//
+// Input parameters:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph
+// - S: a source node
+// - T: a set of target nodes
+//
+// Output (most relevant):
+// - pg: the product graph defined by the finite automaton A extracted from the
+//      predicate Conn. A node of the product graph is a pair (u, p) that represents
+//      A reaching node u of the KG in a state p. The edge between two nodes of
+//      the product graph is labeled with the (hash value) of the edge label in the KG
+//      that connects the two nodes and has a corresponding transition in A.  An
+//      a-labeled edge from (u, p) to (v, q) is represented as pg(p, q, a, u, v).
+//      Type: pg(State,State,#Label,Node,Node)
+// - label: a function that maps hashed edge labels to their string representation.
+//      Using hashes improves performance drastically. Type: label(#Label,String)
+// - middle: the set of the nodes of the product graph where the two balls meet. In
+//      particular, middle(t, i, u, p) holds if (u, p) is a node in the intersection
+//      of the ball centered at S with the ball centered at t for the target node t.
+//      Besides, i is the distance in the product graph between the source node and
+//      (u, p). Type: middle(Node,Int,Node,State)
+// - dist_from_S: a relation that holds the distance from the source node
+//      to a product node (v, q). Type: dist_from_S(Int,Node,State).
+// - dist_to_T: a relation that holds the distance of a product node (v, q) to a
+//      target node t, for each t in T, which is denoted as
+//      dist_from_S(d, t, v, q). Type: dist_to_T(Int,Node,Node,State).
+// - radius_S: the radius of the ball centered at S. Type: Int.
+// - radius_T: the maximum among the radii of the balls centered at t, for each
+//      target node t. Tyoe: Int.
+// - dist_S_to_T: the length of the shortest path between the source node and a target
+//      node t, for each t in T. Type: dist_S_to_T(Node,Int).
+//
+@outline
+module balls[{Conn}, {S}, {T}]
+
+    // The source ball starts from the source node in the initial state 1 of the automaton
+    @inline
+    def initial_state { 1 }
+
+    @inline
+    def source(u, p): S(u) and p = initial_state
+
+
+    // The target ball starts from the target nodes in the final states of the automaton
+    // which are provided by the FFI rel_primitive_product_graph_targets
+    @pipeline
+    def pg_target { rel_primitive_product_graph_targets[Conn] }
+
+    @force_dnf
+    def target(u, p): T(u) and pg_target(p, u)
+
+
+    // The FFI rel_primitive_product_graph compiles the definition of the product graph
+    @inline
+    def pg { rel_primitive_product_graph[Conn] }
+
+
+    // This FFI provides the mapping from hash values to the string labels
+    // (hash values of string labels are used for efficiency reasons)
+    @function
+    def label { rel_primitive_product_graph_labels[Conn] }
+
+
+    // Hard-coded bound on the maximum number of iterations to avoid runaway computations
+    @inline
+    def max_number_iterations { 100 }
+
+
+    // Iterative process of constructing the balls. Uses recursion with non-stratified
+    // negation to simulate while loop iteration: finish_iteration() and finish_loop()
+    // control the execution of the loop.
+    @function
+    def radius_S {
+        minimum[
+            max[0;
+                radius_S;
+                (radius_S + 1,                      // increment the radius only if
+                    delta_S_size < delta_T_size and // the ball size increase is smaller
+                    finish_iteration() and
+                    not finish_loop()
+                )
+            ],
+            max_number_iterations
+        ]
+    }
+
+
+    @function
+    def radius_T {
+        minimum[
+            max[0;
+                radius_T;
+                (radius_T + 1,                       // increment the radius only if
+                    delta_S_size >= delta_T_size and // the ball size increase is smaller
+                    finish_iteration() and
+                    not finish_loop()
+                )
+            ],
+            max_number_iterations
+        ]
+    }
+
+
+    // delta_S_size is the size of the layer at distance radius_S from the pair
+    // (s, 1), where s is the source node
+    @inline
+    def delta_S_size { count[dist_from_S[radius_S]] }
+
+
+    // delta_T_size is the size of the level set at distance radius_T from
+    // {(v, q) | v is a target node, q is a final state and v is active}
+    @inline
+    def delta_T_size { count[dist_to_T[radius_T]] }
+
+
+    // active(d, t) holds if t is a target node and there is no final state
+    // q such that the intersection of the ball of radius d from (v, q)
+    // with the ball of radius radius_S from (s, 1) is not empty, where s is
+    // the source node.
+    def active(d, t): T(t) and d = 0
+    def active(d, t):
+        d = radius_T and
+        active(radius_T - 1, t) and
+        not exists((u, p) |
+            dist_from_S(_, u, p) and dist_to_T(_, t, u, p)) and
+        forall((u) |
+            active(radius_T, t) implies dist_to_T(radius_T, u, _, _))
+    def active(d, t): active(d, t)
+
+
+    // prev_dist_from_S(v, q) holds if the distance from the source node
+    // to (v, q) is at most radius_S
+    @force_dnf
+    def prev_dist_from_S(v, q):
+        exists((u, p) |
+            dist_from_S(radius_S - 1, u, p) and pg(p, q, _, u, v)
+        )
+
+
+    // dist_from_S(d, v, q) holds if the distance between the source node
+    // and (v, q) is d.
+    @force_dnf
+    def dist_from_S(d, v, q): source(v, q) and d = 0
+    def dist_from_S(d, v, q):
+        d = radius_S and
+        prev_dist_from_S(v, q) and
+        not exists((j) |
+            range(0, radius_S - 1, 1, j) and dist_from_S(j, v, q))
+    def dist_from_S(d, v, q): dist_from_S(d, v, q)
+
+
+    // prev_dist_to_T(t, u, p) holds if the distance from (u, p)
+    //  to the target node t is at most radius_T
+    @force_dnf
+    def prev_dist_to_T(t, u, p):
+        exists((v, q) |
+            dist_to_T(radius_T - 1, t, v, q) and pg(p, q, _, u, v)
+        )
+
+
+    // Given a target node t, dist_to_T(d, t, u, p) holds if the distance
+    // between (u, p) and { (t, q) | q is a final state } is d.
+    // Notice that the distance from a node n to a set of nodes N is
+    // defined as the minimum of the distances from n to each node in N
+    @force_dnf
+    def dist_to_T(d, t, u, p): target(u, p) and d = 0 and t = u
+    def dist_to_T(d, t, u, p):
+        d = radius_T and
+        active(radius_T, t) and
+        prev_dist_to_T(t, u, p) and
+        not exists((j) |
+            range(0, radius_T - 1, 1, j) and dist_to_T(j, t, u, p))
+    def dist_to_T(d, t, u, p): dist_to_T(d, t, u, p)
+
+
+    // Iteration is complete if the extensions of source and target balls
+    // have been completed
+    def finish_iteration():
+        delta_S_size > 0 and
+        delta_T_size > 0 and
+        active(radius_T, _) and
+        forall((t) |
+            active(radius_T, t) implies dist_to_T(radius_T, t, _, _))
+
+
+    // Loop is terminated when the interesection of the source ball with each ball
+    // centered at t is not empty, where t is a target node.
+    def finish_loop():
+        forall((t) |
+            T(t) implies exists((u, p) | dist_from_S(_, u, p) and dist_to_T(_, t, u, p))
+        )
+
+
+    // This auxilary predicate is used for efficiency purposes
+    def pre_middle(t, i, j, u, p): dist_from_S(i, u, p) and dist_to_T(j, t, u, p)
+
+
+    // Given a target node t, dist_S_to_T[t] is the distance from
+    // the source node to t
+    @function
+    def dist_S_to_T[t]:
+        min[(k) : exists((i,j) | pre_middle(t, i, j, _, _) and k = i + j)]
+
+
+    // For each target node t, compute the set of pairs (u, p) in the
+    // intersection of the ball centered at (s, 1) with the ball centered at
+    // { (t, q) | q is a final state }, where s is the source node.
+    // Besides, for each such pair (u, p), it stores the distance i
+    // from (s, 1) to (u, p).
+    def middle(t, i, u, p):
+        exists((j) | pre_middle(t, i, j, u, p) and i + j = dist_S_to_T[t])
+
+
+    def max_dist_to_T[t, u, p]: max[(j) : pre_middle(t, _, j, u, p)]
+
+end // module balls[{Conn}, {S}, {T}]
+
+
+end // namespace pathfinder::for_each
+
+// pathfinder/_internal/for_each/all (from model/_internal/for_each/all.rel)
+namespace pathfinder::_internal::for_each
+
+from ::pathfinder::utilities import prefix_sum
+from ::pathfinder::_internal::utilities import reindex_nodes, aux_hash
+
+
+// _all indexes the nodes based on their distance from the source (starting from 0).
+// We reindex them to start from 1, as is common practice in Rel.
+@inline
+def all[{Conn}, {S}, {T}]: { reindex_nodes[_all[Conn, S, T, :paths]] }
+
+
+//
+// Given a connectivity predicate Conn, a source node S and a set of
+// target nodes T, all[{Conn}, {S}, {T}] computes all shortest paths from S
+// to t that conform to Conn, for each target node t in T.
+//
+@outline
+module _all[{Conn}, {S}, {T}]
+
+    with balls[Conn, S, T] use
+        pg,            // product graph. Type: (State,State,#Label,Node,Node)
+        middle,        // middle nodes in the paths from S to each target node in pg
+                       // Type: (Node,Int,Node,State)
+        dist_from_S,   // distance from S. Type: (Int,Node,State)
+        radius_S,      // radius of the ball centered at S. Type: Int
+        dist_to_T,     // distance to each node in T. Type: (Int,Node,Node,State)
+        max_dist_to_T, // maximum of the distances in dist_to_T. Type: Int
+        dist_S_to_T,   // length of shortest path from S to each node in T.
+                       // Type: (Node,Int)
+        source,        // source node in pg. Type: (Node,State)
+        label          // edge label. Type: (#Label,String)
+
+
+    // Listing all shortest paths from the source node to the target nodes.
+    def paths(path_num, :node, i, v): _paths(i, v, _, path_num, _, _)
+    def paths(path_num, :edge_label, i, lab):
+        exists((h) | _paths(i, _, _, path_num, h, _) and label(h, lab))
+
+    // _paths(i, v, q, path_num, a, n) holds if (v, q) is the node of
+    // the product graph at position i of a path, a is the label of the
+    // i-th edge of the path, and n is the path-number of the sub-problem of
+    // generating a path from (v, q) to the target nodes in the product graph.
+    def _paths(i, v, q, path_num, a, n):
+        i = 0 and
+        source(v, q) and
+        a = aux_hash and
+        range(1, nsp[0, v, q], 1, path_num) and
+        n = path_num
+    def _paths(i, v, q, path_num, a, n):
+        exists((m, u, p) |
+            _paths(i - 1, u, p, path_num, _, m) and
+            route_path(i - 1, u, p, m, v, q, a, n) and
+            not relevant_target(i - 1, u, p)
+        )
+    def _paths(i, v, q, path_num, a, n):
+        exists((m, u, p) |
+            _paths(i - 1, u, p, path_num, _,  m) and
+            route_path(i - 1, u, p, m - 1, v, q, a, n) and
+            relevant_target(i - 1, u, p) and
+            m > 1
+        )
+
+
+    // The union of shortest paths (USP) is a subgraph of the product graph that
+    // is defined as the union of the shortest paths from the source node to each
+    // target node. Recall that a node in a product graph is represented as a pair of
+    // values (u, p) where u is a node in the source graph and p is a state of
+    // the finite automaton representing the connectivity path query. USP is decorated
+    // with additional information that compactly represents the enumeration of the
+    // shortest paths that allows an efficient path retrieval.
+
+    // The USP structure is obtained by constructing the paths from the source node to
+    // the middle nodes and from the middle nodes to the target nodes.
+    // usp_edge(i, u, p, v, q, a) holds if there is an edge in the product graph from
+    // (u, p) to (v, q) with label a, and the distance from the source node in the
+    // product graph to (u, p) is i.
+    def usp_edge(i, u, p, v, q, a): usp_edge_back(i, u, p, v, q, a)
+    def usp_edge(i, u, p, v, q, a): usp_edge_fwd(_, i, u, p, v, q, a)
+
+
+    // Build the paths backward from the middle to the source node. We materialize the
+    // USP fragment "on the fly", using recursion where we control the order of
+    // evaluation by introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_back(i, u, p, v, q, a):
+        dist_from_S(i, u, p) and pg(p, q, a, u, v) and i <= radius_S - 1
+
+    @force_dnf
+    def step_usp_edge_back(i, u, p, v, q, a):
+        usp_edge_back(i + 1, v, q, _, _, _) and pg(p, q, a, u, v)
+
+    // usp_edge_back(i, u, p, v, q, a) holds if there is an edge in
+    // the product graph from (u, p) to (v, q) with label a, and the
+    // distance from the source node in the product graph to (u, p) is i.
+    def usp_edge_back(i, u, p, v, q, a):
+        start_usp_edge_back(i, u, p, v, q, a) and middle(_, i + 1, v, q)
+    def usp_edge_back(i, u, p, v, q, a):
+        step_usp_edge_back(i, u, p, v, q, a) and dist_from_S(i, u, p)
+
+
+    // Build the paths forward from the middle to the target nodes. We materialize the
+    // USP structure "on the fly", using recursion where we control the order of
+    // evaluation by introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_fwd(t, j, u, p, v, q, a):
+        dist_to_T(j, t, v, q) and
+        pg(p, q, a, u, v) and
+        j = max_dist_to_T[t, u, p] - 1
+
+    @force_dnf
+    def step_usp_edge_fwd(t, i, u, p, v, q, a):
+        usp_edge_fwd(t, i - 1, _, _, u, p, _) and pg(p, q, a, u, v)
+
+    // Assuming that t is a target node and d is the distance from the
+    // source node to { (t, r) | r is a final state } in the product graph,
+    // usp_edge_fwd(t, i, u, p, v, q, a) holds if there is an edge in the
+    // product graph from (u, p) to (v, q) with label a, and the distance
+    // from (v, q) to { (t, r) | r is a final state } is d - (i + 1).
+    // Recall that the distance between a node n and a set of nodes N is
+    // defined as the minimum of the distances between n and each node in N.
+    def usp_edge_fwd(t, i, u, p, v, q, a):
+        exists((j) |
+            middle(t, i, u, p) and
+            start_usp_edge_fwd(t, j, u, p, v, q, a) and
+            i + j + 1 = dist_S_to_T[t]
+        )
+    def usp_edge_fwd(t, i, u, p, v, q, a):
+        exists((j) |
+            step_usp_edge_fwd(t, i, u, p, v, q, a) and
+            dist_to_T(j, t, v, q) and
+            i + j + 1 = dist_S_to_T[t]
+        )
+
+
+    // Order the outbound edges of every USP node
+    def neighbor(i, u, p, j, v, q, a):
+        sort({(w, r, b) : usp_edge(i, u, p, w, r, b)}, j, v, q, a)
+
+
+    // Filter out the target nodes for which there is no path from the source node.
+    def relevant_target(i, u, p):
+        source(u, p) and dist_S_to_T[u] = 0 and i = 0
+    def relevant_target(i, u, p):
+        T(u) and i = dist_S_to_T[u] and usp_edge(i - 1, _, _, u, p, _)
+
+
+    // Compute the number of shortest paths from the given USP node to the
+    // target nodes
+    def nsp[i, u, p]:
+        (
+            sum[(v, q, a, w) : w = nsp[i + 1, v, q] and usp_edge(i, u, p, v, q, a)],
+            not relevant_target(i, u, p)
+        )
+    def nsp[i, u, p]:
+        (
+            (sum[(v, q, a, w) :
+                w = nsp[i + 1, v, q] and usp_edge(i, u, p, v, q, a)
+             ]<++0) + 1,
+            relevant_target(i, u, p)
+        )
+
+
+    // Given a number j, acc_nsp computes the accumulated number of shortest
+    // paths from a node in the USP structure to the target nodes that pass
+    // through the first j successors of the node.
+    def acc_nsp[i, u, p, 0]: (0, usp_edge(i, u, p, _, _, _))
+    def acc_nsp[i, u, p]: prefix_sum[_acc_nsp[i, u, p]]
+
+    // Auxiliary predicate used for efficiency reasons.
+    def _acc_nsp(i, u, p, j, val):
+        exists((v, q) |
+            val = nsp[i + 1, v, q] and neighbor(i, u, p, j, v, q, _)
+        )
+
+
+    // Routes the m-th shortest path from (u, p) through (v, q) using an
+    // a-edge, and computes the number n for rerouting from (v, q)
+    // in the construction of the shortest path.
+    def route_path(i, u, p, m, v, q, a, n):
+        exists((j) |
+            range(
+                _route_path[i, u, p, j] + 1,
+                acc_nsp[i, u, p, j],
+                1,
+                m
+            ) and
+            neighbor(i, u, p, j, v, q, a) and
+            n = m - _route_path[i, u, p, j]
+        )
+
+    // Auxiliary predicate used for efficiency reasons.
+    def _route_path[i, u, p, j]: acc_nsp[i, u, p, j - 1]
+
+    end // with balls[Conn, S, T] use
+
+end // module _all[{Conn}, {S}, {T}]
+
+
+end // pathfinder::_internal::for_each
+
+// pathfinder/_internal/for_each/single (from model/_internal/for_each/single.rel)
+namespace pathfinder::_internal::for_each
+
+from ::pathfinder::_internal::utilities import some, aux_hash, reindex_nodes
+from ::pathfinder::_internal::for_each::utilities import index_target
+
+
+//
+// Given a connectivity predicate Conn, a source node S and a set of
+// target nodes T, single[{Conn}, {S}, {T}] computes a single shortest path
+// from S to t for each target node t in T.
+// _single indexes the nodes based on their distance from the source (starting from 0).
+// We reindex them to start from 1, as is common practice in Rel.
+//
+@inline
+def single[{Conn}, {S}, {T}]: { reindex_nodes[_single[Conn, S, T, :paths]] }
+
+
+@outline
+module _single[{Conn}, {S}, {T}]
+
+    with balls[Conn, S, T] use
+        pg,          // product graph. Type: (State,State,#Label,Node,Node)
+        dist_from_S, // distance from S. Type: (Int,Node,State)
+        dist_to_T,   // distance to each node in T. Type: (Int,Node,Node,State)
+        dist_S_to_T, // length of shortest path from S to each node in T.
+                     // Type: (Node,Int)
+        middle,      // middle nodes in the paths from S to each target node in pg
+                     // Type: (Node,Int,Node,State)
+        label        // edge label. Type: (#Label,String)
+
+    // For each target node t, paths combines the results of
+    // path_from_S and path_to_T into a single path from the source
+    // node to t
+    def paths(path_num, :node, i, v):
+        exists((t) |
+            (path_from_S(t, i, v, _, _) or path_to_T(t, i, v, _, _)) and
+            index_target(T, t, path_num)
+        )
+    def paths(path_num, :edge_label, i, lab):
+        exists((t, h) |
+            (path_from_S(t, i - 1, _, _, h) or path_to_T(t, i, _, _, h)) and
+            label(h, lab) and
+            index_target(T, t, path_num)
+        )
+
+
+    // For each target node t, choose a pair (u, p) in the intersection
+    // of the ball centered at (s, 1) and the ball centered at
+    // { (t, q) | q is a final state }, where s is the source node.
+    @function
+    def candidate(t, i, u, p):
+        { some[(j, v, q): middle(t, j, v, q)] }(i, u, p)
+
+
+    // For each target node t, path_from_S constructs a path from
+    // (s, 1) to a pair (v, q) in the middle, where where s is the
+    // source node.
+    def path_from_S(t, i, u, p, a): candidate(t, i, u, p) and a = aux_hash
+    @force_dnf
+    def path_from_S[t, i]:
+        some[(u, p, a) :
+            exists((q, v) |
+                dist_from_S(i, u, p) and
+                pg(p, q, a, u, v)  and
+                path_from_S(t, i + 1, v, q, _)
+            )
+        ]
+
+
+    // For each target node t, path_to_T constructs a path from
+    // a pair (u, p) in the middle to (t, q), where q is a final
+    // state
+    def path_to_T(t, i, u, p, a): candidate(t, i, u, p) and a = aux_hash
+    @force_dnf
+    def path_to_T[t, i]:
+        some[(v, q, a) :
+            dist_to_T(dist_S_to_T[t] - i, t, v, q) and
+            exists((p, u) |
+                pg(p, q, a, u, v) and path_to_T(t, i - 1, u, p, _))
+        ]
+
+    end // with balls[Conn, S, T]
+
+end // module _single[{Conn}, {S}, {T}]
+
+
+end // pathfinder::_internal::for_each
+
+// pathfinder/_internal/for_each/usp (from model/_internal/for_each/usp.rel)
+namespace pathfinder::_internal::for_each
+
+from ::pathfinder::utilities import prefix_sum
+
+// The union of shortest paths (USP) is a subgraph of the product graph that
+// is defined as the union of the shortest paths from the source node to each
+// target node. Recall that a node in a product graph is represented as a pair of
+// values (u, p) where u is a node in the source graph and p is a state of
+// the finite automaton representing the connectivity path query. USP is decorated
+// with additional information that compactly represents the enumeration of the
+// shortest paths that allows an efficient path retrieval.
+
+
+//
+// Constructs a fragment of the USP containing the shortest paths from the source node
+// to each target node going through K middle points, used for limit-k queries.
+// The USP fragment is obtained by identifying the paths traversing K selected
+// middle nodes (obtained from the balls construction).
+//
+// Input:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph
+// - S: a source node
+// - T: a set of target nodes
+// - K: the number of middle nodes (single int)
+//
+// Output (that we use):
+// - limit_middle: the set of (up to) K middle nodes for each target node t.
+//   Type: (Node,Node,State)
+// - usp_edge: the edges of the USP fragment. Note that it has different signature
+//   than product graph. Type: (Node,Node,State,Node,State,#Label)
+//   [Compact representation of the enumeration of the shortest paths]
+// - neighbor: enumeration of the outbound edges of USP node.
+//   Type: (Node,Node,State,Int,Node,State,#Label)
+// - nsp: the number of shortest paths from a USP node to target nodes. Type:
+//   (Node,Node,State,Int)
+// - relevant_target: target nodes in pg that are reachable from the source node.
+//   Type: (Node,State)
+// - acc_nsp: the enumeration of the shortest paths going through the outbound edges
+//   of a USP node. Type: (Node,Node,State,Int)
+// - total: the total number of shortest paths from the source node to each target
+//   node (may be smaller than K, or even 0, for some target nodes).
+//   Type: (Node,Int)
+//
+@outline
+module usp_cut[{Conn}, {S}, {T}, {K}]
+
+    with balls[Conn, S, T] use
+        middle,        // middle nodes in the paths from S to each target node in pg.
+                       // Type: (Node,Int,Node,State)
+        pg,            // product graph. Type: (State,State,#Label,Node,Node)
+        dist_from_S,   // distance from S. Type: (Int,Node,State)
+        dist_to_T,     // distance to each node in T. Type: (Int,Node,Node,State)
+        dist_S_to_T,   // length of shortest path from S to each node in T.
+                       // Type: (Node,Int)
+        radius_S,      // radius of the ball centered at S. Type: Int
+        source,        // source node in pg. Type: (Node,State)
+        target         // target nodes in pg. Type: (Node,State)
+
+
+    // Pick K middle nodes for each target node t
+    def limit_middle[t]: top[K, {(j, v, q) : middle(t, j, v, q)}, range[1, K, 1]]
+
+
+    // The USP structure is obtained by constructing the paths from the source node to
+    // the middle nodes and from the middle nodes to the target nodes.
+    // usp_edge(t, u, p, v, q, a) holds if there exists a path from the source node
+    // to the target node t that contains an edge from (u, p) to (v, q)
+    // with label a
+    def usp_edge(t, u, p, v, q, a): usp_edge_back(t, _, u, p, v, q, a)
+    def usp_edge(t, u, p, v, q, a): usp_edge_fwd(t, _, u, p, v, q, a)
+
+
+    // Build the paths backward from the middle to the source node. We materialize the
+    // USP fragment "on the fly", using recursion where we control the order of
+    // evaluation by introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_back(t, i, u, p, v, q, a):
+        pg(p, q, a, u, v) and
+        limit_middle(t, i + 1, v, q)
+
+    @force_dnf
+    def step_usp_edge_back(t, i, u, p, v, q, a):
+        usp_edge_back(t, i + 1, v, q, _, _, _) and
+        pg(p, q, a, u, v)
+
+    // usp_edge_back(t, i, u, p, v, q, a) holds if there exists a path
+    // from the source node to the target node t that contains an edge from
+    // (u, p) to (v, q) with label a, and the distance from the source
+    // node to (u, p) in this path is i.
+    def usp_edge_back(t, i, u, p, v, q, a):
+        start_usp_edge_back(t, i, u, p, v, q, a) and
+        dist_from_S(i, u, p) and
+        i <= radius_S - 1
+    def usp_edge_back(t, i, u, p, v, q, a):
+        step_usp_edge_back(t, i, u, p, v, q, a) and
+        dist_from_S(i, u, p)
+
+
+    // Build the paths forward from the middle to the target nodes. We materialize the
+    // USP structure "on the fly", using recursion where we control the order of
+    // evaluation by introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_fwd(t, i, u, p, v, q, a):
+        limit_middle(t, i, u, p) and
+        pg(p, q, a, u, v)
+
+    @force_dnf
+    def step_usp_edge_fwd(t, i, u, p, v, q, a):
+        usp_edge_fwd(t, i - 1, _, _, u, p, _) and
+        pg(p, q, a, u, v)
+
+    // usp_edge_fwd(t, i, u, p, v, q, a) holds if there exists a path
+    // from the source node to the target node t that contains an edge from
+    // (u, p) to (v, q) with label a, and the distance from the source
+    // node to (u, p) in this path is i.
+    def usp_edge_fwd(t, i, u, p, v, q, a):
+        exists((j) |
+            start_usp_edge_fwd(t, i, u, p, v, q, a) and
+            dist_to_T(j, t, v, q) and
+            i + j + 1 = dist_S_to_T[t]
+        )
+    def usp_edge_fwd(t, i, u, p, v, q, a):
+        exists((j) |
+            step_usp_edge_fwd(t, i, u, p, v, q, a) and
+            dist_to_T(j, t, v, q) and
+            i + j + 1 = dist_S_to_T[t]
+        )
+
+
+    // Order the outbound edges of every USP node, considering for each
+    // target node t the fragment of the USP structure consisting of the
+    // shortest paths form the source node to t.
+    def neighbor(t, u, p, j, v, q, a):
+        sort({(w, r, b) : usp_edge(t, u, p, w, r, b)}, j, v, q, a)
+
+
+    // Filter out the target nodes for which there is no path from the source node.
+    def relevant_target(u, p): source(u, p) and dist_S_to_T[u] = 0
+    def relevant_target(u, p): target(u, p) and usp_edge(u, _, _, u, p, _)
+
+
+    // Compute the number of shortest paths from a given USP node to the
+    // target node t, considering the fragment of the USP structure
+    // consisting of the shortest paths form the source node to t.
+    def nsp[t, u, p]: (1, relevant_target(u, p) and t = u)
+    def nsp[t, u, p]:
+        sum[(v, q, a, w) : w = nsp[t, v, q] and usp_edge(t, u, p, v, q, a)]
+
+
+    // Given a number j, acc_nsp computes the accumulated number of shortest
+    // paths from a node in the USP structure to the target node t that pass
+    // through the first j successors of the node, considering the fragment
+    // of the USP structure consisting of the shortest paths form the source
+    // node to t.
+    def acc_nsp[t, u, p, 0]: (0, usp_edge(t, u, p, _, _, _))
+    def acc_nsp[t, u, p]: prefix_sum[_acc_nsp[t, u, p]]
+
+    // Auxiliary predicate used for efficiency reasons.
+    def _acc_nsp(t, u, p, j, val):
+        exists((v, q) |
+            val = nsp[t, v, q] and neighbor(t, u, p, j, v, q, _)
+        )
+
+
+    // The maximum index of a successor of a node in the USP structure,
+    // considering the fragment of the USP structure consisting of the
+    // shortest paths form the source node to t.
+    @inline
+    def max_pos[t, u, p]: max[(i) : neighbor(t, u, p, i, _, _, _)]
+
+
+    // The total number of shortest paths from the source node to
+    // each target node (that go through the K middle nodes)
+    def total(t, val):
+        exists((u, p) |
+            val = (nsp[t, u, p]<++0) and T(t) and source(u, p)
+        )
+
+    end // balls[Conn, S, T] use
+
+end // module usp_cut[{Conn}, {S}, {T}, {K}]
+
+
+end // namespace pathfinder::_internal::for_each
+
+// pathfinder/_internal/for_each/limit (from model/_internal/for_each/limit.rel)
+namespace pathfinder::_internal::for_each
+
+from ::pathfinder::utilities import canonical_index
+from ::pathfinder::_internal::utilities import reindex_nodes, aux_hash
+from ::pathfinder::_internal::for_each::utilities import index_target
+
+
+// _limit indexes the nodes based on their distance from the source (starting from 0). We
+// reindex them to start from 1, as is common practice in Rel.
+@inline
+def limit[{Conn}, {S}, {T}, {K}]: { reindex_nodes[_limit[Conn, S, T, K, :paths]] }
+
+
+//
+// Given a connectivity predicate Conn, a source node S, a set of
+// target nodes T, and a natural number K, all[{Conn}, {S}, {T}, {K}] computes
+// K shortest paths from S to t that conform to Conn, for each target node t in T.
+//
+@outline
+module _limit[{Conn}, {S}, {T}, {K}]
+
+    with balls[Conn, S, T] use
+        source,      // source node in pg. Type: (Node,State)
+        target,      // target nodes in pg. Type: (Node,State)
+        dist_S_to_T, // length of shortest path from S to each node in T.
+                     // Type: (Node,Int)
+        label        // edge label. Type: (#Label,String)
+
+    with usp_cut[Conn, S, T, K] use
+        acc_nsp,        // enum of shortest paths numbers following the order of
+                        // outbound edges, for a given USP node.
+                        // Type: (Node,Node,State,Int)
+        neighbor,       // enum of outbound USP edges.
+                        // Type: (Node,Node,State,Int,Node,State,#Label)
+        usp_edge,       // edges the USP fragment.
+                        // Type: (Node,Node,State,Node,State,#Label)
+        nsp,            // number of shortest paths from a USP node.
+                        // Type: (Node,Node,State,Int)
+        relevant_target // target nodes reachable from the source.
+                        // Type: (Node,State)
+
+
+    // For each target node t, construct K shortest paths from the
+    // source node to t
+    def paths(path_num, :node, i, v):
+        exists((t, pn) |
+            _paths(i, t, v, _, pn, _, _) and
+            path_num = canonical_index[index_target[T, t], pn]
+        )
+    def paths(path_num, :edge_label, i, lab):
+        exists((t, pn, h) |
+            _paths(i, t, _, _, pn, h, _) and
+            label(h, lab) and
+            path_num = canonical_index[index_target[T, t], pn]
+        )
+
+    // _paths(i, t, v, q, path_num, a, n) holds if (v, q) is the node
+    // of the product graph at position i of a shortest path from the source
+    // node to the target node t, a is the label of the i-th edge of
+    // the path, and n is the path-number of the sub-problem of generating
+    // a path from (v, q) to the target nodes in the product graph.
+    def _paths(i, t, v, q, path_num, a, n):
+        relevant_target(t, _) and
+        source(v, q) and
+         a = aux_hash and
+        i = 0 and
+        range(1, minimum[nsp[t, v, q], K], 1, path_num) and
+        n = path_num
+    def _paths(i, t, v, q, path_num, a, n):
+        exists((m, u, p) |
+            _paths(i - 1, t, u, p, path_num, _,  m) and
+            route_path(t, u, p, m, v, q, a, n)
+        )
+
+
+    // Considering the shortest paths from the source node to the target
+    // node t, routes the m-th shortest path from (u, p) through
+    // (v, q) using an a-edge, and computes the number n for
+    // rerouting from (v, q) in the construction of the shortest path.
+    def route_path(t, u, p, m, v, q, a, n):
+        exists((i) |
+            range(
+                _route_path[t, u, p, i] + 1,
+                acc_nsp[t, u, p, i],
+                1,
+                m
+            ) and
+            neighbor(t, u, p, i, v, q, a) and
+            n = m - _route_path[t, u, p, i]
+        )
+
+    // Auxiliary predicate used for efficiency reasons.
+    def _route_path[t, u, p, i]: acc_nsp[t, u, p, i - 1]
+
+    end // with usp_cut[Conn, S, T, K] use
+
+    end // with balls[Conn, S, T] use
+
+end // module _limit[{Conn}, {S}, {T}, {K}]
+
+
+end // namespace pathfinder::_internal::for_each
+
+// pathfinder/_internal/any/from_source/all (from model/_internal/any/from_source/all.rel)
+namespace pathfinder::_internal::any::from_source
+
+from ::pathfinder::utilities import canonical_index
+from ::pathfinder::_internal::utilities import reindex_nodes, aux_hash
+
+// _all indexes the nodes based on their distance from the source (starting from 0). We
+// reindex them to start from 1, as is common practice in Rel.
+@inline
+def all[{Conn}, {S}, {T}]: reindex_nodes[_all[Conn, S, T, :paths]]
+
+//
+// Computes all shortest paths from the set of source nodes S to the set of target nodes T
+// that follow the predicate Conn. The :any grouping selects only the shortest paths among
+// any paths satisfying Conn and connecting a source node to a target node.
+//
+@outline
+module _all[{Conn}, {S}, {T}]
+
+@function
+def label { rel_primitive_product_graph_labels[Conn] }
+
+with ball[Conn, S, T] use
+    index_to_state
+
+with usp[Conn, S, T] use
+    relevant_source,
+    neighbor,    // enum of outbound USP edges. Type: (Node,State,Int,Node,State,#Label)
+    nsp,         // number of shortest paths from a USP node to. Type: (Node,State,Int)
+    interval,    // interval of shortest path numbers for source nodes. Type: (Node,Int,Int)
+    acc_nsp     // enum of shortest paths numbers following the order of
+                 // outbound edges, for a given USP node. Type: (Node,State,Int)
+
+
+    //  Computes all shortest paths from S to T that conform to Conn
+    def paths(path_num, :node, i, v): exists((vv) |
+        paths_from_S(vv, _, i, path_num, _) and index_to_state(vv, v, _)
+    )
+
+    def paths(path_num, :edge_label, i, lab):
+        exists((h) |
+            paths_from_S(_, _, i, path_num, h) and
+            label(h, lab)
+        )
+
+
+    // Paths are constructed using their enumeration in the USP fragment.  The path is
+    // routed with the help on the interval assigned to source nodes, and with the neighbor
+    // enumeration and nsp values for subsequent nodes.
+    def paths_from_S(vv, n, i, path_num, a):
+        exists((c, d) |
+            i = 0 and
+            a = aux_hash and
+            relevant_source(vv) and
+            interval(vv, c, d) and
+            range(c, d, 1, path_num) and
+            n = path_num - c + 1
+        )
+
+    // TODO: this was disabled because the faqtorizer created an unnecessary intermediate
+    // We will remove this once the faqtorizer is fixed
+    @disable(:faq)
+    def paths_from_S(vv, n, i, path_num, a):
+        exists((m, uu) |
+            paths_from_S(uu, m, i - 1, path_num, _) and
+            route_paths_from_S(uu, m, vv, a, n)
+        )
+
+    // The path numbers assigned to the i-th outbound edge of u start at this number.
+    @no_inline
+    def prev_acc_nsp[uu, i]: acc_nsp[uu, i - 1]
+
+    // Route the n-th shortest path from (u, p) through (v, q) using an a-edge. Holds for
+    // every path with relative number m among the paths routed through the edge.
+    def route_paths_from_S(uu, m, vv, a, n):
+        exists((i) |
+            range(prev_acc_nsp[uu, i] + 1, acc_nsp[uu, i], 1, m) and
+            neighbor(uu, i, vv, a) and
+            n = m - prev_acc_nsp[uu, i]
+        )
+
+end // usp[Conn, S, T]
+
+end // ball[Conn, S, T]
+
+end // module _all[{Conn}, {S}, {T}]
+
+end // namespace pathfinder::_internal::any::from_source
+
+// pathfinder/_internal/any/from_source/balls (from model/_internal/any/from_source/balls.rel)
+namespace pathfinder::_internal::any::from_source
+
+//
+// ball[{Conn}, {S}, {T}]
+//
+// Constructs a subgraph of the product graph, defined by Conn, that consists of one
+// "ball", growing from the source nodes S. The ball is constructed by iteratively extending
+// its radius until it reaches a target node. There is a hard coded limit on the number of
+// iterations (up to 100).
+//
+// Input parameters:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph; used
+//   to extract a finite automaton FA with a set of states that represents the query.
+// - S: a set of source nodes; Type: (Node)
+// - T: a set of target nodes; Type: (Node)
+//
+// Output (most relevant):
+// - pg: the product graph defined by the FA extracted from the predicate Conn. A _node_ of
+//      the product graph is a pair (n, p) that represents FA reaching node n of the KG in a
+//      state p.  The edge between two nodes of the product graph is labeled with the (hash
+//      value) of the edge label in the KG that connects the two nodes and has a
+//      corresponding transition in A.  An a-labeled edge from (u, p) to (v, q) is
+//      represented as pg(p, q, a, u, v). Type: (State,State,#Label,Node,Node)
+// - label: a function that maps hashed edge labels to their string representation. Using
+//      hashes improves performance drastically. Type: (#Label, String).
+// - state_to_index: a function that maps a pair (Node, State) to a distinct integer index.
+// - index_to_state: a function that maps back from an integer index to a pair (Node, State)
+// - source: source nodes of the product graph. Type: (Index), which is an integer.
+// - target: target nodes of the product graph. Type: (Index), which is an integer.
+// - dist_from_S: a relation that holds the distance between a product node (Index) in the
+//      S-ball to its closest source node. Type: (Int, Index).
+// - radius_S: the diameter of the source S-ball. Type:Int.
+//
+@outline
+module ball[{Conn}, {S}, {T}]
+
+    // The S-ball starts from the source nodes in the initial state 1 of the automaton
+    @inline
+    def initial_state { 1 }
+
+    @inline
+    def _source(u, p): S(u) and p = initial_state
+
+    // The S-ball grows until it reaches a target node in the final state of the
+    // automaton, which are provided by the FFI rel_primitive_product_graph_targets
+    @pipeline
+    def pg_target { rel_primitive_product_graph_targets[Conn] }
+
+    @force_dnf
+    def _target(u, p): T(u) and pg_target(p, u)
+
+    // The FFI rel_primitive_product_graph compiles the definition of the product graph
+    @inline
+    def pg { rel_primitive_product_graph[Conn] }
+
+    // This FFI provides the mapping from hash values to the string labels.
+    // (hash values of string labels are used for efficiency reasons)
+    @function
+    def label { rel_primitive_product_graph_labels[Conn] }
+
+    // Hard-coded bound on the maximal number of iterations to avoid runaway computations.
+    @inline
+    def max_number_iterations { 100 }
+
+
+    // Iterative process of constructing the S-ball. Uses recursion with non-stratified
+    // negation to simulate while loop iteration: finish_iteration() and finish_loop()
+    // control the execution of the loop.
+    @function
+    def radius_S {
+        minimum[
+            max[0;
+                radius_S;
+                {(radius_S + 1,
+                  finish_iteration() and
+                  not finish_loop())
+                }
+            ],
+            max_number_iterations]
+    }
+
+
+    // Predecessor nodes of the source ball
+    @force_dnf
+    def _prev_dist_from_S(v, q):
+        exists((u, p) |
+            _dist_from_S(radius_S - 1, u, p) and pg(p, q, _, u, v)
+        )
+
+    // Extending the source ball (if radius_S hash been incremented)
+    @force_dnf
+    def _dist_from_S(d, v, q): _source(v, q) and d = 0
+    def _dist_from_S(d, v, q):
+        d = radius_S and
+        _prev_dist_from_S(v, q) and
+        not exists((j) | range(0, radius_S - 1, 1, j) and _dist_from_S(j, v, q))
+    def _dist_from_S(d, v, q): _dist_from_S(d, v, q)
+
+
+    // Iteration is complete if extending the S-ball has been considered
+    @inline
+    def finish_iteration(): _dist_from_S(radius_S, _, _)
+
+    // Loop is terminated when the S-ball reaches a target node
+    @inline
+    def finish_loop():
+        exists((u, p) |
+            _dist_from_S(radius_S, u, p) and _target(u, p))
+
+    // Gather all nodes and give each of them a number
+    def all_nodes(v, q) : _dist_from_S(_, v, q)
+
+    // index_to_state[uu] = (u, p) if uu-th node in all_nodes is (u, p)
+    def index_to_state { enumerate[all_nodes]}
+
+    // state_to_index[u,p] = uu if uu-th node in all_nodes is (u, p)
+    @no_inline
+    def state_to_index(u, p, uu) : index_to_state(uu, u, p)
+
+    def dist_from_S(d, uu):
+        exists ( (u, p) | _dist_from_S(d, u, p) and state_to_index(u, p, uu) )
+
+    def source(uu) : exists((u, p) | _source(u, p) and uu = state_to_index[u, p])
+
+    def target(uu) : exists((u, p) | _target(u, p) and uu = state_to_index[u, p])
+
+end // module ball[{Conn}, {S}, {T}]
+
+end // namespace pathfinder::_internal::any::from_source
+
+// pathfinder/_internal/any/from_source/usp (from model/_internal/any/from_source/usp.rel)
+namespace pathfinder::_internal::any::from_source
+
+from ::pathfinder::utilities import prefix_sum, linear_prefix_sum
+
+//
+// The union of shortest paths (USP) is a subgraph of the product graph that contains only
+// the shortest paths from the set of source nodes to the set of target nodes.  Recall that
+// a node in a product graph is represented as a pair of values (u, p) where u is a node in
+// the source graph and p is a state of the finite automaton capturing the connectivity path
+// query. USP is decorated with additional information that compactly represents the
+// enumeration of the shortest paths that allows an efficient path retrieval.
+//
+
+//
+// Constructs the USP structure
+//
+// Input:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph
+// - S: a set of source nodes. Type: (Node)
+// - T: a set of target nodes. Type: (Node)
+//
+// Output (that we use):
+// - usp_edge: the edges of the USP fragment. Note that it has different signature than
+//   product graph. Namely, Type: (Index, Index, #Label)
+// Compact representation of the enumeration of the shortest paths
+// - neighbor: enumeration of the outbound edges of USP node.
+//   Type: (Index, Int, Index, #Label)
+// - nsp: the number of shortest paths from a USP node to target nodes.
+//   Type: (Index, Int)
+// - interval: the interval of numbers of shortest paths for source nodes.
+//   Type: (Index, Int, Int)
+// - acc_nsp: the enumeration of the shortest paths going through the outbound edges of a
+//   USP node. Type: (Index, Int)
+// - total: the total number of shortest paths from S to T (may be <= K). Type: Int
+//
+@outline
+module usp[{Conn}, {S}, {T}]
+
+with ball[Conn, S, T] use
+    pg,              // product graph. Type: (State,State,#Label,Node,Node)
+    dist_from_S,     // distance from S. Type: (Int,Node,State)
+    radius_S,        // S-ball radius. Type: Int
+    initial_state,   // initial state of the automaton. Type: Int
+    target,           // target nodes. Type: (Node,State)
+    state_to_index,
+    source
+
+
+    // The USP fragment is obtained by constructing the paths from the source nodes
+    // to the target nodes.
+    def usp_edge { usp_edge_back[_] }
+
+
+    // Build the paths backward from the target to the source nodes. We materialize the USP
+    // fragment "on the fly", using recursion where we control the order of evaluation by
+    // introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_back(uu, vv, a): exists ( (u, p, v, q) |
+        pg(p, q, a, u, v) and
+        target(vv) and
+        state_to_index[v, q] = vv and
+        state_to_index[u, p] = uu
+    )
+
+    @force_dnf
+    def step_usp_edge_back(i, uu, vv, a): exists ( (u, p, v, q) |
+        usp_edge_back(i + 1, vv, _, _) and
+        pg(p, q, a, u, v) and
+        state_to_index[v, q] = vv and
+        state_to_index[u, p] = uu
+    )
+
+    def usp_edge_back(i, uu, vv, a):
+        dist_from_S(i, uu) and
+        start_usp_edge_back(uu, vv, a) and
+        i = radius_S - 1
+
+    def usp_edge_back(i, uu, vv, a):
+        step_usp_edge_back(i, uu, vv, a) and
+        dist_from_S(i, uu)
+
+    //
+    // An enumeration of relevant shortest paths, represented in a compact manner.
+    //
+
+    // Order the outbound edges of every pg node
+    def neighbor(uu, i, vv, a):
+        enumerate({(ww, _a): usp_edge(uu, ww, _a)}, i, vv, a)
+
+    // Compute the number of shortest paths from the given USP node to target nodes
+    def nsp[uu]: (1, target(uu))
+    def nsp[uu]: sum[(vv, a, w): w = nsp[vv] and usp_edge(uu, vv, a)]
+
+    // Filter out the source nodes that are not connected to a target node with a
+    // shortest path. If S and T coincide, USP has no edges and all relevant
+    // source nodes are also target nodes.
+    def relevant_source(uu): source(uu) and usp_edge(uu, _, _)
+    def relevant_source(uu): source(uu) and target(uu)
+
+    // Order the relevant source nodes
+    def ordered_source { sort[relevant_source] }
+
+    // Decomposition of number of shortest paths that traverses nodes (and edges).
+    // Edge case is simple and we keep the relative position i of the edge.
+    def edge_nsp(uu, i, val): exists((vv) | val = nsp[vv] and neighbor(uu, i, vv, _))
+
+    // Node case: an enumeration of the shortest paths going through its outbound edges
+    // We use linear prefix sum here because the expected degree of nodes in the USP graph
+    // is small, and the number of nodes is large. Linear prefix sum has less overhead than
+    // the binary search prefix sum.
+    def acc_nsp[uu, 0]: (0, usp_edge(uu, _, _))
+    def acc_nsp[uu]: linear_prefix_sum[edge_nsp[uu]]
+
+    // Also, relevant source nodes get an interval [a, b] of the shortest paths (up to K)
+    def interval(uu, a, b) :
+        ordered_source(1, uu) and a = 1 and b = nsp[uu]
+
+    def interval(uu, a, b) :
+        exists((i) |
+            ordered_source(i, uu) and
+            a = running_sum[i - 1] + 1 and
+            b = running_sum[i])
+
+    def value_source(i, val):
+        exists((uu) | ordered_source(i, uu) and val = nsp[uu])
+
+    // Here binary-search prefix-sum is used because the array we are taking the prefix sum
+    // of is expected to be large.
+    def running_sum { prefix_sum[value_source] }
+
+    // The total number of shortest paths from S to T
+    def total { sum[(uu, val): relevant_source(uu) and val = nsp[uu]] }
+
+
+end // with ball[Conn, S, T]
+
+end // module usp[{Conn}, {S}, {T}]
+
+end // namespace pathfinder::_internal::any::from_source
+
+// pathfinder/_internal/for_each/from_source/all (from model/_internal/for_each/from_source/all.rel)
+namespace pathfinder::_internal::for_each::from_source
+
+from ::pathfinder::utilities import canonical_index
+from ::pathfinder::_internal::utilities import reindex_nodes, aux_hash
+
+// _all indexes the nodes based on their distance from the source (starting from 0). We
+// reindex them to start from 1, as is common practice in Rel.
+@inline
+def all[{Conn}, {S}, {T}]: reindex_nodes[_all[Conn, S, T, :paths]]
+
+//
+// Computes all shortest paths from the set of source nodes S to the set of target nodes T
+// that follow the predicate Conn. The :any grouping selects only the shortest paths among
+// any paths satisfying Conn and connecting a source node to a target node.
+//
+@outline
+module _all[{Conn}, {S}, {T}]
+
+@function
+def label { rel_primitive_product_graph_labels[Conn] }
+
+with ball[Conn, S, T] use
+    index_to_state,
+    target
+
+with usp[Conn, S, T] use
+    relevant_source,
+    neighbor,    // enum of outbound USP edges. Type: (Node,State,Int,Node,State,#Label)
+    nsp,         // number of shortest paths from a USP node to. Type: (Node,State,Int)
+    interval,    // interval of shortest path numbers for source nodes. Type: (Node,Int,Int)
+    acc_nsp     // enum of shortest paths numbers following the order of
+                 // outbound edges, for a given USP node. Type: (Node,State,Int)
+
+
+    //  Computes all shortest paths from S to T that conform to Conn
+    def paths(path_num, :node, i, v): exists((vv) |
+        paths_from_S(vv, _, i, path_num, _) and index_to_state(vv, v, _)
+    )
+
+    def paths(path_num, :edge_label, i, lab):
+        exists((h) |
+            paths_from_S(_, _, i, path_num, h) and
+            label(h, lab)
+        )
+
+
+    // Paths are constructed using their enumeration in the USP fragment.  The path is
+    // routed with the help on the interval assigned to source nodes, and with the neighbor
+    // enumeration and nsp values for subsequent nodes.
+    def paths_from_S(vv, n, i, path_num, a):
+        exists((c, d) |
+            i = 0 and
+            a = aux_hash and
+            relevant_source(vv) and
+            interval(vv, c, d) and
+            range(c, d, 1, path_num) and
+            n = path_num - c + 1
+        )
+
+    // TODO: this was disabled because the faqtorizer created an unnecessary intermediate
+    // We will remove this once the faqtorizer is fixed
+    @disable(:faq)
+    def paths_from_S(vv, n, i, path_num, a):
+        exists((m, uu) |
+            paths_from_S(uu, m, i - 1, path_num, _) and
+            route_paths_from_S(uu, m, vv, a, n)
+        )
+
+    // The path numbers assigned to the i-th outbound edge of u start at this number.
+    @no_inline
+    def prev_acc_nsp[uu, i]: acc_nsp[uu, i - 1]
+
+    // Route the n-th shortest path from (u, p) through (v, q) using an a-edge. Holds for
+    // every path with relative number m among the paths routed through the edge.
+    def route_paths_from_S(uu, m, vv, a, n):
+        exists((i) |
+            range(prev_acc_nsp[uu, i] + 1, acc_nsp[uu, i], 1, m) and
+            neighbor(uu, i, vv, a) and
+            n = m - prev_acc_nsp[uu, i]
+        )
+
+end // usp[Conn, S, T]
+
+end // ball[Conn, S, T]
+
+end // module _all[{Conn}, {S}, {T}]
+
+end // namespace pathfinder::_internal::for_each::from_source
+
+// pathfinder/_internal/for_each/from_source/balls (from model/_internal/for_each/from_source/balls.rel)
+namespace pathfinder::_internal::for_each::from_source
+
+//
+// ball[{Conn}, {S}, {T}]
+//
+// Constructs a subgraph of the product graph, defined by Conn, that consists of one
+// "ball", growing from the source nodes S. The ball is constructed by iteratively extending
+// its radius until it reaches a target node. There is a hard coded limit on the number of
+// iterations (up to 100).
+//
+// Input parameters:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph; used
+//   to extract a finite automaton FA with a set of states that represents the query.
+// - S: a set of source nodes; Type: (Node)
+// - T: a set of target nodes; Type: (Node)
+//
+// Output (most relevant):
+// - pg: the product graph defined by the FA extracted from the predicate Conn. A _node_ of
+//      the product graph is a pair (n, p) that represents FA reaching node n of the KG in a
+//      state p.  The edge between two nodes of the product graph is labeled with the (hash
+//      value) of the edge label in the KG that connects the two nodes and has a
+//      corresponding transition in A.  An a-labeled edge from (u, p) to (v, q) is
+//      represented as pg(p, q, a, u, v). Type: (State,State,#Label,Node,Node)
+// - label: a function that maps hashed edge labels to their string representation. Using
+//      hashes improves performance drastically. Type: (#Label, String).
+// - state_to_index: a function that maps a pair (Node, State) to a distinct integer index.
+// - index_to_state: a function that maps back from an integer index to a pair (Node, State)
+// - source: source nodes of the product graph. Type: (Index), which is an integer.
+// - target: target nodes of the product graph. Type: (Index), which is an integer.
+// - dist_from_S: a relation that holds the distance between a product node (Index) in the
+//      S-ball to its closest source node. Type: (Int, Index).
+//
+@outline
+module ball[{Conn}, {S}, {T}]
+
+    // The S-ball starts from the source nodes in the initial state 1 of the automaton
+    @inline
+    def initial_state { 1 }
+
+    @inline
+    def _source(u, p): S(u) and p = initial_state
+
+    // The S-ball grows until it reaches a target node in the final state of the
+    // automaton, which are provided by the FFI rel_primitive_product_graph_targets
+    @pipeline
+    def pg_target { rel_primitive_product_graph_targets[Conn] }
+
+    @force_dnf
+    def _target(u, p): T(u) and pg_target(p, u)
+
+    // The FFI rel_primitive_product_graph compiles the definition of the product graph
+    @inline
+    def pg { rel_primitive_product_graph[Conn] }
+
+    // This FFI provides the mapping from hash values to the string labels.
+    // (hash values of string labels are used for efficiency reasons)
+    @function
+    def label { rel_primitive_product_graph_labels[Conn] }
+
+
+    @force_dnf @function
+    def _dist_from_S[v, q]: {
+        min[
+            [d] : (
+                (
+                    exists((u, p) | 
+                        d = _dist_from_S[u, p] + 1 and 
+                        pg(p, q, _, u, v)
+                    )
+                ) or
+                (_source(v, q) and d = 0)    
+            )
+        ]
+    }
+
+
+    // Gather all nodes and give each of them a number
+    def all_nodes(v, q) : _dist_from_S(v, q, _)
+
+    // index_to_state[uu] = (u, p) if uu-th node in all_nodes is (u, p)
+    def index_to_state { enumerate[all_nodes]}
+
+    // state_to_index[u,p] = uu if uu-th node in all_nodes is (u, p)
+    @no_inline
+    def state_to_index(u, p, uu) : index_to_state(uu, u, p)
+
+    def dist_from_S(d, uu):
+        exists ( (u, p) | _dist_from_S(u, p, d) and state_to_index(u, p, uu) )
+
+    def source(uu) : exists((u, p) | _source(u, p) and uu = state_to_index[u, p])
+
+    def target(uu) : exists((u, p) | _target(u, p) and uu = state_to_index[u, p])
+
+end // module ball[{Conn}, {S}, {T}]
+
+end // namespace pathfinder::_internal::for_each::from_source
+
+// pathfinder/_internal/for_each/from_source/usp (from model/_internal/for_each/from_source/usp.rel)
+namespace pathfinder::_internal::for_each::from_source
+
+from ::pathfinder::utilities import prefix_sum, linear_prefix_sum
+
+//
+// The union of shortest paths (USP) is a subgraph of the product graph that contains only
+// the shortest paths from the set of source nodes to the set of target nodes.  Recall that
+// a node in a product graph is represented as a pair of values (u, p) where u is a node in
+// the source graph and p is a state of the finite automaton capturing the connectivity path
+// query. USP is decorated with additional information that compactly represents the
+// enumeration of the shortest paths that allows an efficient path retrieval.
+//
+
+//
+// Constructs the USP structure
+//
+// Input:
+// - Conn: a connectivity predicate that defines a path query in the knowledge graph
+// - S: a set of source nodes. Type: (Node)
+// - T: a set of target nodes. Type: (Node)
+//
+// Output (that we use):
+// - usp_edge: the edges of the USP fragment. Note that it has different signature than
+//   product graph. Namely, Type: (Index, Index, #Label)
+// Compact representation of the enumeration of the shortest paths
+// - neighbor: enumeration of the outbound edges of USP node.
+//   Type: (Index, Int, Index, #Label)
+// - nsp: the number of shortest paths from a USP node to target nodes.
+//   Type: (Index, Int)
+// - interval: the interval of numbers of shortest paths for source nodes.
+//   Type: (Index, Int, Int)
+// - acc_nsp: the enumeration of the shortest paths going through the outbound edges of a
+//   USP node. Type: (Index, Int)
+// - total: the total number of shortest paths from S to T (may be <= K). Type: Int
+//
+@outline
+module usp[{Conn}, {S}, {T}]
+
+with ball[Conn, S, T] use
+    pg,              // product graph. Type: (State,State,#Label,Node,Node)
+    dist_from_S,     // distance from S. Type: (Int,Node,State)
+    radius_S,        // S-ball radius. Type: Int
+    initial_state,   // initial state of the automaton. Type: Int
+    target,           // target nodes. Type: (Node,State)
+    state_to_index,
+    source
+
+
+    // The USP fragment is obtained by constructing the paths from the source nodes
+    // to the target nodes.
+    def usp_edge { usp_edge_back[_] }
+
+
+    // Build the paths backward from the target to the source nodes. We materialize the USP
+    // fragment "on the fly", using recursion where we control the order of evaluation by
+    // introducing additional intermediate predicates.
+    @force_dnf
+    def start_usp_edge_back(uu, vv, a): exists ( (u, p, v, q) |
+        pg(p, q, a, u, v) and
+        target(vv) and
+        state_to_index[v, q] = vv and
+        state_to_index[u, p] = uu
+    )
+
+    @force_dnf
+    def step_usp_edge_back(i, uu, vv, a): exists ( (u, p, v, q) |
+        usp_edge_back(i + 1, vv, _, _) and
+        pg(p, q, a, u, v) and
+        state_to_index[v, q] = vv and
+        state_to_index[u, p] = uu
+    )
+
+    def usp_edge_back(i, uu, vv, a):
+        dist_from_S(i, uu) and
+        start_usp_edge_back(uu, vv, a)
+
+    def usp_edge_back(i, uu, vv, a):
+        step_usp_edge_back(i, uu, vv, a) and
+        dist_from_S(i, uu)
+
+    //
+    // An enumeration of relevant shortest paths, represented in a compact manner.
+    //
+
+    // Order the outbound edges of every pg node
+    def neighbor(uu, i, vv, a):
+        enumerate({(ww, _a): usp_edge(uu, ww, _a)}, i, vv, a)
+
+    // Compute the number of shortest paths from the given USP node to target nodes
+    def nsp[uu]: (1, target(uu))
+    def nsp[uu]: sum[(vv, a, w): w = nsp[vv] and usp_edge(uu, vv, a)]
+
+    // Filter out the source nodes that are not connected to a target node with a
+    // shortest path. If S and T coincide, USP has no edges and all relevant
+    // source nodes are also target nodes.
+    def relevant_source(uu): source(uu) and usp_edge(uu, _, _)
+    def relevant_source(uu): source(uu) and target(uu)
+
+    // Order the relevant source nodes
+    def ordered_source { sort[relevant_source] }
+
+    // Decomposition of number of shortest paths that traverses nodes (and edges).
+    // Edge case is simple and we keep the relative position i of the edge.
+    def edge_nsp(uu, i, val): exists((vv) | val = nsp[vv] and neighbor(uu, i, vv, _))
+
+    // Node case: an enumeration of the shortest paths going through its outbound edges
+    // We use linear prefix sum here because the expected degree of nodes in the USP graph
+    // is small, and the number of nodes is large. Linear prefix sum has less overhead than
+    // the binary search prefix sum.
+    def acc_nsp[uu, 0]: (0, usp_edge(uu, _, _))
+    def acc_nsp[uu]: linear_prefix_sum[edge_nsp[uu]]
+
+    // Also, relevant source nodes get an interval [a, b] of the shortest paths (up to K)
+    def interval(uu, a, b) :
+        ordered_source(1, uu) and a = 1 and b = nsp[uu]
+
+    def interval(uu, a, b) :
+        exists((i) |
+            ordered_source(i, uu) and
+            a = running_sum[i - 1] + 1 and
+            b = running_sum[i])
+
+    def value_source(i, val):
+        exists((uu) | ordered_source(i, uu) and val = nsp[uu])
+
+    // Here binary-search prefix-sum is used because the array we are taking the prefix sum
+    // of is expected to be large.
+    def running_sum { prefix_sum[value_source] }
+
+    // The total number of shortest paths from S to T
+    def total { sum[(uu, val): relevant_source(uu) and val = nsp[uu]] }
+
+
+end // with ball[Conn, S, T]
+
+end // module usp[{Conn}, {S}, {T}]
+
+end // namespace pathfinder::_internal::for_each::from_source

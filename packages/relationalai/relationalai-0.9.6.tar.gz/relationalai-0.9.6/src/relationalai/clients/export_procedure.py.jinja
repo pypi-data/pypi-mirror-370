@@ -1,0 +1,190 @@
+from __future__ import annotations
+import json
+import textwrap
+import random
+import string
+import time
+from zoneinfo import ZoneInfo
+from snowflake.snowpark.types import StringType, IntegerType, StructField, StructType, FloatType, MapType, ArrayType, BooleanType, BinaryType, DateType, TimestampType
+import logging
+
+from snowflake.snowpark.exceptions import SnowparkSQLException
+
+class RAIException(Exception):
+    pass
+
+def random_string():
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(32))
+
+def run_sql(session, query, params=None, engine=""):
+    try:
+        return session.sql(query, params).collect()
+    except SnowparkSQLException as e:
+        if "engine not found" in e.message:
+            import sys
+            def exception_handler(exception_type, exception, traceback):
+                print(f"{exception_type.__name__}: {exception}")
+            sys.excepthook = exception_handler
+            raise RAIException(f"RelationalAI engine not found. Please create an engine called `{engine}` using `___RAI_APP___.api.create_engine`.") from None
+        else:
+            raise e
+
+def poll_with_specified_overhead(
+    f,
+    overhead_rate: float,
+    start_time: float | None = None,
+    timeout: int | None = None,
+    max_tries: int | None = None,
+    max_delay: float = 120,
+    min_delay: float = 0.1
+):
+    if overhead_rate < 0:
+        raise ValueError("overhead_rate must be non-negative")
+
+    if start_time is None:
+        start_time = time.time()
+
+    tries = 0
+    max_time = time.time() + timeout if timeout else None
+
+    while True:
+        if f():
+            break
+
+        current_time = time.time()
+
+        if max_tries is not None and tries >= max_tries:
+            raise Exception(f'max tries {max_tries} exhausted')
+
+        if max_time is not None and current_time >= max_time:
+            raise Exception(f'timed out after {timeout} seconds')
+
+        duration = (current_time - start_time) * overhead_rate
+        duration = max(min(duration, max_delay), min_delay, 0)
+
+        time.sleep(duration)
+        tries += 1
+
+def check_ready(session, sql_string, database, engine, wait_for_stream_sync, use_index_id):
+    results = run_sql(session, sql_string, [database, engine, wait_for_stream_sync, use_index_id])
+    # Extract the JSON string from the `USE_INDEX` field
+    use_index_json_str = results[0]["USE_INDEX"]
+
+    # Convert the JSON string to lowercase
+    use_index_json_str = use_index_json_str.lower()
+
+    # Parse the JSON string into a Python dictionary
+    use_index_data = json.loads(use_index_json_str)
+    ready = use_index_data.get("ready", False)
+    errors = use_index_data.get("errors", [])
+
+    if ready:
+        return True
+    elif errors:
+        error_strs = []
+        for error in errors:
+            if error.get("type") == "data":
+                error_strs.append(f"{error.get('message')}, source: {error.get('source')}")
+            elif error.get("type") == "engine":
+                error_strs.append(f"{error.get('message')}")
+        raise Exception("\n".join(error_strs))
+
+def get_engine(session, passed_engine):
+    if passed_engine:
+        return passed_engine
+    try:
+        APP_NAME = {{ APP_NAME }}
+        query = f"select * from {APP_NAME}.api.engines where created_by=current_user() and status = 'READY' and name != 'CDC_MANAGED_ENGINE' order by created_on desc;"
+        row = run_sql(session, query)[0]
+        return row["NAME"]
+    except:
+        return {{ engine }}
+
+def escape(code):
+    return (
+        code
+        .replace("\\", "\\\\\\\\")
+        .replace("'", "\\\'")
+        .replace('"', '\\\\"')
+        .replace("\n", "\\n")
+    )
+
+{% if has_return_hint %}
+def handle(session{{py_inputs}}, passed_engine=""):
+{% else %}
+def handle(session{{py_inputs}}, save_as_table="", passed_engine=""):
+{% endif %}
+    {% if not has_return_hint %}
+    if not save_as_table:
+        raise ValueError("`save_as_table` must be provided.")
+    {% endif %}
+    try:
+        {{clean_inputs}}
+        engine = get_engine(session, passed_engine)
+        logging.debug(f"Using engine: {engine}")
+        rel_code = {{ rel_code }}
+        logging.debug(f"RelationalAI code: {rel_code}")
+        proc_database = {{ proc_database }}
+        logging.debug(f"Procedure database: {proc_database}")
+        APP_NAME = {{ APP_NAME }}
+        logging.debug(f"APP_NAME: {APP_NAME}")
+        database = {{ database }}
+        logging.debug(f"Model database: {database}")
+        sql_out_names = [{{ sql_out_names }}]
+        logging.debug(f"Output column names: {sql_out_names}")
+        table_name = f"{database[:30]}_{random_string()}"
+        temp_table = f"temp_{table_name}"
+        logging.debug(f"Created temporary table name: {temp_table}")
+        nowait_durable = True
+
+        sources = "{{ source_references }}"
+        logging.debug(f"Using source references: {sources}")
+        wait_for_stream_sync = {{ wait_for_stream_sync }}
+        use_index_id = f"{proc_database}_{random_string()}"
+        sql_string = f"CALL {APP_NAME}.api.use_index([{sources}], {{'model': ?, 'engine': ?, 'wait_for_stream_sync': ?, 'use_index_id': ?}});"
+        logging.debug("Polling for graph index readiness...")
+        poll_with_specified_overhead(lambda: check_ready(session, sql_string, proc_database, engine, wait_for_stream_sync, use_index_id), overhead_rate=0.1, max_delay=1)
+        logging.debug("Graph index is ready")
+        install_code = '''
+        {{ install_code }}
+        '''
+        if install_code:
+            rel_code = install_code + "\n" + rel_code
+        # signature: exec_into_table(model, engine, query, table_name, readonly, nowait_durable)
+        run_sql(session, f"call {APP_NAME}.api.exec_into_table(?, ?, ?, ?, ?, ?);", [proc_database, engine, rel_code, table_name, False, nowait_durable], engine=engine)
+        logging.debug("Executed query into table")
+
+        logging.debug("Sampling output to determine schema...")
+        out_sample = run_sql(session, f"select * from {APP_NAME}.results.{table_name} limit 1;")
+        keys = set()
+        if out_sample:
+            keys = set([k.lower() for k in out_sample[0].as_dict().keys()])
+            logging.debug(f"Found output columns: {keys}")
+        else:
+            logging.debug("No output rows found in sample")
+
+        {% if has_return_hint %}
+        names = ", ".join([f"CAST(col{ix:03} as {type_name}) as \"{name}\"" if f"col{ix:03}" in keys else f"NULL as \"{name}\"" for (ix, (name, type_name)) in enumerate(sql_out_names)])
+        logging.debug(f"Delete result table and output table with columns: {names}")
+        return session.sql(f"""
+        BEGIN
+            let r resultset := (select {names} from {APP_NAME}.results.{table_name});
+            call {APP_NAME}.api.drop_result_table('{table_name}');
+            return table(r);
+        END;
+        """)
+        {% else %}
+        names =  ", ".join([f"col{ix:03} as \"{name}\"" if f"col{ix:03}" in keys else f"NULL as \"{name}\"" for (ix, name) in enumerate(sql_out_names)])
+        logging.debug(f"Creating final output table with columns: {names}")
+        run_sql(session, f"create or replace table {save_as_table} as select {names} from {APP_NAME}.results.{table_name};", [], engine=engine)
+        logging.debug(f"Successfully wrote results to {save_as_table}")
+        return f"Results written to {save_as_table}"
+        {% endif %}
+    except Exception as e:
+        logging.debug(f"Error occurred: {str(e)}")
+        msg = str(e).lower()
+        if "No columns returned".lower() in msg or "Columns of results could not be determined".lower() in msg:
+            logging.debug("No results returned - creating empty dataframe")
+            return session.createDataFrame([], StructType([{{ py_outs }}]))
+        raise e
