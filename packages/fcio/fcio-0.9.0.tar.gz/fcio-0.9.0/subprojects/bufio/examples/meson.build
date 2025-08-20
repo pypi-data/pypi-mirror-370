@@ -1,0 +1,1 @@
+bufio_benchmark = executable('bufio_benchmark', 'bufio_benchmark.c', include_directories : bufio_inc, link_with : bufio_lib)
