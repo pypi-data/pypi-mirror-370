@@ -1,0 +1,88 @@
+set dotenv-load
+set export
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
+IMAGE := env_var_or_default("IMAGE", "registry.gitlab.com/ratio-case-os/docker/python-ci")
+TAG := env_var_or_default("TAG", "latest")
+JUSTFILE := justfile()
+HERE := env_var_or_default("HERE", invocation_directory())
+DOCS_SOURCE := HERE / "docs" / "source"
+DOCS_BUILD := HERE / "docs" / "build"
+DIST_DIR := HERE / "dist"
+
+# Show the recipe list.
+default:
+  @just --list --justfile {{JUSTFILE}}
+
+# Pull the tools image from the registry.
+pull-container *args:
+  podman pull {{args}} {{IMAGE}}:{{TAG}}
+
+# Run the Docker tools image with the project directory mounted.
+run-container args="" cmd="":
+  podman run --userns=keep-id --rm -it -v {{HERE}}:/home/ratio/work:z {{args}} {{IMAGE}}:{{TAG}} {{cmd}}
+
+# Run a recipe in the Docker tools image.
+in-container recipe="":
+  podman run --userns=keep-id --rm -it -v {{HERE}}:/home/ratio/work:z {{IMAGE}}:{{TAG}} just {{recipe}}
+
+# Install the Python package in development mode.
+install *args:
+  uv sync --all-extras {{args}}
+
+# Update the dependencies.
+update *args:
+  uv lock {{args}} && just install
+
+# Run tests using pytest.
+test *args:
+  uv run pytest {{args}}
+
+# Run the tests in watch mode.
+watch *args:
+  uv run ptw --patterns "*.py,*.md" --ignore-patterns "tests/.temp/**/*" --now . --no-header {{args}}
+
+# Build the Python wheel.
+build *args:
+  uv build {{args}}
+
+# Publish the Python package with a token.
+publish token *args:
+  uv publish --token {{token}} {{args}}
+
+# Run mkdocs with dependencies.
+mkdocs *args:
+  uvx \
+    --with cairosvg --with mkdocs-autorefs \
+    --with mkdocs-bibtex \
+    --with mkdocs-glightbox \
+    --with mkdocs-literate-nav \
+    --with "mkdocs-material[recommended,git,imaging]" \
+    --with "mkdocstrings[python]" \
+    --with pydoc-markdown \
+  mkdocs {{args}}
+
+# Build the Python package's documentation.
+docs *args:
+  just mkdocs build {{args}}
+
+# Serve the Python package's documentation.
+serve-docs *args:
+  just mkdocs serve {{args}}
+
+# Lint the Python package.
+lint *args:
+  uvx ruff check {{args}} .
+
+# Fix fixable linting errors.
+fix *args:
+  uvx ruff check --fix {{args}} .
+
+# Check version increment.
+version *args:
+  uvx raver {{args}}
+
+# Clean generated files.
+clean:
+  rm -rf {{DOCS_BUILD}}
+  rm -rf {{DIST_DIR}}
