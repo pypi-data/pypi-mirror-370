@@ -1,0 +1,3 @@
+from finderConsole import *
+
+startFinderConsole()
