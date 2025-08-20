@@ -1,0 +1,222 @@
+# lamp.py
+
+from draftsman.classes.entity import Entity
+from draftsman.classes.mixins import (
+    ColorMixin,
+    LogisticConditionMixin,
+    CircuitConditionMixin,
+    CircuitEnableMixin,
+    ControlBehaviorMixin,
+    CircuitConnectableMixin,
+    EnergySourceMixin,
+)
+from draftsman.constants import LampColorMode
+from draftsman.serialization import (
+    draftsman_converters,
+)
+from draftsman.signatures import Color, SignalID
+from draftsman.validators import instance_of, try_convert
+
+from draftsman.data import mods
+from draftsman.data.entities import lamps
+
+import attrs
+from typing import Optional
+
+
+@attrs.define
+class Lamp(
+    ColorMixin,
+    LogisticConditionMixin,
+    CircuitConditionMixin,
+    CircuitEnableMixin,
+    ControlBehaviorMixin,
+    CircuitConnectableMixin,
+    EnergySourceMixin,
+    Entity,
+):
+    """
+    An entity that illuminates an area.
+    """
+
+    @property
+    def similar_entities(self) -> list:
+        return lamps
+
+    # =========================================================================
+
+    use_colors: bool = attrs.field(default=False, validator=instance_of(bool))
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+
+    Whether or not this entity should use signals to determine it's color.
+    """
+
+    # =========================================================================
+
+    color_mode: Optional[LampColorMode] = attrs.field(
+        default=LampColorMode.COLOR_MAPPING,
+        converter=try_convert(LampColorMode),
+        validator=instance_of(LampColorMode),
+    )
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+
+    In what way to interpret signals given to the lamp if :py:attr:`.use_colors` 
+    is ``True``.
+
+    .. versionadded:: 3.0.0 (Factorio 2.0)
+    """
+
+    # =========================================================================
+
+    red_signal: Optional[SignalID] = attrs.field(
+        factory=lambda: SignalID(name="signal-red", type="virtual"),
+        converter=SignalID.converter,
+        validator=instance_of(Optional[SignalID]),
+    )
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+    
+    The signal to pull the red color component from, if :py:attr:`.color_mode` is
+    :py:attr:`.LampColorMode.COMPONENTS`.
+    """
+
+    # =========================================================================
+
+    green_signal: Optional[SignalID] = attrs.field(
+        factory=lambda: SignalID(name="signal-green", type="virtual"),
+        converter=SignalID.converter,
+        validator=instance_of(Optional[SignalID]),
+    )
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+
+    The signal to pull the green color component from, if :py:attr:`.color_mode` 
+    is :py:attr:`.LampColorMode.COMPONENTS`.
+
+    .. versionadded:: 3.0.0 (Factorio 2.0)
+    """
+
+    # =========================================================================
+
+    blue_signal: Optional[SignalID] = attrs.field(
+        factory=lambda: SignalID(name="signal-blue", type="virtual"),
+        converter=SignalID.converter,
+        validator=instance_of(Optional[SignalID]),
+    )
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+
+    The signal to pull the blue color component from, if :py:attr:`.color_mode` 
+    is :py:attr:`.LampColorMode.COMPONENTS`.
+
+    .. versionadded:: 3.0.0 (Factorio 2.0)
+    """
+
+    # =========================================================================
+
+    rgb_signal: Optional[SignalID] = attrs.field(
+        factory=lambda: SignalID(name="signal-white", type="virtual"),
+        converter=SignalID.converter,
+        validator=instance_of(Optional[SignalID]),
+    )
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+    
+    The signal to pull the entire encoded color from, if :py:attr:`color_mode` 
+    is :py:attr:`.LampColorMode.PACKED_RGB`.
+
+    .. versionadded:: 3.0.0 (Factorio 2.0)
+    """
+
+    # =========================================================================
+
+    always_on: Optional[bool] = attrs.field(default=False, validator=instance_of(bool))
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+    
+    Whether or not this entity should always be active, regardless of the
+    current day-night cycle. This option is superceeded by any given 
+    :py:attr:`.circuit_condition`.
+    """
+
+    # =========================================================================
+
+    color: Color = attrs.field(
+        converter=Color.converter,
+        validator=instance_of(Color),
+    )
+    """
+    .. serialized::
+
+        This attribute is imported/exported from blueprint strings.
+
+    What (static) :py:attr:`.Color` should this lamp have. Setting the lamp's 
+    color via :py:attr:`.use_colors` and :py:attr:`.color_mode` overrides this 
+    value if either are present.
+    """
+
+    @color.default
+    def _(self):
+        if mods.versions.get("base", (2, 0)) >= (2, 0):
+            return Color(r=1.0, g=1.0, b=191 / 255, a=1.0)
+        else:  # pragma: no coverage
+            return Color(r=1.0, g=1.0, b=1.0, a=1.0)
+
+    # =========================================================================
+
+    def merge(self, other: "Lamp"):
+        super().merge(other)
+
+        self.use_colors = other.use_colors
+        self.color_mode = other.color_mode
+        self.always_on = other.always_on
+        self.color = other.color
+
+    # =========================================================================
+
+    __hash__ = Entity.__hash__
+
+
+draftsman_converters.get_version((1, 0)).add_hook_fns(
+    Lamp,
+    lambda fields: {
+        ("control_behavior", "use_colors"): fields.use_colors.name,
+        # None: fields.color_mode.name,
+        # None: fields.red_signal.name,
+        # None: fields.green_signal.name,
+        # None: fields.blue_signal.name,
+        # None: fields.rgb_signal.name,
+        # None: fields.always_on.name,
+        "color": fields.color.name,
+    },
+)
+
+draftsman_converters.get_version((2, 0)).add_hook_fns(
+    Lamp,
+    lambda fields: {
+        ("control_behavior", "use_colors"): fields.use_colors.name,
+        ("control_behavior", "color_mode"): fields.color_mode.name,
+        ("control_behavior", "red_signal"): fields.red_signal.name,
+        ("control_behavior", "green_signal"): fields.green_signal.name,
+        ("control_behavior", "blue_signal"): fields.blue_signal.name,
+        ("control_behavior", "rgb_signal"): fields.rgb_signal.name,
+        "always_on": fields.always_on.name,
+        "color": fields.color.name,
+    },
+)

@@ -1,0 +1,43 @@
+# artillery_turret.py
+
+from draftsman.classes.entity import Entity
+from draftsman.classes.mixins import (
+    ArtilleryAutoTargetMixin,
+    ReadAmmoMixin,
+    CircuitConditionMixin,
+    LogisticConditionMixin,
+    CircuitEnableMixin,
+    ControlBehaviorMixin,
+    CircuitConnectableMixin,
+    DirectionalMixin,
+)
+
+from draftsman.data.entities import artillery_turrets
+
+import attrs
+
+
+@attrs.define
+class ArtilleryTurret(
+    ArtilleryAutoTargetMixin,
+    ReadAmmoMixin,
+    LogisticConditionMixin,
+    CircuitConditionMixin,
+    CircuitEnableMixin,
+    ControlBehaviorMixin,
+    CircuitConnectableMixin,
+    DirectionalMixin,
+    Entity,
+):
+    """
+    A turret which can only target enemy structures and uses artillery
+    ammunition.
+    """
+
+    @property
+    def similar_entities(self) -> list[str]:
+        return artillery_turrets
+
+    # =========================================================================
+
+    __hash__ = Entity.__hash__
