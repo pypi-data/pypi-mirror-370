@@ -1,0 +1,712 @@
+"""
+The `graph` module provides a wrapper class + convenience methods for
+building and querying a Brick graph
+"""
+import io
+from warnings import warn
+import os
+import sys
+import glob
+import pkgutil
+import importlib.util
+import rdflib
+import owlrl
+import pyshacl
+import logging
+from typing import List, Optional
+from .inference import (
+    OWLRLNaiveInferenceSession,
+    OWLRLReasonableInferenceSession,
+    OWLRLAllegroInferenceSession,
+    TagInferenceSession,
+    HaystackInferenceSession,
+    VBISTagInferenceSession,
+)
+from . import namespaces as ns
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+class BrickBase(rdflib.Graph):
+    def rebuild_tag_lookup(self, brick_file=None):
+        """
+        Rebuilds the internal tag lookup dictionary used for Brick tag->class inference.
+        This is broken out as its own method because it is potentially an expensive operation.
+        """
+        self._tagbackend = TagInferenceSession(
+            rebuild_tag_lookup=True, brick_file=brick_file, approximate=False
+        )
+
+    def to_networkx(self):
+        """
+        Exports the graph as a NetworkX DiGraph. Edge labels are stored in the 'name' attribute
+        Returns:
+            graph (networkx.DiGraph): networkx object representing this graph
+        """
+        try:
+            import networkx as nx
+        except ImportError as e:
+            warn("Could not import NetworkX. Need 'networkx' option during install.")
+            raise e
+        g = nx.DiGraph()
+        for (s, p, o) in self.triples((None, None, None)):
+            g.add_edge(s, o, name=p)
+        return g
+
+    def get_most_specific_class(self, classlist: List[rdflib.URIRef]):
+        """
+        Given a list of classes (rdflib.URIRefs), return the 'most specific' classes
+        This is a subset of the provided list, containing classes that are not subclasses
+        of anything else in the list. Uses the class definitions in the graph to perform
+        this task
+
+        Args:
+            classlist (list of rdflib.URIRef): list of classes
+
+        Returns:
+            classlist (list of rdflib.URIRef): list of specific classes
+        """
+
+        # given a list of classes and an ontology (self), return the classes
+        # which are not the transtivie parent of any other class in the list.
+        specific = []
+        for c in classlist:
+            # Find the transtive parent by computing transitive closure of rdfs:subClassOf|owl:equivalentClass|brick:aliasOf
+            # and then finding the intersection of the closure with the classlist
+            # If the intersection is empty, then the class is not a parent of any other class in the list
+            # and is therefore specific
+            # if the intersection is only the class itself or anything it is equivalent to, then it is specific
+            closure_query = f"""
+            SELECT ?parent WHERE {{
+                ?parent (rdfs:subClassOf|owl:equivalentClass)+ <{c}> .
+            }}
+            """
+            closure = set(x[0] for x in self.query(closure_query))
+
+            equivalent_query = f"""
+            SELECT ?parent WHERE {{
+                <{c}> (owl:equivalentClass|brick:aliasOf)+ ?parent .
+            }}
+            """
+            equivalent = set(x[0] for x in self.query(equivalent_query))
+
+            if len(closure.intersection(classlist)) == 0 or closure.intersection(
+                classlist
+            ).issubset(equivalent):
+                specific.append(c)
+
+        return specific
+
+    def validate(
+        self,
+        extra_graphs: Optional[List[rdflib.Graph]] = None,
+        engine: Optional[str] = None,
+        min_iterations=1,
+        max_iterations=10,
+    ):
+        """
+        Validates the graph using the shapes embedded w/n the graph.
+
+        Args:
+          extra_graphs (list of rdflib.Graph or brickschema.graph.Graph): merges these graphs and includes them in
+                the validation
+          engine (str): the SHACL engine to use. Options are 'pyshacl' and 'topquadrant'. Defaults to 'topquadrant'
+                if available, else 'pyshacl'.
+          min_iterations (int): minimum number of iterations for topquadrant engine.
+          max_iterations (int): maximum number of iterations for topquadrant engine.
+
+        Returns:
+          (conforms, resultsGraph, resultsText) from pyshacl
+        """
+        shapes = rdflib.Graph()
+        if extra_graphs is not None and isinstance(extra_graphs, list):
+            for sg in extra_graphs:
+                shapes += sg
+
+        if engine is None:
+            if importlib.util.find_spec("brick_tq_shacl") is not None:
+                engine = "topquadrant"
+            else:
+                engine = "pyshacl"
+
+        if engine == "pyshacl":
+            if min_iterations > 1 or max_iterations > 1:
+                self.compile(engine="pyshacl", min_iterations=min_iterations, max_iterations=max_iterations)
+            combined = self.skolemize() + shapes
+            return pyshacl.validate(
+                combined,
+                advanced=True,
+                abort_on_first=True,
+                allow_warnings=True,
+            )
+        elif engine == "topquadrant":
+            from brick_tq_shacl import validate
+
+            return validate(
+                self,
+                shapes,
+                min_iterations=min_iterations,
+                max_iterations=max_iterations,
+            )
+
+    def serve(self, address="127.0.0.1:8080", ignore_prefixes=[]):
+        """
+        Start web server offering SPARQL queries and 1-click reasoning capabilities
+
+        Args:
+          address (str): <host>:<port> of the web server
+          ignore_prefixes (list[str]): list of prefixes not to be added to the query editor's namespace bindings.
+        """
+        try:
+            from . import web
+        except ImportError:
+            warn(
+                "Using the webserver requires the 'web' option:\n\n\tpip install brickschema[web]"
+            )
+            import sys
+
+            sys.exit(1)
+        srv = web.Server(self, ignore_prefixes=ignore_prefixes)
+        srv.start(address)
+
+    def get_extensions(self):
+        """
+        Returns a list of Brick extensions
+
+        This currently just lists the extensions already loaded into brickschema,
+        but may in the future pull a list of extensions off of an online resolver
+        """
+        d = os.path.dirname(sys.modules[__name__].__file__)
+        extension_path = os.path.join(
+            d, "ontologies", self._brick_version, "extensions"
+        )
+        extensions = glob.glob(os.path.join(extension_path, "*.ttl"))
+        return [
+            os.path.basename(x).strip(".ttl")[len("brick_extension_") :]
+            for x in extensions
+        ]
+
+    def get_alignments(self):
+        """
+        Returns a list of Brick alignments
+
+        This currently just lists the alignments already loaded into brickschema,
+        but may in the future pull a list of alignments off of an online resolver
+        """
+        d = os.path.dirname(sys.modules[__name__].__file__)
+        alignment_path = os.path.join(
+            d, "ontologies", self._brick_version, "alignments"
+        )
+        alignments = glob.glob(os.path.join(alignment_path, "*.ttl"))
+        return [
+            os.path.basename(x)[len("Brick-") : -len("-alignment.ttl")]
+            for x in alignments
+        ]
+
+    def compile(
+        self,
+        extra_graphs: Optional[List[rdflib.Graph]] = None,
+        engine=None,
+        min_iterations=1,
+        max_iterations=10,
+    ):
+        """
+        Compiles the graph by applying SHACL-AF rules. This includes tag inference
+        if the tag inference rules are loaded into the graph.
+
+        Possible engines are:
+        - 'pyshacl': default, python-based SHACL implementation
+        - 'topquadrant': uses TopQuadrant's SHACL-AF implementation. Requires 'brick-tq-shacl'
+          to be installed.
+
+        Args:
+            extra_graphs (list[Graph]): list of graphs containing extra ontological definitions. If not provided,
+                uses the ontologies loaded in the graph.
+            engine (str): which SHACL engine to use. If not provided, defaults to topquadrant
+                then pyshacl
+            min_iterations (int): minimum number of iterations for pyshacl or topquadrant engine.
+            max_iterations (int): maximum number of iterations for pyshacl or topquadrant engine.
+        """
+        onts = rdflib.Graph()
+        if extra_graphs:
+            for g in extra_graphs:
+                onts += g
+
+        shacl_engine = engine
+        if shacl_engine is None:
+            if importlib.util.find_spec("brick_tq_shacl") is not None:
+                shacl_engine = "topquadrant"
+            else:
+                shacl_engine = "pyshacl"
+
+        if shacl_engine == "topquadrant":
+            try:
+                from brick_tq_shacl import infer as tq_shacl_infer
+
+                res = tq_shacl_infer(
+                    self,
+                    onts,
+                    min_iterations=min_iterations,
+                    max_iterations=max_iterations,
+                )
+                self += res
+                return self
+            except ImportError:
+                warn(
+                    "TopQuadrant SHACL engine selected/defaulted, but failed to import. Falling back to pyshacl."
+                )
+                shacl_engine = "pyshacl"
+
+        if shacl_engine == "pyshacl":
+            if max_iterations < min_iterations:
+                max_iterations = min_iterations
+            skolemized = self.skolemize()
+            combined = skolemized + onts
+            for i in range(max_iterations):
+                old_size = len(combined)
+                valid, _, report = pyshacl.validate(
+                    data_graph=combined,
+                    advanced=True,
+                    allow_warnings=True,
+                    abort_on_first=True,
+                    inplace=True,
+                )
+                if not valid:
+                    warn(report)
+                if (i + 1) >= min_iterations and len(combined) == old_size:
+                    break
+            added = combined - skolemized - onts
+            self += added
+            return self
+        raise Exception(f"Unknown SHACL engine {engine}")
+
+    def expand(
+        self,
+        profile,
+        backend=None,
+        simplify=True,
+    ):
+        """
+        Expands the current graph with the inferred triples under the given entailment regime
+        and with the given backend. Possible profiles are:
+        - 'rdfs': runs RDFS rules
+        - 'owlrl': runs full OWLRL reasoning
+        - 'vbis': adds VBIS tags
+
+        Possible backends are:
+        - 'reasonable': default, fastest backend
+        - 'allegrograph': uses Docker to interface with allegrograph
+        - 'owlrl': native-Python implementation
+
+        Not all backend work with all profiles. In that case, brickschema will use the fastest appropriate
+        backend in order to perform the requested inference.
+
+        To perform more than one kind of inference in sequence, use '+' to join the profiles:
+
+            import brickschema
+            g = brickschema.Graph()
+            g.expand(profile='rdfs+owlrl') # performs RDFS inference, then OWLRL inference
+
+
+        # TODO: currently nothing is cached between expansions
+        """
+        if "+" in profile:
+            for prf in profile.split("+"):
+                self.expand(
+                    prf,
+                    backend=backend,
+                    simplify=simplify,
+                )
+            return
+
+        if profile == "brick":
+            return self.expand("owlrl", backend=backend, simplify=simplify)
+        elif profile == "rdfs":
+            owlrl.DeductiveClosure(owlrl.RDFS_Semantics).expand(self)
+            return
+        elif profile == "owlrl":
+            if backend is None:
+                backend = "reasonable"
+            if backend == "reasonable":
+                OWLRLReasonableInferenceSession().expand(self)
+            elif backend == "allegrograph":
+                OWLRLAllegroInferenceSession().expand(self)
+            elif backend == "owlrl":
+                OWLRLNaiveInferenceSession().expand(self)
+            else:
+                raise ValueError(f"Unknown owlrl backend {backend}")
+        elif profile == "vbis":
+            VBISTagInferenceSession(brick_version=self._brick_version).expand(self)
+        else:
+            raise Exception(f"Invalid profile '{profile}'")
+
+        if simplify:
+            self.simplify()
+        return self
+
+    def simplify(self):
+        """
+        Removes redundant and axiomatic triples and other detritus that is produced as a side effect of reasoning.
+        Simplification consists of the following steps:
+        - remove all "a owl:Thing", "a owl:Nothing" triples
+        - remove all "a <blank node" triples
+        - remove all "X owl:sameAs Y" triples
+        """
+        for entity, etype in self.subject_objects(ns.RDF.type):
+            if etype in [ns.OWL.Thing, ns.OWL.Nothing]:
+                self.remove((entity, ns.A, etype))
+            elif isinstance(etype, rdflib.BNode):
+                self.remove((entity, ns.A, etype))
+
+        for a, b in self.subject_objects(ns.OWL.sameAs):
+            if a == b:
+                self.remove((a, ns.OWL.sameAs, b))
+
+
+class GraphCollection(rdflib.Dataset, BrickBase):
+    def __init__(
+        self,
+        *args,
+        load_brick=False,
+        load_brick_nightly=False,
+        brick_version="1.4",
+        **kwargs,
+    ):
+        """Wrapper class and convenience methods for handling Brick models
+        and graphs. Accepts the same arguments as RDFlib.Graph
+
+        Args:
+            load_brick (bool): if True, loads packaged Brick ontology
+                into graph
+            load_brick_nightly (bool): if True, loads latest nightly Brick build
+                into graph (requires internet connection)
+            brick_version (string): the MAJOR.MINOR version of the Brick ontology
+                to load into the graph. Only takes effect for the load_brick argument
+
+        Returns:
+            A GraphCollection object
+        """
+        kwargs.update({"default_union": True})
+        super().__init__(*args, **kwargs)
+        self._brick_version = brick_version
+        self._load_brick = load_brick
+        self._load_brick_nightly = load_brick_nightly
+        self._graph_init()
+        # subset of graphs in the store to use; if this is length-0, then
+        # all graphs are used
+        self._subset = set()
+
+    def __iter__(self):
+        """Iterates over all quads in the store"""
+        for (s, p, o, _) in self.quads((None, None, None, None)):
+            yield (s, p, o)
+
+    def load_graph(
+        self,
+        filename: str = None,
+        source: io.IOBase = None,
+        format: str = None,
+        graph: rdflib.Graph = None,
+        graph_name: rdflib.URIRef = None,
+    ):
+        """
+        Imports the triples contained in the indicated file (or graph) into the graph.
+        Names the graph using any owl:Ontology declaration found in the file
+        or using the 'graph_name' argument if it is provided
+
+        Args:
+            filename (str): relative or absolute path to the file
+            source (file): file-like object
+            graph (brickschema.Graph): graph to load into the collection
+            graph_name (rdflib.URIRef): name of the graph (defaults to owl:Ontology instance or 'default')
+
+        Return:
+            parsed (rdflib.Graph): the graph loaded from parsing the input
+        """
+        if graph is None:
+            graph = Graph().load_file(filename=filename, source=source, format=format)
+        if graph_name is None:
+            try:
+                graph_name = next(graph.subjects(rdflib.RDF.type, ns.OWL.Ontology))
+            except StopIteration:
+                warn(
+                    f"No owl:Ontology found in graph {filename or source}. Using default graph"
+                )
+                graph_name = rdflib.graph.DATASET_DEFAULT_GRAPH_ID
+        else:
+            graph_name = rdflib.URIRef(graph_name)
+        g = self.graph(graph_name)
+        for (s, p, o) in graph.triples((None, None, None)):
+            g.add((s, p, o))
+        return g
+
+    def remove_graph(self, graph_name):
+        """
+        Removes the named graph from the graph store
+
+        Args:
+            graph_name (str): name of the graph to remove
+        """
+        self.remove_graph(graph_name)
+
+    def _graph_init(self):
+        """
+        Initializes the graph by downloading or loading from local cache the requested
+        versions of the Brick ontology.
+        """
+        ns.bind_prefixes(self, brick_version=self._brick_version)
+
+        if self._load_brick_nightly:
+            self.load_graph(
+                filename="https://github.com/BrickSchema/Brick/releases/download/nightly/Brick.ttl",
+                format="turtle",
+                graph_name="https://brickschema.org/schema/Brick#",
+            )
+        elif self._load_brick:
+            # get ontology data from package
+            data = pkgutil.get_data(
+                __name__, f"ontologies/{self._brick_version}/Brick.ttl"
+            ).decode()
+            # wrap in StringIO to make it file-like
+            self.load_graph(
+                source=io.StringIO(data),
+                format="turtle",
+                graph_name="https://brickschema.org/schema/Brick#",
+            )
+
+        self._tagbackend = None
+
+    @property
+    def graph_names(self):
+        """
+        Returns a list of the names of the graphs in the graph store
+
+        Returns:
+            list: list of graph names
+        """
+        if self._subset:
+            return list(self._subset)
+        else:
+            return [g.identifier for g in self.graphs()]
+
+    def load_alignment(self, alignment_name):
+        """
+        Loads the given alignment into the current graph by name.
+        Use get_alignments() to get a list of alignments
+        """
+        alignment_name = f"Brick-{alignment_name}-alignment.ttl"
+        alignment_path = os.path.join(
+            "ontologies", self._brick_version, "alignments", alignment_name
+        )
+        data = pkgutil.get_data(__name__, alignment_path).decode()
+        # wrap in StringIO to make it file-like
+        self.load_graph(source=io.StringIO(data), format="turtle")
+
+    def load_extension(self, extension_name):
+        """
+        Loads the given extension into the current graph by name.
+        Use get_extensions() to get a list of extensions
+        """
+        extension_name = f"brick_extension_{extension_name}.ttl"
+        extension_path = os.path.join(
+            "ontologies", self._brick_version, "extensions", extension_name
+        )
+        data = pkgutil.get_data(__name__, extension_path).decode()
+        # wrap in StringIO to make it file-like
+        self.load_graph(source=io.StringIO(data), format="turtle")
+
+    def contexts(self, triple=None):
+        """Iterate over all contexts in the graph
+
+        If triple is specified, iterate over all contexts the triple is in.
+        """
+        for context in self.store.contexts(triple):
+            if len(self._subset) > 0 and context not in self._subset:
+                continue
+            if isinstance(context, Graph):
+                # TODO: One of these should never happen and probably
+                # should raise an exception rather than smoothing over
+                # the weirdness - see #225
+                yield context
+            else:
+                yield self.get_context(context)
+
+
+class Graph(BrickBase):
+    def __init__(
+        self,
+        *args,
+        load_brick=False,
+        load_brick_nightly=False,
+        brick_version="1.4",
+        _delay_init=False,
+        **kwargs,
+    ):
+        """Wrapper class and convenience methods for handling Brick models
+        and graphs. Accepts the same arguments as RDFlib.Graph
+
+        Args:
+            load_brick (bool): if True, loads packaged Brick ontology
+                into graph
+            load_brick_nightly (bool): if True, loads latest nightly Brick build
+                into graph (requires internet connection)
+            brick_version (string): the MAJOR.MINOR version of the Brick ontology
+                to load into the graph. Only takes effect for the load_brick argument
+            _delay_init (bool): if True, the graph will not call internal initialization logic.
+                You should not need to touch this.
+
+        Returns:
+            A Graph object
+        """
+        super().__init__(*args, **kwargs)
+        self._brick_version = brick_version
+        self._load_brick = load_brick
+        self._load_brick_nightly = load_brick_nightly
+        if not _delay_init:
+            self._graph_init()
+
+    def _graph_init(self):
+        """
+        Initializes the graph by downloading or loading from local cache the requested
+        versions of the Brick ontology. If Graph() is initialized Using Graph.open() as
+        part of an external store will also call this method automatically
+        """
+        ns.bind_prefixes(self, brick_version=self._brick_version)
+
+        if self._load_brick_nightly:
+            self.load_file(
+                "https://github.com/BrickSchema/Brick/releases/download/nightly/Brick.ttl",
+                format="turtle",
+            )
+        elif self._load_brick:
+            # get ontology data from package
+            data = pkgutil.get_data(
+                __name__, f"ontologies/{self._brick_version}/Brick.ttl"
+            ).decode()
+            # wrap in StringIO to make it file-like
+            self.load_file(source=io.StringIO(data), format="turtle")
+
+        self._tagbackend = None
+
+    def load_file(self, filename=None, source=None, format=None):
+        """
+        Imports the triples contained in the indicated file into the default graph.
+
+        Args:
+            filename (str): relative or absolute path to the file
+            source (file): file-like object
+        """
+        if filename is not None:
+            fmt = format if format else rdflib.util.guess_format(filename)
+            self.parse(filename, format=fmt)
+        elif source is not None:
+            for fmt in [format, "ttl", "n3", "xml"]:
+                try:
+                    self.parse(source=source, format=fmt)
+                    return self
+                except Exception as e:
+                    warn(f"could not load {filename} as {fmt}: {e}")
+            raise Exception(f"unknown file format for {filename}")
+        else:
+            raise Exception(
+                "Must provide either a filename or file-like\
+source to load_file"
+            )
+        return self
+
+    def add(self, *triples):
+        """
+        Adds triples to the graph. Triples should be 3-tuples of rdflib.Nodes.
+
+        If the object of a triple is a list/tuple of length-2 lists/tuples,
+        then this method will substitute a blank node as the object of the original
+        triple, add the new triples, and add as many triples as length-2 items in the
+        list with the blank node as the subject and the item[0] and item[1] as the predicate
+        and object, respectively.
+
+        For example, calling add((X, Y, [(A,B), (C,D)])) produces the following triples::
+
+            X Y _b1 .
+            _b1 A B .
+            _b1 C D .
+
+        or, in turtle::
+
+            X Y [
+              A B ;
+              C D ;
+            ] .
+
+        Otherwise, acts the same as rdflib.Graph.add
+        """
+        for triple in triples:
+            assert len(triple) == 3
+            obj = triple[2]
+            if isinstance(obj, (list, tuple)):
+                for suffix in obj:
+                    assert len(suffix) == 2
+                bnode = rdflib.BNode()
+                self.add((triple[0], triple[1], bnode))
+                for (nested_pred, nested_obj) in obj:
+                    self.add((bnode, nested_pred, nested_obj))
+            else:
+                super().add(triple)
+
+    @property
+    def nodes(self):
+        """
+        Returns all nodes in the graph
+
+        Returns:
+            nodes (list of rdflib.URIRef): nodes in the graph
+        """
+        return self.all_nodes()
+
+    def from_haystack(self, namespace, model):
+        """
+        Adds to the graph the Brick triples inferred from the given Haystack model.
+        The model should be a Python dictionary produced from the Haystack JSON export
+
+        Args:
+            model (dict): a Haystack model
+        """
+        sess = HaystackInferenceSession(namespace)
+        self.add(*sess.infer_model(model))
+        return self
+
+    def from_triples(self, triples):
+        """
+        Creates a graph from the given list of triples
+
+        Args:
+            triples (list of rdflib.Node): triples to add to the graph
+        """
+        self.add(*triples)
+        return self
+
+    def load_alignment(self, alignment_name):
+        """
+        Loads the given alignment into the current graph by name.
+        Use get_alignments() to get a list of alignments
+        """
+        alignment_name = f"Brick-{alignment_name}-alignment.ttl"
+        alignment_path = os.path.join(
+            "ontologies", self._brick_version, "alignments", alignment_name
+        )
+        data = pkgutil.get_data(__name__, alignment_path).decode()
+        # wrap in StringIO to make it file-like
+        self.load_file(source=io.StringIO(data), format="turtle")
+
+    def load_extension(self, extension_name):
+        """
+        Loads the given extension into the current graph by name.
+        Use get_extensions() to get a list of extensions
+        """
+        extension_name = f"brick_extension_{extension_name}.ttl"
+        extension_path = os.path.join(
+            "ontologies", self._brick_version, "extensions", extension_name
+        )
+        data = pkgutil.get_data(__name__, extension_path).decode()
+        # wrap in StringIO to make it file-like
+        self.load_file(source=io.StringIO(data), format="turtle")
