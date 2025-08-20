@@ -1,0 +1,37 @@
+name: Run automated tests
+
+on:
+  push
+
+jobs:
+  ci:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ "3.10", "3.11", "3.12", "3.13" ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+        # see details (matrix, python-version, python-version-file, etc.)
+        # https://github.com/actions/setup-python
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/cache@v4
+        name: Define a cache for the virtual environment based on the dependencies lock file
+        with:
+          path: ./.venv
+          key: venv-${{ hashFiles('uv.lock') }}
+      - name: Install the project dependencies
+        run: uv sync --extra dev
+      - name: Install pyright
+        run: uv tool install pyright
+      - name: Run type checking
+        run: uv run pyright
+      - name: Run the automated tests (for example)
+        run: uv run pytest -v
