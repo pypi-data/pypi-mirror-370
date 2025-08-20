@@ -1,0 +1,148 @@
+# BaseApp Payments - Django
+
+This app integrates Stripe with your Django project using Django REST Framework.
+
+It provides API endpoints to manage Stripe customers and subscriptions, while also handling webhooks for real-time synchronization between Stripe and your system.
+
+## How to install:
+
+Install the package with `pip install baseapp-backend[payments]`.
+
+## Setup Stripe Credentials
+
+Add your Stripe credentials to your settings/base.py:
+
+```python
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET")
+```
+
+## Customer Integration
+
+A Customer represents any entity (such as a User, Organization, or any model with an email attribute) that will be billed through Stripe. You can configure the customer entity model by setting the corresponding value in your settings:
+
+```python
+# This can be updated in the Constance config
+STRIPE_CUSTOMER_ENTITY_MODEL = "profiles.Profile"
+```
+
+When a customer is created via the API, the `StripeCustomerSerializer` will use the authenticated user (or a provided `user_id`) to retrieve the appropriate entity from your customer model. This entity is then linked to the Stripe customer record via the `remote_customer_id`.
+
+## Subscription Management
+
+The Subscription model stores Stripe subscription details including:
+
+`remote_customer_id`
+`remote_subscription_id`
+
+## Creating a Subscription
+
+To create a subscription, use the `payments/stripe/customer/` (assuming your route is registered at `payments/`) endpoint. A validation will check that no active subscription exists for the same product and price id, to redduce duplicate subscriptions, and then creates a new subscription through the Stripe API. It returns the new `remote_subscription_id` upon success.
+
+## Configure URL Patterns
+
+Include the payments router in your URL configuration. For example, in your main `urls.py`:
+
+```python
+from django.urls import include, path
+from baseapp_payments.router import payments_router
+
+urlpatterns = [
+# ... your other URL patterns
+path('payments/', include(payments_router.urls)),
+]
+```
+
+## API Endpoints
+
+The following endpoints are provided via the payments router:
+
+`POST payments/stripe/`: Create a new Stripe subscription.
+`GET payments/stripe/{remote_subscription_id}`: Retrieve subscription details from Stripe.
+`DELETE payments/stripe/`: Delete a subscription.
+`GET/POST payments/stripe/customer/`: Retrieve or create a customer.
+`GET payments/stripe/products/`: List available Stripe products.
+`POST payments/stripe/webhook/`: Endpoint for handling Stripe webhook events.
+`GET payments/stripe/payment-methods`: List available payment methods for the requesting user or provided id 
+`POST payments/stripe/payment-methods`: Create or update payment methods
+`DELETE payments/stripe/payment-methods`: Delete existing payment methods
+
+## Stripe Webhooks
+
+The app includes a `StripeWebhookHandler` to process various Stripe events:
+
+`customer.created`: Automatically creates a new customer in your system.
+`customer.deleted`: Deletes the corresponding customer record.
+`customer.subscription.created`: Creates a new subscription record.
+`customer.subscription.deleted`: Deletes a subscription record.
+These handlers ensure that any changes in Stripe are reflected in your local database, keeping your system in sync.
+
+### Stripe Webhook Configuration
+
+For the integration to work properly, you must configure webhooks in your Stripe dashboard:
+
+#### Production Setup
+
+1. Log into your [Stripe Dashboard](https://dashboard.stripe.com)
+2. Navigate to **Developers → Webhooks → Add endpoint**
+3. Add your webhook URL: `https://yourdomain.com/payments/stripe/webhooks`
+4. Select the following events to listen for:
+   - `customer.created`
+   - `customer.deleted`
+   - `customer.subscription.created`
+   - `customer.subscription.deleted`
+   - `customer.subscription.updated`
+   - `invoice.payment_succeeded`
+   - `invoice.payment_failed`
+5. After creating the webhook, copy the **Signing Secret** and add it to your environment variables:
+   ```
+   STRIPE_WEBHOOK_SECRET=whsec_...
+   ```
+
+#### Local Development
+
+For local testing, use the [Stripe CLI](https://stripe.com/docs/stripe-cli):
+
+1. Install the Stripe CLI
+2. Log in with `stripe login`
+3. Forward events to your local server:
+   ```
+   stripe listen --forward-to localhost:8000/payments/stripe/webhooks
+   ```
+4. The CLI will display a webhook secret. Add this to your local environment:
+   ```
+   STRIPE_WEBHOOK_SECRET=whsec_...
+   ```
+
+
+## Stripe Service
+
+The StripeService class encapsulates all interactions with the Stripe API. It provides methods to:
+
+Create, retrieve, and delete customers
+Create, retrieve, and delete subscriptions
+List subscriptions and products
+This service is used internally by serializers, viewsets, and the webhook handler to standardize communication with Stripe.
+
+## Admin Integration
+
+Both the Customer and Subscription models are registered with the Django admin interface for easy management of Stripe-related data:
+
+```python
+from django.contrib import admin
+import swapper
+Customer = swapper.load_model("baseapp_payments", "Customer")
+Subscription = swapper.load_model("baseapp_payments", "Subscription")
+
+@admin.register(Customer)
+class CustomerAdmin(admin.ModelAdmin):
+list_display = ("entity", "remote_customer_id")
+search_fields = ("entity", "remote_customer_id")
+readonly_fields = ("remote_customer_id",)
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+list_display = ("id", "remote_customer_id", "remote_subscription_id")
+search_fields = ("remote_customer_id", "remote_subscription_id")
+readonly_fields = ("remote_subscription_id", "remote_customer_id")
+```
