@@ -1,0 +1,217 @@
+# HOPPR Python SDK
+
+The HOPPR Python SDK allows you to interact with the HOPPR API for managing studies, adding images, and performing model inferences.
+
+## Installation
+
+To install the HOPPR SDK, you can use `pip`:
+
+```sh
+pip install hopprai
+```
+
+This will install the HOPPR SDK along with its dependencies.
+
+## Initialization
+
+To start using the HOPPR SDK, you need to initialize it with your API key:
+
+**Note**: Do not place your API key directly in your code. Instead, use environment variables or other secure methods to manage your API key. This helps prevent accidental exposure of sensitive information.
+
+```python
+import os
+from hopprai import HOPPR
+
+api_key = os.getenv("HOPPR_API_KEY")
+hoppr = HOPPR(api_key)
+```
+
+Make sure to set the `HOPPR_API_KEY` environment variable with your actual API key.
+
+## Error Handling
+
+To handle errors more effectively, the HOPPR SDK includes a custom `HOPPRError` type that provides the status code and an error message, allowing users to respond accordingly to specific error situations.
+
+Here's an example of how to handle errors:
+
+```python
+from hopprai import HOPPR
+
+api_key = os.getenv("HOPPR_API_KEY")
+hoppr = HOPPR(api_key)
+
+try:
+  study = hoppr.create_study("example_study_reference")
+except Exception as e:
+  print(f"Error occurred: Status code: {e.status_code}, Message: {e.message}")
+```
+
+## Examples
+
+### Create a Study
+
+To create a new study, use the `create_study` method:
+
+```python
+reference = "example_study_reference"
+study = hoppr.create_study(reference)
+print(f"Created study with id: {study.id}")
+```
+
+### Retrieve a Study
+
+To retrieve an existing study by its id:
+
+```python
+study_id = "a3f1d5c2-41d4-4c9a-8b8f-8e5f9a4e8f9a"
+study = hoppr.get_study(study_id)
+if study:
+  print(f"Study id: {study.id}, Reference: {study.reference}")
+else:
+  print("Study not found.")
+```
+
+### Delete a Study
+
+To delete a study by its id:
+
+```python
+study_id = "a3f1d5c2-41d4-4c9a-8b8f-8e5f9a4e8f9a"
+if hoppr.delete_study(study_id):
+  print("Study deleted successfully.")
+else:
+  print("Failed to delete study.")
+```
+
+### Add an Image to a Study
+
+To add an image to a study:
+
+```python
+study_id = "a3f1d5c2-41d4-4c9a-8b8f-8e5f9a4e8f9a"
+reference = "1.2.840.113619.2.312.4120.793348.11111.1586342345.233"
+image_data = open("path/to/your/image.dcm", "rb").read()
+
+image = hoppr.add_study_image(study_id, reference, image_data)
+print(f"Added image with id: {image.id}")
+```
+
+### Delete an Image from a Study
+
+To delete an image from a study:
+
+```python
+study_id = "a3f1d5c2-41d4-4c9a-8b8f-8e5f9a4e8f9a"
+image_id = "1.2.840.113619.2.312.4120.793348.11111.1586342345.233"
+if hoppr.delete_study_image(study_id, image_id):
+  print("Image deleted successfully.")
+else:
+  print("Failed to delete image.")
+```
+
+### Prompt a Model for Inference
+
+To prompt a model for inference and wait for the response:
+
+```python
+study_id = "a3f1d5c2-41d4-4c9a-8b8f-8e5f9a4e8f9a"
+model = "hoppr_model:1.0.0"
+prompt = "What findings are present in this study?"
+
+response = hoppr.prompt_model(study_id, model, prompt)
+if response:
+  print(f"Model response: {response.response}")
+else:
+  print("Model inference timed out or failed.")
+```
+
+### Prompt a Model for Inference Asynchronously
+
+To prompt a model for inference asynchronously:
+
+```python
+study_id = "a3f1d5c2-41d4-4c9a-8b8f-8e5f9a4e8f9a"
+model = "hoppr_model:1.0.0"
+prompt = "What findings are present in this study?"
+
+inference_id = hoppr.prompt_model_async(study_id, model, prompt)
+print(f"Inference queued with id: {inference_id}")
+```
+
+To retrieve the response later:
+
+```python
+timeout = 180
+response = hoppr.retrieve_prompt_response(study_id, inference_id, timeout)
+if response:
+  print(f"Model response: {response.response}")
+else:
+  print("Model inference timed out or failed.")
+```
+
+## Datasets and Training Jobs
+
+### List Datasets
+
+To retrieve all datasets:
+
+```python
+datasets = hoppr.get_datasets()
+for ds in datasets:
+  print(f"Dataset id: {ds['id']}, Name: {ds['name']}")
+```
+
+### Retrieve a Dataset
+
+To retrieve a dataset:
+
+```python
+dataset_id = "your_dataset_id"
+dataset = hoppr.get_dataset(dataset_id)
+print(f"Dataset: {dataset}")
+```
+
+### Create a Dataset
+
+To create a new dataset (expects a .jsonl file):
+
+```python
+dataset_name = "my_dataset"
+description = "A test dataset."
+file_path = "path/to/dataset.jsonl"
+dataset = hoppr.create_dataset(dataset_name, description, file_path)
+print(f"Created dataset with id: {dataset['id']}")
+```
+
+### Create a Training Job
+
+To create a new training job:
+
+```python
+training_job = {
+  "dataset_id": "your_dataset_id",
+  "model": "hoppr_model:1.0.0",
+  # Add other required fields as needed
+}
+job = hoppr.create_training_job(training_job)
+print(f"Created training job with id: {job['id']}")
+```
+
+### Retrieve a Training Job
+
+To get the status or details of a training job:
+
+```python
+training_job_id = "your_training_job_id"
+job = hoppr.get_training_job(training_job_id)
+print(f"Training job status: {job['status']}")
+```
+
+### Cancel a Training Job
+
+To cancel a running training job:
+
+```python
+training_job_id = "your_training_job_id"
+result = hoppr.cancel_training_job(training_job_id)
+print(f"Cancel result: {result}")
