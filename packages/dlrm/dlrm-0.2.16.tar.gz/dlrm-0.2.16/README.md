@@ -1,0 +1,2 @@
+# DLR_resource_manager
+deel_learning_reserch_resource_manager
