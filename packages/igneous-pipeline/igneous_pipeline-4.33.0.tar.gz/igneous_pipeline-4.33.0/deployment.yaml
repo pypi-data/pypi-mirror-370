@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: igneous
+  labels:
+    app: igneous
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: igneous
+  template:
+    metadata:
+      labels:
+        app: igneous
+    spec:
+      dnsPolicy: Default
+      containers:
+        - name: igneous
+          image: seunglab/igneous
+          volumeMounts:
+          - name: secrets
+            mountPath: "/root/.cloudvolume/secrets"
+            readOnly: true
+          - name: tmp
+            mountPath: "/tmp"
+            readOnly: false
+          - mountPath: /dev/shm
+            name: dshm
+            readOnly: false
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: 2.5Gi
+            limits:
+              memory: 7.5Gi
+          env:
+            - name: SQS_URL
+              value: 'sqs://QUEUE_NAME'
+            - name: LEASE_SECONDS
+              value: "800"
+      volumes:
+      - name: secrets
+        secret:
+          secretName: secrets
+      - name: tmp
+        emptyDir: { medium: "Memory" }
+      - name: dshm
+        emptyDir:
+          medium: Memory
