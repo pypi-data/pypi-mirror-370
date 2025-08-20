@@ -1,0 +1,113 @@
+- name: Gather installed package facts
+  package_facts:
+    manager: auto
+
+- name: Define list of required packages
+  set_fact:
+    required_packages:
+      - prometheus
+      - prometheus-node-exporter
+      - apt-transport-https
+      - software-properties-common
+
+- name: Filter out already installed packages
+  set_fact:
+    packages_to_install: "{{ required_packages | difference(ansible_facts.packages.keys() | list) }}"
+
+- name: Install missing Prometheus-related packages
+  apt:
+    name: "{{ packages_to_install }}"
+    update_cache: yes
+  when: packages_to_install | length > 0
+
+- name: Install and configure grafana
+  block:
+    - name: add grafana repo key
+      shell: |
+        sudo mkdir -p /etc/apt/keyrings/
+        wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | tee /etc/apt/keyrings/grafana.gpg > /dev/null
+
+    - name: add repo
+      shell: |
+        echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | tee -a /etc/apt/sources.list.d/grafana.list
+
+    - name: install grafana
+      apt:
+        update_cache: yes
+        name: grafana
+        state: present
+
+    - name: configure grafana
+      template:
+        src: grafana.ini.j2
+        dest: /etc/grafana/grafana.ini
+        owner: grafana
+        group: grafana
+        mode: 0644
+      # notify:
+      #   - restart grafana
+
+    - name: restart grafana service
+      systemd:
+        name: grafana-server
+        state: restarted
+
+    - name: Add node-exporter to prometheus
+      template:
+        src: prometheus.yml.j2
+        dest: /etc/prometheus/prometheus.yml
+
+    - name: Pause for 10 seconds
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Restart prometheus service
+      systemd:
+        name: prometheus
+        state: restarted
+
+    - name: Pause for 10 seconds
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Add Prometheus data source to Grafana
+      grafana_datasource:
+        name: "prometheus"
+        url: http://localhost:{{ http_port }}/monitor
+        grafana_user: "admin"
+        grafana_password: "admin"
+        org_id: "1"
+        ds_type: "prometheus"
+        ds_url: "http://localhost:9090"
+        is_default: true
+
+    - name: Restart Grafana
+      systemd:
+        name: grafana-server
+        state: restarted
+
+    - name: Create dashboard in Grafana
+      grafana_dashboard:
+        url: http://localhost:{{ http_port }}/monitor
+        url_username: "admin"
+        url_password: "admin"
+        dashboard_url: https://grafana.com/api/dashboards/1860/revisions/36/download
+        org_id: 1
+        state: present
+      tags:
+        - create_nodeexporter_dashboard
+  tags:
+    - grafana
+
+- name: enable prometheus service
+  systemd:
+    name: prometheus
+    state: restarted
+    enabled: true
+
+- name: enable node-exporter service
+  systemd:
+    name: prometheus-node-exporter
+    state: restarted
+    enabled: true
+
