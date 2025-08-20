@@ -1,0 +1,26 @@
+TOPLEVELS := {{toplevels}}
+
+VHDL_FILESETS := $(addsuffix .com,$(wildcard *-vhdl.fileset))
+VERILOG_FILESETS := $(addsuffix .com,$(wildcard *verilog.fileset))
+
+{% set libpaths = [] %}
+{% for library in libraries %}
+{% set libpath = library.Path or library.Name %}
+{{ libpaths.append(libpath) or ''}}
+
+{{libpath}}:
+	$(VLIB) {{library.Name}}
+	$(VMAP) {{library.Name}} {{libpath}}
+
+{% endfor %}
+
+{% for library in external_libraries %}
+{{ libpaths.append(library.Name + ".map") or '' }}
+{{library.Name}}.map:
+	$(VMAP) {{library.Name}} {{library.Path}}
+	@touch $@
+
+{% endfor %}
+
+LIBRARIES := {{libpaths|join(' ')}}
+

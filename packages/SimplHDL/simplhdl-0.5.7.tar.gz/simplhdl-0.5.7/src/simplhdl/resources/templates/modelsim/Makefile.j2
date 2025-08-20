@@ -1,0 +1,63 @@
+VLIB := vlib
+VMAP := vmap
+VCOM := vcom
+VLOG := vlog
+VOPT := vopt
+VSIM := vsim
+
+include project.mk
+-include cocotb.mk
+
+VLIB_FLAGS :=
+VMAP_FLAGS := {{vmap_args|replace('#', '\#')}}
+VCOM_FLAGS := {{vcom_args|replace('#', '\#')}}
+VLOG_FLAGS := {{vlog_args|replace('#', '\#')}}
+VOPT_FLAGS := {{vopt_args|replace('#', '\#')}}
+VSIM_FLAGS := {{vsim_args|replace('#', '\#')}} $(COCOTB_FLAGS)
+
+VOPT_DESIGN ?= simvopt
+
+.PHONY: clean compile simulate gui
+
+ifeq ($(DO_CMD),)
+DO_CMD := -do run.do
+else
+GUI_DO_CMD := $(DO_CMD)
+endif
+
+simulate: $(VOPT_DESIGN)
+	$(VSIM) $(VSIM_FLAGS) $< -c $(DO_CMD)
+
+elaborate: $(VOPT_DESIGN)
+
+$(VOPT_DESIGN): compile
+	$(VOPT) $(VOPT_FLAGS) $(TOPLEVELS) -o $@
+
+gui: $(VOPT_DESIGN)
+	$(VSIM) $(VSIM_FLAGS) $< $(GUI_DO_CMD)
+
+
+compile: $(VERILOG_FILESETS) $(VHDL_FILESETS)
+
+
+include dependencies.mk
+include *.files
+
+
+%-vhdl.fileset.com: %-vhdl.fileset %-vhdl.files | $(LIBRARIES)
+	$(VCOM) $(VCOM_FLAGS) -f $<
+	@touch $@
+
+
+%-verilog.fileset.com: %-verilog.fileset %-verilog.files | $(LIBRARIES)
+	$(VLOG) $(VLOG_FLAGS) -f $<
+	@touch $@
+
+
+%-systemverilog.fileset.com: %-systemverilog.fileset %-systemverilog.files | $(LIBRARIES)
+	$(VLOG) $(VLOG_FLAGS) -f $<
+	@touch $@
+
+
+clean:
+	rm -rf $(LIBRARIES) transcript *.wlf *.vcd *.com modelsim.ini

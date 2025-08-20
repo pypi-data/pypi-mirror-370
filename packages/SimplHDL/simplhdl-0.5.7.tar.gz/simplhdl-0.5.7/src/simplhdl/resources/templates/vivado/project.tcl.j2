@@ -1,0 +1,124 @@
+package require Vivado
+
+proc source_script {filename} {
+    if {[catch {source -notrace $filename} err]} {
+        send_msg_id {SimplHDL SOURCE-1} {ERROR} "Error sourcing $filename: $err"
+    }
+}
+
+proc source_step_script {filename} {
+    # NOTE: make get_files fail if not files are found
+    set_msg_config -id {Vivado 12-818} -new_severity {ERROR}
+    source_script $filename
+    reset_msg_config -id {Vivado 12-818} -default_severity
+}
+
+
+proc set_hooks {filename} {
+    foreach run [get_runs -filter {IS_SYNTHESIS==true}] {
+        set_property STEPS.SYNTH_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.SYNTH_DESIGN.TCL.POST $filename $run
+    }
+    foreach run [get_runs -filter {IS_IMPLEMENTATION==true}] {
+        set_property STEPS.INIT_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.INIT_DESIGN.TCL.POST $filename $run
+        set_property STEPS.OPT_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.OPT_DESIGN.TCL.POST $filename $run
+        set_property STEPS.POWER_OPT_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.POWER_OPT_DESIGN.TCL.POST $filename $run
+        set_property STEPS.PLACE_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.PLACE_DESIGN.TCL.POST $filename $run
+        set_property STEPS.POST_PLACE_POWER_OPT_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.POST_PLACE_POWER_OPT_DESIGN.TCL.POST $filename $run
+        set_property STEPS.PHYS_OPT_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.PHYS_OPT_DESIGN.TCL.POST $filename $run
+        set_property STEPS.ROUTE_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.ROUTE_DESIGN.TCL.POST $filename $run
+        set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.TCL.PRE $filename $run
+        set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.TCL.POST $filename $run
+        set_property STEPS.WRITE_BITSTREAM.TCL.PRE $filename $run
+        set_property STEPS.WRITE_BITSTREAM.TCL.POST $filename $run
+    }
+}
+
+proc add_reports {} {
+    # Report strategies are only available from Vivado 2021.1
+    if {[package vsatisfies 1.[version -s] 1.2021.1]} {
+        foreach run [get_runs -filter {IS_IMPLEMENTATION==true}] {
+            set reportName "${run}__route_report_cdc"
+            create_report_config -report_name $reportName -step route_design -report_type report_cdc -run $run
+            set_property DISPLAY_NAME {CDC - Route Design} [get_report_configs -of_objects $run $reportName]
+            set reportName "${run}__post_route_phys_opt_report_cdc"
+            create_report_config -report_name $reportName -step post_route_phys_opt_design -report_type report_cdc -run $run
+            set_property DISPLAY_NAME {CDC - Route Design} [get_report_configs -of_objects $run $reportName]
+        }
+    }
+}
+
+
+proc add_filesets {} {
+    # Older Vivado version does not have a utils_1 fileset
+    if {[llength [get_filesets -quiet utils_1]] == 0} {
+        create_fileset utils_1
+    }
+}
+
+
+create_project -force -part {{project.Part}} {{project.Name}} [pwd]
+add_filesets
+{% if project.Parameters or project.Generics %}
+foreach fileset [get_filesets -filter {FILESET_TYPE =~ *Srcs}] {
+    set_property generic "{{dict2str(project.Parameters, project.Generics)}}" $fileset
+}
+{% endif %}
+{% if project.Defines %}
+foreach fileset [get_filesets -filter {FILESET_TYPE =~ *Srcs}] {
+    set_property verilog_define "{{dict2str(project.Defines)}}" $fileset
+}
+{% endif %}
+{% for file in files %}
+{% if file.FileType == VerilogIncludeFile %}
+add_files "{{file.Path|replace('\\', '/')}}"
+{% elif file.FileType == SystemVerilogSourceFile %}
+read_verilog -sv "{{file.Path|replace('\\', '/')}}"
+{% elif file.FileType == VerilogSourceFile %}
+read_verilog "{{file.Path|replace('\\', '/')}}"
+{% elif file.FileType == VHDLSourceFile %}
+read_vhdl -vhdl2008 -library {{file.Library}} "{{file.Path|replace('\\', '/')}}"
+{% elif file.FileType == ConstraintFile %}
+read_xdc "{{file.Path|replace('\\', '/')}}"
+{% elif file.FileType == VivadoIPSpecificationFile %}
+{% if file.Path.suffix == '.xcix' %}
+read_ip "{{file.Path|replace('\\', '/')}}"
+{% else %}
+import_ip "{{file.Path|replace('\\', '/')}}"
+{% endif %}
+{% elif file.Path.suffix == '.dcp' %}
+add_files "{{file.Path|replace('\\', '/')}}"
+{% elif file.Path.suffix in ['.edif', '.ngc'] %}
+read_edif "{{file.Path|replace('\\', '/')}}"
+{% elif file.Path.suffix == '.bd' %}
+read_bd "{{file.Path|replace('\\', '/')}}"
+{% elif file.FileType == VivadoBDTclFile %}
+send_msg_id {SimplHDL PRJ-3} {INFO} "Sourcing BD tcl file {{file.Path|replace('\\', '/')}}: this might take some time."
+source_script "{{file.Path|replace('\\', '/')}}"
+{% elif file.FileType == VivadoProjectStepFile %}
+add_files -fileset utils_1 "{{file.Path|replace('\\', '/')}}"
+global step
+set step {project}
+send_msg_id {SimplHDL PRJ-2} {INFO} "Sourcing step tcl file {{file.Path|replace('\\', '/')}}."
+source_step_script "{{file.Path|replace('\\', '/')}}"
+unset step
+{% else %}
+add_files -fileset utils_1 "{{file.Path|replace('\\', '/')}}"
+{% endif %}
+{% endfor %}
+{% if project.Parameters or project.Generics %}
+set_property generic "{{dict2str(project.Parameters, project.Generics)}}" [current_fileset]
+{% endif %}
+{% if project.Defines %}
+set_property verilog_define "{{dict2str(project.Defines)}}" [current_fileset]
+{% endif %}
+set_property top {{project.DefaultDesign.DefaultFileSet.TopLevel}} [current_fileset]
+add_reports
+update_compile_order -fileset [current_fileset]
