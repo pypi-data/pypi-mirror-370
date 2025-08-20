@@ -1,0 +1,70 @@
+name: "MCP Fetch Server Test Suite"
+description: "Comprehensive evaluation of the MCP fetch server capabilities"
+
+# MCP Server Configuration - must be under mcp.servers for mcp-agent
+mcp:
+  servers:
+    fetch:
+      command: "uvx"
+      args: ["mcp-server-fetch"]
+      env: {
+        "UV_NO_PROGRESS": "1"
+      }
+
+# Global defaults for LLM used in tests
+provider: "anthropic"
+model: "claude-sonnet-4-0"  # Will use ModelSelector if not specified
+
+# Default agent for tests that don't specify one
+default_agent: "default"  # Use the "default" agent spec by default
+
+# Named AgentSpecs used by tests
+agents:
+  definitions:
+    - name: "default"
+      instruction: |
+        You are a web content fetching agent. You can fetch URLs and extract their content.
+        Be thorough in your responses and handle errors gracefully.
+      server_names: ["fetch"]
+      max_iterations: 5
+    
+    - name: "advanced"
+      instruction: |
+        You are an expert web scraping agent. You can fetch content from multiple URLs,
+        handle various content types, and process large documents efficiently using chunking.
+      server_names: ["fetch"]
+      max_iterations: 10
+
+# Enhanced Judge Configuration
+judge:
+  # provider not specified - will inherit from global
+  # model not specified - will use ModelSelector with judge preferences
+  min_score: 0.8
+  max_tokens: 2000
+  system_prompt: |
+    You are an expert evaluator of web content fetching tasks.
+    Consider accuracy, completeness, error handling, and efficiency.
+
+# Metrics Configuration
+metrics:
+  collect:
+    - "response_time"
+    - "tool_coverage"
+    - "iteration_count" 
+    - "token_usage"
+    - "cost_estimate"
+    - "error_recovery"
+    - "content_extraction_quality"
+    - "input_tokens"
+
+# Reporting
+reporting:
+  formats: ["json", "markdown"]
+  output_dir: "./test-reports"
+  include_traces: true
+
+# Execution
+execution:
+  max_concurrency: 3
+  timeout_seconds: 120
+  retry_failed: false
