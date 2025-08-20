@@ -1,0 +1,1 @@
+from .screenshot_label_and_func_checker import ScreenshotsLabelAndFuncChecker
