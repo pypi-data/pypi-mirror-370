@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Configuration - AI Coding Agent System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        .agent-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid #dee2e6;
+        }
+        .agent-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border-color: #0d6efd;
+        }
+        .agent-card.selected {
+            border-color: #0d6efd;
+            background: #f0f8ff;
+        }
+        .agent-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        .config-panel {
+            display: none;
+        }
+        .config-panel.active {
+            display: block;
+        }
+        .CodeMirror {
+            height: 300px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .model-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .model-openai { background: #00A67E; color: white; }
+        .model-anthropic { background: #D4A574; color: white; }
+        .model-google { background: #4285F4; color: white; }
+        .model-azure { background: #0078D4; color: white; }
+        .model-ollama { background: #000000; color: white; }
+        .tool-item {
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .nav-tabs .nav-link {
+            color: #6c757d;
+        }
+        .nav-tabs .nav-link.active {
+            color: #0d6efd;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-robot me-2"></i>
+                AI Coding Agent System
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/projects">Projects</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/agent-settings">Agent Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col">
+                <h2 class="mb-4">
+                    <i class="fas fa-users-cog me-2"></i>
+                    Agent Configuration
+                </h2>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Agent Selection Grid -->
+            <div class="col-lg-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Select Agent</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3" id="agentGrid">
+                            <!-- Planner Agent -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="planner">
+                                    <div class="agent-icon text-danger">
+                                        <i class="fas fa-brain"></i>
+                                    </div>
+                                    <h6 class="mb-1">Planner</h6>
+                                    <small class="text-muted">Strategy & Architecture</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Developer Agent -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="developer">
+                                    <div class="agent-icon text-success">
+                                        <i class="fas fa-code"></i>
+                                    </div>
+                                    <h6 class="mb-1">Developer</h6>
+                                    <small class="text-muted">Code Implementation</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Tester Agent -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="tester">
+                                    <div class="agent-icon text-info">
+                                        <i class="fas fa-vial"></i>
+                                    </div>
+                                    <h6 class="mb-1">Tester</h6>
+                                    <small class="text-muted">Testing & QA</small>
+                                </div>
+                            </div>
+                            
+                            <!-- UI/UX Expert -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="ui_ux_expert">
+                                    <div class="agent-icon text-warning">
+                                        <i class="fas fa-palette"></i>
+                                    </div>
+                                    <h6 class="mb-1">UI/UX Expert</h6>
+                                    <small class="text-muted">Design & Interface</small>
+                                </div>
+                            </div>
+                            
+                            <!-- DB Expert -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="db_expert">
+                                    <div class="agent-icon text-primary">
+                                        <i class="fas fa-database"></i>
+                                    </div>
+                                    <h6 class="mb-1">DB Expert</h6>
+                                    <small class="text-muted">Database Design</small>
+                                </div>
+                            </div>
+                            
+                            <!-- DevOps Expert -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="devops_expert">
+                                    <div class="agent-icon text-secondary">
+                                        <i class="fas fa-server"></i>
+                                    </div>
+                                    <h6 class="mb-1">DevOps Expert</h6>
+                                    <small class="text-muted">Deployment & CI/CD</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Reviewer -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="reviewer">
+                                    <div class="agent-icon text-purple">
+                                        <i class="fas fa-check-double"></i>
+                                    </div>
+                                    <h6 class="mb-1">Reviewer</h6>
+                                    <small class="text-muted">Code Review</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Human Expert -->
+                            <div class="col-6">
+                                <div class="agent-card card h-100 text-center p-3" data-agent="human_expert">
+                                    <div class="agent-icon text-dark">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    <h6 class="mb-1">Human Expert</h6>
+                                    <small class="text-muted">Human-in-the-Loop</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Panel -->
+            <div class="col-lg-8 mb-4">
+                <div class="card config-panel" id="configPanel">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <span id="selectedAgentName">Select an agent to configure</span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Configuration Tabs -->
+                        <ul class="nav nav-tabs mb-3" id="configTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="prompt-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#prompt" type="button">
+                                    <i class="fas fa-comment me-1"></i>System Prompt
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="model-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#model" type="button">
+                                    <i class="fas fa-microchip me-1"></i>Model Settings
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tools-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#tools" type="button">
+                                    <i class="fas fa-toolbox me-1"></i>Tools & Capabilities
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="advanced-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#advanced" type="button">
+                                    <i class="fas fa-cog me-1"></i>Advanced
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="configTabContent">
+                            <!-- System Prompt Tab -->
+                            <div class="tab-pane fade show active" id="prompt" role="tabpanel">
+                                <div class="mb-3">
+                                    <label for="systemPrompt" class="form-label">
+                                        <strong>System Prompt</strong>
+                                        <small class="text-muted ms-2">Define the agent's role and behavior</small>
+                                    </label>
+                                    <textarea id="systemPrompt" name="system_prompt"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="customInstructions" class="form-label">
+                                        <strong>Custom Instructions</strong>
+                                        <small class="text-muted ms-2">Additional context or rules</small>
+                                    </label>
+                                    <textarea class="form-control" id="customInstructions" rows="4" 
+                                              placeholder="Add any custom instructions or context..."></textarea>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <button class="btn btn-outline-primary w-100" onclick="loadDefaultPrompt()">
+                                            <i class="fas fa-undo me-2"></i>Load Default
+                                        </button>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <button class="btn btn-outline-success w-100" onclick="previewPrompt()">
+                                            <i class="fas fa-eye me-2"></i>Preview
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Model Settings Tab -->
+                            <div class="tab-pane fade" id="model" role="tabpanel">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="modelProvider" class="form-label">Provider</label>
+                                        <select class="form-select" id="modelProvider">
+                                            <option value="openai">OpenAI</option>
+                                            <option value="anthropic">Anthropic</option>
+                                            <option value="google_genai">Google Gemini</option>
+                                            <option value="azure_openai">Azure OpenAI</option>
+                                            <option value="ollama">Ollama (Local)</option>
+                                            <option value="openai_compatible">OpenAI Compatible</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="modelName" class="form-label">Model</label>
+                                        <select class="form-select" id="modelName">
+                                            <option value="gpt-4">GPT-4</option>
+                                            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                                            <option value="claude-3-opus">Claude 3 Opus</option>
+                                            <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                                            <option value="gemini-pro">Gemini Pro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="temperature" class="form-label">
+                                            Temperature <span id="tempValue">0.7</span>
+                                        </label>
+                                        <input type="range" class="form-range" id="temperature" 
+                                               min="0" max="2" step="0.1" value="0.7">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="maxTokens" class="form-label">Max Tokens</label>
+                                        <input type="number" class="form-control" id="maxTokens" 
+                                               value="2000" min="100" max="8000">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="topP" class="form-label">
+                                            Top P <span id="topPValue">1.0</span>
+                                        </label>
+                                        <input type="range" class="form-range" id="topP" 
+                                               min="0" max="1" step="0.05" value="1.0">
+                                    </div>
+                                </div>
+
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Fallback Models:</strong> Configure backup models in case the primary model fails.
+                                </div>
+                                
+                                <div id="fallbackModels">
+                                    <!-- Fallback models list will be populated here -->
+                                </div>
+                                
+                                <button class="btn btn-sm btn-outline-primary" onclick="addFallbackModel()">
+                                    <i class="fas fa-plus me-1"></i>Add Fallback Model
+                                </button>
+                            </div>
+
+                            <!-- Tools & Capabilities Tab -->
+                            <div class="tab-pane fade" id="tools" role="tabpanel">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="toolsEnabled" checked>
+                                    <label class="form-check-label" for="toolsEnabled">
+                                        Enable Tool Usage
+                                    </label>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Available Tools</label>
+                                    <div id="toolsList">
+                                        <div class="tool-item">
+                                            <div>
+                                                <i class="fas fa-terminal me-2"></i>
+                                                <strong>Code Execution</strong>
+                                                <small class="text-muted ms-2">Run and test code</small>
+                                            </div>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" checked>
+                                            </div>
+                                        </div>
+                                        <div class="tool-item">
+                                            <div>
+                                                <i class="fas fa-file-code me-2"></i>
+                                                <strong>File Operations</strong>
+                                                <small class="text-muted ms-2">Read/write files</small>
+                                            </div>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" checked>
+                                            </div>
+                                        </div>
+                                        <div class="tool-item">
+                                            <div>
+                                                <i class="fas fa-search me-2"></i>
+                                                <strong>Web Search</strong>
+                                                <small class="text-muted ms-2">Search documentation</small>
+                                            </div>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox">
+                                            </div>
+                                        </div>
+                                        <div class="tool-item">
+                                            <div>
+                                                <i class="fas fa-plug me-2"></i>
+                                                <strong>MCP Servers</strong>
+                                                <small class="text-muted ms-2">Model Context Protocol servers</small>
+                                            </div>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" checked>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="maxToolCalls" class="form-label">Max Tool Calls per Response</label>
+                                    <input type="number" class="form-control" id="maxToolCalls" value="5" min="1" max="20">
+                                </div>
+                            </div>
+
+                            <!-- Advanced Tab -->
+                            <div class="tab-pane fade" id="advanced" role="tabpanel">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="memoryEnabled" checked>
+                                            <label class="form-check-label" for="memoryEnabled">
+                                                Enable Memory
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="maxMemoryEntries" class="form-label">Max Memory Entries</label>
+                                        <input type="number" class="form-control" id="maxMemoryEntries" value="100">
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="conversationTimeout" class="form-label">
+                                            Conversation Timeout (seconds)
+                                        </label>
+                                        <input type="number" class="form-control" id="conversationTimeout" value="3600">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="maxRetries" class="form-label">Max Retries on Failure</label>
+                                        <input type="number" class="form-control" id="maxRetries" value="3" min="0" max="10">
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Stop Sequences</label>
+                                    <input type="text" class="form-control" id="stopSequences" 
+                                           placeholder="Enter comma-separated stop sequences...">
+                                    <small class="text-muted">Sequences that will stop generation</small>
+                                </div>
+
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>Caution:</strong> Advanced settings can significantly affect agent behavior and performance.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Save Buttons -->
+                        <div class="mt-4 border-top pt-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <button class="btn btn-success w-100" onclick="saveAgentConfig()">
+                                        <i class="fas fa-save me-2"></i>Save Configuration
+                                    </button>
+                                </div>
+                                <div class="col-md-6">
+                                    <button class="btn btn-outline-secondary w-100" onclick="resetToDefaults()">
+                                        <i class="fas fa-undo me-2"></i>Reset to Defaults
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Initial state when no agent selected -->
+                <div class="card" id="noAgentSelected">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-hand-pointer fa-3x text-muted mb-3"></i>
+                        <h5>Select an Agent to Configure</h5>
+                        <p class="text-muted">Choose an agent from the left panel to view and edit its configuration</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/yaml/yaml.min.js"></script>
+    <script>
+        let currentAgent = null;
+        let systemPromptEditor = null;
+        let agentConfigs = {};
+
+        // Initialize CodeMirror for system prompt
+        document.addEventListener('DOMContentLoaded', () => {
+            systemPromptEditor = CodeMirror.fromTextArea(document.getElementById('systemPrompt'), {
+                lineNumbers: true,
+                mode: 'yaml',
+                theme: 'monokai',
+                lineWrapping: true,
+                autoCloseBrackets: true,
+                matchBrackets: true
+            });
+
+            // Load agent configurations
+            loadAgentConfigurations();
+
+            // Bind agent selection
+            document.querySelectorAll('.agent-card').forEach(card => {
+                card.addEventListener('click', () => selectAgent(card));
+            });
+
+            // Bind slider updates
+            document.getElementById('temperature').addEventListener('input', (e) => {
+                document.getElementById('tempValue').textContent = e.target.value;
+            });
+
+            document.getElementById('topP').addEventListener('input', (e) => {
+                document.getElementById('topPValue').textContent = e.target.value;
+            });
+
+            // Model provider change handler
+            document.getElementById('modelProvider').addEventListener('change', updateModelOptions);
+        });
+
+        async function loadAgentConfigurations() {
+            try {
+                const response = await fetch('/api/agent-configs');
+                const data = await response.json();
+                if (data.success) {
+                    agentConfigs = data.configs;
+                }
+            } catch (error) {
+                console.error('Error loading configurations:', error);
+            }
+        }
+
+        function selectAgent(card) {
+            // Update selection UI
+            document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+
+            // Show configuration panel
+            document.getElementById('noAgentSelected').style.display = 'none';
+            document.getElementById('configPanel').classList.add('active');
+
+            // Get agent name
+            currentAgent = card.dataset.agent;
+            const agentName = card.querySelector('h6').textContent;
+            document.getElementById('selectedAgentName').innerHTML = 
+                `<i class="${card.querySelector('.agent-icon i').className} me-2"></i>${agentName} Configuration`;
+
+            // Load agent configuration
+            loadAgentConfig(currentAgent);
+        }
+
+        async function loadAgentConfig(agentName) {
+            const config = agentConfigs[agentName] || getDefaultConfig(agentName);
+            
+            // Load system prompt
+            systemPromptEditor.setValue(config.system_prompt || '');
+            document.getElementById('customInstructions').value = config.custom_instructions || '';
+            
+            // Load model settings
+            document.getElementById('modelProvider').value = config.model?.provider || 'openai';
+            updateModelOptions();
+            document.getElementById('modelName').value = config.model?.model_name || 'gpt-4';
+            document.getElementById('temperature').value = config.model?.temperature || 0.7;
+            document.getElementById('tempValue').textContent = config.model?.temperature || 0.7;
+            document.getElementById('maxTokens').value = config.model?.max_tokens || 2000;
+            document.getElementById('topP').value = config.model?.top_p || 1.0;
+            document.getElementById('topPValue').textContent = config.model?.top_p || 1.0;
+            
+            // Load tools settings
+            document.getElementById('toolsEnabled').checked = config.tools?.enabled !== false;
+            document.getElementById('maxToolCalls').value = config.tools?.max_calls_per_response || 5;
+            
+            // Load advanced settings
+            document.getElementById('memoryEnabled').checked = config.memory_enabled !== false;
+            document.getElementById('maxMemoryEntries').value = config.max_memory_entries || 100;
+            document.getElementById('conversationTimeout').value = config.conversation_timeout || 3600;
+            document.getElementById('maxRetries').value = config.retry_strategy?.max_retries || 3;
+        }
+
+        function getDefaultConfig(agentName) {
+            const defaults = {
+                planner: {
+                    system_prompt: "You are a strategic planning agent responsible for breaking down complex tasks into actionable steps.",
+                    model: { provider: 'openai', model_name: 'gpt-4', temperature: 0.7 }
+                },
+                developer: {
+                    system_prompt: "You are an expert software developer responsible for implementing clean, efficient, and maintainable code.",
+                    model: { provider: 'openai', model_name: 'gpt-4', temperature: 0.3 }
+                },
+                tester: {
+                    system_prompt: "You are a quality assurance expert responsible for writing comprehensive tests and ensuring code quality.",
+                    model: { provider: 'openai', model_name: 'gpt-3.5-turbo', temperature: 0.2 }
+                },
+                ui_ux_expert: {
+                    system_prompt: "You are a UI/UX design expert responsible for creating intuitive and beautiful user interfaces.",
+                    model: { provider: 'openai', model_name: 'gpt-4', temperature: 0.8 }
+                },
+                db_expert: {
+                    system_prompt: "You are a database architecture expert responsible for designing efficient and scalable database schemas.",
+                    model: { provider: 'openai', model_name: 'gpt-4', temperature: 0.3 }
+                },
+                devops_expert: {
+                    system_prompt: "You are a DevOps expert responsible for deployment, CI/CD, and infrastructure configuration.",
+                    model: { provider: 'openai', model_name: 'gpt-3.5-turbo', temperature: 0.3 }
+                },
+                reviewer: {
+                    system_prompt: "You are a code review expert responsible for ensuring code quality, best practices, and security.",
+                    model: { provider: 'openai', model_name: 'gpt-4', temperature: 0.2 }
+                },
+                human_expert: {
+                    system_prompt: "You are a human expert interface for collecting feedback and making critical decisions.",
+                    model: { provider: 'openai', model_name: 'gpt-3.5-turbo', temperature: 0.5 }
+                }
+            };
+            return defaults[agentName] || {};
+        }
+
+        function updateModelOptions() {
+            const provider = document.getElementById('modelProvider').value;
+            const modelSelect = document.getElementById('modelName');
+            
+            const models = {
+                openai: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4-32k'],
+                anthropic: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku', 'claude-2.1'],
+                google_genai: ['gemini-pro', 'gemini-pro-vision', 'gemini-ultra'],
+                azure_openai: ['gpt-4', 'gpt-4-32k', 'gpt-35-turbo'],
+                ollama: ['llama2', 'mistral', 'codellama', 'neural-chat'],
+                openai_compatible: ['custom-model']
+            };
+            
+            modelSelect.innerHTML = '';
+            (models[provider] || []).forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                modelSelect.appendChild(option);
+            });
+        }
+
+        async function saveAgentConfig() {
+            if (!currentAgent) {
+                alert('Please select an agent first');
+                return;
+            }
+
+            const config = {
+                name: currentAgent,
+                system_prompt: systemPromptEditor.getValue(),
+                custom_instructions: document.getElementById('customInstructions').value,
+                model: {
+                    provider: document.getElementById('modelProvider').value,
+                    model_name: document.getElementById('modelName').value,
+                    temperature: parseFloat(document.getElementById('temperature').value),
+                    max_tokens: parseInt(document.getElementById('maxTokens').value),
+                    top_p: parseFloat(document.getElementById('topP').value)
+                },
+                tools: {
+                    enabled: document.getElementById('toolsEnabled').checked,
+                    max_calls_per_response: parseInt(document.getElementById('maxToolCalls').value)
+                },
+                memory_enabled: document.getElementById('memoryEnabled').checked,
+                max_memory_entries: parseInt(document.getElementById('maxMemoryEntries').value),
+                conversation_timeout: parseInt(document.getElementById('conversationTimeout').value),
+                retry_strategy: {
+                    max_retries: parseInt(document.getElementById('maxRetries').value)
+                }
+            };
+
+            try {
+                const response = await fetch(`/api/agent-configs/${currentAgent}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showNotification('Configuration saved successfully!', 'success');
+                    agentConfigs[currentAgent] = config;
+                } else {
+                    showNotification('Failed to save configuration', 'danger');
+                }
+            } catch (error) {
+                console.error('Error saving configuration:', error);
+                showNotification('Error saving configuration', 'danger');
+            }
+        }
+
+        function loadDefaultPrompt() {
+            if (currentAgent) {
+                const defaultConfig = getDefaultConfig(currentAgent);
+                systemPromptEditor.setValue(defaultConfig.system_prompt || '');
+            }
+        }
+
+        function previewPrompt() {
+            const prompt = systemPromptEditor.getValue();
+            const customInstructions = document.getElementById('customInstructions').value;
+            
+            const fullPrompt = prompt + (customInstructions ? '\n\nAdditional Instructions:\n' + customInstructions : '');
+            
+            // Show in modal
+            const modal = `
+                <div class="modal fade" id="previewModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Full System Prompt Preview</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <pre class="bg-light p-3 rounded">${fullPrompt}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modal);
+            const modalEl = new bootstrap.Modal(document.getElementById('previewModal'));
+            modalEl.show();
+            
+            document.getElementById('previewModal').addEventListener('hidden.bs.modal', () => {
+                document.getElementById('previewModal').remove();
+            });
+        }
+
+        function resetToDefaults() {
+            if (currentAgent && confirm('Reset this agent to default configuration?')) {
+                loadAgentConfig(currentAgent);
+                showNotification('Reset to default configuration', 'info');
+            }
+        }
+
+        function showNotification(message, type) {
+            const alert = `
+                <div class="alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3" 
+                     style="z-index: 1050;">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', alert);
+            
+            setTimeout(() => {
+                const alertEl = document.querySelector('.alert');
+                if (alertEl) alertEl.remove();
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
