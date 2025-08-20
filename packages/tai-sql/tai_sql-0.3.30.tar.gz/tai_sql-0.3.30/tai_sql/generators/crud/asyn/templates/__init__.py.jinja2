@@ -1,0 +1,122 @@
+# Este archivo ha sido generado automáticamente por tai-sql
+# No modifiques este archivo directamente
+
+{{ imports|join('\n') }}
+
+class {{ schema_name.title() }}AsyncDBAPI:
+    """
+    API principal para operaciones de base de datos asíncronas.
+    
+    Esta clase proporciona acceso centralizado a todas las operaciones DAO
+    con gestión automática de sesiones SQLAlchemy. Implementa el patrón
+    de fachada para simplificar el acceso a los diferentes modelos de datos.
+    
+    Características principales:
+    - Gestión automática del ciclo de vida de sesiones
+    - Acceso unificado a todos los modelos DAO
+    - Soporte para operaciones transaccionales
+    - Context managers para manejo de transacciones
+    
+    Atributos:
+        session_manager (AsyncSessionManager): Gestor de sesiones SQLAlchemy
+        {% for model in models %}
+        {{ model.tablename }} ({{ model.name }}AsyncDAO): Operaciones DAO para {{ model.name }}
+        {% endfor %}
+    
+    Ejemplos de uso:
+        ```python
+        # Operaciones simples
+        user = db_api.user.create(name="Juan", email="juan@email.com")
+        found_user = db_api.user.find(email="juan@email.com")
+        
+        # Operaciones transaccionales
+        with db_api.session_manager.get_session() as session:
+            user = db_api.user.create(name="Ana", session=session)
+            post = db_api.post.create(title="Post", author_id=user.id, session=session)
+        ```
+    """
+
+    _instance: Optional[{{ schema_name.title() }}AsyncDBAPI] = None
+
+    def __new__(cls) -> {{ schema_name.title() }}AsyncDBAPI:
+        """Implementación del patrón Singleton"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        """Inicializa la API con un gestor de sesiones síncrono"""
+        if not self._initialized:
+            self._session_manager = AsyncSessionManager()
+            self._initialized = True
+    
+    @property
+    def session_manager(self) -> AsyncSessionManager:
+        """
+        Acceso al gestor de sesiones.
+        
+        El SessionManager proporciona:
+        - get_session(): Context manager para sesiones individuales
+        
+        Returns:
+            SyncSessionManager: Instancia del gestor de sesiones
+        """
+        return self._session_manager
+    
+    {% for model in models %}
+    @property
+    def {{ model.tablename }}(self) -> {{ model.name }}AsyncDAO:
+        """
+        Acceso a operaciones DAO para el modelo {{ model.name }}.
+        
+        Operaciones disponibles:
+        - `find`: Buscar un registro por filtros
+        - `find_many`: Buscar múltiples registros con paginación
+        - `create`: Crear un nuevo registro
+        - `create_many`: Crear múltiples registros
+        - `update`: Actualizar registro existente
+        - `update_many`: Actualizar registros existentes
+        - `upsert`: Inserta o actualiza un registro
+        - `upsert_many`: Inserta o actualiza múltiples registros
+        - `delete`: Eliminar un registro
+        - `delete_many`: Eliminar varios registros
+        
+        Returns:
+            {{ model.name }}AsyncDAO: Instancia DAO para {{ model.name }}
+        """
+        return {{ model.name }}AsyncDAO(self._session_manager)
+
+    {% endfor %}
+    {% for enum in enums %}
+    @property
+    def {{ enum.name }}(self) -> EnumModel:
+        """
+        Acceso a operaciones para el Enum {{ enum.name }}.
+        
+        Operaciones disponibles:
+        - `find_many`: Devuelve la lista de posibilidades
+        
+        Returns:
+            EnumModel: Instancia para {{ enum.name }}
+        """
+        return EnumModel(name="{{ enum.name }}", values={{ enum['values'] | repr }})
+    {% endfor %}
+
+# Instancia global para fácil acceso
+{{ schema_name }}_api = {{ schema_name.title() }}AsyncDBAPI()
+
+# Exportar tanto la clase como la instancia
+__all__ = [
+    '{{ schema_name.title() }}AsyncDBAPI',
+    '{{ schema_name }}_api',
+    {% for model in models %}
+    '{{ model.name }}Read',
+    {% if not model.is_view %}
+    '{{ model.name }}Create',
+    '{{ model.name }}Filter',
+    '{{ model.name }}Update',
+    '{{ model.name }}UpdateValues',
+    {% endif %}
+    {% endfor %}
+]
