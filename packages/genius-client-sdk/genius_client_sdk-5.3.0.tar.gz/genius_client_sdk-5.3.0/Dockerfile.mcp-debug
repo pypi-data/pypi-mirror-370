@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1
+FROM python:3.13-bookworm AS builder
+
+ARG UV_VERSION="0.4.26"
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates software-properties-common python3-launchpadlib
+
+# mcphost :: Install go v1.23
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/bookworm-backports.list && \
+    apt-get update && apt-get install -y -t bookworm-backports golang-go
+
+# mcphost :: Install mcphost (Ollama MCP proxy)
+RUN go install github.com/mark3labs/mcphost@latest
+
+# Download the latest installer
+ADD https://astral.sh/uv/${UV_VERSION}/install.sh /uv-installer.sh
+
+# Run the installer then remove it
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+# Ensure the installed binary is on the `PATH`
+ENV PATH="/root/.cargo/bin/:$PATH"
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock README.md ./
+
+# ARG RUST_LOG=uv=trace
+
+# Cache dependencies first
+RUN --mount=type=secret,id=codeartifact-token <<EOF
+    UV_INDEX_VERSES_INTERNAL_USERNAME=aws \
+    UV_INDEX_VERSES_INTERNAL_PASSWORD="$(cat /run/secrets/codeartifact-token)" \
+      uv sync --frozen --no-dev --no-install-workspace --package genius-client-sdk
+EOF
+
+# Install workspace package
+COPY packages/genius-client-sdk ./packages/genius-client-sdk
+RUN --mount=type=secret,id=codeartifact-token <<EOF
+    UV_INDEX_VERSES_INTERNAL_USERNAME=aws \
+    UV_INDEX_VERSES_INTERNAL_PASSWORD="$(cat /run/secrets/codeartifact-token)" \
+      uv sync --frozen --no-dev --package genius-client-sdk
+EOF
+
+# mcphost :: copy only executable
+RUN cp $(go env GOPATH)/bin/mcphost .
+
+
+FROM python:3.13-slim-bookworm AS app
+
+ARG UV_VERSION="0.4.26"
+
+# mcphost :: jq to manipulate json configuration
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates jq
+
+# Download the latest installer
+ADD https://astral.sh/uv/${UV_VERSION}/install.sh /uv-installer.sh
+
+# Run the installer then remove it
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+
+# Ensure the installed binary and tools are on the `PATH`
+ENV PATH="/root/.cargo/bin/:/root/.local/bin:$PATH"
+
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 verses \
+  && adduser --system --uid 1001 verses \
+  && chown -R 1001:1001 /app
+
+# Set user and the work dir, and copy the project
+USER verses
+
+COPY --from=builder --chown=verses:verses /app/mcphost /app/mcphost
+COPY --from=builder --chown=verses:verses /app/.venv/ /app/.venv/
+COPY --from=builder --chown=verses:verses /app/packages/genius-client-sdk ./packages/genius-client-sdk
