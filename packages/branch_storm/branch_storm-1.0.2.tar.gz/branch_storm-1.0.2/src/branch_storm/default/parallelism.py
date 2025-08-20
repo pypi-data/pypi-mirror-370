@@ -1,0 +1,110 @@
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, List, Optional, Tuple, Sequence
+
+from .rw_classes import RunConfigurations
+from ..branch import Branch
+from ..utils.formatters import LoggerBuilder
+
+log = LoggerBuilder().build()
+
+
+def check_sequence_lengths(*args):
+    for arg in args:
+        if len(arg) != len(args[0]):
+            raise ValueError(
+                "The lengths of the sequences "
+                "are not equal to each other")
+
+
+def add_sequences(
+        base_seq: Sequence,
+        *sequences: Tuple[Sequence]) -> List[Tuple]:
+    check_sequence_lengths(base_seq, *sequences)
+    combined_seq = []
+    for num, base_el in enumerate(base_seq):
+        if not isinstance(base_seq[0], Sequence):
+            base_el = (base_el,)
+        combined_seq.append((*base_el, *list(
+            zip(*sequences))[num]))
+    return combined_seq
+
+
+def set_val_for_all(len_objects: int, value: Any) -> List[Any]:
+    return list(map(lambda x: value, range(len_objects)))
+
+
+def create_init_data_sequence(
+        len_obj: int,
+        idata_for_all: Optional[Any] = None,
+        idata_for_each: Tuple[Sequence] = None) -> List[Tuple]:
+    if idata_for_all is None and idata_for_each is None:
+        return set_val_for_all(len_obj, ())
+
+    elif not isinstance(idata_for_all, Sequence) and idata_for_each is None:
+        return set_val_for_all(len_obj, (idata_for_all,))
+
+    elif isinstance(idata_for_all, Sequence) and idata_for_each is None:
+        return set_val_for_all(len_obj, tuple(idata_for_all))
+
+    elif idata_for_all is None and idata_for_each:
+        id_for_all = set_val_for_all(len_obj, ())
+        return add_sequences(id_for_all, *idata_for_each)
+
+    elif not isinstance(idata_for_all, Sequence) and idata_for_each:
+        id_for_all = set_val_for_all(len_obj, (idata_for_all,))
+        return add_sequences(id_for_all, *idata_for_each)
+
+    id_for_all = set_val_for_all(len_obj, tuple(idata_for_all))
+    return add_sequences(id_for_all, *idata_for_each)
+
+
+def thread_pool(
+        arg_seq: Any,
+        table_branches_seq: Sequence[Branch],
+        threads: str = "max") -> Tuple:
+    results = []
+    if threads == "max":
+        threads = len(arg_seq)
+    else:
+        threads = int(threads)
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        for one_thread_result in pool.map(
+                lambda x: x[0].run(x[1]),
+                zip(table_branches_seq, arg_seq)):
+            results.append(one_thread_result)
+        log.info(f"ThreadPoolExecutor has finished "
+                 f"processing in {threads} threads")
+
+    return tuple(results)
+
+
+def parallelize_without_result(
+        run_config: RunConfigurations,
+        table_branches_seq: Sequence[Branch],
+        threads: str,
+        idata_for_all: Optional[Any] = None,
+        idata_for_each: Tuple[Sequence] = None) -> None:
+    branches = []
+    for branch in table_branches_seq:
+        renewed_run_conf = run_config.get_renewed_self_instance()
+        branches.append(branch.rw_inst({"run_conf": renewed_run_conf}))
+    table_branches_seq = branches
+    arg_seq = create_init_data_sequence(
+        len(table_branches_seq), idata_for_all, idata_for_each)
+    thread_pool(arg_seq, table_branches_seq, threads=threads)
+
+
+def parallelize_with_result_return(
+        run_config: RunConfigurations,
+        table_branches_seq: Sequence[Branch],
+        threads: str,
+        idata_for_all: Optional[Any] = None,
+        idata_for_each: Tuple[Sequence] = None) -> Tuple:
+    branches = []
+    for branch in table_branches_seq:
+        branches.append(branch.rw_inst(
+            {"run_conf": run_config.get_renewed_self_instance()}))
+    table_branches_seq = branches
+    arg_seq = create_init_data_sequence(
+        len(table_branches_seq), idata_for_all, idata_for_each)
+    return thread_pool(arg_seq, table_branches_seq, threads=threads)
