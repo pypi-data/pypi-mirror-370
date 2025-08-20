@@ -1,0 +1,234 @@
+The entire process step by step:
+
+1. Prepare a text for generating Knowledge graph.
+2. Init a KnowledgeGraphGenerator object for example:
+kggen = kg.KnowledgeGraphGenerator(model = "openai/gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
+
+Steps 3-5 generate a KG tailored to the specific text. 
+While it is expected to be closer to the text it will be difficult to compare different KG since the entities/Relations
+are tailored to the specific context.
+
+3. Init a new graph.
+    if a text is provided the function reset the internal variables to start a new graph generation.
+    if a JSON path is provided it loads an existing graph, for example:
+    kggen.init_graph(path=f"../../Ramban/json/{file_name}_c{chunk_size}.json")
+4. Extract Entities, wil use LLM to extract entities from the text. 
+   This function automaticaly calls Init so step 3 is not needed if you call the extract function. 
+   You need to load the text file into a local variable to send it to this function
+
+   The chaunk size parameter determine if the text will be analyzed in the following steps as a hole (chunk_size=0 , single chunk)
+   or it will be splited into several chanks. a subgraph will be generated for each chunk and all will be merged into a single unified graph. 
+   The pros/Cons for each methos refer to A: Context Dilution in Long Texts in this documentation
+
+   For example: 
+   kggen.extract_entities(text=text, chunk_size=chunk_size)
+
+5. Extract Relations. This function utilse LLM to extract the relations between the already discoverd entities. 
+   example: kggen.extract_relations()
+
+The next steps designed to generalize the KG into a known ontology, This may reduce the granularity level of description 
+of each Kg, however it will enable to create a common language to compare different graphs fromdifferent texts.  
+
+6. Converting Entities to Concepts. 
+    Step 4 might detect multiple entities with the same meaning due to ortographic, morphologic or synonyms.
+    in this step a LLM is used to merge the entities into concepts where each each concept ma have several alternat names. 
+
+    kggen.extract_relations()
+
+7. step 5 will generate multiple relations with the same meaning due to ortographic, morphologic or synonyms.
+   This package support several methods to handle these flactuations:
+7.1 Using LLM to merge relations into Predicates.
+    The LLM groups the relations into similar meaning cluster, name each cluster and povide alternative names for each predicate (that is all the relation names within the clustter)
+    The advantage, increase relation similarity within a text Graph.
+    pitfall: It will likely generate different predicates for different texts. 
+
+    example: kggen.relations2ontology(["LLM"])
+
+7.2 Align the relations to an Ontology.
+    You can provide a full or partial well known ontology, the system will use the embeddings similarity between
+    the detected relations and ontology to choose the best ontology relation for each relation detected by the LLM.
+    The advantage: Unified relation terminology will easily enable graph comparisons between texts.
+    Pitfall: It will narow the knowledge description, is some cases it might even asign a wrong relation. 
+
+    exapmle: kggen.relations2ontology(["SKOS"])
+
+7.3 LLM validation on step 7.2 - To be programed.
+
+7.4 Multiple Ontologies. To overcome the limitation of a single ontology, the system allows to proovide multiple ontologies.
+    for each relation the system will select the best relation of all ontologies. 
+
+    Example: kggen.relations2ontology(["CDOCCRM", "SKOS", "DUBLIN_CORE"])
+
+The following step are for visualization:
+
+step 8: Convert the detected graph into a specifi ontology and Create an HTML representing the Graph.
+For example:
+
+ontology = "SKOS"  # Use "MIX" to vusialize a multiple ontologies graph. 
+kggen.graph2Ontology(ontology)
+viz = kggen.visualize(f"../../Ramban/vis/{file_name}_c{chunk_size}_ontology_{ontology}.html")
+
+============================================================
+
+A: Context Dilution in Long Texts
+
+When the LLM processes a long passage, it must divide its attention across many topics and entities. This often leads to:
+
+Merging related concepts into broader categories.
+
+Omitting more specific terms in favor of higher-level ones.
+
+Losing some local details because the global context takes priority.
+
+When you feed a shorter segment:
+
+The model focuses exclusively on that content.
+
+It’s more likely to pick out fine-grained mentions, even minor sub-parts of entities.
+
+2. Normalizing: Entities to Concept.
+Grouping entities to an higher level concepts.
+For edditional documentationsee the methos entities2concepts.
+
+3. Normalizing Relations
+Challenges with Relations
+
+From your extracted graph, predicates look like this:
+
+"is placed on"
+
+"is part of"
+
+"contains"
+
+"dwells on"
+
+"is above"
+
+"is in"
+
+Common issues:
+
+Variability in phrasing (is placed on vs placed on).
+
+Hebrew/English mix (if extracted in Hebrew).
+
+Morphological or tense variation (dwells on vs dwelling upon).
+
+Synonyms (is part of, are part of, belongs to).
+
+Directional ambiguity (is in vs contains).
+
+Normalization Strategy for Relations
+1. Define a Canonical Predicate Vocabulary
+
+Decide on a small, clean set of relations for your domain, aligned with SKOS or custom properties:
+
+skos:broader / skos:narrower → hierarchical (is part of).
+
+skos:related → associative (generic relatedness).
+
+Custom object properties (namespaced, e.g., ex:contains, ex:isIn, ex:dwellsOn).
+
+2. Group Variants into Canonical Predicates
+
+Just like we grouped entities into SKOS concepts, group relations into canonical forms:
+
+Canonical: contains
+Variants: is in, is placed in.
+
+Canonical: isPartOf
+Variants: is part of, are part of, belongs to.
+
+Canonical: isAbove
+Variants: is over, stands upon.
+
+There are several methods available to group relations into predicated:
+
+a. LLM with granularity level (LoW, MEDIUM, HIGH)
+b. Embedding each relation, cluster the embeddings, Extracts the relations belonging to each cluster and
+   Uses an LLM to generate a canonical name for the cluster.
+
+Dubline Core Basic Relation Terms: 
+dcterms_relations = {
+    "dcterms:isPartOf": "Refers to a related resource in which the described resource is physically or logically included.",
+    "dcterms:hasPart": "Refers to a related resource that is included either physically or logically in the described resource.",
+    "dcterms:isVersionOf": "Refers to a related resource of which the described resource is a version, edition, or adaptation.",
+    "dcterms:hasVersion": "Refers to a related resource that is a version, edition, or adaptation of the described resource.",
+    "dcterms:isFormatOf": "Refers to a related resource that is substantially the same as the described resource, but in another format.",
+    "dcterms:hasFormat": "Refers to a related resource that is the same as the described resource, but in another format.",
+    "dcterms:references": "Refers to a related resource that is referenced, cited, or otherwise pointed to by the described resource.",
+    "dcterms:isReferencedBy": "Refers to a related resource that references, cites, or otherwise points to the described resource.",
+    "dcterms:relation": "A general statement of relation to another resource."
+}
+
+SKOS Relations Terms:
+skos_relations = {
+    "skos:broader": "Indicates a more general concept",
+    "skos:narrower": "Indicates a more specific concept",
+    "skos:related": "Indicates an associative relationship",
+    "skos:exactMatch": "Concepts are exactly equivalent",
+    "skos:closeMatch": "Concepts are sufficiently similar but not identical",
+    "skos:broadMatch": "Broader concept in another scheme",
+    "skos:narrowMatch": "Narrower concept in another scheme",
+    "skos:relatedMatch": "Associative relation in another scheme"
+}
+
+cidoccrm_relations = {
+    "P1_is_identified_by": "Links an entity to an identifier (e.g., name, title, number).",
+    "P2_has_type": "Assigns an entity to a type or category.",
+    "P3_has_note": "Links an entity to a descriptive note.",
+    "P4_has_time_span": "Associates an event or period with a time-span.",
+    "P5_consists_of": "Indicates that an entity is composed of or forms part of another entity.",
+    "P7_took_place_at": "Indicates the place where an event took place.",
+    "P8_took_place_on_or_within": "Specifies the surface or object on/within which an event occurred.",
+    "P10_falls_within": "Indicates spatial or temporal containment.",
+    "P11_had_participant": "Relates an event to participants.",
+    "P12_occurred_in_the_presence_of": "Links an event with entities present during it.",
+    "P13_destroyed": "Indicates that an entity destroyed another entity.",
+    "P14_carried_out_by": "Associates an event or activity with the actor who performed it.",
+    "P15_was_influenced_by": "States that an entity was influenced by another.",
+    "P16_used_specific_object": "Relates an event to the specific object used.",
+    "P17_was_motivated_by": "Indicates that an event or action was motivated by something.",
+    "P19_was_intended_use_of": "Specifies the intended use for which an object was made.",
+    "P20_had_specific_purpose": "Indicates a specific purpose of an object or action.",
+    "P21_had_general_purpose": "Indicates a general purpose of an object or action.",
+    "P25_moved": "Indicates that an object was moved.",
+    "P26_moved_to": "Specifies the destination of a move.",
+    "P27_moved_from": "Specifies the origin of a move.",
+    "P31_has_modified": "Indicates that an entity was modified by another.",
+    "P35_has_identified": "Indicates that an entity was identified by another.",
+    "P37_assigned": "Indicates that an attribute or role was assigned.",
+    "P38_deassigned": "Indicates that an attribute or role was removed/deassigned.",
+    "P39_measured": "Indicates that an entity was measured.",
+    "P40_observed_dimension": "Links an observation to the dimension observed.",
+    "P43_has_dimension": "Relates an entity to its measurable dimension.",
+    "P90_has_value": "Indicates the value of an attribute or property.",
+    "P94_has_created": "Links an event to the object it created.",
+    "P96_by_mother": "Links a person to their mother (birth event).",
+    "P97_from_father": "Links a person to their father (birth event).",
+    "P98_brought_into_life": "Indicates that a person was born.",
+    "P100_was_death_of": "Indicates that a person died.",
+    "P102_has_title": "Relates an entity to its title.",
+    "P104_is_subject_to": "Indicates that an entity is subject to a condition or rule.",
+    "P105_right_held_by": "Indicates the rights held by an entity over another.",
+    "P127_has_broader_term": "Indicates a broader term for a concept (has narrower term as inverse)."
+}
+
+Map relations into an existing ontologies: 
+
+Takes any ontology embedding file (SKOS, Dublin Core, or others you prepare).
+
+Embeds your raw relations from the graph.
+
+Computes cosine similarity between raw relation embeddings and ontology relation embeddings.
+
+Assigns each raw relation to its closest ontology relation.
+
+Builds structured Predicate objects, with:
+
+prefLabel_en: the ontology relation label (e.g., skos:broader, dcterms:isPartOf).
+
+altLabels_en: the list of raw variants that got mapped here.
+
+mapping_examples: the examples that show this mapping.
