@@ -1,0 +1,65 @@
+name: Docket CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}, Redis ${{ matrix.redis-version }}, redis-py ${{ matrix.redis-py-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+        redis-version: ["6.2", "7.4", "valkey-8.0"]
+        redis-py-version: [">=4.6,<5", ">=5"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set Python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync --dev --upgrade-package 'redis${{ matrix.redis-py-version }}'
+
+      - name: Run tests
+        env:
+          REDIS_VERSION: ${{ matrix.redis-version }}
+        run: uv run pytest --cov-branch --cov-fail-under=100 --cov-report=xml --cov-report=term-missing:skip-covered
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: python-${{ matrix.python-version }}
+
+  pre-commit:
+    name: Pre-commit checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set Python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          uv sync --dev
+          uv pip install pip
+
+      - uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files
