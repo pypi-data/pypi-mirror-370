@@ -1,0 +1,49 @@
+#!/bin/sh
+
+###
+#
+# In the project root, run
+#
+# $ ln -sf ../../git/hooks/pre-commit ./.git/hooks/pre-commit
+#
+# to enable automatic linting and code formatting.
+# However, when about to commit on branch `main`, just let all tests pass
+# and don't change anything.
+#
+# On successful automatic merge, this hook gets executed by the
+# `pre-merge-commit` hook. When the automatic merge fails, this hook
+# will be directly executed instead.
+# Thereby, this hook then needs to cover both cases: development on a
+# feature branch and merging on the `main` branch.
+
+# exit on first non-zero return code
+set -e
+
+if test "$(git branch --show-current)" = "main"; then
+  # we are likely merging right now;
+  # just check if everything is working as expected
+  ruff check --no-fix
+  ruff format --check
+else
+  # running on a feature branch
+  #
+  # use NULL-byte-separated filenames to be on the safe side;
+  # store NULL-byte-separated filenames in a temp file, 
+  # as NULL bytes are illegal in bash variables and command substitutions
+  files="$(mktemp)"
+  git diff --staged --name-only --diff-filter=ACMR -z \
+    | grep -z '.*\.py$' \
+    > "$files" \
+    || true  # continue even if `grep` does not find anything
+
+  if test -s "$files"; then
+    # the `$files` temp file is not empty
+
+    # format the changed files instantly, but don't run any tests
+    xargs --null ruff check --fix < "$files"
+    xargs --null ruff format < "$files"
+
+    # add changes to the current commit
+    xargs --null git add --verbose < "$files"
+  fi
+fi
