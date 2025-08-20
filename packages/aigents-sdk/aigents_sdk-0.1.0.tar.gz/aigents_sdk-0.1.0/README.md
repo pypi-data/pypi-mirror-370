@@ -1,0 +1,174 @@
+# AIgents Python Client
+
+Official Python client library for the AIgents AI platform.
+
+## Installation
+
+```bash
+pip install aigents-sdk
+```
+
+## Quick Start
+
+```python
+from aigents import AIgentsClient
+
+# Initialize the client with your API key
+client = AIgentsClient(
+    api_key="aig_your_api_key_here",
+    base_url="http://localhost:8000"  # or your AIgents server URL
+)
+
+# List your applications
+apps = client.applications.list()
+print(f"Found {len(apps)} applications")
+
+# Get a specific application
+app = client.applications.get("app_id")
+print(f"Application: {app.name}")
+
+# List agents in an application
+agents = client.applications.agents.list("app_id")
+print(f"Found {len(agents)} agents")
+
+# Start a chat session
+session = client.chat.create_session("app_id", agent_id="agent_id")
+print(f"Created session: {session.id}")
+
+# Send a message
+response = client.chat.send_message(
+    session_id=session.id,
+    content="Hello, how can you help me today?"
+)
+print(f"Assistant: {response.content}")
+```
+
+## Advanced Usage
+
+### Tool Calls and MCP Approval
+
+```python
+# Send a message that might trigger tool calls
+response = client.chat.send_message(
+    session_id=session.id,
+    content="What's the weather like in San Francisco?",
+    tools=[{"type": "weather_api"}]
+)
+
+# Handle tool calls
+if response.tool_calls:
+    for tool_call in response.tool_calls:
+        print(f"Tool call: {tool_call.name}")
+        print(f"Arguments: {tool_call.arguments}")
+
+# Handle MCP approval requests
+if response.requires_mcp_approval:
+    print(f"MCP approval required: {response.mcp_approval_request_id}")
+    
+    # Approve the MCP request
+    approved_response = client.chat.approve_mcp_request(
+        request_id=response.mcp_approval_request_id,
+        approved=True
+    )
+```
+
+### Working with Datasets
+
+```python
+# List datasets
+datasets = client.applications.datasets.list("app_id")
+
+# Add data to a dataset
+client.applications.datasets.add_data(
+    app_id="app_id",
+    dataset_id="dataset_id",
+    data=[
+        {
+            "input": "What is machine learning?",
+            "output": "Machine learning is a subset of AI...",
+            "metadata": {"category": "education"}
+        }
+    ]
+)
+```
+
+### Error Handling
+
+```python
+from aigents.exceptions import AIgentsError, AuthenticationError, RateLimitError
+
+try:
+    response = client.chat.send_message(session_id, "Hello")
+except AuthenticationError:
+    print("Invalid API key")
+except RateLimitError:
+    print("Rate limit exceeded")
+except AIgentsError as e:
+    print(f"API error: {e}")
+```
+
+## Configuration
+
+The client can be configured with environment variables:
+
+```bash
+export AIGENTS_API_KEY="aig_your_api_key_here"
+export AIGENTS_BASE_URL="https://api.aigents.co"
+```
+
+```python
+# Client will automatically use environment variables
+client = AIgentsClient()
+```
+
+## API Reference
+
+### Client
+
+- `AIgentsClient(api_key, base_url, timeout)`
+
+### Applications
+
+- `client.applications.list()` - List all applications
+- `client.applications.get(app_id)` - Get application details
+- `client.applications.create(name, description)` - Create new application
+- `client.applications.update(app_id, **kwargs)` - Update application
+- `client.applications.delete(app_id)` - Delete application
+
+### Agents
+
+- `client.applications.agents.list(app_id)` - List agents
+- `client.applications.agents.get(app_id, agent_id)` - Get agent details
+- `client.applications.agents.create(app_id, **kwargs)` - Create agent
+- `client.applications.agents.update(app_id, agent_id, **kwargs)` - Update agent
+- `client.applications.agents.delete(app_id, agent_id)` - Delete agent
+
+### Chat
+
+- `client.chat.create_session(app_id, **kwargs)` - Create chat session
+- `client.chat.send_message(session_id, content, **kwargs)` - Send message
+- `client.chat.get_history(session_id)` - Get chat history
+- `client.chat.approve_mcp_request(request_id, approved)` - Approve MCP request
+
+### Tools & MCPs
+
+- `client.applications.tools.list(app_id)` - List tools
+- `client.applications.mcps.list(app_id)` - List MCPs
+
+### Datasets
+
+- `client.applications.datasets.list(app_id)` - List datasets
+- `client.applications.datasets.get(app_id, dataset_id)` - Get dataset
+- `client.applications.datasets.add_data(app_id, dataset_id, data)` - Add data
+
+## Contributing
+
+1. Clone the repository
+2. Install development dependencies: `pip install -e .[dev]`
+3. Run tests: `pytest`
+4. Format code: `black aigents/`
+5. Type check: `mypy aigents/`
+
+## License
+
+MIT License - see LICENSE file for details.
