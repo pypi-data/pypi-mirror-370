@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hypha Account</title>
+    <meta name="description" content="Login to Hypha">
+    <meta name="author" content="Amun AI AB">
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <noscript>
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <span class="block sm:inline">Hypha Account requires JavaScript to be enabled.</span>
+        </div>
+    </noscript>
+    <div class="flex items-center justify-center min-h-screen">
+        <div class="w-full max-w-lg bg-white rounded-lg shadow-md p-8">
+            <img src="../../../static/img/hypha-logo-black.svg" alt="Hypha Account" class="mx-auto h-20 mb-5">
+            <button onclick="login()" id="login-btn" class="w-full bg-blue-500 text-white py-3 rounded-lg text-lg">
+                Login / Sign up
+            </button>
+            <div class="mt-4" id="error-panel" style="display:none;">
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline" id="error-message"></span>
+                    <div class="mt-3">
+                        <button onclick="clearLoginState()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">
+                            Clear Login Info
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8" id="info-panel" style="display:none;">
+                <div class="text-center mb-4">
+                    <img id="picture" alt="Avatar" class="w-20 h-20 rounded-full mx-auto">
+                    <div class="mt-4 text-lg font-semibold" id="name"></div>
+                </div>
+                <div class="mt-8">
+                    <button onclick="logout()" class="w-full bg-red-500 text-white py-2 rounded">Logout</button>
+                </div>
+                <div class="border-t border-gray-200">
+                    <div class="p-4">
+                        <div class="font-semibold">E-mail</div>
+                        <div id="email"></div>
+                        <div id="email-verification"></div>
+                    </div>
+                    <div class="p-4 border-t border-gray-200">
+                        <div class="font-semibold">User ID</div>
+                        <div id="user-id"></div>
+                    </div>
+                    <details class="p-4 border-t border-gray-200">
+                        <summary class="font-semibold cursor-pointer">Get Access Token</summary>
+                        <p>Use the access token to authenticate with the Hypha API.</p>
+                        <div class="toast mt-4 bg-green-100 border-t-4 border-green-500 rounded-b text-green-900 px-4 py-3 shadow-md" id="toast" style="display:none;"></div>
+                        <pre id="access-token" class="bg-gray-200 whitespace-pre-wrap max-h-24 overflow-y-auto break-words"></pre>
+                        <div class="mt-4">
+                            <button class="bg-gray-500 text-white py-1 px-4 rounded mr-2" onclick="copyToken()">Copy Token</button>
+                        </div>
+                        <div class="mt-4">
+                            <label for="workspace" class="block text-sm font-medium text-gray-700">Workspace Name</label>
+                            <input type="text" id="workspace" name="workspace" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </div>
+                        <div class="mt-4">
+                            <label for="permission" class="block text-sm font-medium text-gray-700">Permission Level</label>
+                            <select id="permission" name="permission" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="read">Read Only</option>
+                                <option value="read_write" selected>Read & Write</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Permission level for the workspace: read, read_write, or admin.</p>
+                        </div>
+                        <div class="mt-4">
+                            <label for="expiry-time" class="block text-sm font-medium text-gray-700">Expiry Time (seconds)</label>
+                            <input type="number" id="expiry-time" name="expiry-time" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="3600">
+                        </div>
+                        <div class="mt-4">
+                            <label class="block text-sm font-medium text-gray-700">Extra Scopes (Optional)</label>
+                            <p class="mt-1 text-xs text-gray-500">Additional scopes for specialized access, e.g., "dataset:read", "model:write".</p>
+                            <div class="mt-2 flex gap-2">
+                                <input type="text" id="new-scope" placeholder="e.g., dataset:read" class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <button type="button" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-md transition duration-200" onclick="addExtraScope()">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <div id="extra-scopes-container" class="mt-2 flex flex-wrap gap-2" style="display: none;">
+                                <!-- Extra scope tags will be inserted here -->
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center">
+                            <button class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded transition duration-200" onclick="generateToken()">Generate New Token</button>
+                        </div>
+                    </details>
+                    
+                </div>
+            </div>
+            <div class="mt-8">
+                <details class="bg-gray-200 p-4 rounded-lg">
+                    <summary class="font-semibold cursor-pointer">Having trouble logging in?</summary>
+                    <div class="mt-4">
+                        <p class="mb-4"><strong>If you just signed up:</strong> Check your email and verify your account before you can proceed. You should have received a verification email from Auth0.</p>
+                        <p class="mb-2">Ensure that pop-ups are enabled in your browser:</p>
+                        <ul class="list-disc list-inside">
+                            <li><strong>Chrome:</strong> Go to Settings > Privacy and security > Site Settings > Pop-ups and redirects, and allow pop-ups for this site.</li>
+                            <li><strong>Firefox:</strong> Go to Settings > Privacy & Security > Permissions > Block pop-up windows, and add an exception for this site.</li>
+                            <li><strong>Safari:</strong> Go to Preferences > Websites > Pop-up Windows, and allow pop-ups for this site.</li>
+                            <li><strong>Edge:</strong> Go to Settings > Cookies and site permissions > Pop-ups and redirects, and allow pop-ups for this site.</li>
+                        </ul>
+                    </div>
+                </details>
+            </div>
+        </div>
+    </div>
+    <script>
+        const HYPHA_VERSION = '{{ hypha_version }}';
+        const AUTH0_AUDIENCE = '{{ auth0_audience }}';
+        const auth0 = new window.auth0.Auth0Client({
+            domain: '{{ auth0_domain }}',
+            clientId: '{{ auth0_client_id }}',
+            authorizationParams: {
+                audience: AUTH0_AUDIENCE,
+            },
+            cacheLocation: 'localstorage',
+            useRefreshTokens: true,
+            useRefreshTokensFallback: true,
+        });
+
+        const showError = (message) => {
+            document.getElementById("error-message").innerHTML = String(message);
+            document.getElementById("error-panel").style.display = "block";
+            // Hide error after 10 seconds
+            setTimeout(() => {
+                document.getElementById("error-panel").style.display = "none";
+            }, 10000);
+        };
+
+        const hideError = () => {
+            document.getElementById("error-panel").style.display = "none";
+        };
+
+        const clearLoginState = async () => {
+            // Clear cookies
+            document.cookie = 'access_token=; path=/; max-age=0; samesite=lax';
+            document.cookie = 'hypha_version=; path=/; max-age=0; samesite=lax';
+            
+            // Clear Auth0 local storage cache
+            try {
+                await auth0.logout({ logoutParams: { returnTo: window.location.href }, localOnly: true });
+            } catch (e) {
+                console.log("Error clearing Auth0 local storage:", e);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Check for logout parameter first
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('logout') === 'true') {
+                    await logout();
+                    return;
+                }
+                
+                await window.showUserProfile();
+            } catch (e) {
+                console.log("Not logged in, showing login button.");
+            }
+            
+            // Add Enter key support for adding scopes
+            const newScopeInput = document.getElementById('new-scope');
+            if (newScopeInput) {
+                newScopeInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addExtraScope();
+                    }
+                });
+            }
+        });
+
+        // Extra scopes management
+        let extraScopes = [];
+
+        window.addExtraScope = () => {
+            const newScopeInput = document.getElementById('new-scope');
+            const scope = newScopeInput.value.trim();
+            
+            if (scope && !extraScopes.includes(scope)) {
+                extraScopes.push(scope);
+                newScopeInput.value = '';
+                updateExtraScopesDisplay();
+            }
+        };
+
+        const removeExtraScope = (index) => {
+            extraScopes.splice(index, 1);
+            updateExtraScopesDisplay();
+        };
+
+        const updateExtraScopesDisplay = () => {
+            const container = document.getElementById('extra-scopes-container');
+            
+            if (extraScopes.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'flex';
+            container.innerHTML = extraScopes.map((scope, index) => `
+                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    ${scope}
+                    <button type="button" class="ml-1 text-blue-600 hover:text-blue-800" onclick="removeExtraScope(${index})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </span>
+            `).join('');
+        };
+
+        window.removeExtraScope = removeExtraScope;
+
+
+
+        const _generateToken = async (workspace, expires_in, accessToken, permission, extraScopes) =>{
+            const generate_token_url = "{{ generate_token_url }}";
+            if(!generate_token_url.startsWith("http")){
+                throw new Error("Invalid generate token URL");
+            }
+            
+            // Build token configuration
+            const tokenConfig = { expires_in, workspace };
+            
+            if (permission && permission !== 'read_write') {
+                // Map user-friendly permission names to enum values
+                const permissionMap = { "read": "r", "read_write": "rw", "admin": "a" };
+                tokenConfig.permission = permissionMap[permission] || permission;
+            }
+            
+            if (extraScopes && extraScopes.length > 0) {
+                tokenConfig.extra_scopes = extraScopes;
+            }
+            
+            // make a post request with {config: tokenConfig}
+            // add auth bearer token to the request
+            const response = await fetch(generate_token_url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ config: tokenConfig }),
+            });
+            if (response.ok) {
+                const token = await response.json();
+                return token;
+            }
+            else{
+                throw new Error(`Failed to generate token. Please try again later. (${response.status}: ${response.statusText})`);
+            }
+        }
+
+        window.generateToken = async () => {
+            const expires_in = document.getElementById("expiry-time").value || 3600; // Default to 1 hour if not specified
+            const workspace = document.getElementById("workspace").value || "";
+            const permission = document.getElementById("permission").value || "read_write";
+            const accessToken = await auth0.getTokenSilently({ audience: AUTH0_AUDIENCE });
+            
+            try {
+                const token = await _generateToken(workspace, expires_in, accessToken, permission, extraScopes);
+                document.getElementById("access-token").innerHTML = token;
+                document.getElementById("info-panel").style.display = "block";
+                const toastElement = document.getElementById("toast");
+                toastElement.innerHTML = "New access token generated successfully!";
+                toastElement.className = "toast mt-4 bg-green-100 border-t-4 border-green-500 rounded-b text-green-900 px-4 py-3 shadow-md";
+                toastElement.style.display = "block";
+                setTimeout(() => {
+                    toastElement.style.display = "none";
+                }, 2000);
+            }
+            catch(e){
+                console.error(e);
+                const toastElement = document.getElementById("toast");
+                toastElement.innerHTML = `Failed to generate token. Please try again later. (${e})`;
+                toastElement.className = "toast mt-4 bg-red-100 border-t-4 border-red-500 rounded-b text-red-900 px-4 py-3 shadow-md";
+                toastElement.style.display = "block";
+                setTimeout(() => {
+                    toastElement.style.display = "none";
+                    // Reset back to success styling for next use
+                    toastElement.className = "toast mt-4 bg-green-100 border-t-4 border-green-500 rounded-b text-green-900 px-4 py-3 shadow-md";
+                }, 5000);
+            }
+        };
+
+        function parseJwt(token) {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+        
+            return JSON.parse(jsonPayload);
+        }
+
+        window.showUserProfile = async () => {
+            let user = await auth0.getUser();
+            if (user) {
+                if (!user.email_verified) {
+                    alert(`Please verify your email (${user.email}) by clicking the link sent from Auth0.`);
+                    return;
+                }
+                console.log(user);
+            } else {
+                throw new Error("User not found");
+            }
+            const accessToken = await auth0.getTokenSilently({ audience: AUTH0_AUDIENCE });
+            const decodedToken = parseJwt(accessToken);
+            const exp = decodedToken.exp;
+            const maxAge = exp - Math.floor(Date.now() / 1000);
+            document.cookie = `access_token=${accessToken}; path=/; max-age=${maxAge}; samesite=lax`;
+            document.cookie = `hypha_version=${HYPHA_VERSION}; path=/; max-age=${maxAge}; samesite=lax`;
+            document.getElementById("login-btn").style.display = "none";
+            document.getElementById("name").innerHTML = user.name;
+            document.getElementById("email").innerHTML = user.email;
+            document.getElementById("email-verification").innerHTML = user.email_verified ? "Verified" : "Not Verified";
+            if (!user.email_verified) {
+                document.getElementById("email-verification").classList.add("text-red-500");
+            }
+            document.getElementById("picture").src = user.picture;
+            document.getElementById("user-id").innerHTML = user.sub;
+            document.getElementById("access-token").innerHTML = accessToken;
+            document.getElementById("info-panel").style.display = "block";
+            document.getElementById("workspace").value = "ws-user-" + user.sub;
+
+            // extract key from search
+            const urlParams = new URLSearchParams(window.location.search);
+            const key = urlParams.get('key');
+            const workspace = urlParams.get('workspace') || ""
+            const expires_in = urlParams.get('expires_in') || ""
+            const report_url = "{{ login_service_url }}/report";
+            const redirect = urlParams.get('redirect');
+
+            if (key && report_url.startsWith('http')) {
+                const url = `${report_url}?key=${key}&token=${accessToken}&workspace=${workspace}&expires_in=${expires_in}&email=${user.email}&email_verified=${user.email_verified}&name=${user.name}&nickname=${user.nickname}&user_id=${user.sub}&picture=${encodeURIComponent(user.picture)}`;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    console.error("Failed to report token: ", response.status, response.statusText);
+                    alert(`Failed to report token. Please try again later. (${response.status}: ${response.statusText})`);
+                }
+                else{
+                    if (redirect) {
+                        setTimeout(() => {
+                            window.location.href = redirect;
+                        }, 500);
+                    }
+                    else {
+                        setTimeout(() => {
+                            window.close();
+                        }, 500);
+                    }
+                }
+            }
+            else if (redirect) {
+                setTimeout(() => {
+                    window.location.href = redirect;
+                }, 500);
+            }
+        };
+
+        window.logout = async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            let href = window.location.href.split('?')[0];
+            if (urlParams.get('redirect')) {
+                href = urlParams.get('redirect');
+            }
+            document.cookie = 'access_token=; path=/; max-age=0; samesite=lax';
+            document.cookie = 'hypha_version=; path=/; max-age=0; samesite=lax';
+            await auth0.logout({ logoutParams: { returnTo: href } });
+        };
+
+        window.login = async () => {
+            // Hide any previous errors
+            hideError();
+            
+            try {
+                // Manually open the popup window
+                const popupWindow = window.open('', '_blank', 'width=500,height=600');
+
+                if (popupWindow) {
+                    try {
+                        // Pass the opened popup window to the Auth0 loginWithPopup method
+                        await auth0.loginWithPopup({ audience: AUTH0_AUDIENCE }, { popup: popupWindow });
+                        popupWindow.close(); // Close the popup window after login
+                        await showUserProfile();
+                    } catch (e) {
+                        console.error('Login with popup failed', e);
+                        // Convert error to string and show in UI
+                        let errorMessage = String(e);
+                        if (e.message) {
+                            errorMessage = e.message;
+                        } else if (e.error_description) {
+                            errorMessage = e.error_description;
+                        }
+                        
+                        // Enhance email verification error message
+                        if (errorMessage.toLowerCase().includes('verify your email') || 
+                            errorMessage.toLowerCase().includes('email verification') ||
+                            errorMessage.toLowerCase().includes('email not verified')) {
+                            errorMessage = "Please check your email and follow the instructions to verify your email address before proceeding with the login. If you don't see the verification email, check your spam folder or try signing up again.";
+                        }
+                        
+                        showError(errorMessage);
+                        if (!popupWindow.closed) {
+                            popupWindow.close(); // Ensure the popup window is closed in case of failure
+                        }
+                    }
+                } else {
+                    console.error('Unable to open popup window for login');
+                    showError('Unable to open popup window for login. Please allow popups for this site.');
+                }
+                
+            } catch (e) {
+                console.error(e);
+                showError("Failed to open login window. Please allow pop-ups for this site.");
+            }
+        };
+
+        window.copyToken = () => {
+            const el = document.createElement('textarea');
+            el.value = document.getElementById("access-token").innerHTML;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            const toastElement = document.getElementById("toast");
+            toastElement.innerHTML = "Access token copied to clipboard!";
+            toastElement.className = "toast mt-4 bg-green-100 border-t-4 border-green-500 rounded-b text-green-900 px-4 py-3 shadow-md";
+            toastElement.style.display = "block";
+            setTimeout(() => {
+                toastElement.style.display = "none";
+            }, 2000);
+        };
+    </script>
+</body>
+</html>

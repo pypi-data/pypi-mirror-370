@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hypha App (web-worker)</title>
+    <meta name="description" content="Template for Hypha app">
+    <meta name="author" content="ImJoy-Team">
+</head>
+
+<body>
+<script id="worker" type="javascript/worker">
+
+self.onmessage = async function(e) {
+const hyphaWebsocketClient = await import("{{ hypha_rpc_websocket_mjs }}");
+const config = e.data
+self.env = new Map()
+self.env.set("HYPHA_SERVER_URL", config.server_url)
+self.env.set("HYPHA_WORKSPACE", config.workspace)
+self.env.set("HYPHA_CLIENT_ID", config.client_id)
+self.env.set("HYPHA_TOKEN", config.token)
+self.env.set("HYPHA_APP_ID", config.app_id)
+const api = await hyphaWebsocketClient.connectToServer(config)
+await hyphaWebsocketClient.loadRequirements([{% for req in requirements %}"{{req}}", {% endfor %}])
+{{ script | safe }}
+
+}
+</script>
+<script>
+window.onload = function() {
+    const blob = new Blob([
+        document.querySelector('#worker').textContent
+    ], { type: "text/javascript" })
+    const worker = new Worker(window.URL.createObjectURL(blob), {type: "module"});
+    worker.onerror = console.error
+    worker.onmessage = console.log
+    const config = {{ config | tojson(indent=2) }}
+    const cfg = Object.assign(config, Object.fromEntries(new URLSearchParams(window.location.search)));
+    if(!cfg.server_url) cfg.server_url = window.location.origin;
+    worker.postMessage(cfg); 
+}
+</script>
+</body>
+</html>
