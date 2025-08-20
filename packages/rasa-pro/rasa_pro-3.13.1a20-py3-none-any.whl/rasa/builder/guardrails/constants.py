@@ -1,0 +1,4 @@
+LAKERA_API_KEY_ENV_VAR = "LAKERA_API_KEY"
+LAKERA_BASE_URL = "https://api.lakera.ai/v2"
+LAKERA_GUARD_ENDPOINT = "guard"
+LAKERA_GUARD_RESULTS_ENDPOINT = "guard/results"
