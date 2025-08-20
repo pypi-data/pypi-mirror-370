@@ -1,0 +1,236 @@
+import { html } from 'lit'
+import { property, query, state } from 'lit/decorators.js'
+import { Map, View } from 'ol'
+import WebGLTileLayer from 'ol/layer/WebGLTile.js'
+import OSM from 'ol/source/OSM.js'
+import GeoTIFF from 'ol/source/GeoTIFF.js'
+import TerraElement from '../../internal/terra-element.js'
+import componentStyles from '../../styles/component.styles.js'
+import styles from './time-average-map.styles.js'
+import type { CSSResultGroup } from 'lit'
+import { watch } from '../../internal/watch.js'
+import { TimeAvgMapController } from './time-average-map.controller.js'
+import TerraButton from '../button/button.component.js'
+import TerraIcon from '../icon/icon.component.js'
+import TerraPlotToolbar from '../plot-toolbar/plot-toolbar.component.js'
+import { GiovanniVariableCatalog } from '../../metadata-catalog/giovanni-variable-catalog.js'
+import { Task } from '@lit/task'
+import type { Variable } from '../browse-variables/browse-variables.types.js'
+import { cache } from 'lit/directives/cache.js'
+import { AuthController } from '../../auth/auth.controller.js'
+
+export default class TerraTimeAverageMap extends TerraElement {
+    static styles: CSSResultGroup = [componentStyles, styles]
+    static dependencies = {
+        'terra-button': TerraButton,
+        'terra-icon': TerraIcon,
+        'terra-plot-toolbar': TerraPlotToolbar,
+    }
+
+    /**
+     * a collection entry id (ex: GPM_3IMERGHH_06)
+     */
+    @property({ reflect: true })
+    collection?: string
+
+    @property({ reflect: true })
+    variable?: string
+
+    @property({
+        attribute: 'start-date',
+        reflect: true,
+    })
+    startDate?: string
+
+    @property({
+        attribute: 'end-date',
+        reflect: true,
+    })
+    endDate?: string
+
+    /**
+     * The point location in "lat,lon" format.
+     * Or the bounding box in "west,south,east,north" format.
+     */
+    @property({
+        reflect: true,
+    })
+    location?: string
+
+    @state()
+    activeMenuItem: any = null
+
+    @watch('activeMenuItem')
+    handleFocus(_oldValue: any, newValue: any) {
+        if (newValue === null) {
+            return
+        }
+
+        this.menu.focus()
+    }
+
+    /**
+     * The token to be used for authentication with remote servers.
+     * The component provides the header "Authorization: Bearer" (the request header and authentication scheme).
+     * The property's value will be inserted after "Bearer" (the authentication scheme).
+     */
+    @property({ attribute: 'bearer-token', reflect: false })
+    bearerToken: string
+
+    @property({ type: String })
+    long_name = ''
+
+    @query('#menu') menu: HTMLMenuElement
+
+    @state() catalogVariable: Variable
+
+    #controller: TimeAvgMapController
+    #catalog = new GiovanniVariableCatalog()
+    _authController = new AuthController(this)
+
+    #map: Map | null = null
+    #gtLayer: WebGLTileLayer | null = null
+
+    /**
+     * anytime the collection or variable changes, we'll fetch the variable from the catalog to get all of it's metadata
+     */
+    _fetchVariableTask = new Task(this, {
+        task: async (_args, { signal }) => {
+            const variableEntryId = this.getVariableEntryId()
+
+            if (!variableEntryId) {
+                return
+            }
+
+            console.debug('Fetch variable ', variableEntryId)
+
+            const variable = await this.#catalog.getVariable(variableEntryId, {
+                signal,
+            })
+
+            console.debug('Found variable ', variable)
+
+            if (!variable) {
+                return
+            }
+
+            // if we don't have dates, use the example initial dates, which is the last 7 days of data
+            this.startDate =
+                this.startDate ?? variable.exampleInitialStartDate?.toISOString()
+            this.endDate =
+                this.endDate ?? variable.exampleInitialEndDate?.toISOString()
+
+            this.catalogVariable = variable
+        },
+        args: () => [this.collection, this.variable],
+    })
+
+    async firstUpdated() {
+        this.#controller = new TimeAvgMapController(this)
+        // Initialize the base layer open street map
+        this.intializeMap()
+        this.updateGeoTIFFLayer()
+    }
+
+    async updateGeoTIFFLayer() {
+        await this.#controller.jobStatusTask.run()
+        // The task returns the blob upon completion
+        let job_status_value = this.#controller.jobStatusTask.value
+        const blobUrl = URL.createObjectURL(job_status_value)
+
+        const gtSource = new GeoTIFF({
+            sources: [
+                {
+                    url: blobUrl,
+                    bands: [1],
+                    nodata: NaN,
+                },
+            ],
+            interpolate: false,
+            normalize: false,
+        })
+
+        this.#gtLayer = new WebGLTileLayer({
+            source: gtSource,
+        })
+
+        if (this.#map) {
+            this.#map.addLayer(this.#gtLayer)
+        }
+
+        const metadata = await this.fetchGeotiffMetadata(gtSource)
+        this.long_name = metadata['long_name'] ?? ''
+    }
+
+    intializeMap() {
+        const baseLayer = new WebGLTileLayer({
+            source: new OSM() as any,
+        })
+
+        this.#map = new Map({
+            target: this.shadowRoot?.getElementById('map') ?? undefined,
+            layers: [baseLayer],
+            view: new View({
+                center: [0, 0],
+                zoom: 2,
+                projection: 'EPSG:3857',
+            }),
+        })
+    }
+
+    async fetchGeotiffMetadata(
+        gtSource: GeoTIFF
+    ): Promise<{ [key: string]: string }> {
+        await gtSource.getView()
+        const internal = gtSource as any
+        const gtImage = internal.sourceImagery_[0][0]
+        const gtMetadata = gtImage.fileDirectory?.GDAL_METADATA
+
+        const parser = new DOMParser()
+        const xmlDoc = parser.parseFromString(gtMetadata, 'application/xml')
+        const items = xmlDoc.querySelectorAll('Item')
+
+        const dataObj: { [key: string]: string } = {}
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i]
+            const name = item.getAttribute('name')
+            const value = item.textContent ? item.textContent.trim() : ''
+            if (name) {
+                dataObj[name] = value
+            }
+        }
+
+        console.log('Data obj: ', dataObj)
+        return dataObj
+    }
+
+    getVariableEntryId() {
+        if (!this.collection || !this.variable) {
+            return
+        }
+
+        return `${this.collection}_${this.variable}`
+    }
+
+    render() {
+        return html`
+            ${cache(
+                this.catalogVariable
+                    ? html`<terra-plot-toolbar
+                          dataType="geotiff"
+                          .catalogVariable=${this.catalogVariable}
+                          .timeSeriesData=${this.#controller.jobStatusTask?.value}
+                          .location=${this.location}
+                          .startDate=${this.startDate}
+                          .endDate=${this.endDate}
+                          .cacheKey=${this.#controller.getCacheKey()}
+                          .variableEntryId=${this.getVariableEntryId()}
+                      ></terra-plot-toolbar>`
+                    : html`<div class="spacer"></div>`
+            )}
+
+            <div id="map"></div>
+        `
+    }
+}
