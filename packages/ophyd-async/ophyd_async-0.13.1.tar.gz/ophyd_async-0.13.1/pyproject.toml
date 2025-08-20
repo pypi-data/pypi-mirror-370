@@ -1,0 +1,207 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ophyd-async"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+description = "Asynchronous Bluesky hardware abstraction code, compatible with control systems like EPICS and Tango"
+dependencies = [
+    "numpy",
+    "bluesky>=1.13.1rc2",
+    "event-model>=1.23",
+    "pyyaml",
+    "colorlog",
+    "pydantic>=2.0",
+    "pydantic-numpy",
+    "stamina>=23.1.0",
+    "scanspec>=1.0a1",
+]
+dynamic = ["version"]
+license.file = "LICENSE"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+sim = ["h5py"]
+ca = ["aioca>=2.0a4"]
+pva = ["p4p>=4.2.0"]
+tango = ["pytango==10.0.2"]
+demo = ["ipython", "matplotlib", "pyqt6"]
+dev = [
+    "ophyd_async[sim]",
+    "ophyd_async[ca]",
+    "ophyd_async[pva]",
+    "ophyd_async[tango]",
+    "ophyd_async[demo]",
+    "inflection",
+    "import-linter",
+    "myst-parser",
+    "numpydoc",
+    "ophyd>=1.10.7",
+    "pickleshare",
+    "pipdeptree",
+    "pre-commit",
+    "pydata-sphinx-theme>=0.12",
+    "pyepics>=3.4.2",
+    "pyright",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-faulthandler",
+    "pytest-forked",
+    "pytest-rerunfailures",
+    "pytest-timeout",
+    "ruff",
+    "sphinx-autobuild",
+    "sphinx-autodoc2",
+    "sphinxcontrib-mermaid",
+    "sphinx-copybutton",
+    "sphinx-design",
+    "tox-direct",
+    "types-mock",
+    "types-pyyaml",
+]
+
+[project.urls]
+GitHub = "https://github.com/bluesky/ophyd-async"
+
+[[project.authors]] # Further authors may be added by duplicating this section
+email = "tom.cobb@diamond.ac.uk"
+name = "Tom Cobb"
+
+[tool.setuptools_scm]
+version_file = "src/ophyd_async/_version.py"
+
+[tool.pyright]
+typeCheckingMode = "standard"
+reportMissingImports = false  # Ignore missing stubs in imported modules
+
+[tool.pytest.ini_options]
+# Run pytest with all our checkers, and don't spam us with massive tracebacks on error
+addopts = """
+    --tb=native -vv --strict-markers --doctest-modules
+    --doctest-glob="*.rst" --doctest-glob="*.md"
+    --ignore=docs/examples --ignore=src/ophyd_async/epics/signal.py
+    """
+# https://iscinumpy.gitlab.io/post/bound-version-constraints/#watch-for-warnings
+filterwarnings = "error"
+# Doctest python code in docs, python code in src docstrings, test functions in tests
+testpaths = "docs src tests"
+log_format = "%(asctime)s,%(msecs)03d %(levelname)s (%(threadName)s) %(message)s"
+log_date_format = "%H:%M:%S"
+
+markers = [
+    "motorsim: require the motorsim IOC to be running",
+    "adsim: require the ADsim IOC to be running",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+timeout = 0.75
+[tool.coverage.run]
+data_file = "/tmp/ophyd_async.coverage"
+
+[tool.coverage.paths]
+# Tests are run from installed location, map back to the src directory
+source = ["src", "**/site-packages/"]
+
+# tox must currently be configured via an embedded ini string
+# See: https://github.com/tox-dev/tox/issues/999
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+skipsdist=True
+
+[testenv:{pre-commit,type-checking,tests,docs}]
+# Don't create a virtualenv for the command, requires tox-direct plugin
+direct = True
+passenv = *
+allowlist_externals =
+    pytest
+    pre-commit
+    pyright
+    sphinx-build
+    sphinx-autobuild
+commands =
+    pre-commit: pre-commit run --all-files --show-diff-on-failure {posargs}
+    type-checking: pyright src {posargs}
+    tests: pytest --cov=ophyd_async --cov-report term --cov-report xml:cov.xml {posargs}
+    docs: sphinx-{posargs:build -EW --keep-going} -T docs build/html
+"""
+
+[tool.ruff]
+line-length = 88
+lint.select = [
+    "B",       # flake8-bugbear - https://docs.astral.sh/ruff/rules/#flake8-bugbear-b
+    "C4",      # flake8-comprehensions - https://docs.astral.sh/ruff/rules/#flake8-comprehensions-c4
+    "E",       # pycodestyle errors - https://docs.astral.sh/ruff/rules/#error-e
+    "F",       # pyflakes rules - https://docs.astral.sh/ruff/rules/#pyflakes-f
+    "W",       # pycodestyle warnings - https://docs.astral.sh/ruff/rules/#warning-w
+    "I",       # isort - https://docs.astral.sh/ruff/rules/#isort-i
+    "UP",      # pyupgrade - https://docs.astral.sh/ruff/rules/#pyupgrade-up
+    "SLF",     # self - https://docs.astral.sh/ruff/settings/#lintflake8-self
+    "PLC2701", # private import - https://docs.astral.sh/ruff/rules/import-private-name/
+    "LOG015",  # root logger call - https://docs.astral.sh/ruff/rules/root-logger-call/
+    "S101",    # assert - https://docs.astral.sh/ruff/rules/assert/
+    "D",       # docstring - https://docs.astral.sh/ruff/rules/#pydocstyle-d
+]
+lint.ignore = [
+    "B901", # Return in a generator is needed for plans
+    "D107", # We squash __init__ docstrings into the class docstring
+    "D104", # TODO: remove this after https://github.com/bluesky/ophyd-async/issues/754
+]
+lint.preview = true # so that preview mode PLC2701 is enabled
+
+[tool.ruff.lint.pydocstyle]
+convention = "google" # not really, but close enough...
+
+[tool.ruff.lint.per-file-ignores]
+# By default, private member access is allowed in tests
+# See https://github.com/DiamondLightSource/python-copier-template/issues/154
+# Remove this line to forbid private member access in tests
+"tests/**/*" = ["SLF001", "S101", "D"]
+"src/ophyd_async/testing/**/*" = ["SLF001", "S101"]
+"system_tests/**/*" = ["SLF001", "S101", "D"]
+
+
+[tool.importlinter]
+root_package = "ophyd_async"
+
+[[tool.importlinter.contracts]]
+name = "All runtime modules are in layers"
+type = "layers"
+containers = ["ophyd_async"]
+layers = ["plan_stubs", "fastcs", "epics | tango | sim", "core"]
+exhaustive = true
+exhaustive_ignores = ["testing", "_version", "__main__", "_docs_parser"]
+
+[[tool.importlinter.contracts]]
+name = "Testing and sim modules are not used at runtime"
+type = "forbidden"
+forbidden_modules = ["ophyd_async.testing", "ophyd_async.sim"]
+source_modules = [
+    "ophyd_async.plan_stubs",
+    "ophyd_async.fastcs.*",
+    "ophyd_async.epics.*",
+    "ophyd_async.tango.*",
+]
+ignore_imports = ["ophyd_async.*.testing.* -> ophyd_async.testing"]
+
+[[tool.importlinter.contracts]]
+name = "ophyd_async.core private modules are not to be used outside ophyd_async.core"
+type = "forbidden"
+forbidden_modules = ["ophyd_async.core.*"]
+source_modules = [
+    "ophyd_async.testing",
+    "ophyd_async.plan_stubs",
+    "ophyd_async.fastcs.*",
+    "ophyd_async.epics.*",
+    "ophyd_async.tango.*",
+]
+allow_indirect_imports = true
