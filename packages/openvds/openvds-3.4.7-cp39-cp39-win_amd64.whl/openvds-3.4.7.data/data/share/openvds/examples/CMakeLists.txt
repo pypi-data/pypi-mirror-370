@@ -1,0 +1,34 @@
+cmake_minimum_required(VERSION 3.16.0)
+project(OpenVDSExamples)
+if (CMAKE_PROJECT_NAME STREQUAL "OpenVDSExamples")
+  include(FetchContent)
+  macro(Fetch3rdParty_Package name version url url_hash)
+    set(Fetch3rdPartyDir "${PROJECT_SOURCE_DIR}/3rdparty")
+    get_filename_component(thirdParty "${Fetch3rdPartyDir}" ABSOLUTE)
+    set(SRC_DIR ${thirdParty}/${name}-${version})
+    set(${name}_SOURCE_DIR ${SRC_DIR})
+    set(${name}_VERSION ${version})
+    if (NOT (EXISTS ${SRC_DIR}))
+      FetchContent_Populate(${name}
+        URL ${url}
+        URL_HASH ${url_hash}
+        SOURCE_DIR ${SRC_DIR}
+        SUBBUILD_DIR ${thirdParty}/CMakeArtifacts/${name}-sub-${version}
+        BINARY_DIR ${thirdParty}/CMakeArtifacts/${name}-${version})
+    endif()
+  endmacro()
+  Fetch3rdParty_Package(cxxopts           3.0.0      https://github.com/jarro2783/cxxopts/archive/refs/tags/v3.0.0.tar.gz SHA256=36f41fa2a46b3c1466613b63f3fa73dc24d912bc90d667147f1e43215a8c6d00)
+
+  set(COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
+  include(modules/SetCompilerFlagsForTarget.cmake)
+  include(modules/InstalledPaths.cmake)
+  include(modules/SetWarnings.cmake)
+  include(modules/CopyDllForTarget.cmake)
+  project(getting-started)
+  set(openvds_DIR "${INSTALLED_LIB_RELATIVE_TO_EXAMPLES}/cmake/openvds")
+  find_package(openvds REQUIRED)
+  find_package(Threads REQUIRED)
+  find_package(OpenMP)
+endif()
+add_subdirectory(SliceDump)
+add_subdirectory(GettingStarted)
