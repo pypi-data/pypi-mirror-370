@@ -1,0 +1,79 @@
+name: Build and Upload Docs
+
+"on":
+  push:
+    tags:
+      - "*"
+    branches:
+      - "main"
+  pull_request: {}
+  workflow_dispatch:
+
+jobs:
+  build_sphinx_docs:
+    name: Build and upload documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: "3.12"
+          miniforge-version: latest
+          channels: conda-forge
+          conda-remove-defaults: true
+          show-channel-urls: true
+
+      - name: configure conda and install requirements
+        shell: bash -l {0}
+        run: |
+          conda install --yes --file=requirements.txt
+          conda install --yes pip
+          pip install lsst.resources
+          pip install "documenteer[guide]"
+
+      - name: install rubin_scheduler
+        shell: bash -l {0}
+        run: |
+          echo `pwd`
+          ls ${{ github.workspace }}
+          python -m pip install . --no-deps
+
+      - name: Access rubin-sim-data cache
+        id: cache-rs
+        uses: actions/cache@v4
+        env:
+          cache-name: cached-rubin-sim-data
+        with:
+          path: ~/rubin_sim_data
+          key: ${{ env.cache-name }}
+          restore-keys: |
+            ${{ env.cache-name }}
+
+      - name: Update rubin-sim-data if needed
+        shell: bash -l {0}
+        run: |
+          export RUBIN_SIM_DATA_DIR=~/rubin_sim_data
+          # Download anything that is not current
+          scheduler_download_data --tdqm_disable --update
+
+      - name: check conda and documenteer
+        shell: bash -l {0}
+        run: |
+          conda list
+
+      - name: build docs
+        shell: bash -l {0}
+        run: |
+          export RUBIN_SIM_DATA_DIR=~/rubin_sim_data
+          cd docs
+          make html
+
+      - name: upload documentation
+        uses: lsst-sqre/ltd-upload@v1
+        with:
+          project: "rubin-scheduler"
+          dir: "docs/_build/html"
+          username: ${{ secrets.ltd_username }}
+          password: ${{ secrets.ltd_password }}
+
