@@ -1,0 +1,65 @@
+# Cyberwave Robotics Integrations
+
+This module provides the base classes and factory loader for Cyberwave robot drivers.
+It also ships a CLI plugin that exposes a `drivers` command group for the
+[`cyberwave` CLI](../cyberwave-cli/README.md).
+
+## Example CLI usage
+
+After installing the plugin alongside `cyberwave-cli` you will see a new
+`drivers` command:
+
+```bash
+pip install ./cyberwave-cli # or install from PyPI
+pip install ./cyberwave_robotics_integrations
+
+cyberwave drivers start spot
+cyberwave drivers status spot
+cyberwave drivers start so-arm100
+```
+
+When running the Tello driver, the `start` command writes telemetry to `~/.cyberwave/tello_config.json` so the `status` command can report the
+latest data. Telemetry can also be forwarded to the Cyberwave backend.
+Provide a device ID and offline token to use an existing device, or omit
+`--device-id` to automatically register one using the default project from
+`cyberwave_cli.config`:
+
+```bash
+cyberwave drivers start tello --device-id 123 --token <offline-token>
+
+# automatic registration
+cyberwave drivers start tello
+```
+
+If `--device-id` is omitted, the command automatically registers a device using
+your configured defaults:
+
+```bash
+cyberwave drivers start tello
+# Device registered and driver started
+```
+
+## Example SDK usage
+
+Drivers can be loaded programmatically via the factory:
+
+```python
+from cyberwave_robotics_integrations.factory import Robot
+
+robot = Robot("spot")
+robot.connect()
+robot.move_to(1.0, 2.0)
+robot.sit()
+robot.disconnect()
+```
+
+The factory is also re-exported from the `cyberwave` SDK as `RobotDriver`:
+
+```python
+from cyberwave import RobotDriver
+RobotDriver("kuka_kr3").connect()
+```
+
+## Input Controllers
+
+Robots can be driven by input controllers that translate user actions into driver commands.  The package defines a base class `BaseInputController` which can be subclassed for different control strategies (e.g. keyboard, web UI).
