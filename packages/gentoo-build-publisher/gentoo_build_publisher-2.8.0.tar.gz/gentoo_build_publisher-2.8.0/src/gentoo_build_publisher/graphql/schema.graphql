@@ -1,0 +1,93 @@
+scalar DateTime
+
+type Package {
+   cpv: String!
+   repo: String!
+   size: Int!
+   buildTime: Int!
+}
+
+type Build {
+  id: ID!
+  machine: String!
+  built: DateTime
+  submitted: DateTime!
+  completed: DateTime
+  published: Boolean
+  tags: [String!]!
+  pulled: Boolean
+  notes: String
+  keep: Boolean!
+  logs: String
+  packages(buildId: Boolean = false): [String!]
+  packagesBuilt: [Package!]
+}
+
+type MachineSummary {
+  machine: String!
+  buildCount: Int
+  builds: [Build!]!
+  latestBuild: Build
+  publishedBuild: Build
+  tags: [String!]!
+}
+
+"""
+Fields that may be searched using the search() query
+"""
+enum SearchField {
+  NOTES
+  LOGS
+}
+
+enum ChangeStateEnum {
+  REMOVED
+  CHANGED
+  ADDED
+}
+
+type Change {
+  item: String!
+  status: ChangeStateEnum!
+}
+
+type DiffStat {
+  left: Build!
+  right: Build!
+  items: [Change!]!
+}
+
+type Error {
+  message: String!
+}
+
+input BuildParameter {
+  name: String!
+  value: String!
+}
+
+type Query {
+  build(id: ID!): Build
+  builds(machine: String!): [Build!]!
+  diff(left: ID!, right: ID!): DiffStat
+  latest(machine: String!): Build
+  machines(names: [String!]): [MachineSummary!]!
+  search(machine: String!, field: SearchField!, key: String!): [Build!]!
+  searchNotes(machine: String!, key: String!): [Build!]! @deprecated(reason: "Use `search()` instead")
+  version: String!
+  working: [Build!]!
+  resolveBuildTag(machine: String!, tag: String!): Build
+}
+
+type Mutation {
+  publish(id: ID!): MachineSummary
+  pull(id: ID!, note: String, tags: [String!]): MachineSummary
+  scheduleBuild(machine: String!, isRepo: Boolean = false, params: [BuildParameter!]): String
+  keepBuild(id: ID!): Build
+  createBuildTag(id: ID!, tag: String!) : Build!
+  removeBuildTag(machine: String!, tag: String!) : MachineSummary
+  releaseBuild(id: ID!): Build
+  createNote(id: ID!, note: String): Build
+  createRepo(name: String!, repo: String!, branch: String!): Error
+  createMachine(name: String!, repo: String!, branch: String!, ebuildRepos: [String!]!): Error
+}
