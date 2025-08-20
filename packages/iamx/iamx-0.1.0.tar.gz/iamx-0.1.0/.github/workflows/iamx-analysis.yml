@@ -1,0 +1,156 @@
+name: IAM Policy Analysis
+
+on:
+  pull_request:
+    paths:
+      - '**/*.json'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '**/policies/**'
+      - '**/iam/**'
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**/*.json'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '**/policies/**'
+      - '**/iam/**'
+
+jobs:
+  iamx-analysis:
+    runs-on: ubuntu-latest
+    name: IAM Policy Security Analysis
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install iamx
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          
+      - name: Find IAM policy files
+        id: find-policies
+        run: |
+          # Find JSON files that might contain IAM policies
+          POLICIES=$(find . -name "*.json" -type f | grep -E "(policy|iam|role|user)" | grep -v node_modules | grep -v .git || true)
+          
+          # Also check specific directories
+          if [ -d "./policies" ]; then
+            POLICIES="$POLICIES $(find ./policies -name "*.json" -type f)"
+          fi
+          
+          if [ -d "./iam" ]; then
+            POLICIES="$POLICIES $(find ./iam -name "*.json" -type f)"
+          fi
+          
+          # Remove duplicates and empty lines
+          POLICIES=$(echo "$POLICIES" | sort -u | grep -v '^$' || true)
+          
+          if [ -z "$POLICIES" ]; then
+            echo "No IAM policy files found"
+            echo "policies=" >> $GITHUB_OUTPUT
+          else
+            echo "Found IAM policy files:"
+            echo "$POLICIES"
+            echo "policies=$POLICIES" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Analyze IAM policies
+        id: analyze
+        if: steps.find-policies.outputs.policies != ''
+        run: |
+          # Create analysis report
+          iamx analyze ${{ steps.find-policies.outputs.policies }} \
+            --format markdown \
+            --output iamx-report.md \
+            --fail-on high \
+            --verbose
+            
+          # Also generate JSON report for programmatic access
+          iamx analyze ${{ steps.find-policies.outputs.policies }} \
+            --format json \
+            --output iamx-report.json \
+            --fail-on high
+            
+      - name: Upload analysis report
+        if: steps.find-policies.outputs.policies != '' && always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: iamx-analysis-report
+          path: |
+            iamx-report.md
+            iamx-report.json
+          retention-days: 30
+          
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && steps.find-policies.outputs.policies != ''
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let reportContent = '';
+            if (fs.existsSync('iamx-report.md')) {
+              reportContent = fs.readFileSync('iamx-report.md', 'utf8');
+            } else {
+              reportContent = '## IAM Policy Analysis\n\nNo IAM policy files were found to analyze.';
+            }
+            
+            const comment = `## 🔍 IAM Policy Security Analysis
+            
+            ${reportContent}
+            
+            ---
+            *This analysis was performed by [iamx](https://github.com/iamsteve0/iamx) - IAM Policy Explainer*
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+            
+      - name: Fail on high severity issues
+        if: steps.find-policies.outputs.policies != ''
+        run: |
+          # Check if analysis failed due to high severity findings
+          if [ -f "iamx-report.json" ]; then
+            # Parse JSON to check for failed policies
+            FAILED=$(python -c "
+            import json
+            import sys
+            try:
+                with open('iamx-report.json', 'r') as f:
+                    data = json.load(f)
+                if 'policies' in data:
+                    failed = sum(1 for p in data['policies'] if not p['results']['passed'])
+                else:
+                    failed = 0 if data['results']['passed'] else 1
+                print(failed)
+            except:
+                print(1)
+            ")
+            
+            if [ "$FAILED" -gt 0 ]; then
+              echo "❌ IAM policy analysis found high severity security issues"
+              echo "Please review the findings and fix the identified security risks"
+              exit 1
+            else
+              echo "✅ IAM policy analysis passed - no high severity issues found"
+            fi
+          fi
+          
+      - name: No policies found
+        if: steps.find-policies.outputs.policies == ''
+        run: |
+          echo "ℹ️ No IAM policy files found to analyze"
+          echo "This is normal if your changes don't include IAM policies"
