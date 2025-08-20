@@ -1,0 +1,28 @@
+import datetime
+from typing import Optional
+
+from ..models.service_account_uuid import ServiceAccountUuid
+from ..models.uuid import Uuid
+from .base import KittyCadBaseModel
+
+
+class ServiceAccount(KittyCadBaseModel):
+    """A service account.
+
+    These are used to authenticate orgs with Bearer authentication.
+
+    This works just like an API token, but it is tied to an organization versus an individual user."""
+
+    created_at: datetime.datetime
+
+    id: Uuid
+
+    is_valid: bool
+
+    label: Optional[str] = None
+
+    org_id: Uuid
+
+    token: ServiceAccountUuid
+
+    updated_at: datetime.datetime
