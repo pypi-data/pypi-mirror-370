@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Monitor - {{ session.id }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/task-monitor.css') }}">
+    <style>
+        .agent-card {
+            transition: all 0.3s ease;
+            border: 2px solid #dee2e6;
+            min-height: 200px;
+        }
+        .agent-card.active {
+            border-color: #0d6efd;
+            box-shadow: 0 0 10px rgba(13, 110, 253, 0.3);
+            transform: translateY(-2px);
+        }
+        .agent-card.completed {
+            border-color: #198754;
+            background: rgba(25, 135, 84, 0.05);
+        }
+        .agent-card.failed {
+            border-color: #dc3545;
+            background: rgba(220, 53, 69, 0.05);
+        }
+        .agent-activity {
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+        }
+        .agent-interaction-line {
+            stroke: #6c757d;
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 5,5;
+            animation: dash 1s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: -10; }
+        }
+        .chat-container {
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: #f8f9fa;
+        }
+        .chat-input-group {
+            border-top: 1px solid #dee2e6;
+            padding: 10px;
+            background: white;
+        }
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+        .message.agent {
+            justify-content: flex-start;
+        }
+        .message.human {
+            justify-content: flex-end;
+        }
+        .message-bubble {
+            max-width: 70%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            position: relative;
+        }
+        .message.agent .message-bubble {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .message.human .message-bubble {
+            background: #0d6efd;
+            color: white;
+        }
+        .agent-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 10px;
+            font-size: 1.2rem;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+        .status-indicator.running {
+            background: #0d6efd;
+        }
+        .status-indicator.waiting {
+            background: #ffc107;
+        }
+        .status-indicator.completed {
+            background: #198754;
+            animation: none;
+        }
+        .status-indicator.failed {
+            background: #dc3545;
+            animation: none;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .timeline-container {
+            position: relative;
+            padding: 20px 0;
+        }
+        .timeline-item {
+            display: flex;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 30px;
+            bottom: -20px;
+            width: 2px;
+            background: #dee2e6;
+        }
+        .timeline-item:last-child::before {
+            display: none;
+        }
+        .timeline-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid #dee2e6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+            flex-shrink: 0;
+        }
+        .timeline-content {
+            flex: 1;
+            margin-left: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring-circle {
+            transition: stroke-dashoffset 0.3s;
+            stroke: #0d6efd;
+            stroke-width: 4;
+            fill: transparent;
+        }
+        .progress-ring-bg {
+            stroke: #e9ecef;
+            stroke-width: 4;
+            fill: transparent;
+        }
+        .agent-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .metric-item {
+            text-align: center;
+            padding: 5px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+        .metric-label {
+            font-size: 0.75rem;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-robot me-2"></i>
+                AI Agent System
+            </a>
+            <div class="ms-auto">
+                <a href="/project/{{ project_id }}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i>
+                    Back to Project
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Task Info Header -->
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h4 class="mb-2">
+                                    <span class="status-indicator" id="taskStatus"></span>
+                                    Task: <span id="taskDescription">{{ session.task_description }}</span>
+                                </h4>
+                                <p class="text-muted mb-0">
+                                    Session ID: <code>{{ session.id }}</code> | 
+                                    Started: <span id="startTime">{{ session.created_at }}</span>
+                                </p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <button class="btn btn-danger btn-sm" id="cancelTask">
+                                    <i class="fas fa-stop me-1"></i>Cancel Task
+                                </button>
+                                <button class="btn btn-success btn-sm" id="downloadResults" style="display:none;">
+                                    <i class="fas fa-download me-1"></i>Download Results
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Left Column: Agent Status Grid -->
+            <div class="col-lg-8">
+                <!-- Agent Status Grid -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-users-cog me-2"></i>
+                            Agent Status & Activity
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="agentGrid">
+                            <!-- Planner Agent -->
+                            <div class="col-md-4 mb-3">
+                                <div class="agent-card card h-100" data-agent="planner">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-brain text-danger"></i>
+                                                Planner
+                                            </h6>
+                                            <span class="badge bg-secondary agent-status">Idle</span>
+                                        </div>
+                                        <div class="progress mb-2" style="height: 5px;">
+                                            <div class="progress-bar" style="width: 0%"></div>
+                                        </div>
+                                        <div class="agent-activity">
+                                            <small class="text-muted">Waiting...</small>
+                                        </div>
+                                        <div class="agent-metrics">
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Tasks</div>
+                                            </div>
+                                            <div class="metric-item">
+                                                <div class="metric-value">0s</div>
+                                                <div class="metric-label">Time</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Developer Agent -->
+                            <div class="col-md-4 mb-3">
+                                <div class="agent-card card h-100" data-agent="developer">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-code text-success"></i>
+                                                Developer
+                                            </h6>
+                                            <span class="badge bg-secondary agent-status">Idle</span>
+                                        </div>
+                                        <div class="progress mb-2" style="height: 5px;">
+                                            <div class="progress-bar bg-success" style="width: 0%"></div>
+                                        </div>
+                                        <div class="agent-activity">
+                                            <small class="text-muted">Waiting...</small>
+                                        </div>
+                                        <div class="agent-metrics">
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Files</div>
+                                            </div>
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Lines</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tester Agent -->
+                            <div class="col-md-4 mb-3">
+                                <div class="agent-card card h-100" data-agent="tester">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-vial text-info"></i>
+                                                Tester
+                                            </h6>
+                                            <span class="badge bg-secondary agent-status">Idle</span>
+                                        </div>
+                                        <div class="progress mb-2" style="height: 5px;">
+                                            <div class="progress-bar bg-info" style="width: 0%"></div>
+                                        </div>
+                                        <div class="agent-activity">
+                                            <small class="text-muted">Waiting...</small>
+                                        </div>
+                                        <div class="agent-metrics">
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Tests</div>
+                                            </div>
+                                            <div class="metric-item">
+                                                <div class="metric-value">0%</div>
+                                                <div class="metric-label">Pass</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- UI/UX Expert -->
+                            <div class="col-md-4 mb-3">
+                                <div class="agent-card card h-100" data-agent="ui_ux_expert">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-palette text-warning"></i>
+                                                UI/UX Expert
+                                            </h6>
+                                            <span class="badge bg-secondary agent-status">Idle</span>
+                                        </div>
+                                        <div class="progress mb-2" style="height: 5px;">
+                                            <div class="progress-bar bg-warning" style="width: 0%"></div>
+                                        </div>
+                                        <div class="agent-activity">
+                                            <small class="text-muted">Waiting...</small>
+                                        </div>
+                                        <div class="agent-metrics">
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Views</div>
+                                            </div>
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Styles</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- DB Expert -->
+                            <div class="col-md-4 mb-3">
+                                <div class="agent-card card h-100" data-agent="db_expert">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-database text-primary"></i>
+                                                DB Expert
+                                            </h6>
+                                            <span class="badge bg-secondary agent-status">Idle</span>
+                                        </div>
+                                        <div class="progress mb-2" style="height: 5px;">
+                                            <div class="progress-bar bg-primary" style="width: 0%"></div>
+                                        </div>
+                                        <div class="agent-activity">
+                                            <small class="text-muted">Waiting...</small>
+                                        </div>
+                                        <div class="agent-metrics">
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Tables</div>
+                                            </div>
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Queries</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- DevOps Expert -->
+                            <div class="col-md-4 mb-3">
+                                <div class="agent-card card h-100" data-agent="devops_expert">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-server text-secondary"></i>
+                                                DevOps Expert
+                                            </h6>
+                                            <span class="badge bg-secondary agent-status">Idle</span>
+                                        </div>
+                                        <div class="progress mb-2" style="height: 5px;">
+                                            <div class="progress-bar bg-secondary" style="width: 0%"></div>
+                                        </div>
+                                        <div class="agent-activity">
+                                            <small class="text-muted">Waiting...</small>
+                                        </div>
+                                        <div class="agent-metrics">
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Config</div>
+                                            </div>
+                                            <div class="metric-item">
+                                                <div class="metric-value">0</div>
+                                                <div class="metric-label">Deploy</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agent Interaction Flow -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-project-diagram me-2"></i>
+                            Agent Interaction Flow
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="interactionFlow" style="height: 300px; position: relative;">
+                            <svg id="interactionSvg" width="100%" height="100%" style="position: absolute; top: 0; left: 0; pointer-events: none;">
+                                <!-- Dynamic SVG lines will be drawn here -->
+                            </svg>
+                            <canvas id="interactionCanvas" width="100%" height="100%" style="display: none;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Timeline & Chat -->
+            <div class="col-lg-4">
+                <!-- Activity Timeline -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-stream me-2"></i>
+                            Activity Timeline
+                        </h5>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <div class="timeline-container" id="activityTimeline">
+                            <!-- Timeline items will be added here dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Human-in-the-Loop Chat -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-comments me-2"></i>
+                            Task Chat
+                        </h5>
+                        <span class="badge bg-success" id="chatStatus">Connected</span>
+                    </div>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            <!-- Messages will appear here -->
+                            <div class="text-center text-muted py-5">
+                                <i class="fas fa-comment-dots fa-3x mb-3"></i>
+                                <p>Chat with the AI agents about this task</p>
+                            </div>
+                        </div>
+                        <div class="chat-input-group">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="chatInput" 
+                                       placeholder="Type your message..." disabled>
+                                <button class="btn btn-primary" id="sendMessage" disabled>
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output/Results Section -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" data-bs-toggle="tab" href="#console">
+                                    <i class="fas fa-terminal me-1"></i>Console Output
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-bs-toggle="tab" href="#files">
+                                    <i class="fas fa-file-code me-1"></i>Generated Files
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-bs-toggle="tab" href="#errors">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Errors
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="console">
+                                <pre class="bg-dark text-light p-3 rounded" id="consoleOutput" style="height: 300px; overflow-y: auto;">
+<code>Task output will appear here...</code>
+                                </pre>
+                            </div>
+                            <div class="tab-pane fade" id="files">
+                                <div id="filesList">
+                                    <p class="text-muted">No files generated yet...</p>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="errors">
+                                <div id="errorsList">
+                                    <p class="text-muted">No errors reported...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', path='js/task-monitor.js') }}"></script>
+    <script>
+        // Initialize task monitor with session ID
+        const sessionId = '{{ session.id }}';
+        const projectId = '{{ project_id }}';
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof TaskMonitor !== 'undefined') {
+                window.taskMonitor = new TaskMonitor(sessionId, projectId);
+            }
+        });
+    </script>
+</body>
+</html>
