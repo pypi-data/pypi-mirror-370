@@ -1,0 +1,96 @@
+name: Build and Publish Docker Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - docker/**
+      - .github/workflows/images.yaml
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+  schedule:
+    - cron: "0 0 * * *"
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  BUILDX_CACHE_TTL: 604800 # Cache expiration in seconds (e.g., 7 days)
+
+jobs:
+  publish:
+    if: ${{
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'docker')
+      }}
+
+    strategy:
+      fail-fast: true
+      matrix:
+        image_flavor: [cpu, cuda, rocm]
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-flags: --debug
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker images
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          flavor: |
+            latest=false
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest-${{ matrix.image_flavor }}
+            type=raw,value=sha-${{ github.sha }}-${{ matrix.image_flavor }}
+
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v5
+        id: push
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          file: docker/${{ matrix.image_flavor }}/Dockerfile
+          cache-to: type=gha,mode=min,scope=docker-cache-${{ matrix.image_flavor }}
+          cache-from: type=gha,mode=max,scope=docker-cache-${{ matrix.image_flavor }}

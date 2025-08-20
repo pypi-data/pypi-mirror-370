@@ -1,0 +1,39 @@
+name: API ROCm Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  run_api_rocm_tests:
+    if: ${{
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch') ||
+      contains( github.event.pull_request.labels.*.name, 'api') ||
+      contains( github.event.pull_request.labels.*.name, 'rocm') ||
+      contains( github.event.pull_request.labels.*.name, 'api_rocm')
+      }}
+
+    uses: huggingface/hf-workflows/.github/workflows/optimum_benchmark_instinct_ci.yaml@testing
+    with:
+      test_file: test_api.py
+      machine_type: single-gpu
+      pytest_keywords: api and cuda
+      install_extras: testing,timm,diffusers,codecarbon
+    secrets:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
