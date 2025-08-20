@@ -1,0 +1,157 @@
+name: Reusable Coverage Workflow
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: 'Python version to use'
+        required: false
+        default: '3.10'
+        type: string
+      fail-under:
+        description: 'Minimum coverage percentage to pass'
+        required: false
+        default: '100'
+        type: string
+      is-pr-check:
+        description: 'Whether this is running as a PR check with PR-specific features'
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+      SHOPIFY_FIXED_ARGS:
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  coverage-check:
+    name: Diff-Based Coverage Check
+    runs-on: ubuntu-latest
+
+    env:
+      SHOPIFY_FIXED_ARGS: ${{ secrets.SHOPIFY_FIXED_ARGS }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for diff comparison
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[milvus,shopify,hubspot]' --quiet
+          pip install diff-cover coverage
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc
+
+      - name: Run tests with coverage
+        run: |
+          # Run tests with coverage, excluding certain directories if needed
+          ARKLEX_TEST_ENV=local coverage run --source=arklex -m pytest tests/ -v --tb=short
+          coverage xml
+          coverage report > coverage.txt
+          echo "Coverage report generated:"
+          cat coverage.txt
+
+      - name: Fetch main branch
+        run: git fetch origin main
+
+      - name: Generate diff coverage report and extract metrics
+        id: coverage_check
+        run: |
+          set -e
+          diff-cover coverage.xml --compare-branch=origin/main --html-report diff_coverage.html --fail-under=${{ inputs.fail-under }} > diff_output.txt 2>&1 || true
+          
+          # Extract coverage percentage with better error handling
+          DIFF_COVERAGE=$(grep -oE 'Diff coverage.*[0-9]+\.*[0-9]*%' diff_output.txt | grep -oE '[0-9]+\.*[0-9]*' || echo "0")
+          
+          # Handle case where no coverage data is found
+          if [ "$DIFF_COVERAGE" = "0" ] && ! grep -q "Diff coverage" diff_output.txt; then
+            echo "No diff coverage data found, checking if this is expected..."
+            if git diff --name-only origin/main...HEAD | grep -E '\.(py|js|ts|jsx|tsx)$' > /dev/null; then
+              echo "Code changes detected but no coverage data - this might indicate missing tests"
+              DIFF_COVERAGE="0"
+            else
+              echo "No code changes detected"
+              DIFF_COVERAGE="100"
+            fi
+          fi
+          
+          echo "Diff coverage: $DIFF_COVERAGE%"
+          echo "diff_coverage=$DIFF_COVERAGE" >> $GITHUB_OUTPUT
+          
+          # Show detailed diff coverage info
+          echo "=== Diff Coverage Details ==="
+          cat diff_output.txt
+          echo "=============================="
+          
+          if (( $(echo "$DIFF_COVERAGE < ${{ inputs.fail-under }}" | bc -l) )); then
+            echo "coverage_low=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Diff coverage is below threshold!"
+          else
+            echo "coverage_low=false" >> $GITHUB_OUTPUT
+            echo "✅ Diff coverage meets threshold."
+          fi
+
+      # Optional: Fail the workflow if diff coverage < threshold
+      - name: Fail if coverage is below threshold
+        if: steps.coverage_check.outputs.coverage_low == 'true'
+        run: |
+          echo "❌ Failing job due to insufficient diff coverage."
+          echo "Current diff coverage: ${{ steps.coverage_check.outputs.diff_coverage }}%"
+          echo "Required: ${{ inputs.fail-under }}%"
+          exit 1
+
+      # Post comment on PR if coverage is low (only for PR checks)
+      - name: Post comment on PR if coverage is low
+        if: steps.coverage_check.outputs.coverage_low == 'true' && inputs.is-pr-check == true
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ github.token }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ⚠️ **Diff coverage is ${{ steps.coverage_check.outputs.diff_coverage }}%**, which is below the required ${{ inputs.fail-under }}%.
+            Please add or update tests to cover newly added or changed lines.
+            📊 **Coverage Report**: [View detailed report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+      - name: Upload diff coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff-coverage-report
+          path: |
+            diff_coverage.html
+            coverage.txt
+            diff_output.txt
+
+      - name: Update README badge
+        if: always() && github.ref == 'refs/heads/main'
+        uses: ./.github/workflows/reusable-update-badge.yml
+        with:
+          coverage-file: 'coverage.txt'
+          coverage-format: 'txt'
+          min-coverage-threshold: ${{ inputs.fail-under }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Coverage Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Diff Coverage**: ${{ steps.coverage_check.outputs.diff_coverage }}%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ steps.coverage_check.outputs.coverage_low == 'true' && '❌ Below threshold' || '✅ Meets threshold' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 [View detailed coverage report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
