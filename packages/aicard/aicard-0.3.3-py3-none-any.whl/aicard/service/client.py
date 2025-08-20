@@ -1,0 +1,75 @@
+import requests
+import json
+from aicard.service.logger import Logger
+from aicard.card.model_card import ModelCard
+from dotenv import dotenv_values
+
+
+class CardConnector():
+    def __init__(self, id: int, client: "Client", prototype: ModelCard):
+        self.id = int(id)
+        self.client = client
+        self.prototype = ModelCard()
+        self.prototype.data.assign(prototype.data)
+
+class Client():
+    def __init__(self, username, url, token, logger: Logger|str|None=None):
+        self.username = username
+        self.url = url
+        self.token = token
+        self.logger = Logger() if logger is None else Logger(logger) if isinstance(logger, str) else logger
+        self.session = requests.Session()
+        self.session.headers.update({"Authorization": f"Bearer {token}"})
+
+    def search(self, query: str="Model Card", owned_only: bool=True, top: int=10):
+        response = requests.post(self.url+"/cards", json={"query": query, "page_size": top, "creator": self.username if owned_only else ""})
+        if response.status_code != 200: self.logger.fatal(f"Card creation failed: {response.status_code} {response.text}")
+        results = response.json()["results"]
+        return results
+
+    def create(self, data=None):
+        if data is None: data = ModelCard()
+        assert isinstance(data, ModelCard), "For now, you can only create a model card given another model card through while using the client api"
+        prototype = data
+        response = self.post("/card", json=prototype.data)
+        if response.status_code != 201: self.logger.fatal(f"Card creation failed: {response.status_code} {response.text}")
+        card_id = response.json()
+        new_card = ModelCard(connector=CardConnector(card_id, self, prototype))
+        new_card.data.assign(prototype.data)
+        return new_card
+
+    def get(self, path: str, **kwargs):
+        return self.session.get(f"{self.url}{path}", **kwargs)
+
+    def post(self, path: str, json=None, **kwargs):
+        return self.session.post(f"{self.url}{path}", json=json, **kwargs)
+
+    def delete(self, path: str, **kwargs):
+        return self.session.delete(f"{self.url}{path}", **kwargs)
+
+    def put(self, path: str, json=None, **kwargs):
+        return self.session.put(f"{self.url}{path}", json=json, **kwargs)
+
+
+def connect(url:str|None=None,
+            env:str|None=None,
+            username:str|None=None,
+            password:str|None=None,
+            logger:Logger|str|None=None):
+    if env: config = dotenv_values(env)
+    else: config = dict()
+    if not url: url = config.get("URL")
+    if not username: username = config.get("USER")
+    if not password: password = config.get("PASS")
+    if not logger: logger = config.get("LOG", logger)
+    assert url, f"url not found in {env} URL or arguments"
+    assert username, f"username not found in {env} USER or arguments"
+    assert password, f"password not found in {env} PASS or arguments"
+
+    login_url = url.rstrip("/") + "/login"
+    response = requests.post(login_url, json={"username": username, "password": password})
+    logger = Logger() if logger is None else Logger(logger) if isinstance(logger, str) else logger
+    if response.status_code != 200: logger.fatal(f"Login failed: {response.status_code} {response.text}")
+    client = Client(username=username, url=url.rstrip("/"), token=response.json()["token"], logger=logger)
+    client.logger.info(f"Connected to server\n * User: {username}\n * Server: {client.url}")
+    return client
