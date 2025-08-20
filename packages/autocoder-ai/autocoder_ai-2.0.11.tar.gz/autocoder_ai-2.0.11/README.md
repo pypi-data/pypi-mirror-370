@@ -1,0 +1,179 @@
+# 🤖 AutoCoder - Autonomous AI Coding Agent System
+
+[![CI/CD Pipeline](https://github.com/eladrave/AutoCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/eladrave/AutoCoder/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A powerful multi-agent AI system that autonomously generates complete software projects using state-of-the-art LLMs and intelligent agent orchestration.
+
+## ✨ Latest Updates (August 2025)
+
+### 🚀 API-Only Architecture
+- Unified execution through centralized API server
+- Automatic port detection and conflict resolution
+- Embedded server management with zero configuration
+
+### 🔑 Simplified Configuration
+- **No environment variables required!** All API keys load from `config.yaml`
+- Support for OpenAI, Anthropic, and Google Gemini
+- Automatic provider detection and fallback
+
+### 🧪 Comprehensive Testing
+- Full CLI test coverage with mocked components
+- Integration tests for all major features
+- CI/CD pipeline with multi-version Python support
+
+## 🎯 Key Features
+
+- **Multi-Agent System**: Specialized agents for planning, development, testing, UI/UX, database, and DevOps
+- **LangGraph Orchestration**: Intelligent workflow management with state persistence
+- **Auto Port Detection**: Automatically finds available ports for API server
+- **Web Interface**: Beautiful FastAPI-powered web UI for project management
+- **CLI Interface**: Powerful command-line tools for developers
+- **MCP Support**: Model Context Protocol integration for enhanced capabilities
+- **OpenAI Gateway**: Compatible with OpenAI API for seamless integration
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/eladrave/AutoCoder.git
+cd AutoCoder
+
+# Install dependencies
+pip install -e .
+```
+
+### Configuration
+
+1. Copy the example config:
+```bash
+cp config.yaml.example config.yaml
+```
+
+2. Add your API keys to `config.yaml`:
+```yaml
+api_keys:
+  openai_api_key: "sk-your-key-here"
+  anthropic_api_key: "sk-ant-your-key-here"
+  google_api_key: "AIza-your-key-here"
+```
+
+No environment variables needed! The system loads everything from the config file.
+
+### Usage
+
+#### Simple CLI Usage
+```bash
+# Create a simple application
+./agent.sh "Create a todo list web app with React"
+
+# Dry run mode (no files created)
+./agent.sh "Build a REST API" --dry-run
+
+# Verbose mode with logging
+./agent.sh "Create a Python package" --verbose --save-logs
+```
+
+#### Advanced CLI Options
+```bash
+# Use specific port for API server
+python main_api.py "Create app" --port 8080
+
+# Use external API server
+python main_api.py "Create app" --api-url http://remote-server:5001
+
+# Keep server running for multiple tasks
+python main_api.py "Create app" --keep-server
+```
+
+#### Web Interface
+```bash
+# Start the web interface
+python web_interface/app.py
+
+# Open browser to http://localhost:5001
+```
+
+## 📚 Documentation
+
+- [API Key Setup Guide](API_KEY_SETUP.md) - Configure API keys and providers
+- [Migration to API Guide](MIGRATION_TO_API.md) - Transition to API-only architecture
+- [Cloud Deployment](docs/CLOUD_RUN_DEPLOYMENT.md) - Deploy to Google Cloud Run
+- [Monitoring Guide](MONITORING_GUIDE.md) - System monitoring and observability
+
+## 🧪 Testing
+
+Run the comprehensive test suite:
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test categories
+pytest tests/test_cli_api.py -v  # CLI tests
+pytest tests/test_web_interface.py -v  # Web interface tests
+pytest tests/test_agents.py -v  # Agent tests
+
+# Run with coverage
+pytest tests/ --cov=. --cov-report=html
+```
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────┐
+│            Web Interface                 │
+│         (FastAPI + React)                │
+└────────────────┬────────────────────────┘
+                 │
+┌────────────────▼────────────────────────┐
+│            API Server                    │
+│     (Automatic Port Detection)           │
+└────────────────┬────────────────────────┘
+                 │
+┌────────────────▼────────────────────────┐
+│      Workflow Orchestrator               │
+│         (LangGraph)                      │
+└────────────────┬────────────────────────┘
+                 │
+     ┌───────────┴───────────┐
+     │                       │
+┌────▼──────┐       ┌────────▼───────┐
+│  Agents   │       │    Services     │
+├───────────┤       ├────────────────┤
+│ • Planner │       │ • File Handler │
+│ • Developer│      │ • Memory Store │
+│ • Tester  │       │ • Config Loader│
+│ • UI/UX   │       │ • Port Finder  │
+│ • Database│       └────────────────┘
+│ • DevOps  │
+└───────────┘
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [LangChain](https://langchain.com/) and [LangGraph](https://langchain.com/langgraph)
+- Powered by OpenAI, Anthropic, and Google AI models
+- FastAPI for the robust web framework
+- The amazing open-source community
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/eladrave/AutoCoder/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/eladrave/AutoCoder/discussions)
+- **Email**: support@autocoder.ai
+
+---
+
+**Built with ❤️ by the AutoCoder Team**
