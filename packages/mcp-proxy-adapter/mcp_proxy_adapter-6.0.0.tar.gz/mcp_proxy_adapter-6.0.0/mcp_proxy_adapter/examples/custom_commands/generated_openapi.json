@@ -1,0 +1,629 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "Extended MCP Proxy Server",
+    "description": "Advanced MCP Proxy Adapter server with custom commands and hooks\n\n## Available commands:\necho, help, health, manual_echo, config, reload, settings, load, unload, plugins, transport_management, proxy_registration\n\n## Getting help\n\nWithout parameters (list of all commands):\n```json\n{\"jsonrpc\": \"2.0\", \"method\": \"help\", \"id\": 1}\n```\n\nWith parameters (information about a specific command):\n```json\n{\"jsonrpc\": \"2.0\", \"method\": \"help\", \"params\": {\"command\": \"echo\"}, \"id\": 1}\n```\n",
+    "version": "2.1.0"
+  },
+  "paths": {
+    "/cmd": {
+      "post": {
+        "summary": "Execute Command",
+        "description": "Executes a command via JSON-RPC protocol.",
+        "operationId": "execute_command",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CommandRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JsonRpcRequest"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CommandResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/JsonRpcResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Проверить работоспособность сервиса",
+        "description": "Возвращает информацию о состоянии сервиса",
+        "operationId": "health_check",
+        "responses": {
+          "200": {
+            "description": "Информация о состоянии сервиса",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "Get Openapi Schema",
+        "description": "Returns OpenAPI schema.",
+        "operationId": "get_openapi_schema_openapi_json_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/commands": {
+      "get": {
+        "summary": "Get Commands",
+        "description": "Returns list of available commands with their descriptions.",
+        "operationId": "get_commands_api_commands_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CommandRequest": {
+        "title": "CommandRequest",
+        "description": "Запрос на выполнение команды",
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "title": "Command",
+            "description": "Команда для выполнения",
+            "type": "string",
+            "enum": [
+              "echo",
+              "help",
+              "health",
+              "manual_echo",
+              "config",
+              "reload",
+              "settings",
+              "load",
+              "unload",
+              "plugins",
+              "transport_management",
+              "proxy_registration"
+            ]
+          },
+          "params": {
+            "title": "Parameters",
+            "description": "Параметры команды, зависят от типа команды",
+            "type": "object",
+            "additionalProperties": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EchoParams"
+              },
+              {
+                "$ref": "#/components/schemas/HelpParams"
+              },
+              {
+                "$ref": "#/components/schemas/HealthParams"
+              },
+              {
+                "$ref": "#/components/schemas/Manual_echoParams"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigParams"
+              },
+              {
+                "$ref": "#/components/schemas/ReloadParams"
+              },
+              {
+                "$ref": "#/components/schemas/SettingsParams"
+              },
+              {
+                "$ref": "#/components/schemas/LoadParams"
+              },
+              {
+                "$ref": "#/components/schemas/UnloadParams"
+              },
+              {
+                "$ref": "#/components/schemas/PluginsParams"
+              },
+              {
+                "$ref": "#/components/schemas/Transport_managementParams"
+              },
+              {
+                "$ref": "#/components/schemas/Proxy_registrationParams"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CommandResponse": {
+        "title": "CommandResponse",
+        "description": "Ответ на выполнение команды",
+        "type": "object",
+        "required": [
+          "result"
+        ],
+        "properties": {
+          "result": {
+            "title": "Result",
+            "description": "Результат выполнения команды"
+          }
+        }
+      },
+      "JsonRpcRequest": {
+        "properties": {
+          "jsonrpc": {
+            "type": "string",
+            "title": "Jsonrpc",
+            "description": "JSON-RPC version",
+            "default": "2.0"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "description": "Method name to call"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params",
+            "description": "Method parameters",
+            "default": {}
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "description": "Request identifier"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method"
+        ],
+        "title": "JsonRpcRequest",
+        "description": "Base model for JSON-RPC requests."
+      },
+      "JsonRpcResponse": {
+        "properties": {
+          "jsonrpc": {
+            "type": "string",
+            "title": "Jsonrpc",
+            "description": "JSON-RPC version",
+            "default": "2.0"
+          },
+          "result": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result",
+            "description": "Method execution result"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Error information"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "description": "Request identifier"
+          }
+        },
+        "type": "object",
+        "title": "JsonRpcResponse",
+        "description": "Base model for JSON-RPC responses."
+      },
+      "HealthResponse": {
+        "title": "HealthResponse",
+        "description": "Информация о состоянии сервиса",
+        "type": "object",
+        "required": [
+          "status",
+          "model",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "title": "Status",
+            "description": "Статус сервиса (ok/error)",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "description": "Текущая активная модель",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "description": "Версия сервиса",
+            "type": "string"
+          }
+        }
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ToolDescription": {
+        "type": "object",
+        "title": "Tool Description",
+        "description": "Description of the microservice tool",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the tool"
+          },
+          "description": {
+            "type": "string",
+            "description": "Tool for executing microservice commands.\n\n## Available commands:\necho, help, health, manual_echo, config, reload, settings, load, unload, plugins, transport_management, proxy_registration\n\n## Getting help:\n- Without parameters (list of all commands): \n  {\"jsonrpc\": \"2.0\", \"method\": \"help\", \"id\": 1}\n  \n- With parameters (information about a specific command): \n  {\"jsonrpc\": \"2.0\", \"method\": \"help\", \"params\": {\"command\": \"command_name\"}, \"id\": 1}\n"
+          },
+          "version": {
+            "type": "string",
+            "description": "Tool version"
+          },
+          "help_examples": {
+            "type": "object",
+            "description": "Examples of using the help command",
+            "properties": {
+              "without_params": {
+                "type": "object",
+                "description": "Get a list of all commands"
+              },
+              "with_params": {
+                "type": "object",
+                "description": "Get information about a specific command"
+              }
+            },
+            "example": {
+              "without_params": {
+                "jsonrpc": "2.0",
+                "method": "help",
+                "id": 1
+              },
+              "with_params": {
+                "jsonrpc": "2.0",
+                "method": "help",
+                "params": {
+                  "command": "echo"
+                },
+                "id": 1
+              }
+            }
+          },
+          "available_commands": {
+            "type": "array",
+            "description": "List of available commands",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "echo",
+              "help",
+              "health",
+              "manual_echo",
+              "config",
+              "reload",
+              "settings",
+              "load",
+              "unload",
+              "plugins",
+              "transport_management",
+              "proxy_registration"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ]
+      },
+      "EchoParams": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message to echo",
+            "default": "Hello, World!"
+          },
+          "text": {
+            "type": "string",
+            "description": "Alternative parameter name for message"
+          }
+        },
+        "title": "Parameters for echo",
+        "description": "Parameters for the echo command"
+      },
+      "HelpParams": {
+        "type": "object",
+        "properties": {
+          "cmdname": {
+            "type": "string",
+            "description": "Name of specific command to get help for"
+          }
+        },
+        "title": "Parameters for help",
+        "description": "Parameters for the help command"
+      },
+      "HealthParams": {
+        "type": "object",
+        "properties": {},
+        "description": "Parameters for the health command",
+        "title": "Parameters for health"
+      },
+      "Manual_echoParams": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message to echo",
+            "default": "Hello from manually registered command!"
+          }
+        },
+        "title": "Parameters for manual_echo",
+        "description": "Parameters for the manual_echo command"
+      },
+      "ConfigParams": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "get",
+              "set"
+            ],
+            "default": "get",
+            "description": "Operation to perform (get or set)"
+          },
+          "path": {
+            "type": "string",
+            "description": "Configuration path in dot notation (e.g. 'server.host')"
+          },
+          "value": {
+            "description": "Value to set (required for 'set' operation)"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "additionalProperties": false,
+        "title": "Parameters for config",
+        "description": "Parameters for the config command"
+      },
+      "ReloadParams": {
+        "type": "object",
+        "properties": {
+          "config_path": {
+            "type": "string",
+            "description": "Path to configuration file to reload",
+            "default": null
+          }
+        },
+        "additionalProperties": false,
+        "title": "Parameters for reload",
+        "description": "Parameters for the reload command"
+      },
+      "SettingsParams": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "Operation to perform",
+            "enum": [
+              "get",
+              "set",
+              "get_all",
+              "reload"
+            ],
+            "default": "get_all"
+          },
+          "key": {
+            "type": "string",
+            "description": "Configuration key in dot notation (e.g., 'server.host', 'custom.feature_enabled')"
+          },
+          "value": {
+            "description": "Configuration value to set (for 'set' operation)"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "additionalProperties": false,
+        "title": "Parameters for settings",
+        "description": "Parameters for the settings command"
+      },
+      "LoadParams": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Source path or URL to load command from (must end with '_command.py')",
+            "examples": [
+              "./my_command.py",
+              "https://example.com/remote_command.py"
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "Parameters for load",
+        "description": "Parameters for the load command"
+      },
+      "UnloadParams": {
+        "type": "object",
+        "properties": {
+          "command_name": {
+            "type": "string",
+            "description": "Name of the command to unload (must be a loaded command)"
+          }
+        },
+        "required": [
+          "command_name"
+        ],
+        "title": "Parameters for unload",
+        "description": "Parameters for the unload command"
+      },
+      "PluginsParams": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false,
+        "title": "Parameters for plugins",
+        "description": "Parameters for the plugins command"
+      },
+      "Transport_managementParams": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "get_info",
+              "validate",
+              "reload"
+            ],
+            "description": "Action to perform"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "Parameters for transport_management",
+        "description": "Parameters for the transport_management command"
+      },
+      "Proxy_registrationParams": {
+        "type": "object",
+        "title": "Parameters for proxy_registration",
+        "description": "Parameters for the proxy_registration command (schema generation failed)",
+        "properties": {},
+        "additionalProperties": true
+      }
+    }
+  }
+}
