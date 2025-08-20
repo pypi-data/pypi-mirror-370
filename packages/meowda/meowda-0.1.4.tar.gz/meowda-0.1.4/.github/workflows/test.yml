@@ -1,0 +1,49 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  run-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Update rust toolchain
+        run: rustup update
+      - uses: actions/cache@v4
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Build
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run: cargo build --release --verbose
+      - name: Run tests
+        run: cargo test --release --verbose
+      - name: E2E test
+        run: |
+          cargo install --path .
+          bash -euxo pipefail <<'EOF'
+            meowda init init.sh
+            source init.sh
+            meowda create test-venv -p 3.14
+            meowda activate test-venv
+            meowda install requests
+            meowda deactivate
+          EOF
+          cargo uninstall meowda
