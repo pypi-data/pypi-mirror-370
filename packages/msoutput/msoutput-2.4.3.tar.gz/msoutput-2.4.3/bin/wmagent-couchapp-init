@@ -1,0 +1,405 @@
+#!/usr/bin/env python
+"""
+wmagent-couchapp-init
+
+"""
+
+import argparse
+import os
+import shutil
+import sys
+import tempfile
+import urllib.parse
+
+from urllib.parse import urlsplit
+from couchapp.commands import push as couchapppush
+
+from WMCore.Configuration import loadConfigurationFile
+from WMCore.Lexicon import splitCouchServiceURL
+from WMCore.WMBase import getWMBASE
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--skip-cron", dest = "cron",
+                    default = True, action = "store_false",
+                    help = "Do not install maintenance cron jobs")
+parser.add_argument("--only-cron", dest = "pushApps",
+                    default = True, action = "store_false",
+                    help = "Install only maintenance cron jobs")
+options = parser.parse_args()
+
+if not options.cron and not options.pushApps:
+    print("Mutually excluding options: --skip-cron && --only-cron")
+    print("Chose only one of them.")
+    sys.exit(1)
+
+def couchAppRoot(couchapp):
+    """Return parent path containing couchapp"""
+    wmcoreroot = os.path.normpath(os.path.join(getWMBASE(), '..', '..', '..'))
+    develPath = os.path.join(getWMBASE(), "src", "couchapps")
+    if os.path.exists(os.path.join(develPath, couchapp)):
+        return develPath
+    elif os.path.exists(os.path.join(wmcoreroot, 'xdata', 'couchapps', couchapp)):
+        return os.path.join(wmcoreroot, 'xdata', 'couchapps')
+    elif os.path.exists(os.path.join(wmcoreroot, 'data', 'couchapps', couchapp)):
+        return os.path.join(wmcoreroot, 'data', 'couchapps')
+    raise OSError('Cannot find couchapp: %s' % couchapp)
+
+# Defining a minimal decorator with parameter
+def pushApps(pushAppsFlag):
+    """
+    Decorator with a single Bool parameter
+    :param pushApps: Bool parameter to check if the callFunc is to be executed or not
+    :return:         The decorated function with call arguments if pushApps=True
+    """
+    def pushAppsDecorator(callFunc):
+        """
+        An Auxiliary simple decorator
+        """
+        def installCouchAppWrapper(*args, **kwargs):
+            """
+            The callFunc wrapper. To decide whether to return the call to the
+            wrapped function or not based on the decorator's pushAppsFlag
+            :*args:    All parameters passed to the wrapped function call
+            :**kwargs: All keyword arguments passed to the wrapped function call
+            """
+            if pushAppsFlag:
+                return callFunc(*args, **kwargs)
+            else:
+                return
+        return installCouchAppWrapper
+    return pushAppsDecorator
+
+@pushApps(options.pushApps)
+def installCouchApp(couchUrl, couchDBName, couchAppName, basePath=None):
+    """
+    _installCouchApp_
+
+    Install the given couch app on the given server in the given database.  If
+    the database already exists it will be deleted.
+    """
+    # set of options required by the couchapp push command
+    # from collections import namedtuple
+    # couchOpts = namedtuple("opts", ["export", "output", "force", "no_atomic"])
+    # for attribute in ["export", "output", "force", "no_atomic"]:
+    #     setattr(couchOpts, attribute, False)
+    ### AMR debugging workqueue couchapps, remove it later ###
+    #couchOpts.export = True
+    #couchOpts.output = "/data/WorkQueue.json"
+    ##########################################################
+    if not basePath:
+        basePath = couchAppRoot(couchAppName)
+    print("Installing %s into %s" % (couchAppName, urllib.parse.unquote_plus(couchDBName)))
+
+    couchapppush("%s/%s" % (basePath, couchAppName), "%s/%s" % (couchUrl, couchDBName))
+    return
+
+
+def installWorkQueueCouchApp(couchUrl, couchDBName):
+    """Workqueue has to install yui to couchapp - handle this here"""
+    yui = os.environ.get('YUI_ROOT', '')
+    if not yui or not os.path.exists(yui):
+        raise RuntimeError("Can't locate YUI, set YUI_ROOT env variable")
+    basePath = couchAppRoot('WorkQueue')
+    # make a temporary directory to create the couchapp structure
+    tempDir = os.path.join(tempfile.mkdtemp(), 'WorkQueue')
+    try:
+        # copy over main WorkQueue couchapp
+        shutil.copytree(os.path.join(basePath, 'WorkQueue'), tempDir)
+        # link to required structure from yui
+        for yFile in files_needed_from_yui:
+            dest = os.path.join(tempDir, 'vendor', 'yui', '_attachments', yFile)
+            try:
+                os.makedirs(os.path.dirname(dest))
+            except OSError:
+                pass
+            os.symlink(os.path.join(yui, yFile), dest)
+        installCouchApp(couchUrl, couchDBName, "WorkQueue", basePath=os.path.dirname(tempDir))
+    finally:
+        shutil.rmtree(tempDir, ignore_errors=True)
+
+
+def createCronEntries(crontabLines):
+    tempDir = tempfile.mkdtemp()
+    cname = '%s/crontab' % tempDir
+    os.system("crontab -l > %s" % cname)
+    entries = [l.replace('\n', '').strip() for l in open(cname, 'r').readlines()]
+    with open(cname, 'a') as astream:
+        for line in crontabLines:
+            line = line.strip()
+            if  line not in entries:
+                astream.write(line + '\n')
+    os.system("crontab %s" % cname)
+    os.remove(cname)
+    os.rmdir(tempDir)
+
+
+def setupCron(couchUrl, couchDBName):
+    """
+    _setupCron_
+
+    Setup cron jobs to index and compact the JobDump.  Things get interesting as
+    the database names have a forward slash in them, which needs to be quoted
+    to function properly.  The percent character has a special meaning to cron,
+    so we need to employ a hacky sed command to filter out the quoting of the
+    quoted slash.
+    """
+    print("Setting up cron jobs for the job dump.")
+    fwjrDumpName = urllib.parse.quote_plus("%s/fwjrs" % couchDBName).replace("%", "\\%")
+    jobDumpName = urllib.parse.quote_plus("%s/jobs" % couchDBName).replace("%", "\\%")
+
+    indexJobsUrl = "'%s/%s/_design/JobDump/_view/statusByWorkflowName?limit=1'" % (couchUrl, jobDumpName)
+    indexFwjrUrl = "'%s/%s/_design/FWJRDump/_view/outputByJobID?limit=1'" % (couchUrl, fwjrDumpName)
+    indexCmd = "echo %s | sed -e 's|\\\\||g' | xargs curl -s -m 1 > /dev/null"
+
+    crontabLines = []
+    crontabLines.append("* * * * * %s" % (indexCmd % indexJobsUrl))
+    crontabLines.append("* * * * * %s" % (indexCmd % indexFwjrUrl))
+    createCronEntries(crontabLines)
+
+
+def setupCronCompaction(couchUrl, couchDbName):
+    """Add a simple couch compaction"""
+    compactUrl = "%s/%s/_compact" % (couchUrl, couchDbName)
+    compactCmd = "curl -s -H 'Content-Type: application/json' -X POST '%s' > /dev/null"
+    cronLine = "0 1 * * * %s" % (compactCmd % compactUrl)
+    createCronEntries([cronLine])
+
+
+files_needed_from_yui = [
+    'build/animation/animation-min.js',
+    'build/assets/skins/sam/ajax-loader.gif',
+    'build/assets/skins/sam/asc.gif',
+    'build/assets/skins/sam/autocomplete.css',
+    'build/assets/skins/sam/back-h.png',
+    'build/assets/skins/sam/back-v.png',
+    'build/assets/skins/sam/bar-h.png',
+    'build/assets/skins/sam/bar-v.png',
+    'build/assets/skins/sam/bg-h.gif',
+    'build/assets/skins/sam/bg-v.gif',
+    'build/assets/skins/sam/blankimage.png',
+    'build/assets/skins/sam/button.css',
+    'build/assets/skins/sam/calendar.css',
+    'build/assets/skins/sam/carousel.css',
+    'build/assets/skins/sam/check0.gif',
+    'build/assets/skins/sam/check1.gif',
+    'build/assets/skins/sam/check2.gif',
+    'build/assets/skins/sam/colorpicker.css',
+    'build/assets/skins/sam/container.css',
+    'build/assets/skins/sam/datatable.css',
+    'build/assets/skins/sam/desc.gif',
+    'build/assets/skins/sam/dt-arrow-dn.png',
+    'build/assets/skins/sam/dt-arrow-up.png',
+    'build/assets/skins/sam/editor-knob.gif',
+    'build/assets/skins/sam/editor-sprite-active.gif',
+    'build/assets/skins/sam/editor-sprite.gif',
+    'build/assets/skins/sam/editor.css',
+    'build/assets/skins/sam/header_background.png',
+    'build/assets/skins/sam/hue_bg.png',
+    'build/assets/skins/sam/imagecropper.css',
+    'build/assets/skins/sam/layout.css',
+    'build/assets/skins/sam/layout_sprite.png',
+    'build/assets/skins/sam/loading.gif',
+    'build/assets/skins/sam/logger.css',
+    'build/assets/skins/sam/menu-button-arrow-disabled.png',
+    'build/assets/skins/sam/menu-button-arrow.png',
+    'build/assets/skins/sam/menu.css',
+    'build/assets/skins/sam/menubaritem_submenuindicator.png',
+    'build/assets/skins/sam/menubaritem_submenuindicator_disabled.png',
+    'build/assets/skins/sam/menuitem_checkbox.png',
+    'build/assets/skins/sam/menuitem_checkbox_disabled.png',
+    'build/assets/skins/sam/menuitem_submenuindicator.png',
+    'build/assets/skins/sam/menuitem_submenuindicator_disabled.png',
+    'build/assets/skins/sam/paginator.css',
+    'build/assets/skins/sam/picker_mask.png',
+    'build/assets/skins/sam/profilerviewer.css',
+    'build/assets/skins/sam/progressbar.css',
+    'build/assets/skins/sam/resize.css',
+    'build/assets/skins/sam/simpleeditor.css',
+    'build/assets/skins/sam/skin.css',
+    'build/assets/skins/sam/slider.css',
+    'build/assets/skins/sam/split-button-arrow-active.png',
+    'build/assets/skins/sam/split-button-arrow-disabled.png',
+    'build/assets/skins/sam/split-button-arrow-focus.png',
+    'build/assets/skins/sam/split-button-arrow-hover.png',
+    'build/assets/skins/sam/split-button-arrow.png',
+    'build/assets/skins/sam/sprite.png',
+    'build/assets/skins/sam/sprite.psd',
+    'build/assets/skins/sam/tabview.css',
+    'build/assets/skins/sam/treeview-loading.gif',
+    'build/assets/skins/sam/treeview-sprite.gif',
+    'build/assets/skins/sam/treeview.css',
+    'build/assets/skins/sam/wait.gif',
+    'build/assets/skins/sam/yuitest.css',
+    'build/connection/connection-min.js',
+    'build/connection/connection_core-min.js',
+    'build/container/assets/alrt16_1.gif',
+    'build/container/assets/blck16_1.gif',
+    'build/container/assets/close12_1.gif',
+    'build/container/assets/container-core.css',
+    'build/container/assets/container.css',
+    'build/container/assets/hlp16_1.gif',
+    'build/container/assets/info16_1.gif',
+    'build/container/assets/skins/sam/container-skin.css',
+    'build/container/assets/skins/sam/container.css',
+    'build/container/assets/tip16_1.gif',
+    'build/container/assets/warn16_1.gif',
+    'build/container/container-min.js',
+    'build/container/container_core-min.js',
+    'build/datasource/datasource-min.js',
+    'build/datatable/assets/datatable-core.css',
+    'build/datatable/assets/datatable.css',
+    'build/datatable/assets/skins/sam/datatable-skin.css',
+    'build/datatable/assets/skins/sam/datatable.css',
+    'build/datatable/assets/skins/sam/dt-arrow-dn.png',
+    'build/datatable/assets/skins/sam/dt-arrow-up.png',
+    'build/datatable/datatable-min.js',
+    'build/dragdrop/dragdrop-min.js',
+    'build/element/element-min.js',
+    'build/fonts/fonts-min.css',
+    'build/fonts/fonts.css',
+    'build/json/json-min.js',
+    'build/layout/assets/layout-core.css',
+    'build/layout/assets/skins/sam/layout-skin.css',
+    'build/layout/assets/skins/sam/layout.css',
+    'build/layout/assets/skins/sam/layout_sprite.png',
+    'build/layout/layout-min.js',
+    'build/menu/assets/menu-core.css',
+    'build/menu/assets/menu.css',
+    'build/menu/assets/menu_down_arrow.png',
+    'build/menu/assets/menu_down_arrow_disabled.png',
+    'build/menu/assets/menu_up_arrow.png',
+    'build/menu/assets/menu_up_arrow_disabled.png',
+    'build/menu/assets/menubaritem_submenuindicator.png',
+    'build/menu/assets/menubaritem_submenuindicator_disabled.png',
+    'build/menu/assets/menubaritem_submenuindicator_selected.png',
+    'build/menu/assets/menuitem_checkbox.png',
+    'build/menu/assets/menuitem_checkbox_disabled.png',
+    'build/menu/assets/menuitem_checkbox_selected.png',
+    'build/menu/assets/menuitem_submenuindicator.png',
+    'build/menu/assets/menuitem_submenuindicator_disabled.png',
+    'build/menu/assets/menuitem_submenuindicator_selected.png',
+    'build/menu/assets/skins/sam/menu-skin.css',
+    'build/menu/assets/skins/sam/menu.css',
+    'build/menu/assets/skins/sam/menubaritem_submenuindicator.png',
+    'build/menu/assets/skins/sam/menubaritem_submenuindicator_disabled.png',
+    'build/menu/assets/skins/sam/menuitem_checkbox.png',
+    'build/menu/assets/skins/sam/menuitem_checkbox_disabled.png',
+    'build/menu/assets/skins/sam/menuitem_submenuindicator.png',
+    'build/menu/assets/skins/sam/menuitem_submenuindicator_disabled.png',
+    'build/menu/menu-min.js',
+    'build/paginator/assets/paginator-core.css',
+    'build/paginator/assets/skins/sam/paginator-skin.css',
+    'build/paginator/assets/skins/sam/paginator.css',
+    'build/paginator/paginator-min.js',
+    'build/progressbar/assets/progressbar-core.css',
+    'build/progressbar/assets/skins/sam/back-h.png',
+    'build/progressbar/assets/skins/sam/back-v.png',
+    'build/progressbar/assets/skins/sam/bar-h.png',
+    'build/progressbar/assets/skins/sam/bar-v.png',
+    'build/progressbar/assets/skins/sam/progressbar-skin.css',
+    'build/progressbar/assets/skins/sam/progressbar.css',
+    'build/progressbar/progressbar-min.js',
+    'build/reset-fonts-grids/reset-fonts-grids.css',
+    'build/resize/assets/resize-core.css',
+    'build/resize/assets/skins/sam/layout_sprite.png',
+    'build/resize/assets/skins/sam/resize-skin.css',
+    'build/resize/assets/skins/sam/resize.css',
+    'build/resize/resize-min.js',
+    'build/utilities/utilities.js',
+    'build/yahoo-dom-event/yahoo-dom-event.js',
+    ]
+
+
+if __name__ == "__main__":
+
+    if "WMAGENT_CONFIG" not in os.environ:
+        print("The WMAGENT_CONFIG environment variable needs to be set before")
+        print("this can run.")
+        sys.exit(1)
+
+    wmagentConfig = loadConfigurationFile(os.environ["WMAGENT_CONFIG"])
+
+    if hasattr(wmagentConfig, "JobStateMachine") and hasattr(wmagentConfig.JobStateMachine, "couchDBName"):
+        fwjrDumpName = urllib.parse.quote_plus("%s/fwjrs" % wmagentConfig.JobStateMachine.couchDBName)
+        jobDumpName = urllib.parse.quote_plus("%s/jobs" % wmagentConfig.JobStateMachine.couchDBName)
+        installCouchApp(wmagentConfig.JobStateMachine.couchurl, fwjrDumpName, "FWJRDump")
+        installCouchApp(wmagentConfig.JobStateMachine.couchurl, jobDumpName, "JobDump")
+        installCouchApp(wmagentConfig.JobStateMachine.couchurl, wmagentConfig.JobStateMachine.jobSummaryDBName, "WMStatsAgent")
+        installCouchApp(wmagentConfig.JobStateMachine.couchurl, wmagentConfig.JobStateMachine.summaryStatsDBName, "SummaryStats")
+        if options.cron:
+            setupCron(wmagentConfig.JobStateMachine.couchurl, wmagentConfig.JobStateMachine.couchDBName)
+
+    if hasattr(wmagentConfig, "JobStateMachine") and hasattr(wmagentConfig.JobStateMachine, "configCacheDBName"):
+        installCouchApp(wmagentConfig.JobStateMachine.couchurl,
+                        wmagentConfig.JobStateMachine.configCacheDBName, "ConfigCache")
+        installCouchApp(wmagentConfig.JobStateMachine.couchurl,
+                        wmagentConfig.JobStateMachine.configCacheDBName, "GroupUser")
+
+    if hasattr(wmagentConfig, "WorkQueueManager"):
+        installWorkQueueCouchApp(wmagentConfig.WorkQueueManager.couchurl, wmagentConfig.WorkQueueManager.dbname)
+        installWorkQueueCouchApp(wmagentConfig.WorkQueueManager.couchurl, wmagentConfig.WorkQueueManager.inboxDatabase)
+
+    if hasattr(wmagentConfig, "AsyncTransfer"):
+        basePath = "%s/couchapp" % os.environ['ASYNC_ROOT']
+        baseWMCorePath = "%s/data/couchapps" % os.environ['ASYNC_ROOT']
+        # The format of wmagentConfig.CoreDatabase.connectUrl is http://$COUCH_USER:$COUCH_PASS@$COUCH_HOST_NAME:$COUCH_PORT/asynctransfer_agent
+        agent_database = wmagentConfig.CoreDatabase.connectUrl.split('/')[len(wmagentConfig.CoreDatabase.connectUrl.split('/')) - 1 ]
+        agent_instance = wmagentConfig.CoreDatabase.connectUrl.split(agent_database)[0]
+        installCouchApp(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.files_database, "Acquired", basePath)
+        installCouchApp(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.files_database, "AsyncTransfer", basePath)
+        installCouchApp(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.files_database, "AsyncTransferErl", basePath)
+        installCouchApp(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.files_database, "ftscp", basePath)
+        installCouchApp(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.files_database, "monitor", basePath)
+        installCouchApp(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.files_database, "Others", basePath)
+        installCouchApp(wmagentConfig.Statistics.couch_statinstance, wmagentConfig.Statistics.statitics_database, "stat", basePath)
+        installCouchApp(wmagentConfig.DBSPublisher.couch_instance, wmagentConfig.DBSPublisher.files_database, "DBSPublisher", basePath)
+        installCouchApp(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.config_database, "config", basePath)
+        installCouchApp(agent_instance, agent_database, "Agent", baseWMCorePath)
+        if options.cron:
+            setupCronCompaction(wmagentConfig.AsyncTransfer.couch_instance, wmagentConfig.AsyncTransfer.files_database)
+            setupCronCompaction(wmagentConfig.Statistics.couch_statinstance, wmagentConfig.Statistics.statitics_database)
+            setupCronCompaction(agent_instance, agent_database)
+
+    if hasattr(wmagentConfig, "Analytics"):
+        installCouchApp(wmagentConfig.Analytics.couch_user_monitoring_instance, wmagentConfig.Analytics.user_monitoring_db, "UserMonitoring", basePath)
+        if options.cron:
+            setupCronCompaction(wmagentConfig.Analytics.couch_user_monitoring_instance, wmagentConfig.Analytics.user_monitoring_db)
+
+    if hasattr(wmagentConfig, "reqmgr"):
+        installCouchApp(wmagentConfig.reqmgr.couchUrl, wmagentConfig.reqmgr.workloadDBName, "ReqMgr")
+        # which needs to be changed in wmagent for prompt skiming deployment script
+        installCouchApp(wmagentConfig.reqmgr.couchUrl, wmagentConfig.reqmgr.wmstatDBName, "WMStats")
+        # this means test mode  in wmagent it won't depoly reqmgr with it in production
+        # set up  workload summary for test
+        if hasattr(wmagentConfig, "WorkloadSummary"):
+            installCouchApp(wmagentConfig.WorkloadSummary.couchurl, wmagentConfig.WorkloadSummary.database, "WorkloadSummary")
+
+        if hasattr(wmagentConfig, "ACDC"):
+            installCouchApp(wmagentConfig.ACDC.couchurl, wmagentConfig.ACDC.database, "ACDC")
+            installCouchApp(wmagentConfig.ACDC.couchurl, wmagentConfig.ACDC.database, "GroupUser")
+
+    else:
+        # in case reqmgr is not set but still worklaad Summary need to be initialized (Tier0 test mode case)
+        # hacky way to check - assuming production url always use https protocal
+        if hasattr(wmagentConfig, "WorkloadSummary") and \
+           urlsplit(wmagentConfig.WorkloadSummary.couchurl).scheme == 'http':
+            installCouchApp(wmagentConfig.WorkloadSummary.couchurl, wmagentConfig.WorkloadSummary.database, "WorkloadSummary")
+        if hasattr(wmagentConfig, "ACDC") and \
+           urlsplit(wmagentConfig.WorkloadSummary.couchurl).scheme == 'http':
+            installCouchApp(wmagentConfig.ACDC.couchurl, wmagentConfig.ACDC.database, "ACDC")
+            installCouchApp(wmagentConfig.ACDC.couchurl, wmagentConfig.ACDC.database, "GroupUser")
+
+    if hasattr(wmagentConfig, "Tier0Feeder"):
+        installCouchApp(wmagentConfig.JobStateMachine.couchurl, wmagentConfig.Tier0Feeder.requestDBName, "T0Request")
+        centralWMStatsURL = wmagentConfig.General.centralWMStatsURL
+        # checks whether this is test agent. if T0 agent is setting local wmstats as central it creates the db
+        if "localhost:" in centralWMStatsURL:
+            couchURL, wmstatsDBName = splitCouchServiceURL(centralWMStatsURL)
+            installCouchApp(couchURL, wmstatsDBName, "WMStats")
+
+    if hasattr(wmagentConfig, "General") and hasattr(wmagentConfig.General, "central_logdb_url") and \
+            "localhost" in wmagentConfig.General.central_logdb_url:
+        couchURL, logDBName = splitCouchServiceURL(wmagentConfig.General.central_logdb_url)
+        installCouchApp(couchURL, logDBName, "LogDB")
+
+    sys.exit(0)
