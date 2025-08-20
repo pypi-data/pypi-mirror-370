@@ -1,0 +1,15 @@
+
+
+class Judgement:
+    def __init__(
+        self, criteria: str, score: float, reasoning: str = "", evidence: list[str] = None
+    ):
+        self.criteria = criteria
+        self.score = score
+        self.reasoning = reasoning
+        self.evidence = evidence or []
+
+
+class BaseEval:
+    async def run(self, data: any) -> list[Judgement]:
+        pass
