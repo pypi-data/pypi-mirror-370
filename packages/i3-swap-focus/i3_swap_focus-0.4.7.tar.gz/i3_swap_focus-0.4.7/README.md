@@ -1,0 +1,48 @@
+# i3-swap-focus
+
+### Requirements
+
+* [i3ipc](https://github.com/altdesktop/i3ipc-python)
+
+## Install
+
+Recommanded way is to use a Python package installer such as [uv](https://docs.astral.sh/uv/) or [pipx](https://github.com/pypa/pipx)
+
+```
+## Using uv
+uv tool install git+https://codeberg.org/olivierlm/i3-swap-focus
+
+## Using pipx
+pipx install i3_swap_focus
+```
+
+### i3/sway config example
+
+```
+exec i3-swap-focus
+bindsym $mod+Tab exec pkill -USR1 -F "${XDG_RUNTIME_DIR}/swap_focus.pid"
+```
+
+## Features
+
+### Ignore windows
+
+To ignore some windows (e.g windows that belong to scratchpad), just mark them with ``ignore_focus`` in your config :
+
+```
+# Put a term in scratchpad
+exec alacritty --class scratchpad_term
+
+# i3 :
+for_window [instance="scratchpad_term"] mark "ignore_focus", move scratchpad
+
+# sway :
+for_window [app_id="scratchpad_term"] mark "ignore_focus", move scratchpad
+```
+
+### Stay in workspace
+
+This script accepts a ``--stay-in-workspace`` flag if you do not wish to focus on a different workspace :
+```
+exec i3-swap-focus --stay-in-workspace
+```
