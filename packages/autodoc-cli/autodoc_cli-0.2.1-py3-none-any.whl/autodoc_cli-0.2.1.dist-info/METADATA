@@ -1,0 +1,146 @@
+Metadata-Version: 2.4
+Name: autodoc-cli
+Version: 0.2.1
+Summary: CLI to auto-generate C doc comments using Tree-sitter and Ollama
+Project-URL: Homepage, https://github.com/pierrelgol/autodoc-cli
+Project-URL: Source, https://github.com/pierrelgol/autodoc-cli
+Project-URL: Issues, https://github.com/pierrelgol/autodoc-cli/issues
+Project-URL: Documentation, https://github.com/pierrelgol/autodoc-cli#readme
+Author-email: PierreLgol <plgol.perso@gmail.com>
+License: MIT
+License-File: LICENSE
+Keywords: c,cli,documentation,ollama,tree-sitter
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Documentation
+Classifier: Topic :: Software Development :: Code Generators
+Classifier: Topic :: Software Development :: Documentation
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Text Processing :: Markup
+Classifier: Typing :: Typed
+Requires-Python: >=3.12
+Requires-Dist: pathspec>=0.12
+Requires-Dist: requests>=2.32
+Requires-Dist: tqdm>=4.66
+Requires-Dist: tree-sitter-languages>=1.10.2
+Requires-Dist: tree-sitter==0.20.4
+Requires-Dist: typer>=0.12
+Provides-Extra: dev
+Requires-Dist: mypy>=1.10; extra == 'dev'
+Requires-Dist: pytest-cov; extra == 'dev'
+Requires-Dist: pytest>=8.2; extra == 'dev'
+Requires-Dist: python-lsp-server[all]>=1.11; extra == 'dev'
+Requires-Dist: ruff>=0.6; extra == 'dev'
+Requires-Dist: types-requests>=2.32; extra == 'dev'
+Requires-Dist: types-tree-sitter-languages; extra == 'dev'
+Description-Content-Type: text/markdown
+
+AutoDoc
+=======
+
+CLI tool that generates documentation comments for source code using Tree-sitter parsing and a local Ollama model. Initially supports C (`.c`, `.h`).
+
+Requirements
+------------
+- Python 3.12+
+- `uv` for environment management
+- Ollama running locally with a compatible code model (e.g., `qwen2.5-coder:7b`)
+
+Install
+-------
+
+### Development Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/pierrelgol/autodoc-cli.git
+cd autodoc-cli
+
+# Create virtual environment and install in development mode
+uv venv --python 3.12.11
+uv pip install -e .[dev]
+```
+
+### Production Installation
+
+```bash
+# Install from PyPI (when published)
+uv pip install autodoc
+
+# Or install from local wheel
+uv pip install dist/autodoc-0.1.0-py3-none-any.whl
+```
+
+Usage
+-----
+
+```bash
+# Basic usage
+autodoc /path/to/target --model qwen2.5-coder:7b
+
+# Dry run to see what would be changed
+autodoc /path/to/target --dry-run
+
+# Use a different model
+autodoc /path/to/target --model llama3.1:8b
+
+# Specify a custom database location
+autodoc /path/to/target --db /path/to/custom.db
+
+# Example: Generate documentation for a C project
+autodoc /path/to/c-project --model qwen2.5-coder:7b
+```
+
+By default, a SQLite DB `.autodoc.sqlite` will be created in the target directory to track function body hashes for change detection.
+
+How it works
+------------
+- Tree-sitter is used to parse C files into ASTs. No regex is used for detection.
+- For each function:
+  - If a doc comment exists and the function hash matches the DB, the function is skipped.
+  - If a doc exists but the hash changed, the doc is regenerated and replaced.
+  - If no doc exists, a new doc comment is generated and inserted above the function.
+- Edits are applied directly to the source files and are idempotent.
+
+Example
+-------
+
+Before running autodoc:
+```c
+int calculate_fibonacci(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return calculate_fibonacci(n - 1) + calculate_fibonacci(n - 2);
+}
+```
+
+After running `autodoc . --model qwen2.5-coder:7b`:
+```c
+/**
+ * Calculates the nth Fibonacci number using recursion.
+ *
+ * @param n The position in the Fibonacci sequence (0-based).
+ * @return The Fibonacci number at position n.
+ */
+int calculate_fibonacci(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return calculate_fibonacci(n - 1) + calculate_fibonacci(n - 2);
+}
+```
+
+Notes
+-----
+- Only C is supported currently. Additional languages can be added by implementing the `LanguageAdapter` interface in `autodoc/adapters`.
+- Ensure Ollama is running locally: `ollama serve` and that the model is available: `ollama pull qwen2.5-coder:7b`.
+- If you prefer uvx, be aware that `uvx autodoc` may resolve to the PyPI package named `autodoc`. Use the local script instead: `.venv/bin/autodoc`.
+
+
