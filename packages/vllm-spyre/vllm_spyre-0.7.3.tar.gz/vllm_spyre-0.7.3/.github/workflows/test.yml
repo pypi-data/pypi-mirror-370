@@ -1,0 +1,188 @@
+name: Test
+
+on:
+  # Don't use `paths` or `paths-ignore` filter since this workflow is required
+  # for all pull requests on main irrespective of file type or location
+  # Use `changed-src-files` step to determine if source code was changed
+  pull_request:
+    # add labeled and unlabeled to the default types (runs when label is added)
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: "1"
+  VLLM_CPU_DISABLE_AVX512: "true"
+  VLLM_TARGET_DEVICE: "empty"
+  VLLM_PLUGINS: "spyre"
+  HF_HUB_CACHE: "${{ github.workspace }}/.cache/huggingface/hub"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    timeout-minutes: 20
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+        python_version: ["3.12"]
+        vllm_version:
+          - name: "default"
+            repo: ""
+          - name: "vLLM:main"
+            repo: "git+https://github.com/vllm-project/vllm --branch main"
+        test_suite:
+          - name: "static batching"
+            markers: "cpu and decoder and not cb"
+            flags: "--timeout=300"
+          - name: "fp8"
+            markers: "cpu and quantized and multi"
+            flags: "--timeout=600 -k 'basic and test_output' --durations=0"
+          - name: "embedding"
+            markers: "cpu and embedding"
+            flags: "--timeout=300"
+          - name: "continuous batching"
+            markers: "cpu and cb"
+            flags: "--timeout=300"
+          - name: "worker and utils"
+            markers: "not e2e"
+            flags: "--timeout=300"
+          - name: "compatibility"
+            markers: "compat"
+            flags: "--timeout=300"
+        include:
+          - vllm_version:
+              name: "vLLM:lowest"
+              repo: "git+https://github.com/vllm-project/vllm --tag v0.9.2"
+            test_suite:
+              name: "backward compat"
+              markers: "compat or (cpu and basic)"
+              flags: "--timeout=300"
+            os: "ubuntu-latest"
+            python_version: "3.12"
+        # Exclude vLLM:main if PR does NOT have the ready label
+        exclude: ${{ github.event_name == 'pull_request' && !contains(toJson(github.event.pull_request.labels), '"ready"') && fromJSON('[{"vllm_version":{"name":"vLLM:main"}}]') || fromJSON('[]') }}
+
+
+    name: "${{ matrix.test_suite.name }} (${{ matrix.vllm_version.name }})"
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: "Get changed source files"
+        id: changed-src-files
+        uses: tj-actions/changed-files@v46
+        with: # Avoid using single or double quotes for multiline patterns
+          files: |
+            .github/workflows/test.yml
+            pyproject.toml
+            uv.lock
+            tests/**/*.py
+            vllm_spyre/**/*.py
+
+      - name: "Install PyTorch 2.7.1"
+        if: (steps.changed-src-files.outputs.any_changed == 'true')
+        run: |
+          pip install torch=="2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+
+      - name: "Install uv"
+        if: steps.changed-src-files.outputs.any_changed == 'true'
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: ${{ matrix.python_version }}
+          enable-cache: true
+          ignore-nothing-to-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+
+      - name: "Set vLLM version"
+        if: (steps.changed-src-files.outputs.any_changed == 'true' && matrix.vllm_version.repo)
+        run: |
+          uv add ${{ matrix.vllm_version.repo }}
+          echo "TEST_VLLM_VERSION=${{ matrix.vllm_version.name }}" >> "$GITHUB_ENV"
+
+      - name: "Install vLLM with Spyre plugin"
+        if: steps.changed-src-files.outputs.any_changed == 'true'
+        run: |
+          uv venv .venv --system-site-packages
+          source .venv/bin/activate
+
+          # Syncs both the runtime and dev deps, based on the lockfile contents
+          uv sync --frozen
+          # Builds and installs the vllm_spyre wheel into .venv
+          # This needs to be done after `uv sync`, or the wheel install will be
+          # overwritten.
+          uv pip install -v .
+
+      - name: "Restore HF models cache"
+        if: steps.changed-src-files.outputs.any_changed == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.HF_HUB_CACHE }}
+          key: ${{ runner.os }}-hub-cache-${{ hashFiles('cached_models.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-hub-cache
+
+      - name: "Download HF models"
+        if: steps.changed-src-files.outputs.any_changed == 'true'
+        run: |
+          # We are caching HF models (HF_HUB_CACHE) for reliability rather than speed, since HF downloads are flaky for concurrent jobs.
+          # Be careful when adding models to the cache here, as the GHA cache is limited to 10 GB.
+          # If a new model is added here, hashFiles('cached_models.txt') should create a new hash key. The previous cache blob can then
+          # be removed by an admin or can be left to expire after 7 days.
+          
+          download_tinygranite() {
+            python -c "from transformers import pipeline, AutoTokenizer; pipeline('text-generation', model='ibm-ai-platform/micro-g3.3-8b-instruct-1b'); tokenizer=AutoTokenizer.from_pretrained('ibm-ai-platform/micro-g3.3-8b-instruct-1b')"
+            python -c "from transformers import pipeline, AutoTokenizer; pipeline('text-generation', model='ibm-ai-platform/micro-g3.3-8b-instruct-1b-FP8'); tokenizer=AutoTokenizer.from_pretrained('ibm-ai-platform/micro-g3.3-8b-instruct-1b-FP8')"
+          }
+          download_roberta_large() {
+            python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-roberta-large-v1')"
+          }
+          # tinyllama used for static batching tests because static batching is _too slow_
+          download_tinyllama() {
+            python -c "from transformers import pipeline; pipeline('text-generation', model='JackFram/llama-160m')"
+          }
+          download_tinygranite &
+          download_roberta_large &
+          download_tinyllama &
+          wait
+          ls "${HF_HUB_CACHE}" > cached_models.txt
+
+      - name: "Save HF models cache"
+        if: ( steps.changed-src-files.outputs.any_changed == 'true' && github.event_name != 'pull_request' && strategy.job-index == 0 )
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.HF_HUB_CACHE }}
+          key: ${{ runner.os }}-hub-cache-${{ hashFiles('cached_models.txt') }}
+
+      - name: "Run tests"
+        if: steps.changed-src-files.outputs.any_changed == 'true'
+        env:
+          MASTER_PORT: 12355
+          MASTER_ADDR: localhost
+          DISTRIBUTED_STRATEGY_IGNORE_MODULES: WordEmbedding
+          VLLM_SPYRE_TEST_MODEL_LIST: "${{ matrix.test_suite.name == 'static batching' && 'JackFram/llama-160m' || '' }}"
+          HF_HUB_OFFLINE: 1
+        run: |
+          # Delete the source code so we can ensure we're testing the installed
+          # wheel
+          rm -fr vllm_spyre
+          # We activate .venv manually and run pytest directly instead of using
+          # `uv run`, to avoid having `uv run` re-sync any dependencies or 
+          # re-install the vllm_sypre package from source
+          source .venv/bin/activate
+       
+          python3 -m pytest ${{ matrix.test_suite.flags }} \
+            tests -v -m "${{ matrix.test_suite.markers }}"
