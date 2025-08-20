@@ -1,0 +1,73 @@
+diff --git a/src/KdTree.c b/src/KdTree.c
+index 5d8d783..698064e 100644
+--- a/src/KdTree.c
++++ b/src/KdTree.c
+@@ -87,9 +87,26 @@ struct _KdTreeQuery
+ // data,index			Static globals (see KdTreeNode_create)
+ // ==================================================================
+ 
+-static int KdTree_compare(const void*,const void*);
++static int KdTree_compare(const void*, const void*);
++#ifdef HAVE_GNU_QSORT_R
++static int KdTree_compare_r(const void*, const void*, void*);
++#else
++static int KdTree_compare_r(void*, const void*, const void*);
++#endif
++
++#ifdef HAVE_THREADLOCALSTORAGE
++static __thread double **KdTree_data;
++static __thread int KdTree_index;
++#else
+ static double **KdTree_data;
+ static int KdTree_index;
++#endif
++
++struct _KdTreeCompareData
++{
++      double** data;
++      int index;
++};
+ 
+ // ==================================================================
+ // Local functions
+@@ -258,6 +275,21 @@ static int KdTree_compare(const void *pa, const void *pb)
+ 	return c<d ? -1 : c>d ? 1 : 0;
+ }
+ 
++#ifdef HAVE_GNU_QSORT_R
++static int KdTree_compare_r(const void* pa, const void* pb, void* data)
++#else
++static int KdTree_compare_r(void* data, const void *pa, const void *pb)
++#endif
++{
++	struct _KdTreeCompareData _data  = *((struct _KdTreeCompareData*) data);
++	const int a = *((const int*)pa);
++	const int b = *((const int*)pb);
++	double c = _data.data[a][_data.index];
++	double d = _data.data[b][_data.index];
++
++	return c<d ? -1 : c>d ? 1 : 0;
++}
++
+ // ==================================================================
+ // Methods of local type KdTreeNode
+ // ==================================================================
+@@ -297,9 +329,18 @@ static KdTreeNode *KdTreeNode_create(int *idx,int n,int type,double **u,int dim)
+ 	// is used because it's not possible to pass extra
+ 	// parameters to qsort.
+ 
++	struct _KdTreeCompareData _data = { u, type };
++#if defined(HAVE_GNU_QSORT_R)
++	qsort_r(idx,n,sizeof(int),KdTree_compare_r,&_data);
++#elif defined(HAVE_APPLE_QSORT_R)
++	qsort_r(idx,n,sizeof(int),&_data,KdTree_compare_r);
++#elif defined(HAVE_WIN32_QSORT_S)
++	qsort_s(idx,n,sizeof(int),KdTree_compare_r, &_data);
++#else
+ 	KdTree_data=u;
+ 	KdTree_index=type;
+ 	qsort(idx,n,sizeof(int),KdTree_compare);
++#endif
+ 
+ 	// 3. The recursive case. Find [n/2] and split the array into
+ 	// two pieces. Create a node whose splitting value is the median.
