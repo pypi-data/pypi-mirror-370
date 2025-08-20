@@ -1,0 +1,2 @@
+# Version of mythic package
+
