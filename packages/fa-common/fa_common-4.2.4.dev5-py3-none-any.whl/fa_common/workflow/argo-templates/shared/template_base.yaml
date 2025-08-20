@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: <<NAME>>
+spec:
+  entrypoint: main
+  <% if USE_PVC.enabled %>
+  volumeClaimTemplates:
+  <% for job in JOBS %>
+  - metadata:
+      name: workspace-<< job.custom_id >>
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: <<USE_PVC.size>>
+  <% endfor %>
+  volumeClaimGC:
+    strategy: OnWorkflowCompletion # OnWorkflowCompletion | OnWorkflowSuccess
+  <% endif %>
+  <% if ENABLE_PDB %>
+  podDisruptionBudget:
+    minAvailable: 1
+  <% endif %>
+  onExit: <<ARCHIVE_TEMP_NAME>>
+  <% if IS_LOCAL %>
+  hostNetwork: true
+  <% endif %>
+  arguments:
+    parameters: []
+  artifactGC:
+    strategy: OnWorkflowCompletion
+    serviceAccountName: <<SERVICE_ACCOUNT_NAME>>
+    forceFinalizerRemoval: true
+  artifactRepositoryRef:
+    configMap: argo-artifact-repo-config
+    key: artifact-repository-config
+  podGC:
+    strategy: OnPodCompletion # OnWorkflowCompletion
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+  activeDeadlineSeconds: 28800
+  <% if SERVICE_ACCOUNT_NAME is not none and SERVICE_ACCOUNT_NAME !="" %>
+  serviceAccountName: <<SERVICE_ACCOUNT_NAME>>
+  <% endif %>
+  <% if IMAGE_PULL_SECRETS is not none and (IMAGE_PULL_SECRETS | length) > 0 %>
+  imagePullSecrets:
+  <% for PULL_SECRET in IMAGE_PULL_SECRETS %>
+  - name: << PULL_SECRET >>
+  <% endfor %>
+  <% endif %>
+  templates:
+  - name: main
+    dag:
+      tasks: []
+  # <% if HAS_SECRET %>
+  # volumes:
+  # - secret:
+  #     secretName: <<SECRET_NAME>>
+  #   name: <<SECRET_NAME>>
+  # <% endif %>

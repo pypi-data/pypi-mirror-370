@@ -1,0 +1,144 @@
+<% if USE_PVC.enabled %>
+name: <<TEMPLATE_NAME>>-<<JOB_ID>>
+<% else %>
+name: <<TEMPLATE_NAME>>
+<% endif %>
+<% if RETRY > 0 %>
+retryStrategy:
+  retryPolicy: OnError
+  limit: <<RETRY>>
+<% endif %>
+container:
+  <% if HAS_SECRET %>
+  envFrom:
+    - secretRef:
+        name: <<SECRET_NAME>>
+  <% endif %>
+  <% if USE_PVC.enabled %>
+  volumeMounts:
+    - name: workspace-<< JOB_ID >>
+      mountPath: <<APP_OUTPUT_PATH.rstrip("/")>>
+      subPath: <<APP_OUTPUT_PATH.lstrip("/").rstrip("/")>>
+  <% endif %>
+  args:
+  - |-
+    <% if not IS_ERR_TOLER %>
+    set -e;
+    <% endif %>
+
+    upload_copy_paths=$(echo '{{inputs.parameters.upload-copy-paths}}' | jq -r '.[]');
+    selected_upload_objs=$(echo '{{inputs.parameters.selected-upload-objects}}' | jq -r '.[]');
+
+    <% if USE_PVC.enabled %>
+    local_path="<<APP_OUTPUT_PATH>>"
+    <% else %>
+    local_path="/tmp/output"
+    <% endif %>
+
+    # Check selected files or all
+    if [ -z "${selected_upload_objs[*]}" ]; then
+      outPath=$local_path;
+    else
+      mkdir -p $local_path/tmp/selected
+      outPath="$local_path/tmp/selected"
+
+      # Iterate over selected files and copy them to the new directory
+      for file in "${selected_upload_objs[@]}"; do
+        if [ -f "$local_path/${file}" ]; then
+          cp "$local_path/${file}" "$outPath/"
+        elif [ -d "$local_path/${file}" ]; then
+          cp -r "$local_path/${file}" "$outPath/"
+        fi
+      done
+    fi
+
+    # Check if zip, zip outputs
+    if {{inputs.parameters.zip-outputs}}; then
+      cd $outPath;
+      zip -r $local_path/tmp/output.zip .;
+      cd -;
+    fi
+
+    if [ -z {{inputs.parameters.upload-custom-path}} ]; then
+    targetPath={{inputs.parameters.upload-base-path}}/{{workflow.name}}/{{inputs.parameters.pod-name}};
+    else
+    targetPath={{inputs.parameters.upload-custom-path}}
+    fi
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.FIREBASE_STORAGE %>
+    # Write the credentials JSON to a temporary file from the environment variable
+    echo "$<<SECRET_KEY>>" > /tmp/firebase.json
+    export GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase.json
+
+    function copy_logs {
+      gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+      gsutil -m cp -r /var/run/argo/ctr/main/combined {{inputs.parameters.upload-base-path}}/{{workflow.name}}/{{pod.name}}/main.log;
+    };
+    trap copy_logs EXIT;
+
+    gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+
+    if {{inputs.parameters.zip-outputs}}; then
+      gsutil -m cp $local_path/tmp/output.zip $targetPath/output.zip;
+    else
+      gsutil -m cp -r $outPath/** $targetPath;
+    fi
+
+
+    <% if RUN_LOGGING %>gsutil -m cp -r /tmp/log/main.log {{inputs.parameters.upload-base-path}}/{{workflow.name}}/{{inputs.parameters.pod-name}}/main.log;<% endif %>
+    for p in $upload_copy_paths; do
+      gsutil -m cp -r  $targetPath/** $p;  # cloud-2-cloud copy
+    done
+    <% endif %>
+
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.MINIO %>
+    # Check if 's3' is not in the STORAGE_ENDPOINT_URL and set it if absent
+    if [[ ! "<<STORAGE_ENDPOINT_URL>>" == *"s3"* ]]; then
+      echo "Changing AWS_ENDPOINT_URL to: https://<<STORAGE_ENDPOINT_URL>> "
+      export AWS_ENDPOINT_URL="https://<<STORAGE_ENDPOINT_URL>>"
+    fi
+
+    function copy_logs {
+      aws s3 cp /var/run/argo/ctr/main/combined {{inputs.parameters.upload-base-path}}/{{workflow.name}}/{{pod.name}}/main.log;
+    };
+    trap copy_logs EXIT;
+
+    if {{inputs.parameters.zip-outputs}}; then
+      aws s3 cp  $local_path/tmp/output.zip $targetPath/output.zip;
+    else
+      aws s3 cp $outPath/ $targetPath/ --recursive;
+    fi
+
+    <% if RUN_LOGGING %>aws s3 cp /tmp/log/main.log {{inputs.parameters.upload-base-path}}/{{workflow.name}}/{{inputs.parameters.pod-name}}/main.log;<% endif %>
+    <% endif %>
+
+    for path in $upload_copy_paths; do
+      aws s3 cp $targetPath/ $path --recursive;
+    done
+
+    # <% if UPLOAD_LOGGING %>copy_logs;<% endif %>
+  command:
+  - /bin/bash
+  - -c
+  image: << CLOUD_BASE_IMAGE >>
+inputs:
+  artifacts:
+  <% if not USE_PVC.enabled %>
+  - name: output-files
+    path: /tmp/output/
+  <% endif %>
+  <% if RUN_LOGGING %>
+  - name: main-logs
+    s3:
+      key: '{{workflow.name}}/{{inputs.parameters.pod-name}}/main.log'
+    path: /tmp/log/main.log
+  <% endif %>
+  parameters:
+  - name: pod-name
+  - name: task-name
+  - name: upload-base-path
+  - name: upload-copy-paths
+  - name: upload-custom-path
+  - name: selected-upload-objects
+  - name: zip-outputs

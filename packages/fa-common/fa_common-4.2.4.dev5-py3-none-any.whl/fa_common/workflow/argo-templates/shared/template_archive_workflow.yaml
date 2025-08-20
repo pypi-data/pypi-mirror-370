@@ -1,0 +1,222 @@
+name: <<ARCHIVE_TEMP_NAME>>
+<% if RETRY > 0 %>
+retryStrategy:
+  limit: <<RETRY>>
+<% endif %>
+inputs:
+  parameters:
+  - name: upload-base-path
+    value: <<UPLOAD_BASE_PATH>>
+container:
+  envFrom:
+    # SECRET_NAME is specifically used for uploading
+    # logs and workflow.json to Storage.
+    # It is set via env var: STORAGE_SECRET_NAME
+    <% if HAS_SECRET %>
+    - secretRef:
+        name: <<SECRET_NAME>>
+    <% endif %>
+  env:
+    - name: ROLLBAR_ACCESS_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: rollbar-secret
+          key: access_token
+  image: << CLOUD_BASE_IMAGE >>
+  command: ["/bin/sh", "-c"]
+  args:
+  - |-
+    mkdir -p /tmp/output/;
+    <% if HAS_ARGO_TOKEN %>TOKEN=$(cat /etc/argo-token/token);<% endif %>
+    BASE_PATH={{inputs.parameters.upload-base-path}}/{{workflow.name}};
+
+    #############################
+    # Get Workflow
+    #############################
+    options="-sS -L";
+    <% if IS_LOCAL %>
+    options="$options -k";
+    <% endif %>
+    <% if HAS_ARGO_TOKEN %>
+    workflow=$(curl $options -H "Authorization: Bearer $TOKEN" -X GET '<<ARGO_BASE_URL>>/api/v1/workflows/<<NAMESPACE>>/{{workflow.name}}');
+    <% else %>
+    workflow=$(curl $options -X GET '<<ARGO_BASE_URL>>/api/v1/workflows/<<NAMESPACE>>/{{workflow.name}}');
+    <% endif %>
+
+    echo "$workflow" > /tmp/output/workflow.json;
+
+    workflow_id=$(echo "$workflow" | jq -r '.metadata.name')
+
+    workflow_uid=$(echo "$workflow" | jq -r '.metadata.uid')
+    argo_link="<<ARGO_BASE_URL>>/workflows/<<NAMESPACE>>/{{workflow.name}}?tab=workflow&uid=$workflow_uid"
+
+    echo "Argo UI link: $argo_link"
+
+    #############################
+    # Rollbar reporting logic
+    #############################
+    <% if ENABLE_ROLLBAR %>
+    if [ -n "$ROLLBAR_ACCESS_TOKEN" ]; then
+      error_summary=$(echo "$workflow" | jq -r '
+        .status.nodes
+        | to_entries[]
+        | select(.value.phase == "Failed" or .value.phase == "Error")
+        | "Node: \(.value.displayName)
+    Template: \(.value.templateName)
+    Status: \(.value.phase)
+    ID: \(.key)
+    Started At: \(.value.startedAt // "N/A")
+    Finished At: \(.value.finishedAt // "N/A")
+    Message: \(.value.message // "No message")
+    ---"
+      ')
+
+      if [ -n "$error_summary" ]; then
+        failed_nodes=$(echo "$workflow" | jq -c '[.status.nodes | to_entries[] | select(.value.phase == "Failed" or .value.phase == "Error") | .key]')
+
+        payload=$(jq -n \
+          --arg token "$ROLLBAR_ACCESS_TOKEN" \
+          --arg workflow_name "{{workflow.name}}" \
+          --arg argo_link "$argo_link" \
+          --arg base_path "$BASE_PATH" \
+          --arg message_body "Workflow '{{workflow.name}}' encountered failed nodes:\n\n$error_summary" \
+          --argjson failed_nodes "$failed_nodes" \
+          '{
+            access_token: $token,
+            data: {
+              environment: "<<ENVIRONMENT>>",
+              level: "error",
+              host: "ARGO",
+              body: {
+                message: {
+                  body: $message_body
+                }
+              },
+              custom: {
+                workflow: $workflow_name,
+                failed_nodes: $failed_nodes,
+                argo_ui_link: $argo_link,
+                s3_path: $base_path
+              }
+            }
+          }')
+
+        # Try the full request
+        response=$(curl -s -w "%{http_code}" -o /tmp/rollbar_response.json \
+          -X POST https://api.rollbar.com/api/1/item/ \
+          -H "Content-Type: application/json" \
+          -d "$payload")
+
+        http_status="${response:(-3)}"
+        rollbar_error=$(jq -r '.err // 0' /tmp/rollbar_response.json)
+
+        if [ "$http_status" != "200" ] || [ "$rollbar_error" != "0" ]; then
+          echo "⚠️ Rollbar post failed with status $http_status or error code $rollbar_error, sending fallback..."
+
+          fallback_payload=$(jq -n \
+            --arg token "$ROLLBAR_ACCESS_TOKEN" \
+            --arg workflow_name "{{workflow.name}}" \
+            --arg argo_link "$argo_link" \
+            --arg base_path "$BASE_PATH" \
+            --arg msg "Workflow '{{workflow.name}}' failed but error message could not be compiled." \
+            '{
+              access_token: $token,
+              data: {
+                environment: "<<ENVIRONMENT>>",
+                level: "error",
+                host: "ARGO",
+                body: {
+                  message: {
+                    body: $msg
+                  }
+                },
+                custom: {
+                  workflow: $workflow_name,
+                  argo_ui_link: $argo_link,
+                  s3_path: $base_path
+                }
+              }
+            }')
+
+          curl -s -X POST https://api.rollbar.com/api/1/item/ \
+            -H "Content-Type: application/json" \
+            -d "$fallback_payload"
+        fi
+      fi
+    fi
+
+    <% endif %>
+
+    #############################
+    # Copy Logs
+    #############################
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.FIREBASE_STORAGE %>
+    copy_logs() {
+      <% if HAS_SECRET %>gcloud auth activate-service-account --key-file=/etc/storage-auth/<<SECRET_KEY>>;<% endif %>
+      gsutil -m cp -r /var/run/argo/ctr/main/combined $BASE_PATH/{{pod.name}}/main.log;
+    };
+    <% if HAS_SECRET %>gcloud auth activate-service-account --key-file=/etc/storage-auth/<<SECRET_KEY>>;<% endif %>
+    gsutil cp /tmp/output/workflow.json $BASE_PATH/workflow.json;
+    <% endif %>
+
+    <% if STORAGE_TYPE == STORAGE_ENUM.MINIO %>
+    copy_logs() {
+      aws s3 cp /var/run/argo/ctr/main/combined $BASE_PATH/{{pod.name}}/main.log;
+    };
+    aws s3 cp /tmp/output/workflow.json $BASE_PATH/workflow.json;
+    <% endif %>
+    trap copy_logs EXIT;
+
+
+    #############################
+    # Callback
+    #############################
+    <% for WORKFLOW_CALLBACK in WORKFLOW_CALLBACKS %>
+    callback_url=<<WORKFLOW_CALLBACK.url>>;
+    metadata=<<WORKFLOW_CALLBACK.metadata>>;
+
+    json_payload=$(jq -n \
+                  --arg workflow_id "$workflow_id" \
+                  --argjson metadata "$metadata" \
+                  '{workflow_id: $workflow_id, metadata: $metadata}');
+
+    <% if WORKFLOW_CALLBACK.api_key %>
+        { response_body=$(curl -s -o - -w "%{http_code}" $options -H "x-api-key: <<WORKFLOW_CALLBACK.api_key>>" -H "Content-Type: application/json" -X POST "$callback_url" -d "$json_payload"); } 2>&1
+        status_code="${response_body: -3}"  # Last three characters will be the status code
+        response_body="${response_body%???}"  # Remove the last three characters (status code)
+    <% else %>
+        { response_body=$(curl -s -o - -w "%{http_code}" $options -H "Content-Type: application/json" -X POST "$callback_url" -d "$json_payload"); } 2>&1
+        status_code="${response_body: -3}"
+        response_body="${response_body%???}"
+    <% endif %>
+
+    # Check if the status code is not 2xx (success)
+    if [[ ! "$status_code" =~ ^2 ]]; then
+        echo "Warning: Callback to $callback_url failed with status $status_code"
+        echo "Response: $response_body"
+        echo "Payload: $json_payload"
+    else
+        echo "Callback to $callback_url succeeded with status $status_code"
+    fi
+
+    # if [[ ! "$status_code" =~ ^2 ]]; then
+    #     echo "Error: HTTP request failed with status $status_code and response $response_body"
+    #     exit 1  # Exit the script with an error status
+    # fi
+
+    <% endfor %>
+<% if HAS_ARGO_TOKEN %>
+  volumeMounts:
+    - name: argo-token-volume
+      mountPath: /etc/argo-token
+      readOnly: true
+    <% if HAS_SECRET %>
+    - name: <<SECRET_NAME>>
+      mountPath: /etc/storage-auth
+    <% endif %>
+volumes:
+  - name: argo-token-volume
+    secret:
+      secretName: argo-workflow.service-account-token
+<% endif %>

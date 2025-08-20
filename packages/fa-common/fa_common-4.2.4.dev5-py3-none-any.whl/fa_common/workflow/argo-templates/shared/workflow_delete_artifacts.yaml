@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: delete-artifacts-
+spec:
+  podGC:
+    strategy: OnPodCompletion
+  entrypoint: delete-artifacts
+  arguments:
+    parameters:
+      - name: target-workflow-name
+        value: <WORKFLOW_NAME>
+  serviceAccountName: argo-workflow-patch  # Use the service account with S3 permissions
+  templates:
+    - name: delete-artifacts
+      inputs:
+        parameters:
+          - name: target-workflow-name
+      script:
+        image: benmotevalli/aws-jq-curl # amazonlinux:2
+        command: [bash]
+        env:
+          - name: AWS_DEFAULT_REGION
+            value: ap-southeast-2  # Change to your AWS region
+        source: |
+          #!/bin/bash
+          set -euo pipefail
+
+          # yum install -y aws-cli
+
+          TARGET_WORKFLOW="{{inputs.parameters.target-workflow-name}}"
+          BUCKET_NAME="xt-argo-artifacts"  # Change to your S3 bucket name
+
+          # Retrieve the list of artifact keys from the S3 bucket
+          ARTIFACT_KEYS=$(aws s3api list-objects --bucket $BUCKET_NAME --prefix "$TARGET_WORKFLOW/" --query "Contents[].Key" --output text || true)
+          echo $ARTIFACT_KEYS
+
+          if [ "$ARTIFACT_KEYS" == "None" ] || [ -z "$ARTIFACT_KEYS" ]; then
+            echo "No artifacts found for workflow $TARGET_WORKFLOW"
+            exit 0
+          fi
+
+          # Delete each artifact
+          for key in $ARTIFACT_KEYS; do
+            echo "Deleting artifact: s3://$BUCKET_NAME/$key"
+            aws s3api delete-object --bucket $BUCKET_NAME --key "$key"
+          done
+
+          # Attempt to delete the folder placeholder
+          echo "Deleting folder: s3://$BUCKET_NAME/$TARGET_WORKFLOW/"
+          aws s3api delete-object --bucket $BUCKET_NAME --key "$TARGET_WORKFLOW/" || true

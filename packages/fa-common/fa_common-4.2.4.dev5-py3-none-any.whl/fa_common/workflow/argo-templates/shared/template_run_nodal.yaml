@@ -1,0 +1,161 @@
+<% if USE_PVC.enabled %>
+name: <<TEMPLATE_NAME>>-<<JOB_ID>>
+<% else %>
+name: <<TEMPLATE_NAME>>
+<% endif %>
+<% if TERMIN_GRACE_SEC > 0 %>
+terminationGracePeriodSeconds: <<TERMIN_GRACE_SEC>>
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "echo 'PreStop: Cleaning up'; sleep 10"]
+<% endif %>
+<% if ENABLE_ON_DEMAND %>
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: karpenter.sh/capacity-type
+              operator: In
+              values:
+                - on-demand
+            # - key: easi.csiro.au/node-class
+            #   operator: In
+            #   values:
+            #     - general-purpose
+<% endif %>
+<% if RETRY > 0 %>
+retryStrategy:
+  retryPolicy: OnError
+  limit: <<RETRY>>
+<% endif %>
+volumes:
+  <% for secret in MOUNT_SECRETS %>
+  - name: secret-volume-<< loop.index >>
+    secret:
+      secretName: << secret.name >>
+  <% endfor %>
+container:
+  envFrom:
+    <% for ENV_SECRET in ENV_SECRETS %>
+    - secretRef:
+        name: << ENV_SECRET >>
+    <% endfor %>
+    <% for ENV_CONFIG in ENV_CONFIGS %>
+    - configMapRef:
+        name: << ENV_CONFIG >>
+    <% endfor %>
+  volumeMounts:
+    <% for secret in MOUNT_SECRETS %>
+    - name: secret-volume-<< loop.index >>
+      mountPath: << secret.mount_path >>
+    <% endfor %>
+    <% if USE_PVC.enabled %>
+    - name: workspace-<< JOB_ID >>
+      mountPath: <<APP_INPUT_PATH.rstrip("/")>>
+      subPath: <<APP_INPUT_PATH.lstrip("/").rstrip("/")>>
+    <% if APP_OUTPUT_PATH is not none %>
+    - name: workspace-<< JOB_ID >>
+      mountPath: <<APP_OUTPUT_PATH.rstrip("/")>>
+      subPath: <<APP_OUTPUT_PATH.lstrip("/").rstrip("/")>>
+    <% endif %>
+    <% if APP_WORK_DIR is not none %>
+    - name: workspace-<< JOB_ID >>
+      mountPath: <<APP_WORK_DIR.rstrip("/")>>
+      subPath: <<APP_WORK_DIR.lstrip("/").rstrip("/")>>
+    <% endif %>
+    <% endif %>
+  env:
+    <% for key, value in ENV_VARS.items() %>
+      - name: << key >>
+        value: << value >>
+    <% endfor %>
+  args:
+  - |-
+    <% if not IS_ERR_TOLER %>
+    set -e;
+    <% endif %>
+    echo Step-Pod: "{{pod.name}}";
+
+    {{inputs.parameters.PRE_COMMAND}};
+
+    <% if not USE_PVC.enabled %>
+    function copy_artifacts {
+      mkdir -p /tmp/output/;
+
+      outPath=<<APP_OUTPUT_PATH>>
+      if [ -d "$outPath" ]; then
+        cp -r $outPath/* /tmp/output/;
+      else
+        echo Output path: $outPath did not exist.
+      fi
+    }
+    trap copy_artifacts EXIT;
+    <% endif %>
+
+    path="<<APP_INPUT_PATH>>";
+    if [ -d "$path" ]; then
+      echo "The path exists."
+    else
+      echo "The path does not exist. Creating the path now..."
+      mkdir -p "$path"
+
+      if [ $? -eq 0 ]; then
+        echo "Path successfully created."
+      else
+        echo "Failed to create path."
+      fi
+    fi;
+
+    echo {{inputs.parameters.JOB_PARAMETERS}} > $path/param.json;
+    {{inputs.parameters.COMMAND}};
+
+
+    {{inputs.parameters.POST_COMMAND}};
+  command:
+  - /bin/bash
+  - -c
+  image: '{{inputs.parameters.IMAGE}}'
+  imagePullPolicy: <<IMG_PULL_POLICY>>
+podSpecPatch: '{"containers":[{"name":"main", "resources":{"limits":{"cpu": "{{inputs.parameters.CPU_LIM}}",
+  "memory": "{{inputs.parameters.MEM_LIM}}", "ephemeral-storage":  "{{inputs.parameters.EPS_LIM}}"},
+  "request":{"cpu": "{{inputs.parameters.CPU_REQ}}", "memory": "{{inputs.parameters.MEM_REQ}}",
+  "ephemeral-storage":  "{{inputs.parameters.EPS_REQ}}" } }}]}'
+inputs:
+  parameters:
+  - name: JOB_PARAMETERS
+  - name: IMAGE
+  - name: MEM_LIM
+  - name: CPU_LIM
+  - name: EPS_LIM
+  - name: MEM_REQ
+  - name: CPU_REQ
+  - name: EPS_REQ
+  - name: COMMAND
+  - name: PRE_COMMAND
+  - name: POST_COMMAND
+  <% for i in range(MAX_NUM) %>
+  - name: dep-art-loc-<<i + 1>>
+    default: no-location
+  <% endfor %>
+  <% if not USE_PVC.enabled %>
+  artifacts:
+  - name: input-files
+    path: /app/input/
+    optional: true
+  <% endif %>
+  <% for i in range(MAX_NUM) %>
+  - name: dep-art-<<i + 1>>
+    optional: true
+    path: <<APP_INPUT_PATH>>/{{inputs.parameters.dep-art-loc-<<i + 1>>}}/
+  <% endfor %>
+outputs:
+  <% if not USE_PVC.enabled %>
+  artifacts:
+  - name: output-files
+    path: /tmp/output/
+  <% endif %>
+  parameters:
+  - name: pod-name
+    value: '{{pod.name}}'
