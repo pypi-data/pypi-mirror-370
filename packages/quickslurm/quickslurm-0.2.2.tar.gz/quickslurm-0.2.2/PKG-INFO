@@ -1,0 +1,140 @@
+Metadata-Version: 2.4
+Name: quickslurm
+Version: 0.2.2
+Summary: A lightweight Python wrapper for Slurm sbatch/srun with robust subprocess handling and optional logging.
+Project-URL: Homepage, https://github.com/quickslurm/quickslurm
+Project-URL: Repository, https://github.com/quickslurm/quickslurm
+Project-URL: Issues, https://github.com/quickslurm/quickslurm/issues
+Author-email: Alex Buettner <alex.buettner93@gmail.com>, Jack Quimby <jack.quimby54@gmail.com>
+License: MIT License
+        
+        Copyright (c) 2025 QuickSlurm - Authors: Jack Quimby and Alex Buettner
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+License-File: LICENSE
+Keywords: cluster,hpc,quick,quickslurm,sbatch,slurm,srun,wrapper
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: System :: Systems Administration
+Requires-Python: >=3.8
+Provides-Extra: docs
+Requires-Dist: mkdocs; extra == 'docs'
+Requires-Dist: mkdocs-include-markdown-plugin; extra == 'docs'
+Requires-Dist: mkdocs-material; extra == 'docs'
+Requires-Dist: mkdocstrings[python]; extra == 'docs'
+Requires-Dist: pymdown-extensions; extra == 'docs'
+Provides-Extra: test
+Requires-Dist: pytest-cov>=4.0; extra == 'test'
+Requires-Dist: pytest>=7.0; extra == 'test'
+Description-Content-Type: text/markdown
+
+# quickslurm
+[![Build/Publish](https://github.com/quickslurm/quickslurm/actions/workflows/docs-build-and-publish.yml/badge.svg?branch=main)](https://github.com/quickslurm/quickslurm/actions/workflows/docs-build-and-publish.yml)
+[![PyPI](https://img.shields.io/pypi/v/quickslurm)](https://pypi.org/project/quickslurm/)
+[![Python versions](https://img.shields.io/pypi/pyversions/quickslurm)](https://pypi.org/project/quickslurm/)
+[![License](https://img.shields.io/github/license/quickslurm/quickslurm)](https://github.com/quickslurm/quickslurm/blob/main/LICENSE)
+
+
+A lightweight Python wrapper around Slurm for:
+
+- Submitting batch jobs (sbatch)
+- Running commands (srun)
+- Cancelling jobs (scancel)
+
+It focuses on safe subprocess handling, simple ergonomics, and sensible defaults.
+
+Full documentation can be found here: [Quickslurm Docs](https://quickslurm.github.io/quickslurm/)
+
+## Features
+
+- sbatch and srun helpers with consistent argument handling
+- Optional built-in logging (file and stderr)
+- Pass-through environment variables (base and per-call overrides)
+- Convenience for inline sbatch scripts
+- Optional wait for job completion after sbatch submission
+
+---
+
+## Installation
+
+- Requires Python 3.8+
+- Requires Slurm 23.02+ be installed on the system
+- Assumes Slurm binaries (sbatch, srun, scancel, sacct if using wait) are on PATH
+
+```shell script
+pip install quickslurm
+```
+
+---
+
+## Quick start
+
+```python
+from quickslurm import Slurm, SlurmError
+
+slurm = Slurm(enable_logging=True)
+
+# Submit an existing script
+submit = slurm.sbatch(
+    script_path="train.sh",
+    sbatch_options={
+        "job-name": "trainA",
+        "time": "00:30:00",
+        "partition": "short",
+        "cpus-per-task": 4,
+        "mem": "8G",
+        "output": "slurm-%j.out",
+    },
+    script_args=["--epochs", "10"],
+)
+print("Job ID:", submit.job_id)
+
+# Submit an inline command (temp script will be generated)
+submit2 = slurm.submit_inline(
+    command=["python", "train.py", "--epochs", "5"],
+    sbatch_options={"time": "00:10:00", "job-name": "quick-train"},
+)
+print("Inline Job ID:", submit2.job_id)
+
+# Run something via srun (non-interactive)
+res = slurm.run(["hostname"], srun_options={"ntasks": 1})
+print("Hostname:", res.stdout.strip())
+
+# Cancel a job
+slurm.cancel(submit2.job_id)
+```
+
+Sample output:
+
+```
+Job ID: 12300008
+Inline Job ID: 12300009
+Hostname: testnode1
+```
