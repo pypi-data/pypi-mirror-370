@@ -1,0 +1,90 @@
+{% extends "psynet_layout.html" %}
+
+{% block stylesheets %}
+    {{ super() }}
+    <style>
+
+    div {
+        width: 100%;
+        height: 100vh;
+    }
+    p {
+        font-size: 3em;
+        font-weight: 600;
+        text-align: center;
+        top: 50%;
+        width: 100%;
+        position: absolute;
+    }
+    </style>
+{% endblock %}
+
+{% block body %}
+    {{super()}}
+
+    <div class="colorfadeanim">
+        <p>
+            {{ pgettext("start", "Starting experiment...") }}
+        </p>
+    </div>
+{% endblock %}
+
+
+{% block scripts %}
+{{super()}}
+    <script>
+        function getEntryInformation() {
+            let entryInformation = {};
+            let queryParams = new URLSearchParams(location.search);
+            for (const [k, v] of queryParams) {
+                if (k !== "mode") {
+                    entryInformation[k] = v;
+                }
+            }
+            return entryInformation
+        }
+
+        async function getFingerprintHash() {
+            return new Promise((resolve) => {
+                new Fingerprint2().get((result) => resolve(result))
+            })
+        }
+
+        async function createParticipant() {
+            // This is similar to dallinger.createParticipant but it bypasses the dallinger.identity
+            // storage object, which shares information across different browser windows and hence
+            // is not reliable when testing multiple participants on the same machine.
+
+            let entryInformation = getEntryInformation();
+            let fingerprintHash = await getFingerprintHash();
+            let url = "/participant";
+            let data = {};
+
+            if (entryInformation) {
+                data = entryInformation;
+                data.fingerprint_hash = fingerprintHash;
+            } else {
+                let recruiter = dallinger.getUrlParameter('recruiter');
+                let hitId = dallinger.getUrlParameter('hitId');
+                let workerId = dallinger.getUrlParameter('workerId');
+                let assignmentId = dallinger.getUrlParameter('assignmentId');
+                let mode = dallinger.getUrlParameter('mode');
+
+                url += "/" + workerId;
+                url += "/" + hitId;
+                url += "/" + assignmentId;
+                url += "/" + mode;
+                url += "?fingerprint_hash=" + fingerprintHash;
+                url += '&recruiter=' + recruiter;
+            }
+
+            dallinger.post(url, data).done(function (resp) {
+                window.location = "/timeline?unique_id=" + resp.participant.unique_id;
+            }).fail(function(resp) {
+                dallinger.error(resp);
+            });
+        }
+
+        createParticipant();
+    </script>
+{% endblock %}

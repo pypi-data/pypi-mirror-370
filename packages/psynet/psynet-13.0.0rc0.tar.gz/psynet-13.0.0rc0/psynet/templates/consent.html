@@ -1,0 +1,64 @@
+{% extends "base/consent.html" %}
+{% include "macros/browser-detect.html" %}
+
+{% block stylesheets %}
+    {{ super() }}
+    {% include "theme.html" %}
+    <style>
+        #consent {
+            float: none;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    {% if not experiment.with_lucid_recruitment() %}
+        <div class="container d-flex align-items-center justify-content-center" style="height: 95%">
+            <div>
+                <div class="row overflow-hidden mb-3" style="height: 73px;">
+                    <img id="adlogo" style="display: none" alt="Lab Logo" />
+                </div>
+                <div class="row">
+                    <div class="text-center">
+                        <h3 class="mb-3">
+                            {{ pgettext("consent", "To proceed, click the button below.") }}
+                        </h3>
+                        <button
+                                type="button"
+                                class="btn btn-primary btn-lg"
+                                id="consent"
+                                onClick="start();">
+                            {{ gettext("Next") }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        document.addEventListener("DOMContentLoaded", function (event) {
+            let isValidBrowser = browser.validate();
+            {% if experiment.with_lucid_recruitment() %}
+                if (!isValidBrowser) {
+                    terminateParticipant("invalid-browser");
+                }
+            {% endif %}
+        });
+
+        start = function() {
+            {% if config.show_abort_button and experiment.start_experiment_in_popup_window %}
+                if (window.opener !== null) {
+                    window.opener.enableAbortButton();
+                }
+            {% endif %}
+            window.location='/start?{{query_string|safe}}';
+        }
+        {% if experiment.with_lucid_recruitment() %}
+            start();
+        {% endif %}
+    </script>
+{% endblock %}

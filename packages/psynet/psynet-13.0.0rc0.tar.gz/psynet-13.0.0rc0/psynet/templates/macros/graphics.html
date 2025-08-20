@@ -1,0 +1,195 @@
+{% macro graphic_(params) %}
+    <style>
+        #graphic-{{ params.id }}-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: {{ params.margin }};
+        }
+        #graphic-{{ params.id }} {
+            border-style: {{ params.border_style }};
+            border-color: {{ params.border_color }};
+            border-width: {{ params.border_width }};
+            height: {{ params.viewport_width * 100}}%;
+            width: {{ params.viewport_width * 100 }}%;
+        }
+    </style>
+
+    <div id="graphic-{{ params.id }}-container">
+        <div id="graphic-{{ params.id }}"> </div>
+    </div>
+
+    <script src="/static/scripts/raphael-2.3.0.min.js"></script>
+
+    <script>
+        let graphic_{{ params.id }} = {
+            id: "{{ params.id }}",
+            paper: new Raphael("graphic-{{ params.id }}"),
+            paperHtml: $("#graphic-{{ params.id }}"),
+            objects: {}
+        };
+
+        (function() {
+            let {id, paper, paperHtml, objects} = graphic_{{ params.id }};
+            let loop = {% if params.loop %} true {% else %} false {% endif %};
+            let blueprintDim = [
+                {{ params.dimensions[0] }},
+                {{ params.dimensions[1] }}
+            ];
+
+            paper.setViewBox(0, 0, blueprintDim[0], blueprintDim[1], true);
+            paper.setSize("100%", "100%");
+
+            let svg = document.querySelector("svg");
+            svg.removeAttribute("width");
+            svg.removeAttribute("height");
+
+            function getCursorLocation(event) {
+                let mouseLoc = [event.pageX, event.pageY];
+                let paperLoc = [paperHtml.offset().left, paperHtml.offset().top];
+                let paperDim = [paperHtml.width(), paperHtml.height()];
+                return [0, 1].map(i => blueprintDim[i] * (mouseLoc[i] - paperLoc[i]) / paperDim[i]);
+            }
+
+            function submitAnswer(clickedObject, clickCoordinates) {
+                psynet.nextPage({
+                    clicked_object: clickedObject,
+                    click_coordinates: clickCoordinates
+                });
+            }
+
+            let frames = [];
+            {% for frame in params.frames %}
+                frames.push({
+                    duration: {% if frame.duration is not none %} {{ 1000 * frame.duration }} {% else %} null {% endif %},
+                    function: function() {
+
+                        {% if frame.audio_id is not none %}
+                            psynet.audio["{{ frame.audio_id }}"].play();
+                        {% endif %}
+
+                        {% if frame.activate_control_response %}
+                            psynet.trial.registerEvent("graphicPromptEnableResponse", {once: true});
+                        {% endif %}
+
+                        {% if frame.activate_control_submit %}
+                            psynet.trial.registerEvent("graphicPromptEnableSubmit", {once: true});
+                        {% endif %}
+
+                        {% for object in frame.objects %}
+                            {
+                                let object = {
+                                    id: "{{ object.id }}",
+                                    active: false,
+                                    persist: {{ object.persist | lower }},
+                                    animations: {{ object.animations_js | tojson }},
+                                    loopAnimations: {{ object.loop_animations | lower }},
+                                    raphael: null
+                                };
+
+                                object.draw = function() {
+                                    {% for cmd in object.js_init %} {{ cmd | safe }} {% endfor %}
+                                    {% for cmd in object.js_edit %} {{ cmd | safe }} {% endfor %}
+
+                                    this.raphael.attr({{ object.attributes | tojson }});
+
+                                    {% if object.click_to_answer %}
+                                        this.raphael.click(function (e) {
+                                            let clickedObject = object.id;
+                                            let clickCoordinates = getCursorLocation(e);
+                                            // Throw an error if clickCoordinates is not an array
+                                            if (!clickCoordinates || clickCoordinates.length !== 2) {
+                                                throw new Error("clickCoordinates must be an array of length 2");
+                                            }
+                                            submitAnswer(clickedObject, clickCoordinates);
+                                        })
+                                    {% endif %}
+
+                                    this.active = true;
+                                }
+
+                                object.erase = function() {
+                                    this.raphael.remove();
+                                    this.active = false;
+                                }
+
+                                object.queueAnimation = function(i) {
+                                    let object = this;
+                                    let numAnimations = this.animations.length;
+                                    let animationSpec = this.animations[i];
+                                    function callback() {
+                                        if (!object.active) {
+                                            return
+                                        } else if (i + 1 < numAnimations) {
+                                            object.queueAnimation(i + 1);
+                                        } else if (object.loopAnimations) {
+                                            object.erase();
+                                            object.draw();
+                                            object.queueAnimation(0);
+                                        }
+                                    }
+                                    this.raphael.animate(
+                                        animationSpec.finalAttributes,
+                                        1000 * animationSpec.duration,
+                                        animationSpec.easing,
+                                        callback
+                                    );
+                                }
+
+                                objects[object.id] = object;
+
+                                object.draw();
+
+                                if (object.animations.length > 0) {
+                                    object.queueAnimation(0);
+                                }
+                            }
+                        {% endfor %}
+                    }
+                });
+            {% endfor %}
+
+            let clearPaper = function(removePersistentObjects) {
+               Object.keys(objects).forEach(function(objectId) {
+                    let object = objects[objectId];
+                    if (removePersistentObjects || !object.persist) {
+                        object.erase();
+                        delete objects[objectId];
+                    }
+                });
+            };
+
+            let queueFrame = function (i) {
+                psynet.log.debug("Graphic '" + id + "': queuing frame " + i);
+                let removePersistentObjects = i == 0;
+                clearPaper(removePersistentObjects);
+                frames[i].function();
+                if (frames[i].duration !== null) {
+                    setTimeout(function() {
+                        let isLastFrame = (!loop) && (i + 1 == frames.length);
+                        if (!isLastFrame) {
+                            let nextFrame = (i + 1) % frames.length;
+                            queueFrame(nextFrame);
+                        }
+                    }, frames[i].duration)
+                }
+            };
+
+            let startSequence = function() {
+                queueFrame(0);
+
+                {% if params.auto_advance_after is defined and params.auto_advance_after is not none %}
+                    setTimeout(function() {
+                        let clickedObject = null;
+                        let clickCoordinates = null;
+                        submitAnswer(clickedObject, clickCoordinates);
+                    }, 1000 * {{ params.auto_advance_after }});
+                {% endif %}
+            };
+
+            if (frames.length > 0) {
+                psynet.trial.onEvent("trialStart", startSequence);
+            }
+        })();
+    </script>
+{% endmacro %}

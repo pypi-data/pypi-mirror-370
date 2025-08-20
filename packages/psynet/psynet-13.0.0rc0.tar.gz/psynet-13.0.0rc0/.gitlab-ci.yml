@@ -1,0 +1,169 @@
+image: docker:26.1.1
+
+services:
+  - docker:26.1.1-dind
+  - postgres:16.2-bookworm
+  - redis:latest
+
+variables:
+  AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+  AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+  POSTGRES_DB: dallinger
+  POSTGRES_USER: dallinger
+  POSTGRES_PASSWORD: ""
+  POSTGRES_HOST_AUTH_METHOD: trust
+  DATABASE_URL: postgresql://dallinger@postgres:5432/dallinger
+  REDIS_URL: redis://redis:6379
+  HEADLESS: "TRUE"
+  DOCKER_REGISTRY_BASE: registry.gitlab.com/psynetdev/psynet
+  DOCKER_IMAGE_CACHE_FROM: "$DOCKER_REGISTRY_BASE:master"
+  DOCKER_LOCAL_TAG: psynet-build
+  DOCKER_REMOTE_TAG: "$DOCKER_REGISTRY_BASE:$CI_COMMIT_REF_NAME"
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+
+before_script:
+  - export POSTGRES_IP=$(getent ahostsv4 postgres | awk '{ print $1 }' | tail -n 1)
+  - export REDIS_IP=$(getent ahostsv4 redis | awk '{ print $1 }' | tail -n 1)
+  - echo $POSTGRES_IP
+  - echo $REDIS_IP
+  - docker image prune --all --force
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  - docker pull $DOCKER_IMAGE_CACHE_FROM || true
+  - docker build --cache-from $DOCKER_IMAGE_CACHE_FROM --tag $DOCKER_LOCAL_TAG .
+
+pre_commit:
+  image: python:3.13
+  before_script:
+    - pip install pre-commit
+  script:
+    - pre-commit run --all-files
+
+tests:
+  parallel: 10
+  stage: test
+  script:
+    - docker run
+      --add-host=postgres:$POSTGRES_IP
+      --add-host=redis:$REDIS_IP
+      -e HEADLESS=TRUE -e REDIS_URL -e DATABASE_URL -e POSTGRES_DB -e POSTGRES_USER -e POSTGRES_PASSWORD
+      -e AWS_ACCESS_KEY_ID -e AWS_DEFAULT_REGION -e AWS_SECRET_ACCESS_KEY
+      -e CI_NODE_TOTAL -e CI_NODE_INDEX
+      -e CI_COMMIT_REF_NAME
+      -v "$PWD/public:/public"
+      $DOCKER_LOCAL_TAG bash -c "bash run-ci-tests.sh"
+  artifacts:
+    paths:
+      - public/
+
+merge_test_results:
+  image: python:3.12.2-alpine
+  stage: test
+  needs: ["tests"]
+  dependencies: ["tests"]
+  when: always
+  before_script:
+    - pip install -q junitparser
+  script:
+    - ls -la public
+    - junitparser merge public/*junit.xml junit.xml || echo "<testsuite></testsuite>" > junit.xml
+  artifacts:
+    reports:
+      junit: junit.xml
+
+deploy_docker:
+  stage: deploy
+  script:
+    - echo "Pushing Docker image to $DOCKER_REMOTE_TAG..."
+    - docker tag "$DOCKER_LOCAL_TAG" "$DOCKER_REMOTE_TAG"
+    - docker push "$DOCKER_REMOTE_TAG"
+  only:
+    - tags
+    - master
+
+# To do:
+# - Skip tests if the changes are only in the docs directory
+# - The Docker build step in before_script is redundant if we're already using the pushed Docker image here
+pages:
+  image: $DOCKER_REMOTE_TAG
+  stage: deploy
+  needs: [deploy_docker]
+  script:
+    - pip install -U sphinx
+    - pip install furo
+    - pip install polib
+    - pip install sphinx-autodoc-typehints
+    - sphinx-build -b html docs public
+  artifacts:
+    paths:
+    - public
+  rules:
+    - if: $CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
+      when: always
+    - when: never
+
+pg_badger:
+  image: python:3.13
+  services:
+    - docker:25.0.2-dind
+    - redis:latest
+  cache:
+      key: "$CI_BUILD_REF_NAME"
+      paths:
+      - venv/
+  before_script:
+    - echo Install Heroku CLI and docker
+    - curl https://cli-assets.heroku.com/install.sh | sh
+    - curl https://get.docker.com/builds/Linux/x86_64/docker-latest.tgz | tar xzf - -C /usr/local
+    - ln -s /usr/local/docker/docker /usr/local/bin/
+    - echo "Starting postgresql server with aggressive logging enabled (via docker)"
+    - docker run --rm -d --name dallinger_postgres -p 5432:5432 -e POSTGRES_USER=dallinger -e POSTGRES_PASSWORD=dallinger -e POSTGRES_DB=dallinger -v dallinger_postgres:/var/lib/postgresql/data postgres:16.2-bookworm postgres -c log_min_duration_statement=0 -c log_checkpoints=on -c log_connections=on -c log_disconnections=on -c log_lock_waits=on -c log_temp_files=0 -c log_autovacuum_min_duration=0 -c log_error_verbosity=default
+    - echo Create a virtualenv and install psynet there
+    - pip install --upgrade pip virtualenv
+    - virtualenv venv -ppython3
+    - . venv/bin/activate
+    - pip install -e .[dev] pytest
+    - |
+      until docker exec -i dallinger_postgres pg_isready; do
+        echo "Waiting for PostgreSQL to become ready..."
+        sleep 1
+      done
+  script:
+    - cd "demos/experiments/$TEST_NAME"
+    - DATABASE_URL="postgresql://dallinger:dallinger@docker:5432/dallinger" psynet test local > /dev/null
+  after_script:
+    - mkdir public
+    - docker logs dallinger_postgres 2> public/postgresql.log > /dev/null
+    - curl -L https://github.com/darold/pgbadger/archive/refs/tags/v13.1.tar.gz | tar xzf - -C /usr/local
+    - (cd /usr/local/pgbadger-*; perl Makefile.PL; make; make install; cpan JSON::XS)
+    - pgbadger --log-duration --exclude-query '(ALTER|CREATE) (TABLE|INDEX)' public/postgresql.log -o /tmp/pgbadger.html
+    - cp /tmp/pgbadger.html "public/${TEST_NAME//\//_}.html"
+    - pgbadger --log-duration --exclude-query '(ALTER|CREATE) (TABLE|INDEX)' public/postgresql.log -o /tmp/pgbadger.txt
+    - cat /tmp/pgbadger.txt
+    - pgbadger --log-duration --exclude-query '(ALTER|CREATE) (TABLE|INDEX)' public/postgresql.log -o /tmp/pgbadger.json
+    - cp /tmp/pgbadger.html /tmp/pgbadger.json /tmp/pgbadger.txt public/
+    - venv/bin/python ci/generate_junit_xml.py --classname "$TEST_NAME" --testname="pgbadger" /tmp/pgbadger.json > public/junit.xml
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 month  # The pgbadger reports are pretty big so we shouldn't keep them around forever
+    reports:
+      junit: public/junit.xml
+  environment:
+      name: PgBadger-$CI_COMMIT_BRANCH-$TEST_NAME
+      url: "https://$CI_PROJECT_NAMESPACE.gitlab.io/-/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/public/$TEST_NAME.html"
+  variables:
+      PUBLIC_URL: "/-/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/public"
+  parallel:
+    matrix:
+      - TEST_NAME: [
+          "timeline",
+          "trial",
+          "trial_2",
+          "static",
+          "mcmcp",
+          "gibbs",
+          "rock_paper_scissors",
+        ]

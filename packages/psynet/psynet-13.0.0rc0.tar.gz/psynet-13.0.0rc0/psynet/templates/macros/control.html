@@ -1,0 +1,1826 @@
+{% macro blank(params) %}
+{% endmacro %}
+
+{% macro null(params) %}
+    {#    This macro is here for back-compatibility     #}
+    {{ next_button(params) }}
+{% endmacro %}
+
+{% macro generic_button(params) %}
+    <button type="button" id="{{ params.id }}" style="{{ params.style }}" class="{{ params.classes }}" {% if params.start_disabled %} disabled {% endif %} onclick="psynet.trial.registerEvent('{{ params.id }}')">
+        <span class="button-text">{{ params.text }}</span>
+    </button>
+{% endmacro %}
+
+{% macro next_button(params) %}
+    <script>
+        disableButton = function() {
+            $("#next-button").attr("disabled", true)
+            $("#next-button-spinner").show()
+            $("#next-button-text").hide();
+        };
+
+        enableButton = function() {
+            $("#next-button").attr("disabled", false)
+            $("#next-button-spinner").hide()
+            $("#next-button-text").show();
+        }
+
+        onNextButton = function() {
+            let width = $("#next-button").width();
+            let height = $("#next-button").height();
+            $("#next-button").width(width); // Locks the button width to the current width
+            $("#next-button").height(height);
+
+            disableButton();
+
+            function onRejection() {
+                enableButton();
+            }
+
+            psynet.submitResponse(onRejection);
+        }
+    </script>
+
+    <button type="button" id="next-button" class="btn btn-primary btn-lg submit" onclick="onNextButton();" disabled="true">
+        <span id="next-button-spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none"></span>
+        <span id="next-button-text">{{ gettext("Next") }}</span>
+    </button>
+{% endmacro %}
+
+{% macro reset_button(params) %}
+    <script>
+        {% if params.show_reset_button == "on_selection" %}
+        $("#reset-button").css({"display": "block"});
+        {% endif %}
+        onResetButton = function() {
+            $('input[type={{ params.input_type }}]').prop('checked', false);
+            {% if params.show_reset_button == "on_selection" %}
+            $("#reset-button").css({"display": "none"});
+            {% endif %}
+            $("#reset-button").prop('disabled', true);
+        }
+
+        $('input[type={{ params.input_type }}]').click(function() {
+            {% if params.show_reset_button == "on_selection" %}
+            $("#reset-button").css({"display": "block"});
+            {% endif %}
+            if (!$('input[type={{ params.input_type }}]').is(':checked'))
+            {
+                $("#reset-button").prop('disabled', true);
+            } else {
+                $("#reset-button").prop('disabled', false);
+            }
+        });
+    </script>
+
+    <button type="button" id="reset-button" class="btn btn-primary btn-lg" style="{% if params.show_reset_button == 'on_selection' %}display: none{% endif %}; margin-right: 30px;" onclick="onResetButton();" disabled>
+        {{ gettext("Reset") }}
+    </button>
+    {% endmacro %}
+
+{% macro push_button(params) %}
+    <button
+            type="button"
+            class="btn push-button btn-primary response {% if params.timed == true %} timed {% else %} submit {% endif %}"
+            id="{{ params.id }}"
+            onclick="clickedButton(this, this.id);"
+            style="{{ params.style }}" ,
+            disabled="true"
+    >
+        {% autoescape off %}
+        {{ params.label }}
+        {% endautoescape %}
+    </button>
+{% endmacro %}
+
+{% macro push_buttons(params) %}
+    <style>
+        .push-button-container {
+            display: {% if params.arrange_vertically %}grid{% else %}flex{% endif %};
+            flex-wrap: wrap;
+            justify-content: center;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+    </style>
+
+    <div class="push-button-container">
+        {% for button in params.push_buttons %}
+            {{ push_button(button) }}
+        {% endfor %}
+    </div>
+
+    {% if params.timed == true %}
+        {#        This is for back-compatibility     #}
+        <p class="vspace"></p>
+    {% endif %}
+
+    <script>
+        let buttonTimers = {};
+
+        clickedButton = function(button, id) {
+            psynet.trial.registerEvent("pushButtonClicked", {info: {buttonId: id}});
+
+            {% if params.timed == true %}
+                let buttonHighlightDuration = {{ params.button_highlight_duration }};
+                if (buttonTimers[id] !== undefined) {
+                    clearTimeout(buttonTimers[id]);
+                }
+                highlightButton(button);
+                buttonTimers[id] = setTimeout(unhighlightButton, buttonHighlightDuration * 1000, button);
+            {% else %}
+                psynet.response.disable();
+                psynet.submit.disable();
+                psynet.nextPage(id);
+            {% endif %}
+        }
+
+        highlightButton = function(button) {
+            button.classList.remove("btn-primary");
+            button.classList.add("btn-success");
+        }
+
+        unhighlightButton = function(button) {
+            button.classList.add("btn-primary");
+            button.classList.remove("btn-success");
+        }
+    </script>
+{% endmacro %}
+
+{% macro keyboard_push_buttons(params) %}
+    {{ push_buttons(params) }}
+    <script>
+        const keyCodeIdx = JSON.parse(`{{ params.keys | tojson }}`);
+        document.addEventListener("keydown", function(event) {
+            let keyCode = event.code;
+            // keyCode in keyCodeIdx
+            if (keyCodeIdx.includes(keyCode)) {
+                let buttonIdx = keyCodeIdx.indexOf(keyCode);
+                let buttons = document.getElementsByClassName("push-button");
+                let button = buttons[buttonIdx];
+                if (button.disabled) {
+                    psynet.alert("Cannot select the button because it is disabled.");
+                } else {
+                    clickedButton(button, button.id);
+                }
+            }
+        });
+    </script>
+{% endmacro %}
+
+{% macro checkbox(params) %}
+    <label style="margin-left: 15px; cursor: pointer;">
+        <input
+            type="checkbox"
+            id="{{ params.id }}"
+            name="{{ params.name }}"
+            class="response"
+            style="cursor: pointer;"
+        />
+        <span>{{ params.label }}</span>
+    </label>
+{% endmacro %}
+
+{% macro checkboxes(params) %}
+    <style>
+        .control-container {
+            display: {% if params.arrange_vertically %}grid{% else %}flex{% endif %};
+            flex-wrap: wrap;
+            justify-content: center;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+    </style>
+    <div class="control-container">
+        {% for _checkbox in params.checkboxes %}
+            {{ checkbox(_checkbox) }}
+        {% endfor %}
+    </div>
+    <p class="vspace"></p>
+
+    <script>
+        clickedButton = function(id) {
+            psynet.response.disable();
+            psynet.submit.disable();
+            psynet.nextPage(id);
+        }
+
+        retrieveResponse = function() {
+            let elements = document.getElementsByName('{{ params.name }}')
+            checkedValues = Array.from(elements).map(function(element, i) {
+                if (element.checked) {return element.id}
+            }).filter(function (element) {
+              return element != null;
+            });
+            return {
+                rawAnswer: checkedValues
+            }
+        }
+    </script>
+{% endmacro %}
+
+{% macro radiobutton(params) %}
+    <label style="margin-left: 15px;">
+        <input
+            type="radio"
+            id="{{ params.id }}"
+            name="{{ params.name }}"
+            class="response"
+            style="{{ params.style }}"
+        />
+        <span style="{{ params.style }}">{{ params.label }}</span>
+    </label>
+{% endmacro %}
+
+{% macro radiobuttons(params) %}
+    <style>
+        .control-container {
+            display: {% if params.arrange_vertically %}grid{% else %}flex{% endif %};
+            flex-wrap: wrap;
+            justify-content: center;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+    </style>
+    <div class="control-container">
+        {% for button in params.radiobuttons %}
+            {{ radiobutton(button) }}
+        {% endfor %}
+    </div>
+    <p class="vspace"></p>
+    <script>
+        clickedButton = function(id) {
+            psynet.response.disable();
+            psynet.submit.disable();
+            psynet.nextPage(id);
+        }
+
+        {% if params.show_free_text_option %}
+        psynet.trial.onEvent("responseEnable", function () {
+            var elem = $('#free_text')
+            $('#free_text_input').change(function () {
+                elem[0].checked = true;
+            }).click(function (){
+                elem[0].checked = true;
+            })
+        });
+        {% endif %}
+
+        retrieveResponse = function() {
+            let element = document.querySelector('input[name="{{ params.name }}"]:checked')
+            var rawAnswer = (element != null) ? element.id : null;
+
+            {% if params.show_free_text_option %}
+            if (rawAnswer === 'free_text') {
+                rawAnswer = $('#free_text_input').val()
+            }
+            {% endif %}
+            return {rawAnswer: rawAnswer}
+        }
+    </script>
+{% endmacro %}
+
+
+{% macro dropdown_option(params) %}
+    <option value="{{ params.value }}">{{ params.text }}</option>
+{% endmacro %}
+
+{% macro dropdown(params) %}
+    <style>
+        .dropdown-container {
+            margin: 0 auto;
+            width: fit-content;
+        }
+    </style>
+    <div class="dropdown-container">
+        <select id="{{ params.name }}" class="form-control response" style="cursor: pointer;" name="{{ params.name }}">
+            <option disabled selected value>{{ params.default_text }}</option>
+            {% for option in params.dropdown %}
+                {{ dropdown_option(option) }}
+            {% endfor %}
+        </select>
+    </div>
+    <p class="vspace"></p>
+
+    <script>
+        clickedButton = function(id) {
+            psynet.response.disable();
+            psynet.submit.disable();
+            psynet.nextPage(id);
+        }
+
+        retrieveResponse = function() {
+            let element = document.getElementById("{{ params.name }}");
+            return {
+                rawAnswer: (element != null) ? element.value : null
+            }
+        }
+    </script>
+{% endmacro %}
+
+
+{% macro media_slider(params) %}
+    <style>
+        #media-container {
+            width: {{ params.media_width }};
+            height: {{ params.media_height }};
+            margin: auto;
+            text-align: center;
+        }
+    </style>
+
+    {{ slider(params) }}
+
+    <script>
+        {% autoescape off %}
+        var mediaLocations = {{ params.js_vars.media_locations }};
+        var autoplay = {{ params.js_vars.autoplay | lower }};
+        var disableWhilePlaying = {{ params.js_vars.disable_while_playing | lower }};
+        {% endautoescape %}
+
+        // Overwrites corresponding method in slider-page.html
+        slider.updateLog = function() {
+            if (!continuousUpdates) {
+                slider.log.push({
+                    'time': new Date(),
+                    'value': slider.value,
+                    'media': slider.media
+                });
+            }
+        }
+
+        findClosestMedia = function (slider) {
+            var locations = Object.values(mediaLocations);
+            if (!randomWrap) {
+                 valueToPlay =  slider.value
+            } else {
+                valueToPlay = slider.getAttribute("output-value")
+            }
+            var nearest = psynet.utils.closest(parseFloat(valueToPlay), locations);
+            return Object.keys(mediaLocations)[nearest.index];
+        };
+
+    </script>
+{% endmacro %}
+
+
+{% macro audio_media_slider(params) %}
+
+    {{ media_slider(params) }}
+
+    <script>
+        playMedia = function () {
+            var id = slider.media;
+            var sound = psynet.audio[id];
+
+            if (!sound.playing) {
+                psynet.media.stopAllAudio();
+                psynet.log.debug('Playing sound with ID = ' + id);
+                disableSlider();
+                sound.play().source.addEventListener("ended", enableSlider);
+            }
+        };
+
+        onSliderEvent = function (eventType) {
+            slider.media = findClosestMedia(slider);
+            if (eventType == "initialise" && autoplay) {
+                playMedia();
+            } else if (eventType == "sliderChanged") {
+                playMedia();
+            }
+        };
+    </script>
+
+{% endmacro %}
+
+
+{% macro image_media_slider(params) %}
+    <style>
+        #slider-current-stimulus {
+            width: 100%;
+            display: block;
+        }
+    </style>
+
+    <p class="vspace"></p>
+
+    {{ media_slider(params) }}
+
+    <script>
+        {% autoescape off %}
+        var disableDuration = {{ params.js_vars.disable_duration | float }};
+        {% endautoescape %}
+
+        const image = document.createElement('img');
+        image.id = "slider-current-stimulus";
+        image.style.visibility = 'hidden';
+        $("#media-container").prepend(image);
+
+        playMedia = function () {
+            let id = slider.media;
+            let content = psynet.image[id];
+
+            disableSlider();
+            psynet.log.debug('Showing image with ID = ' + id);
+            image.setAttribute("src", content.player.src);
+            image.style.visibility='visible';
+            setTimeout(enableSlider, disableDuration * 1000);
+        };
+
+        onSliderEvent = function (eventType) {
+            slider.media = findClosestMedia(slider);
+            if (eventType == "initialise" && autoplay) {
+                playMedia();
+            } else if (eventType == "sliderChanged") {
+                playMedia();
+            }
+        };
+    </script>
+{% endmacro %}
+
+
+{% macro html_media_slider(params) %}
+    <style>
+        #slider-current-stimulus {
+            width: 100%;
+            display: block;
+        }
+    </style>
+
+    <p class="vspace"></p>
+
+    {{ media_slider(params) }}
+
+    <script>
+        {% autoescape off %}
+        var disableDuration = {{ params.js_vars.disable_duration | float }};
+        {% endautoescape %}
+
+        const stimulus = document.createElement('div');
+        stimulus.id = "slider-current-stimulus";
+        $("#media-container").prepend(stimulus);
+
+        playMedia = function () {
+            var id = slider.media;
+            var html = psynet.html[id];
+
+            disableSlider();
+            psynet.log.debug('Showing HTML with ID = ' + id);
+            var show = document.getElementById('slider-current-stimulus');
+            // get image, parse source text, and insert text into html
+            show.innerHTML = html.player.innerHTML;
+            setTimeout(enableSlider, disableDuration * 1000);
+        };
+
+        onSliderEvent = function (eventType) {
+            slider.media = findClosestMedia(slider);
+            if (eventType == "initialise" && autoplay) {
+                playMedia();
+            } else if (eventType == "sliderChanged") {
+                playMedia();
+            }
+        };
+    </script>
+{% endmacro %}
+
+
+{% macro video_media_slider(params) %}
+    <style>
+        .video {
+            width: 100%;
+        }
+    </style>
+
+    <p class="vspace"></p>
+
+    {{ media_slider(params) }}
+
+    <script>
+        {% autoescape off %}
+        var disableDuration = {{ params.js_vars.disable_duration | float }};
+        {% endautoescape %}
+
+        playMedia = function () {
+            var id = slider.media;
+            var video = psynet.video[id];
+
+            $('video').each(function (idx, elem){
+                elem.pause()
+                elem.style.display='none'
+            })
+            disableSlider();
+            psynet.log.debug('Playing video with ID = ' + id);
+            video.player.style.margin = 'auto'
+            video.player.style.display = 'block'
+            video.player.pause();
+            video.player.currentTime = 0;
+            video.player.play();
+            if (disableDuration == 0) {
+                setTimeout(enableSlider, video.player.duration * 1000)
+            } else {
+                setTimeout(enableSlider, disableDuration * 1000);
+            }
+        };
+
+        onSliderEvent = function (eventType) {
+            slider.media = findClosestMedia(slider);
+            if (eventType == "initialise" && autoplay) {
+                playMedia();
+            } else if (eventType == "sliderChanged") {
+                playMedia();
+            }
+        };
+    </script>
+{% endmacro %}
+
+
+{% macro color_slider(params) %}
+    <style>
+        .main-body {
+            background-color: white;
+            padding: 30px;
+        }
+    </style>
+
+    {{ slider(params) }}
+
+    {% for color, value in params.hidden_inputs.items() %}
+        <input type="hidden" value="{{ value }}" id="{{ color }}">
+    {% endfor %}
+
+    <script>
+        function pad(n) {
+            return (n.length < 2) ? "0" + n : n;
+        }
+
+        // Set the color
+        onSliderEvent = function (eventType) {
+            psynet.log.debug("Updating slider background");
+            var rHex = parseInt(document.getElementById('red').value, 10).toString(16),
+                gHex = parseInt(document.getElementById('green').value, 10).toString(16),
+                bHex = parseInt(document.getElementById('blue').value, 10).toString(16),
+                hex = "#" + pad(rHex) + pad(gHex) + pad(bHex);
+            document.body.style.backgroundColor = hex;
+        };
+
+        document.addEventListener("load", onSliderEvent);
+    </script>
+{% endmacro %}
+
+{% macro HTML5_range_slider(params) %}
+    <style>
+        #{{ params.slider_id }} {
+            width: 100%;
+            {% if params.reverse_scale == true %} direction: rtl; {% endif %}
+        }
+        .slider-range {
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            border: 1px solid #000000;
+            background-color: #0d6efd;
+            border: 11px solid #0d6efd;
+            border-radius: 1rem;
+            {% if params.directional == false %}
+            margin-top: -8px;
+            {% endif %}
+            cursor: pointer;
+        }
+        {% if params.directional == false %}
+        input[type=range]::-webkit-slider-runnable-track {
+              background: #000000;
+              border: 1px solid #b2b2b2;
+              background-color: #efefef;
+              border-radius: 1rem;
+              width: 100%;
+              height: 8px;
+            }
+        {% endif %}
+        input[type=range]:focus::-webkit-slider-thumb {
+            box-shadow: none;
+        }
+        input[type=range]:disabled::-webkit-slider-thumb {
+            background-color: #86b6fe;
+            border: 11px solid #86b6fe;
+        }
+    </style>
+
+    <input
+        type="range"
+        id="{{ params.slider_id }}"
+        class="wait-for-media-load slider-range form-range form-control-range{% if not params.directional %} slider-non-directional{% endif %}"
+        min="{{ params.min_value }}"
+        max="{{ params.max_value + 0.0001 * params.step_size }}"
+        step="{{ params.step_size }}"
+        value="{{ params.start_value }}"
+        random-wrap="{{ params.random_wrap }}"
+    >
+
+    <script>
+        let enableSlider = function() {
+            if (disableWhilePlaying){
+                slider.disabled=false;
+                psynet.log.debug('Horizontal slider is enabled');
+            }
+        };
+
+        let disableSlider = function() {
+            if (disableWhilePlaying){
+                slider.disabled=true;
+                psynet.log.debug('Horizontal slider is disabled');
+            }
+        };
+    </script>
+{% endmacro %}
+
+{% macro circular_slider(params) %}
+{#    <script src="/static/scripts/jquery.knob.min.js"></script>#}
+
+    <style>
+        div.knob-container {
+            visibility: hidden;
+            display: flex;
+            justify-content: center;
+            height: 200px;
+        }
+    </style>
+
+    <div class="knob-container">
+        <input
+            id="{{ params.slider_id }}"
+            class="circular-slider"
+            data-readOnly="false"
+            data-width="200"
+            data-lineCap="round"
+            data-cursor=4
+            data-fgColor="#222222"
+            data-thickness=.3
+            data-displayInput=false
+            data-min="{{ params.min_value }}"
+            data-max="{{ params.max_value + 0.0001 * params.step_size }}"
+            data-step="{{ params.step_size }}"
+            value="{{ params.start_value }}"
+            random-wrap="{{ params.random_wrap }}"
+        >
+    </div>
+
+     <script>
+        $( document ).ready(() => { // TODO: fix problem below, loading JS library
+            // This is a stupid way to load the JS library.
+            // We should be able to do something like this instead:
+            // <script src="/static/scripts/jquery.knob.min.js"> ...
+            // Unfortunately the attempt above failed.
+            (function(e){if(typeof define==="function"&&define.amd){define(["jquery"],e)}else{e(jQuery)}})(function(e){"use strict";var t={},n=Math.max,r=Math.min;t.c={};t.c.d=e(document);t.c.t=function(e){return e.originalEvent.touches.length-1};t.o=function(){var n=this;this.o=null;this.$=null;this.i=null;this.g=null;this.v=null;this.cv=null;this.x=0;this.y=0;this.w=0;this.h=0;this.$c=null;this.c=null;this.t=0;this.isInit=false;this.fgColor=null;this.pColor=null;this.dH=null;this.cH=null;this.eH=null;this.rH=null;this.scale=1;this.relative=false;this.relativeWidth=false;this.relativeHeight=false;this.$div=null;this.run=function(){var t=function(e,t){var r;for(r in t){n.o[r]=t[r]}n._carve().init();n._configure()._draw()};if(this.$.data("kontroled"))return;this.$.data("kontroled",true);this.extend();this.o=e.extend({min:this.$.data("min")!==undefined?this.$.data("min"):0,max:this.$.data("max")!==undefined?this.$.data("max"):100,stopper:true,readOnly:this.$.data("readonly")||this.$.attr("readonly")==="readonly",cursor:this.$.data("cursor")===true&&30||this.$.data("cursor")||0,thickness:this.$.data("thickness")&&Math.max(Math.min(this.$.data("thickness"),1),.01)||.35,lineCap:this.$.data("linecap")||"butt",width:this.$.data("width")||200,height:this.$.data("height")||200,displayInput:this.$.data("displayinput")==null||this.$.data("displayinput"),displayPrevious:this.$.data("displayprevious"),fgColor:this.$.data("fgcolor")||"#87CEEB",inputColor:this.$.data("inputcolor"),font:this.$.data("font")||"Arial",fontWeight:this.$.data("font-weight")||"bold",inline:false,step:this.$.data("step")||1,rotation:this.$.data("rotation"),draw:null,change:null,cancel:null,release:null,format:function(e){return e},parse:function(e){return parseFloat(e)}},this.o);this.o.flip=this.o.rotation==="anticlockwise"||this.o.rotation==="acw";if(!this.o.inputColor){this.o.inputColor=this.o.fgColor}if(this.$.is("fieldset")){this.v={};this.i=this.$.find("input");this.i.each(function(t){var r=e(this);n.i[t]=r;n.v[t]=n.o.parse(r.val());r.bind("change blur",function(){var e={};e[t]=r.val();n.val(n._validate(e))})});this.$.find("legend").remove()}else{this.i=this.$;this.v=this.o.parse(this.$.val());this.v===""&&(this.v=this.o.min);this.$.bind("change blur",function(){n.val(n._validate(n.o.parse(n.$.val())))})}!this.o.displayInput&&this.$.hide();this.$c=e(document.createElement("canvas")).attr({width:this.o.width,height:this.o.height});this.$div=e('<div style="'+(this.o.inline?"display:inline;":"")+"width:"+this.o.width+"px;height:"+this.o.height+"px;"+'"></div>');this.$.wrap(this.$div).before(this.$c);this.$div=this.$.parent();if(typeof G_vmlCanvasManager!=="undefined"){G_vmlCanvasManager.initElement(this.$c[0])}this.c=this.$c[0].getContext?this.$c[0].getContext("2d"):null;if(!this.c){throw{name:"CanvasNotSupportedException",message:"Canvas not supported. Please use excanvas on IE8.0.",toString:function(){return this.name+": "+this.message}}}this.scale=(window.devicePixelRatio||1)/(this.c.webkitBackingStorePixelRatio||this.c.mozBackingStorePixelRatio||this.c.msBackingStorePixelRatio||this.c.oBackingStorePixelRatio||this.c.backingStorePixelRatio||1);this.relativeWidth=this.o.width%1!==0&&this.o.width.indexOf("%");this.relativeHeight=this.o.height%1!==0&&this.o.height.indexOf("%");this.relative=this.relativeWidth||this.relativeHeight;this._carve();if(this.v instanceof Object){this.cv={};this.copy(this.v,this.cv)}else{this.cv=this.v}this.$.bind("configure",t).parent().bind("configure",t);this._listen()._configure()._xy().init();this.isInit=true;this.$.val(this.o.format(this.v));this._draw();return this};this._carve=function(){if(this.relative){var e=this.relativeWidth?this.$div.parent().width()*parseInt(this.o.width)/100:this.$div.parent().width(),t=this.relativeHeight?this.$div.parent().height()*parseInt(this.o.height)/100:this.$div.parent().height();this.w=this.h=Math.min(e,t)}else{this.w=this.o.width;this.h=this.o.height}this.$div.css({width:this.w+"px",height:this.h+"px"});this.$c.attr({width:this.w,height:this.h});if(this.scale!==1){this.$c[0].width=this.$c[0].width*this.scale;this.$c[0].height=this.$c[0].height*this.scale;this.$c.width(this.w);this.$c.height(this.h)}return this};this._draw=function(){var e=true;n.g=n.c;n.clear();n.dH&&(e=n.dH());e!==false&&n.draw()};this._touch=function(e){var r=function(e){var t=n.xy2val(e.originalEvent.touches[n.t].pageX,e.originalEvent.touches[n.t].pageY);if(t==n.cv)return;if(n.cH&&n.cH(t)===false)return;n.change(n._validate(t));n._draw()};this.t=t.c.t(e);r(e);t.c.d.bind("touchmove.k",r).bind("touchend.k",function(){t.c.d.unbind("touchmove.k touchend.k");n.val(n.cv)});return this};this._mouse=function(e){var r=function(e){var t=n.xy2val(e.pageX,e.pageY);if(t==n.cv)return;if(n.cH&&n.cH(t)===false)return;n.change(n._validate(t));n._draw()};r(e);t.c.d.bind("mousemove.k",r).bind("keyup.k",function(e){if(e.keyCode===27){t.c.d.unbind("mouseup.k mousemove.k keyup.k");if(n.eH&&n.eH()===false)return;n.cancel()}}).bind("mouseup.k",function(e){t.c.d.unbind("mousemove.k mouseup.k keyup.k");n.val(n.cv)});return this};this._xy=function(){var e=this.$c.offset();this.x=e.left;this.y=e.top;return this};this._listen=function(){if(!this.o.readOnly){this.$c.bind("mousedown",function(e){e.preventDefault();n._xy()._mouse(e)}).bind("touchstart",function(e){e.preventDefault();n._xy()._touch(e)});this.listen()}else{this.$.attr("readonly","readonly")}if(this.relative){e(window).resize(function(){n._carve().init();n._draw()})}return this};this._configure=function(){if(this.o.draw)this.dH=this.o.draw;if(this.o.change)this.cH=this.o.change;if(this.o.cancel)this.eH=this.o.cancel;if(this.o.release)this.rH=this.o.release;if(this.o.displayPrevious){this.pColor=this.h2rgba(this.o.fgColor,"0.4");this.fgColor=this.h2rgba(this.o.fgColor,"0.6")}else{this.fgColor=this.o.fgColor}return this};this._clear=function(){this.$c[0].width=this.$c[0].width};this._validate=function(e){var t=~~((e<0?-.5:.5)+e/this.o.step)*this.o.step;return Math.round(t*100)/100};this.listen=function(){};this.extend=function(){};this.init=function(){};this.change=function(e){};this.val=function(e){};this.xy2val=function(e,t){};this.draw=function(){};this.clear=function(){this._clear()};this.h2rgba=function(e,t){var n;e=e.substring(1,7);n=[parseInt(e.substring(0,2),16),parseInt(e.substring(2,4),16),parseInt(e.substring(4,6),16)];return"rgba("+n[0]+","+n[1]+","+n[2]+","+t+")"};this.copy=function(e,t){for(var n in e){t[n]=e[n]}}};t.Dial=function(){t.o.call(this);this.startAngle=null;this.xy=null;this.radius=null;this.lineWidth=null;this.cursorExt=null;this.w2=null;this.PI2=2*Math.PI;this.extend=function(){this.o=e.extend({bgColor:this.$.data("bgcolor")||"#EEEEEE",angleOffset:this.$.data("angleoffset")||0,angleArc:this.$.data("anglearc")||360,inline:true},this.o)};this.val=function(e,t){if(null!=e){e=this.o.parse(e);if(t!==false&&e!=this.v&&this.rH&&this.rH(e)===false){return}this.cv=this.o.stopper?n(r(e,this.o.max),this.o.min):e;this.v=this.cv;this.$.val(this.o.format(this.v));this._draw()}else{return this.v}};this.xy2val=function(e,t){var i,s;i=Math.atan2(e-(this.x+this.w2),-(t-this.y-this.w2))-this.angleOffset;if(this.o.flip){i=this.angleArc-i-this.PI2}if(this.angleArc!=this.PI2&&i<0&&i>-.5){i=0}else if(i<0){i+=this.PI2}s=i*(this.o.max-this.o.min)/this.angleArc+this.o.min;this.o.stopper&&(s=n(r(s,this.o.max),this.o.min));return s};this.listen=function(){var t=this,i,s,o=function(e){e.preventDefault();var o=e.originalEvent,u=o.detail||o.wheelDeltaX,a=o.detail||o.wheelDeltaY,f=t._validate(t.o.parse(t.$.val()))+(u>0||a>0?t.o.step:u<0||a<0?-t.o.step:0);f=n(r(f,t.o.max),t.o.min);t.val(f,false);if(t.rH){clearTimeout(i);i=setTimeout(function(){t.rH(f);i=null},100);if(!s){s=setTimeout(function(){if(i)t.rH(f);s=null},200)}}},u,a,f=1,l={37:-t.o.step,38:t.o.step,39:t.o.step,40:-t.o.step};this.$.bind("keydown",function(i){var s=i.keyCode;if(s>=96&&s<=105){s=i.keyCode=s-48}u=parseInt(String.fromCharCode(s));if(isNaN(u)){s!==13&&s!==8&&s!==9&&s!==189&&(s!==190||t.$.val().match(/\./))&&i.preventDefault();if(e.inArray(s,[37,38,39,40])>-1){i.preventDefault();var o=t.o.parse(t.$.val())+l[s]*f;t.o.stopper&&(o=n(r(o,t.o.max),t.o.min));t.change(t._validate(o));t._draw();a=window.setTimeout(function(){f*=2},30)}}}).bind("keyup",function(e){if(isNaN(u)){if(a){window.clearTimeout(a);a=null;f=1;t.val(t.$.val())}}else{t.$.val()>t.o.max&&t.$.val(t.o.max)||t.$.val()<t.o.min&&t.$.val(t.o.min)}});this.$c.bind("mousewheel DOMMouseScroll",o);this.$.bind("mousewheel DOMMouseScroll",o)};this.init=function(){if(this.v<this.o.min||this.v>this.o.max){this.v=this.o.min}this.$.val(this.v);this.w2=this.w/2;this.cursorExt=this.o.cursor/100;this.xy=this.w2*this.scale;this.lineWidth=this.xy*this.o.thickness;this.lineCap=this.o.lineCap;this.radius=this.xy-this.lineWidth/2;this.o.angleOffset&&(this.o.angleOffset=isNaN(this.o.angleOffset)?0:this.o.angleOffset);this.o.angleArc&&(this.o.angleArc=isNaN(this.o.angleArc)?this.PI2:this.o.angleArc);this.angleOffset=this.o.angleOffset*Math.PI/180;this.angleArc=this.o.angleArc*Math.PI/180;this.startAngle=1.5*Math.PI+this.angleOffset;this.endAngle=1.5*Math.PI+this.angleOffset+this.angleArc;var e=n(String(Math.abs(this.o.max)).length,String(Math.abs(this.o.min)).length,2)+2;this.o.displayInput&&this.i.css({width:(this.w/2+4>>0)+"px",height:(this.w/3>>0)+"px",position:"absolute","vertical-align":"middle","margin-top":(this.w/3>>0)+"px","margin-left":"-"+(this.w*3/4+2>>0)+"px",border:0,background:"none",font:this.o.fontWeight+" "+(this.w/e>>0)+"px "+this.o.font,"text-align":"center",color:this.o.inputColor||this.o.fgColor,padding:"0px","-webkit-appearance":"none"})||this.i.css({width:"0px",visibility:"hidden"})};this.change=function(e){this.cv=e;this.$.val(this.o.format(e))};this.angle=function(e){return(e-this.o.min)*this.angleArc/(this.o.max-this.o.min)};this.arc=function(e){var t,n;e=this.angle(e);if(this.o.flip){t=this.endAngle+1e-5;n=t-e-1e-5}else{t=this.startAngle-1e-5;n=t+e+1e-5}this.o.cursor&&(t=n-this.cursorExt)&&(n=n+this.cursorExt);return{s:t,e:n,d:this.o.flip&&!this.o.cursor}};this.draw=function(){var e=this.g,t=this.arc(this.cv),n,r=1;e.lineWidth=this.lineWidth;e.lineCap=this.lineCap;if(this.o.bgColor!=="none"){e.beginPath();e.strokeStyle=this.o.bgColor;e.arc(this.xy,this.xy,this.radius,this.endAngle-1e-5,this.startAngle+1e-5,true);e.stroke()}if(this.o.displayPrevious){n=this.arc(this.v);e.beginPath();e.strokeStyle=this.pColor;e.arc(this.xy,this.xy,this.radius,n.s,n.e,n.d);e.stroke();r=this.cv==this.v}e.beginPath();e.strokeStyle=r?this.o.fgColor:this.fgColor;e.arc(this.xy,this.xy,this.radius,t.s,t.e,t.d);e.stroke()};this.cancel=function(){this.val(this.v)}};e.fn.dial=e.fn.knob=function(n){return this.each(function(){var r=new t.Dial;r.o=n;r.$=e(this);r.run()}).parent()}})
+            $(".circular-slider").knob({
+                change: function (value) {
+                    // Seems like the terminology used by knob.js is inconsistent with base JS
+                    sliderOnInput();
+                },
+                release: function (value) {
+                    // We currently don't support snapping in the circular slider because of the annoying way in
+                    // the 'release' listener doesn't differentiate between the user releasing the slider
+                    // and the internal JS snapping the slider to its new value. This confusion in the API
+                    // makes it difficult to avoid infinite loops where the release listener is constantly
+                    // being called. One solution that seemed promising was to store the last value, and
+                    // compare it to the new (snapped value), and work out when convergence occurs.
+                    // It would be worth exploring this more in the future.
+                    // Also for some complicated reason putting sliderUpdateHandler in a timeout
+                    // seemed to work, but again, it's a bit of a hack...
+
+                    // Seems like the terminology used by knob.js is inconsistent with base JS
+                    sliderOnChange();
+
+                    /*if (!continuousUpdates) {
+                        if (lastValue != value) {
+                            lastValue = value;
+                            sliderUpdating = setTimeout(sliderUpdateHandler, 100);
+                        }
+                    }*/
+                },
+                cancel: function () {
+                }
+            });
+        });
+
+        psynet.trial.onEvent("trialConstruct", () => $(".knob-container").css("visibility", "visible"));
+
+        let enableSlider = function() { // TODO: add transparent div to disable circular slider instead of hid it
+            if (disableWhilePlaying){
+                $(".knob-container").css("visibility", "visible");
+                psynet.log.debug('Circular slider is enabled');
+            }
+        };
+
+        let disableSlider = function() {
+            if (disableWhilePlaying){
+                $(".knob-container").css("visibility", "hidden");
+                psynet.log.debug('Circular slider is disabled');
+            }
+        };
+    </script>
+{% endmacro %}
+
+{% macro slider(params) %}
+
+    {% if params.input_type == "HTML5_range_slider" %}
+        {{ HTML5_range_slider(params) }}
+    {% elif params.input_type == "circular_slider" %}
+        {{ circular_slider(params) }}
+    {% endif %}
+
+    <p class="vspace"></p>
+
+    <script>
+        {% autoescape off %}
+        var snapValues = {% if params.js_vars.snap_values is none %}null{% else %}{{ params.js_vars.snap_values }}{% endif %};
+        var minimalInteractions = {% if params.js_vars.minimal_interactions is none %}null{% else %}{{ params.js_vars.minimal_interactions }}{% endif %};
+        var continuousUpdates = {% if params.js_vars.continuous_updates is not defined or params.js_vars.continuous_updates is none %}null{% else %}{{ params.js_vars.continuous_updates | lower }}{% endif %};
+        var sliderId = '{{ params.slider_id }}';
+        var randomWrap = {{ params.random_wrap | lower }}; // Decide whether to add to js_vars
+        var minVal = {{ params.min_value }}; // Decide whether to add to js_vars
+        var maxVal = {{ params.max_value }}; // Decide whether to add to js_vars
+        {% endautoescape %}
+
+        // This is called each time
+        // Todo - refactor this using psynet.trial.onEvent
+        onSliderEvent = function (eventType) {
+
+        };
+
+        // Metadata collection
+        var slider = document.getElementById(sliderId);
+
+        if (continuousUpdates) {
+            slider.log = "The slider log is disabled when continuous slider updates are enabled.";
+        } else {
+            slider.log = [];
+        }
+
+        // Todo - refactor this into psynet.trial.eventLog
+        slider.updateLog = function() {
+            if (!continuousUpdates) {
+                slider.log.push({
+                    'time': new Date(),
+                    'value': slider.value,
+                    'outputValue': slider.getAttribute("output-value")
+                });
+            }
+        }
+
+        slider.interactionCount = 0;
+
+        let setSliderValue = function(val) {
+            {% if params.input_type == "HTML5_range_slider" %}
+                slider.value = val;
+            {% elif params.input_type == "circular_slider" %}
+                throw Error("Programmatically seting the slider value is not supported yet");
+                $(".circular-slider").val(val).trigger("change");
+            {% endif %}
+        }
+
+        let snapSlider = function () {
+            let rawValue = parseFloat(slider.value);
+            if (snapValues == null) {
+                psynet.log.debug("Slider value: " + rawValue + " (no snapping).");
+                return rawValue
+            } else {
+                let newValue = psynet.utils.closest(slider.value, snapValues).value;
+                psynet.snapping = true; // TODO: can this be removed?
+                setSliderValue(newValue);
+                psynet.log.debug("Snapped slider from " + rawValue + " to " + newValue);
+                return newValue;
+            }
+        };
+
+        let formatSliderValue = function () {
+            let rawValue = parseFloat(slider.value);
+            let outputValue;
+
+            if (randomWrap) {
+                let phase = slider.getAttribute("phase")
+                outputValue = wrapSliderValue(rawValue, phase);
+            } else  {
+                outputValue = rawValue;
+            }
+
+            slider.setAttribute("raw-value", rawValue);
+            slider.setAttribute("output-value", outputValue);
+            psynet.log.debug("Slider rawValue = " + rawValue + ", slider outputValue = " + outputValue);
+        };
+
+        let sampleSliderPhase = function () {
+            let phase = minVal + (2 * (maxVal - minVal)) * Math.random()
+            return phase
+        };
+
+        let wrapSliderValue = function (value, phase) {
+            // first, the original value of the slider is wrapped twice, creating a new virtual
+            // range between min and min+2(max-min)
+            let valueNewRange =  minVal + 2 * (value - minVal);
+            // second, we we adjust it to incorporate a given phase
+            let valueNewRangeWithPhase =  mod((valueNewRange - phase), (2 * (maxVal - minVal))) + minVal;
+            let outputValue = - Math.abs(valueNewRangeWithPhase - maxVal) + maxVal;
+            return outputValue
+        };
+
+        let mod = function(a, n){
+            // in JS it, the builtin modulo operator is a remainder operator not a modulo operator
+            // this function uses a modulo operator as in Python
+            return a - (n * Math.floor(a/n));
+        };
+
+        psynet.trial.onEvent("trialPrepare", () => {
+            let phase;
+            if (randomWrap) {
+                phase = sampleSliderPhase();
+            } else {
+                phase = 0.0;
+            }
+            slider.setAttribute("phase", phase);
+            slider.setAttribute("random-wrap", randomWrap);
+            psynet.log.debug("Slider phase:" + phase);
+            snapSlider();
+            formatSliderValue();
+            onSliderEvent("initialise");
+            slider.updateLog();
+        });
+
+        let hadMinimalInteractions = false;
+        let checkMinimalInteractions = function() {
+            if (slider.interactionCount >= minimalInteractions && !hadMinimalInteractions) {
+                hadMinimalInteractions = true;
+                psynet.trial.registerEvent("sliderMinimalInteractions");
+            }
+        }
+
+        let sliderOnInput = function() {
+            // Triggered whenever the slider slides to a new value
+            if (continuousUpdates) {
+                snapSlider();
+            }
+            formatSliderValue();
+            if (continuousUpdates) {
+                onSliderEvent("sliderChanged");
+                slider.updateLog();
+            }
+        };
+
+        let sliderOnChange = function() {
+            // Triggered whenever the slider is released on a new value
+            if (!continuousUpdates) {
+                snapSlider();
+                onSliderEvent("sliderChanged");
+                slider.updateLog();
+            }
+            slider.interactionCount += 1;
+            checkMinimalInteractions();
+            psynet.trial.registerEvent("sliderChange", {
+                info: {
+                    outputValue: slider.value
+                }
+            });
+        }
+
+        slider.addEventListener("input", sliderOnInput, false);
+        slider.addEventListener("change", sliderOnChange, false);
+
+        psynet.trial.onEvent("trialConstruct", () => {
+            checkMinimalInteractions();
+        });
+
+        retrieveResponse = function() {
+            let outputValue = parseFloat(slider.getAttribute("output-value"));
+            let rawAnswer = outputValue;
+            let metadata = {
+              rawValue: parseFloat(slider.value),
+              outputValue: outputValue,
+              phase: parseFloat(slider.getAttribute("phase"))
+            };
+            return {
+                rawAnswer: rawAnswer,
+                metadata: metadata
+            }
+        };
+    </script>
+    {% if params.template_filename %}
+        {% include params.template_filename %}
+    {% endif %}
+{% endmacro %}
+
+{% macro multi_slider(params) %}
+    <style type="text/css">
+        .slider-collection {
+            margin: 30px;
+        }
+
+        .slider {
+            margin: 20px;
+        }
+
+        input[type=range] {
+            width: 50%;
+            display: inline-block;
+        }
+
+        .slider-label {
+            font-weight: bold;
+            display: inline-block;
+            min-width: 200px;
+            text-align: right;
+            margin-right: 20px;
+        }
+
+        .slider-value {
+            width: 60px;
+            display: inline-block;
+            margin-left: 20px;
+        }
+    </style>
+
+    <script>
+        var initSliders = function(){
+            var slider = $('.slider'),
+                range = $('.slider-range'),
+                value = $('.slider-value');
+
+            slider.each(function(){
+                value.each(function(){
+                    var value = $(this).prev().attr('value');
+                    $(this).html(value);
+                });
+
+                range.on('input', function(){
+                    $(this).next(value).html(this.value);
+                });
+            });
+        };
+        window.addEventListener("load", initSliders);
+    </script>
+
+    <div class="slider-collection">
+        {% for s in params.sliders %}
+            <div class="slider">
+                <span class="slider-label">
+                    {{ s.label }}
+                </span>
+                <input
+                    type="range"
+                    id="{{ s.slider_id }}"
+                    class="form-control-range response slider-range{% if not s.directional %} slider-non-directional{% endif %}"
+                    style="display: inline-block;"
+                    min="{{ s.min_value }}"
+                    max="{{ s.max_value + 0.0001 * s.step_size }}"
+                    step="{{ s.step_size }}"
+                    value="{{ s.start_value }}">
+                <span class="slider-value">NA</span>
+            </div>
+        {% endfor %}
+    </div>
+{% endmacro %}
+
+{% macro audio_meter(params) %}
+    <style>
+        .audio-meter-block {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+    </style>
+    <div class="audio-meter-block">
+        <table style="width: 500px; padding: 10px">
+            <tbody>
+                <tr align="left" valign="middle">
+                    <td width="300px">
+                        <div style="width: 300px; height: 50px">
+                            <canvas style=" background-color: var(--bs-secondary-bg);" id="audio-meter" width="300" height="50"></canvas>
+                        </div>
+                    </td>
+                    <td width="20px"></td>
+                    <td align="left">
+                        <p id="audio-meter-text" style="font-weight: bold; margin: 0px; display: none;"></p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        {% if params.calibrate %}
+            {{ audio_meter_calibrate(params) }}
+        {% endif %}
+    </div>
+
+    <script>
+        {% include "macros/control/audio_meter.js" %}
+        audioMeterControl.init('{{ params.to_json() }}');
+
+    </script>
+{% endmacro %}
+
+{% macro audio_meter_calibrate(params) %}
+    <style type="text/css">
+        #audio-meter-documentation {
+            padding-top: 20px;
+        }
+    </style>
+
+    <ul class="nav nav-tabs">
+        <li class="nav-item">
+            <a href="#audio-meter-sliders" class="nav-link" data-toggle="tab">{{ pgettext("audio_meter_calibrate", "Sliders") }}</a>
+        </li>
+        <li class="nav-item">
+            <a href="#audio-meter-documentation" class="nav-link" data-toggle="tab">{{ pgettext("audio_meter_calibrate", "Documentation") }}</a>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <div id="audio-meter-sliders" class="tab-pane active">
+            {{ multi_slider(params.sliders) }}
+        </div>
+
+        <div id="audio-meter-documentation" class="tab-pane">
+            <p>
+                {{ pgettext("audio_meter_calibrate", "The <strong>decay</strong> parameters determine the amount of smoothing that happens to the signal, and have units of seconds.") }}
+                {{ pgettext("audio_meter_calibrate", "A high decay parameter means that the signal takes a long time to decay (i.e. high smoothing).") }}
+                {{ pgettext("audio_meter_calibrate", "There are three decay parameters: one for the displayed audio meter, one for the 'too-high' detector, and one for the 'too-low' detector.") }}
+
+            </p>
+            <p>
+                {{ pgettext("audio_meter_calibrate", "The <strong>threshold</strong> parameters determine the point at which the volume is determined to be 'too high' or 'too low'.") }}
+
+            </p>
+            <p>
+                {{ pgettext("audio_meter_calibrate", "The <strong>grace</strong> parameters determine how long the volume must be outside the respective threshold for a warning message to be triggered.") }}
+
+            </p>
+            <p>
+                {{ pgettext("audio_meter_calibrate", "The <strong>message duration</strong> parameters determine how long warning messages are displayed for.") }}
+
+            </p>
+        </div>
+    </div>
+
+    <script>
+        setInterval(() => audioMeterControl.updateFromSliders(), 50);
+    </script>
+{% endmacro %}
+
+{% macro generic_record(params) %}
+    {% if params.show_meter %}
+        {{ audio_meter(params.meter) }}
+    {% endif %}
+
+
+    {% if params.controls %}
+        <style>
+            #record-controls {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding-bottom: 50px;
+            }
+            .record-button {
+                margin-left: 10px;
+                margin-right: 10px;
+            }
+            #record-loop {
+                margin-left: 10px;
+                margin-right: 10px;
+            }
+        </style>
+
+        <div id="record-controls">
+            <button id="btn-record-record" type="button" class="btn record-button auto-reset record-control btn-danger btn-sm" disabled>
+                {{ gettext("Record from start") }}
+            </button>
+            <button id="btn-record-play-all" type="button" class="btn record-button auto-reset record-control btn-primary btn-sm" disabled>
+                {{ gettext("Play all") }}
+            </button>
+            <button id="btn-record-play-prompt" type="button" class="btn record-button auto-reset record-control btn-primary btn-sm" disabled>
+                {{ gettext("Play prompt") }}
+            </button>
+            <button id="btn-record-play-recording" type="button" class="btn record-button auto-reset record-control btn-primary btn-sm" disabled>
+                {{ gettext("Play recording") }}
+            </button>
+            <button id="btn-record-stop" type="button" class="btn record-button auto-reset record-control btn-secondary btn-sm">
+                {{ gettext("Stop") }}
+            </button>
+{#            <button id="btn-record-upload" type="button" class="btn record-button record-control btn-success btn-sm" disabled>#}
+{#                <span id="btn-record-upload-spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none"></span>#}
+{#                <span>Upload</span>#}
+{#            </button>#}
+            <div id="record-loop">
+                <label style="cursor: pointer;">
+                    <input id="record-loop-input" class="record-control" type="checkbox" value="" {% if params.loop_playback %} checked {% endif %}>
+                    {{ gettext("Loop") }}
+                </label>
+            </div>
+        </div>
+    {% endif %}
+
+    <script>
+        $(document).ready(function() {
+            $(".auto-reset").on("click", function() {
+                this.disabled = true;
+                setTimeout(() => this.disabled = false, 500);
+            });
+
+            $("#btn-record-record").on("click", function() {
+                replayMode = false;
+                psynet.trial.restart();
+            });
+
+            $("#btn-record-play-all").on("click", function() {
+                replayMode = true;
+                psynet.media.stopAllAudio();
+                psynet.trial.restart();
+            });
+
+            $("#btn-record-play-prompt").on("click", async function() {
+                await psynet.media.stopAllAudio();
+                await psynet.trial.restart({from: "promptStart"});
+            });
+
+            $("#btn-record-play-recording").on("click", async function() {
+                await psynet.media.stopAllAudio();
+                await psynet.trial.stop();
+                await psynet.page.control.playRecording();
+            });
+
+            $("#btn-record-stop").on("click", async function() {
+                await psynet.trial.stop();
+                await psynet.page.control.stopRecordingPlayback();
+            });
+
+            $("#record-loop-input").on("change", function(event) {
+                loopRecorder = event.target.checked;
+            });
+
+            {#$("#btn-record-upload").on("click", function() {#}
+            {#    let button = $(this);#}
+            {#    let spinner = $("#btn-record-upload-spinner");#}
+            {##}
+            {#    let disableResponse = function() {#}
+            {#        button.prop("disabled", true);#}
+            {#        spinner.show();#}
+            {#    }#}
+            {#    let enableResponse = function() {#}
+            {#        button.prop("disabled", false);#}
+            {#        spinner.hide();#}
+            {#    }#}
+            {#    disableResponse();#}
+            {#    psynet.trial.onEvent("submitFail", enableResponse);#}
+            {#    $("#next-button").click();#}
+            {#});#}
+        });
+
+        let recorderControls = {{ params.controls | lower }};
+        let replayMode = false;
+        let loopRecorder = {{ params.loop_playback | tojson }};
+
+        psynet.trial.onEvent("recordEnd", function() {
+            if (!replayMode) {
+                hasRecorded = true;
+            }
+            $("#btn-record-play-recording").attr("disabled", false);
+            $("#btn-record-play-all").attr("disabled", false);
+            {#$("#btn-record-upload").prop("disabled", false);#}
+
+            psynet.response.staged.blobs["cameraRecording"] = psynet.media.data["videoBlob"];
+            psynet.response.staged.blobs["screenRecording"] = psynet.media.data["screenBlob"];
+
+        }, {
+            priority: -100 // ensures that this is only executed once all the media processing completes
+        });
+
+        psynet.trial.onEvent("trialStop", function() {
+            psynet.media.stopAllAudio();
+        });
+
+        psynet.trial.onEvent("trialFinished", function() {
+            if (loopRecorder) {
+                psynet.trial.restart();
+            }
+        });
+
+        psynet.trial.onEvent("trialPrepare", () => {
+            psynet.media.stopAllAudio();
+        });
+
+        let supportedPrompts = ["audio", "video"];
+        if (!supportedPrompts.includes(modular_page_components.prompt)) {
+            $("#btn-record-play-prompt").hide();
+            $("#btn-record-play-all").hide();
+        }
+
+        psynet.trial.onEvent("trialConstruct", () => {
+            if (psynet.audio.prompt || psynet.video.prompt) {
+                $("#btn-record-play-prompt").prop("disabled", false);
+            }
+            $("#btn-record-record").prop("disabled", false);
+        }, {priority: - 1000});
+
+        psynet.trial.onEvent("autoSubmit", () => {
+            let submitButton = $("#next-button");
+            if (submitButton.length > 0) {
+                let enableButton = () => submitButton.prop("disabled", false);
+                let disableButton = () => submitButton.prop("disabled", true);
+
+                psynet.trial.onEvent("submitFail", enableButton);
+                enableButton();
+                submitButton.click();
+                disableButton();
+            } else {
+                psynet.submitResponse();
+            }
+        });
+
+    </script>
+
+{% endmacro %}
+
+{% macro audio_record(params) %}
+    {{ generic_record(params) }}
+
+    <script>
+        {% include "macros/control/recorder.js" %}
+
+        var recorder;
+        var hasRecorded = false;
+        var recordingBlob;
+
+        psynet.page.control.playRecording = async function() {
+            await psynet.audio.recording.play();
+        }
+
+        psynet.page.control.stopRecordingPlayback = async function() {
+            await psynet.media.stopAllAudio();
+        }
+
+        psynet.trial.onEvent("recordStart", function() {
+            if (replayMode) {
+                psynet.audio.recording.play();
+            } else {
+                recorder.clear();
+                recorder.record();
+            }
+        });
+
+        let getAudioRecording = function() {
+            return new Promise(resolve => {
+                recorder.exportWAV((blob) => resolve(blob));
+            });
+        }
+
+        psynet.trial.onEvent("recordEnd", async function() {
+            if (!replayMode) {
+                await recorder.stop();
+                recordingBlob = await getAudioRecording();
+                psynet.response.staged.blobs["audioRecording"] = recordingBlob;
+                let buffer = await psynet.media.blobToArrayBuffer(recordingBlob);
+                await psynet.media.addExtraAudioStimulus(buffer, "recording");
+            }
+        });
+
+        psynet.trial.onEvent("trialStop", () => recorder.stop());
+
+        psynet.trial.onEvent("trialConstruct", () => new Promise((resolve) => {
+            let channelCount = {{ params.num_channels }};
+            navigator.mediaDevices.getUserMedia({
+                audio: {
+                    channelCount: channelCount,
+                    autoGainControl: false,
+                    echoCancellation: false,
+                    noiseSuppression: false
+                },
+                video: false
+            }).then(function(stream) {
+                psynet.log.debug("Initialising audio recorder.");
+                let input = psynet.media.audioContext.createMediaStreamSource(stream);
+                let microphoneMetadata = psynet.media.getMicrophoneMetadataFromAudioStream(stream);
+                Object.assign(psynet.response.staged.metadata, microphoneMetadata);
+                recorder = new Recorder(input, channelCount);
+                psynet.trial.registerEvent("audioRecorderReady");
+                resolve();
+            });
+        }));
+    </script>
+{% endmacro %}
+
+{% macro video_record(params) %}
+    {{ generic_record(params) }}
+
+    <style>
+        #video-control-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #video-control {
+            display: {% if params.show_preview %} block {% else %} none {% endif %};
+            width: {{ params.width }};
+            margin: 10px
+        }
+        {% if params.mirrored is true %}
+        video {
+            -webkit-transform: scaleX(-1);
+            transform: scaleX(-1);
+        }
+        {% endif %}
+    </style>
+
+    <div id="video-control-container">
+        <video id="video-control"></video>
+    </div>
+
+    <script>
+        {% include "macros/control/RecordRTC.js" %}
+        {% include "macros/control/adapter.js" %}
+
+        let videoPreviewPlayer = document.getElementById('video-control');
+        let screenVideo = document.getElementById('screen-recording');
+
+        let recordingSource = "{{ params.recording_source | lower }}";
+        let recordingCamera = recordingSource == "camera" || recordingSource == "both";
+        let recordingScreen = recordingSource == "screen" || recordingSource == "both";
+
+        if (recordingCamera) {
+            let cameraStream = null;
+            var videoRecorder = null;
+            let audioSettings = null;
+
+            if ({{ params.record_audio | lower }}) {
+                audioSettings = {
+                    channelCount: {{ params.audio_n_channels }}
+                };
+            }
+            else { audioSettings = false; }
+
+            psynet.trial.onEvent("trialConstruct", () => new Promise((resolve) => {
+                navigator.mediaDevices.getUserMedia({
+                    audio: audioSettings,
+                    video: true,
+                }).then((stream) => {
+                    psynet.log.debug("Initialising video recorder.");
+                    cameraStream = stream;
+                    resolve();
+                }).catch((error) => {
+                    throw new Error('Cannot start video recording:', error.name + ":", error.message);
+                });
+            }));
+
+            psynet.trial.onEvent("trialConstruct", async function() {
+                await loadCameraPreview();
+            })
+
+            psynet.trial.onEvent("trialPrepare", () => {
+                if (!replayMode) {
+                    videoRecorder = new RecordRTCPromisesHandler(cameraStream, {
+                        mimeType: "video/webm",
+                    });
+                    videoRecorder.stream = cameraStream;
+                }
+            });
+
+            psynet.trial.onEvent("trialPrepare", async function() {
+                await loadCameraPreview();
+            });
+
+            psynet.page.control.playRecording = async function() {
+                await loadRecordedVideo();
+                videoPreviewPlayer.play();
+                videoPreviewPlayer.addEventListener("ended", loadCameraPreview, {once: true});
+            };
+
+            psynet.page.control.stopRecordingPlayback = async function() {
+                loadCameraPreview();
+            }
+
+            let videoDisplayMode = null;
+
+            async function loadRecordedVideo() {
+                if (videoDisplayMode == "playback") {
+                    return;
+                }
+                videoPreviewPlayer.src = null;
+                videoPreviewPlayer.srcObject = null;
+                let blob = psynet.media.data.videoBlob;
+                videoPreviewPlayer.src = URL.createObjectURL(blob);
+                videoPreviewPlayer.muted = false;
+                await videoPreviewPlayer.pause();
+                videoDisplayMode = "playback";
+            }
+
+            async function loadCameraPreview() {
+                if (videoDisplayMode == "preview") {
+                    return;
+                }
+                videoPreviewPlayer.src = null;
+                videoPreviewPlayer.srcObject = null;
+                setSrcObject(cameraStream, videoPreviewPlayer);
+                videoPreviewPlayer.muted = true;
+                await videoPreviewPlayer.play();
+                videoDisplayMode = "preview";
+            }
+
+            psynet.trial.onEvent("recordStart", async function() {
+                if (replayMode) {
+                    await psynet.page.control.playRecording();
+                } else {
+                    await videoRecorder.startRecording(videoRecorder.stream);
+                }
+            });
+
+            psynet.trial.onEvent("recordEnd", async function() {
+                if (!replayMode) {
+                    await videoRecorder.stopRecording();
+                    psynet.media.data["videoBlob"] = await videoRecorder.getBlob();
+                    await videoRecorder.reset();
+                }
+            });
+
+            psynet.trial.onEvent("trialStop", async function() {
+                if (videoRecorder !== null) {
+                    let state = await videoRecorder.getState();
+                    if (state != "inactive") {
+                        await videoRecorder.stopRecording();
+                    }
+                    await videoRecorder.reset();
+                }
+                await loadCameraPreview();
+            });
+        }
+
+        let screenBlob = null;
+        let screenRecorder = null;
+        let screenStream = null;
+
+        if (recordingScreen) {
+            psynet.trial.onEvent("trialConstruct", () => new Promise((resolve) => {
+                navigator.mediaDevices.getDisplayMedia({
+                    video: true
+                }).then((stream => {
+                    screenStream = stream;
+                    resolve(true);
+                })).catch((error) => {
+                    throw new Error("Unable to capture your screen. " + error.name + ":" + error.message);
+                });
+            }));
+
+            psynet.trial.onEvent("trialPrepare", () => {
+                if (!replayMode) {
+                    screenRecorder = new RecordRTCPromisesHandler(screenStream, {
+                        mimeType: 'video/webm'
+                    });
+                    screenRecorder.stream = screenStream;
+                }
+            });
+
+            psynet.trial.onEvent("recordStart", function() {
+                if (!replayMode) {
+                    screenRecorder.startRecording();
+                }
+            });
+
+            psynet.trial.onEvent("recordEnd", async function() {
+                if (!replayMode) {
+                    await screenRecorder.stopRecording();
+                    psynet.media.data["screenBlob"] = await screenRecorder.getBlob();
+                    await screenRecorder.reset();
+                }
+            });
+
+            psynet.trial.onEvent("trialStop", async function() {
+                let state = await screenRecorder.getState();
+                if (state != "inactive") {
+                    await screenRecorder.stopRecording();
+                }
+                await screenRecorder.reset();
+            });
+
+        }
+    </script>
+{% endmacro %}
+
+{% macro text(params) %}
+    <style>
+        #text-input-container {
+            padding-top: 20px;
+            padding-bottom: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        #text-input {
+            {% if params.width is not none %} width: {{ params.width }}; {% endif %}
+            {% if params.height is not none %} height: {{ params.height }}; {% endif %}
+        }
+    </style>
+
+    <div id="text-input-container">
+        <{% if params.one_line %}input{% else %}textarea{% endif %} id="text-input" class="form-control response" type="text" autocomplete="off" value="" {% if params.block_copy_paste %}onselectstart="return false" oncut="return false" oncopy="return false" onpaste="return false" ondrag="return false" ondrop="return false"{% endif %}><{% if params.one_line %}/input{% else %}/textarea{% endif %}>
+    </div>
+    <p class="vspace"></p>
+
+    <script>
+        retrieveResponse = function() {
+            return {
+                rawAnswer: $("#text-input").get(0).value
+            }
+        }
+
+        psynet.trial.onEvent("responseEnable", function() {
+            document.getElementById('text-input').focus();
+        });
+    </script>
+
+{% endmacro %}
+
+{% macro number(params) %}
+    <style>
+        #number-input-container {
+            padding-top: 20px;
+            padding-bottom: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        #number-input {
+            text-align: {{params.text_align}};
+            {% if params.width is not none %}width: {{ params.width }};{% endif %}
+        }
+    </style>
+
+    <div id="number-input-container">
+        <input id="number-input" class="form-control response" type="text" autocomplete="off" value=""/>
+    </div>
+    <p class="vspace"></p>
+
+    <script>
+        retrieveResponse = function() {
+            return {
+                rawAnswer: $("#number-input").get(0).value
+            }
+        }
+
+        psynet.trial.onEvent("responseEnable", function() {
+            document.getElementById('number-input').focus();
+        });
+    </script>
+{% endmacro %}
+
+{% macro frame_slider(params) %}
+    <style>
+        #slider-video-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 25px;
+            min-height: {{ params.height }};
+            min-width: {{ params.width }};
+        }
+        #slider-container {
+            margin: 25px;
+            {% if params.hide_slider == true %} display: none; {% endif %}
+        }
+        #slider {
+            {%if params.reverse_scale %} direction: rtl {% endif %};
+            width: 100%;
+        }
+        .slider-range {
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            border: 1px solid #000000;
+            height: 36px;
+            background-color: #efefef;
+            border: 11px solid #b2b2b2;
+            border-radius: 5px;
+            {% if params.directional == false %}
+            margin-top: -8px;
+            {% endif %}
+            cursor: pointer;
+        }
+        {% if params.directional == false %}
+        input[type=range]::-webkit-slider-runnable-track {
+              background: #000000;
+              border: 1px solid #b2b2b2;
+              background-color: #efefef;
+              border-radius: 5px;
+              width: 100%;
+              height: 8px;
+            }
+        {% endif %}
+    </style>
+
+    <div id="slider-video-container">
+        <video id="slider-video" class="loader" width="{{ params.width }}" height="{{ params.height }}" style="visibility: hidden">
+            <source src="" type="video/{{ params.file_type }}"
+        </video>
+    </div>
+
+    <div id="slider-container">
+        <input
+            type="range"
+            id="slider"
+            class="form-control-range response slider-range{% if not params.directional %} slider-non-directional{% endif %}"
+            style="display: inline-block;"
+            min="0"
+            max="1"
+            step="0.001"
+            value="{{ params.starting_value }}">
+    </div>
+
+    <script>
+        function updateVideoFromSlider() {
+            let slider_value = document.getElementById("slider").value;
+            let video = document.getElementById("slider-video");
+
+            video.currentTime = slider_value * video.duration;
+            window.requestAnimationFrame(updateVideoFromSlider);
+        };
+
+        psynet.trial.onEvent("responseEnable", function() {
+            $("#slider-video").css("visibility", "visible");
+            updateVideoFromSlider()
+        });
+
+        retrieveResponse = function() {
+            return {
+                rawAnswer: parseFloat($("#slider").get(0).value)
+            }
+        }
+    </script>
+{% endmacro %}
+
+{% from "macros/graphics.html" import graphic_%}
+{% macro graphic(params) %}
+    {{ graphic_(params) }}
+{% endmacro %}
+
+
+{% macro survey_js(params) %}
+    <style>
+    </style>
+
+    <div id="surveyContainer"></div>
+
+    <link href="{{ url_for('static', filename='scripts/survey-jquery/defaultV2.min.css') }}" type="text/css" rel="stylesheet">
+
+    <script>
+    var survey;
+
+    function initSurvey() {
+        Survey
+            .StylesManager
+            .applyTheme("defaultV2");
+
+        const surveyJson = {{ params.design | tojson }};
+
+        survey = new Survey.Model(surveyJson);
+        survey.focusFirstQuestionAutomatic = false;
+
+        {% if params.use_psynet_next_button %}
+        // survey.showCompleteButton = false; // only available in SurveyJS v2.0.0
+        survey.showNavigationButtons = false;
+
+        psynet.stageResponse = () => {
+            // This will actually do more than stage the response,
+            // it'll trigger the full submission.
+            let success = survey.completeLastPage()
+            if (!success) {
+                throw new Error(
+                    "The participant failed SurveyJS's validation checks (e.g. because they forgot to answer a question). They will be asked to try again."
+                );
+            }
+        }
+
+        {% endif %}
+
+        function handleSurveyCompletion(sender, options) {
+            // Setting these options instructs SurveyJS to cancel the current completion code,
+            // and allow us to handle it ourselves.
+            // We need this slightly convoluted approach because SurveyJS doesn't allow you to place
+            // async code within its own validation functions.
+            // See https://github.com/surveyjs/survey-library/issues/1242 for a discussion.
+            options.allowComplete = false;
+            options.allowCompleting = false;
+            asyncPostResults(sender);
+        }
+
+        async function asyncPostResults(sender, options) {
+            survey.onCompleting.remove(handleSurveyCompletion);
+            const results = JSON.stringify(sender.data);
+
+            // SurveyJS automatically hides the survey when the user presses the complete button.
+            // To keep the UI consistent we also hide the rest of the PsyNet page.
+            $("#main-body").hide()
+
+            const success = await psynet.nextPage(results);
+            if (success) {
+                sender.doComplete();
+            } else {
+                $("#main-body").show()
+                survey.onCompleting.add(handleSurveyCompletion);
+            }
+        }
+
+        survey.onAfterRenderPage.add(() => {
+            $(".sd-navigation__complete-btn").addClass("submit");
+            if (!psynet.trial.events.submitEnable.happened) {
+                $(".sd-navigation__complete-btn").attr("disabled", true);
+            }
+        });
+        survey.onCompleting.add(handleSurveyCompletion);
+
+        $(function() {
+            $("#surveyContainer").Survey({ model: survey });
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", initSurvey);
+
+    </script>
+
+{% endmacro %}
+
+
+{% macro terminate_control(params) %}
+    <style>
+        .push-button-container {
+            display: {% if params.arrange_vertically %}grid{% else %}flex{% endif %};
+            flex-wrap: wrap;
+            justify-content: center;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+    </style>
+
+    <div class="push-button-container">
+        {% for item in params.items %}
+        <button
+                type="button"
+                id="{{ item.id }}"
+                class="{{ item.class }}"
+                onclick="clickedButton(this, this.id, {{ item.allowed | tojson }});"
+        >
+            {% autoescape off %}
+            {{ item.label }}
+            {% endautoescape %}
+        </button>
+        {% endfor %}
+    </div>
+
+    <script>
+
+        clickedButton = function(button, id, allowed) {
+            if (allowed) {
+                psynet.nextPage(id);
+            } else {
+                terminateParticipant("{{ params.label }}_" + id)
+            }
+        };
+    </script>
+{% endmacro %}
+
+
+{% macro monitor(params) %}
+<script>
+    summarizeScreen = function (screenDetailed) {
+        const dict = {};
+        let keys = Object.keys(Object.getOwnPropertyDescriptors(Object.getPrototypeOf(screenDetailed)));
+        let extraKeys = [
+            'availHeight', 'availLeft', 'availTop', 'availWidth', 'colorDepth', 'height', 'width', 'left', 'top',
+            'isExtended', 'pixelDepth'
+        ]
+        keys.push(...extraKeys)
+        keys.map(function (key) {
+            try {
+                if (typeof screenDetailed[key] !== "function") {
+                    dict[key] = screenDetailed[key];
+                }
+            } catch (e) {
+                dict[key] = undefined;
+            }
+        });
+        return dict;
+    }
+
+    async function getMonitorInformation () {
+        let info = await window.getScreenDetails();
+        return {
+            currentScreen: summarizeScreen(info.currentScreen),
+            screens: info.screens.map(summarizeScreen),
+            currentWindow: {
+                'width': window.innerWidth,
+                'height': window.innerHeight,
+                'left': window.screenX,
+                'top': window.screenY
+            }
+        }
+    }
+
+
+    psynet.stageResponse = async function (){
+        psynet.response.staged.rawAnswer = await getMonitorInformation()
+    }
+</script>
+{% endmacro %}
