@@ -1,0 +1,68 @@
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier,BaggingClassifier, ExtraTreesClassifier
+import numpy as np, pandas as pd, random
+from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
+class TreeNet:
+  def __init__(self,layer_count=2,breath_count=1):
+    self.layers={}
+    self.layer_count=layer_count
+    self.breath_count=breath_count
+    for i in range(layer_count):
+      self.layers["layer_"+str(i)]={}
+      if(i%2==0):
+        for b in range(self.breath_count):
+          self.layers["layer_"+str(i)]["RF_1_"+str(b)]=RandomForestClassifier(n_estimators=random.randint(1,8)*25, random_state=42)
+          self.layers["layer_"+str(i)]["RF_2_"+str(b)]=RandomForestClassifier(n_estimators=random.randint(1,8)*25, random_state=42)
+          self.layers["layer_"+str(i)]["ET_3_"+str(b)]=ExtraTreesClassifier(n_estimators=random.randint(1,8)*25, random_state=42)
+          self.layers["layer_"+str(i)]["ET_4_"+str(b)]=ExtraTreesClassifier(n_estimators=random.randint(1,8)*25, random_state=42)
+      else:
+        for b in range(self.breath_count):
+          self.layers["layer_"+str(i)]["XG_1_"+str(b)]=XGBClassifier()
+          self.layers["layer_"+str(i)]["CB_2_"+str(b)]=CatBoostClassifier(iterations=random.randint(1,8)*25, learning_rate=0.1, depth=6, loss_function='MultiClass', random_state=42)
+          self.layers["layer_"+str(i)]["CB_3_"+str(b)]=CatBoostClassifier(iterations=random.randint(1,8)*25, learning_rate=0.1, depth=6, loss_function='MultiClass', random_state=42)
+          self.layers["layer_"+str(i)]["BC_4_"+str(b)]=BaggingClassifier(DecisionTreeClassifier(), n_estimators=random.randint(1,8)*25, random_state=42)
+    
+  def train(self,trainX,trainY):
+    for l,layer in enumerate(self.layers):
+      print("Training Layer\t",l+1,"\t with input\t",trainX.shape)
+      preds={}
+      for i,forest in enumerate(self.layers[layer]):
+        if("CB_" in forest):
+          preds[forest]=self.layers[layer][forest].fit(trainX, trainY,verbose=0).predict_proba(trainX)
+        else:
+          preds[forest]=self.layers[layer][forest].fit(trainX, trainY).predict_proba(trainX)
+      for forest in self.layers[layer]:
+        trainX=trainX.merge(pd.DataFrame(preds[forest]).add_suffix("_"+layer+"_"+forest), left_index=True, right_index=True,copy=True)
+  def predict_prob(self,testX):
+    for l,layer in enumerate(self.layers):
+      print("Input Shape Before Layer ",layer,"\t",testX.shape)
+      preds={}
+      for i,forest in enumerate(self.layers[layer]):
+        preds[forest]=self.layers[layer][forest].predict_proba(testX)
+      for forest in self.layers[layer]:
+        testX=testX.merge(pd.DataFrame(preds[forest]).add_suffix("_"+layer+"_"+forest), left_index=True, right_index=True,copy=True)
+    return np.mean(np.stack(list(preds.values())), axis=0)
+
+    
+  def predict(self,testX):
+    for l,layer in enumerate(self.layers):
+      print("Input Shape Before Layer ",layer,"\t",testX.shape)
+      preds={}
+      for i,forest in enumerate(self.layers[layer]):
+        preds[forest]=self.layers[layer][forest].predict_proba(testX)
+      for forest in self.layers[layer]:
+        testX=testX.merge(pd.DataFrame(preds[forest]).add_suffix("_"+layer+"_"+forest), left_index=True, right_index=True,copy=True)
+    return np.argmax(np.mean(np.stack(list(preds.values())), axis=0), axis=1).reshape(-1, 1)
+
+
+
+    
+  def summary(self):
+    print("Model has "+str(self.layer_count)," layers")
+    print("Model Layer Breath is "+str(self.breath_count))
+    print("Model Details")
+    print(self.layers)
+
+treenet=TreeNet(2,3)
+treenet.summary()
