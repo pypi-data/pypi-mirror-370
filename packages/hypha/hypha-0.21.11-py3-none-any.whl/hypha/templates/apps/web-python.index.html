@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hypha App (web-python)</title>
+    <meta name="description" content="Template for Hypha app">
+    <meta name="author" content="ImJoy-Team">
+</head>
+
+<body>
+<ul id="console">
+
+</ul>
+<script id="worker" type="javascript/worker">
+const window = self;
+const src = `
+import sys
+import os
+import asyncio
+import json
+from types import ModuleType
+import inspect
+from js import console
+import traceback
+import micropip
+from hypha_rpc.utils import ObjectProxy
+from hypha_rpc import connect_to_server
+
+async def export_service(plugin_api, config, hypha_rpc):
+    try:
+        wm = await connect_to_server(config)
+        hypha_rpc.api.update(wm) # make the api available to the plugin
+        rpc = wm.rpc
+        if not isinstance(plugin_api, dict) and inspect.isclass(type(plugin_api)):
+            plugin_api = {a: getattr(plugin_api, a) for a in dir(plugin_api)}
+        # Copy the plugin name as the default name
+        plugin_api["id"] = "default"
+        plugin_api["name"] = config.get("name", "default")
+        await wm.register_service(plugin_api, {"overwrite": True})
+        console.log("Application initialized successfully.")
+    except Exception as exp:
+        console.error("Failed to export service: ", traceback.format_exc())
+        print(traceback.format_exc())
+
+
+async def patch_hypha_rpc(default_config):
+    import hypha_rpc
+    def export(api, config=None):
+        default_config.update(config or {})
+        hypha_rpc.ready = asyncio.ensure_future(
+            export_service(api, default_config, hypha_rpc)
+        )
+
+    # create a fake hypha_rpc to patch hypha rpc
+    hypha_rpc.api = ObjectProxy(export=export)
+    return hypha_rpc
+
+
+async def prepare_artifact_files(config):
+    """Prepare artifact files if required_artifact_files is specified."""
+    required_files = config.get("required_artifact_files", [])
+    if not required_files:
+        return
+    # Install hypha-artifact if not already available
+    from hypha_artifact import AsyncHyphaArtifact
+    # Get environment variables
+    workspace = config.get("workspace")
+    token = config.get("token")
+    app_id = config.get("app_id")
+    server_url = config.get("server_url")
+    if not all([workspace, token, app_id]):
+        error_msg = "Missing required environment variables for artifact access"
+        console.error(error_msg)
+        raise RuntimeError(error_msg)
+    
+    console.log(f"🔗 Connecting to artifact: {app_id}")
+    artifact = AsyncHyphaArtifact(
+        server_url=server_url,
+        artifact_id=app_id,
+        workspace=workspace,
+        token=token
+    )
+    
+    # Process each required file/directory
+    failed_files = []
+    for file_path in required_files:
+        target_dir = f"/tmp/custom_modules_{file_path.replace('/', '_')}"
+        
+        console.log(f"📂 Processing artifact path: {file_path}")
+        
+        try:
+            # Download files
+            console.log(f"⬇️ Downloading {file_path} to {target_dir}...")
+            n_downloaded = await artifact.get(file_path, target_dir, recursive=True)
+            console.log(f"✅ Downloaded {n_downloaded if isinstance(n_downloaded, int) else 'all'} files to {target_dir}")
+            
+            # Add to Python path
+            if target_dir not in sys.path:
+                sys.path.insert(0, target_dir)
+                console.log(f"🛤️ Added {target_dir} to sys.path")
+                
+        except Exception as e:
+            error_msg = f"Failed to process artifact path {file_path}: {str(e)}"
+            console.error(f"❌ {error_msg}")
+            print(error_msg)
+            failed_files.append((file_path, str(e)))
+    
+    # If any files failed to download, raise an error
+    if failed_files:
+        error_details = "; ".join([f"{path}: {error}" for path, error in failed_files])
+        raise RuntimeError(f"Failed to download required artifact files: {error_details}")
+    
+    console.log("🚀 Artifact preparation completed!")
+
+
+
+async def run():
+    from js import config, script_src
+    config = config.to_py()
+    os.environ["HYPHA_SERVER_URL"] = config.get("server_url", "")
+    os.environ["HYPHA_WORKSPACE"] = config.get("workspace", "")
+    os.environ["HYPHA_CLIENT_ID"] = config.get("client_id", "")
+    os.environ["HYPHA_TOKEN"] = config.get("token", "")
+    os.environ["HYPHA_APP_ID"] = config.get("app_id", "")
+    try:
+        # Prepare artifact files first if needed
+        await prepare_artifact_files(config)
+        
+        # Then run the main application
+        hypha_rpc = await patch_hypha_rpc(config)
+        exec(script_src, globals())
+    except Exception as exp:
+        console.error("Failed to run script: ", traceback.format_exc())
+        print(traceback.format_exc())
+
+asyncio.ensure_future(run())
+`
+
+self.script_src = `
+{{ script | safe }}
+`
+
+const startupScript = `
+import js
+import micropip
+import sys
+import traceback
+import asyncio
+from js import console
+
+# patch ssl module for fastapi etc.
+from types import ModuleType
+m = ModuleType("ssl")
+m.SSLObject = None
+m.MemoryBIO = None
+m.SSLContext = None
+sys.modules["ssl"] = m
+del m
+
+async def run():
+    try:
+        # Check if hypha-artifact is needed
+        config = js.config.to_py()
+        required_files = config.get("required_artifact_files", [])
+        
+        # Base packages to install
+        packages = ["numpy", "pydantic", "hypha-rpc=={{ hypha_hypha_rpc_version }}"]
+        
+        # Add hypha-artifact if required_artifact_files is specified
+        if required_files:
+            packages.append("hypha-artifact")
+            console.log("📦 Will install hypha-artifact for artifact file access")
+        
+        # Add other requirements
+        {% for req in requirements %}
+        packages.append("{{req}}")
+        {% endfor %}
+        
+        console.log(f"📦 Installing packages: {packages}")
+        await micropip.install(packages)
+        console.log("✅ Package installation completed")
+        
+    except Exception as e:
+        console.error("Failed to install packages: ", traceback.format_exc())
+        raise e
+
+await run()
+`
+
+async function installPackage(){
+    return await self.pyodide.runPythonAsync(startupScript)
+}
+
+const toObject = (x) => {
+    if(x===undefined || x===null) return x;
+    if(self.pyodide.isPyProxy(x)){
+        return x.toJs({dict_converter : Object.fromEntries})
+    }
+    else if (x instanceof Array) {
+        return x.map(toObject);
+    } else {
+        return x;
+    }
+}
+
+async function setupPyodide() {
+    if(self.pyodide) return;
+    importScripts('https://cdn.jsdelivr.net/pyodide/v0.28.0/full/pyodide.js');
+    self.pyodide = await loadPyodide({
+        indexURL : 'https://cdn.jsdelivr.net/pyodide/v0.28.0/full/',
+        stdout: (text) => {
+            self.postMessage({"type": "stdout", "content": text})
+        },
+        stderr: (text) => {
+            self.postMessage({"type": "stderr", "content": text})
+        },
+    });
+    self.pyodide.setStdout({ batched: (msg) => console.log(msg) });
+    self.pyodide.setStderr({ batched: (msg) => console.error(msg) });
+    await self.pyodide.loadPackage(['micropip']);
+    await installPackage()
+}
+
+self.onmessage = async function(e) {
+    const config = e.data
+    self.config = config
+    try {
+        await setupPyodide()
+        await self.pyodide.runPythonAsync(src);
+    } catch (err) {
+        console.error("Failed to start the script", err);
+        self.postMessage({type: "stderr", "content": err})
+    }
+}
+    
+</script>
+<script>
+window.onload = function() {
+    const consoleElem = document.getElementById('console');
+    const blob = new Blob([
+        document.querySelector('#worker').textContent
+    ], { type: "text/javascript" })
+    const worker = new Worker(window.URL.createObjectURL(blob));
+    worker.onerror = console.error
+    worker.onmessage = (e)=>{
+        if(e.data.type === 'title'){
+            document.title = e.data.content;
+            return
+        }
+        if(e.data.type === 'stdout'){
+            const li = document.createElement('li')
+            li.innerHTML = e.data.content;
+            li.style.color ="blue";
+            consoleElem.appendChild(li)
+        }
+        else if(e.data.type === 'stderr'){
+            const li = document.createElement('li')
+            li.innerHTML = e.data.content;
+            li.style.color ="red";
+            consoleElem.appendChild(li)
+        }
+        // make sure we don't have too many elements in the dom
+        if(consoleElem.children.length>1024){
+            consoleElem.removeChild(consoleElem.firstChild)
+        }
+    }
+    const config = {{ config | tojson(indent=2) }}
+    const cfg = Object.assign(config, Object.fromEntries(new URLSearchParams(window.location.search)));
+    if(!cfg.server_url) cfg.server_url = window.location.origin;
+    worker.postMessage(cfg); 
+}
+</script>
+</body>
+</html>
