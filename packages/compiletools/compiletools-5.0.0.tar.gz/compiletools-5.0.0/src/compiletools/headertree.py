@@ -1,0 +1,259 @@
+#!/usr/bin/env python3
+import sys
+from collections import defaultdict
+from collections import Counter
+import math
+import configargparse
+import compiletools.wrappedos
+import compiletools.headerdeps
+import compiletools.git_utils as git_utils
+import compiletools.utils as utils
+import compiletools.tree as tree
+import compiletools.configutils
+import compiletools.apptools
+
+
+class FlatStyle(compiletools.git_utils.NameAdjuster):
+
+    """ Print a newline delimited list of header files """
+
+    def __init__(self, tree_, args):
+        compiletools.git_utils.NameAdjuster.__init__(self, args)
+        tree.depth_first_traverse(node=tree_, pre_traverse_function=self.print_wrapper)
+
+    def print_wrapper(self, key):
+        """ Wrap the builtin print so that it can be passed to the tree.depth_first_traverse """
+        print(self.adjust(key))
+
+
+class DepthStyle(compiletools.git_utils.NameAdjuster):
+
+    """ Print the include tree with some sort of indicator of depth """
+
+    def __init__(self, tree_, args, indicator="--"):
+        compiletools.git_utils.NameAdjuster.__init__(self, args)
+        self.indicator = indicator
+        tree.depth_first_traverse(
+            node=tree_, pre_traverse_function=self.depth_indicator_print
+        )
+
+    def depth_indicator_print(self, key, depth):
+        """ Print the filenames with a leading indicator to denote the depth of the file from the root """
+        print(self.indicator * depth + self.adjust(key))
+
+
+class DotStyle(compiletools.git_utils.NameAdjuster):
+
+    """ Print the include tree in graphviz dot format. """
+
+    def __init__(self, tree_, args):
+        compiletools.git_utils.NameAdjuster.__init__(self, args)
+        for key in tree_:
+            # TODO: Take care of the case where there are multiple top level
+            # nodes
+            self.name = self.adjust(key)
+        self._print_header()
+        tree.depth_first_traverse(node=tree_, pre_traverse_function=self._print_node)
+        self._print_footer()
+
+    def _print_header(self):
+        print('digraph "' + self.name + '" {')
+
+    @staticmethod
+    def _print_footer():
+        print("}")
+
+    def _print_node(self, key, value):
+        print('"' + self.adjust(key) + '"')
+
+        for child_key in value:
+            print('"' + self.adjust(key) + '"->"' + self.adjust(child_key) + '"')
+
+
+class TreeStyle(compiletools.git_utils.NameAdjuster):
+
+    """ Show the cumulative cost and self cost of including the header files """
+
+    # TODO: There are now four different statistics that TreeStyle calculates and
+    #       we can easily imagine more.  And by embedding the statistics in here
+    #       they are unavailable to DotStyle.  We need to separate the output
+    #       formatting style from the calculated statistics. Also the statistics
+    #       should be command line settable so that you only get what
+    #       you want
+
+    def __init__(self, tree_, args):
+        compiletools.git_utils.NameAdjuster.__init__(self, args)
+        self.verbose = args.verbose
+
+        # The various max_* variables are used to figure out the number of
+        # digits to leave space for
+        self.max_cumulative = 1
+        self.max_self = 1
+        self.max_duplicates = 1
+        self.max_parents = 1
+
+        self.counter = [0]  # Counter will be used as a stack
+        # List of all parents leading to the current node.  Used as a stack.
+        self.parent_stack = []
+        # A dict mapping a file to the set of parents of that file
+        self.parents = defaultdict(set)
+        self.reverse_result = []  # The output in reverse order
+        # Count the number of times a given header is included across all
+        # branches of the include tree
+        self.duplicates = Counter()
+
+        # Now traverse the tree and print out the result
+        tree.depth_first_traverse(
+            node=tree_,
+            pre_traverse_function=self._pre,
+            post_traverse_function=self._post,
+        )
+        self.print()
+
+    def _pre(self, key):
+        self.counter.append(0)
+        self.duplicates[key] += 1
+        self.parent_stack.append(key)
+
+    def _post(self, key, value, depth):
+        self.parent_stack.pop()  # pop the current file off the stack
+        try:
+            # push the immediate parent into the set of parents of the file
+            self.parents[key].add(self.parent_stack[-1])
+        except IndexError:
+            pass
+        last = self.counter.pop()
+        self.counter[-1] += last + 1
+        name = self.adjust(key)
+
+        self.max_cumulative = max(self.max_cumulative, self.counter[-1])
+        self.max_self = max(self.max_self, len(value))
+        self.max_duplicates = max(self.max_duplicates, self.duplicates[key])
+        self.max_parents = max(self.max_parents, len(self.parents[key]))
+
+        # store cumulative includes and direct includes
+        self.reverse_result.append(
+            {
+                "cumulative": last,
+                "self": len(value),
+                "depth": depth,
+                "name": name,
+                "key": key,
+            }
+        )
+
+    def print(self):
+        if self.verbose >= 1:
+            print(
+                "First column is the cumulative count of headers (recursively) included by the filename."
+            )
+            print(
+                "Second column is the self count.  That is, the headers directly included by the filename."
+            )
+            print(
+                "Third column is the number of times the file is duplicated in this tree."
+            )
+            print("Fourth column is the number of unique parents the file has.")
+
+        def _righttreechars(child_index):
+            return {1: u"\u2514\u2500"}.get(child_index, u"\u251c\u2500")
+
+        def _internaltreechars(child_index):
+            return {0: u"  "}.get(child_index, u"\u2502 ")
+
+        def _digits_str(max_value):
+            """ How many digits are in the number when represented in base 10. Return as a string. """
+            return str(1 + int(math.floor(math.log10(max_value))))
+
+        cumulative_format_str = "{c:" + _digits_str(self.max_cumulative) + "d}"
+        self_format_str = "{s:" + _digits_str(self.max_self) + "d}"
+        duplicates_format_str = "{d:" + _digits_str(self.max_duplicates) + "d}"
+        parents_format_str = "{p:" + _digits_str(self.max_parents) + "d}"
+
+        remaining_children = []
+        for item in reversed(self.reverse_result):
+            tree_structure = ""
+
+            # Trim any no longer needed information from the remaining children
+            if item["depth"] < len(remaining_children):
+                remaining_children = remaining_children[: (item["depth"])]
+
+            # Create the internal tree structure up to the grandparents
+            if item["depth"] > 1:
+                for child_index in remaining_children[: (item["depth"] - 1)]:
+                    tree_structure += _internaltreechars(child_index)
+
+            # Add on the connector to the parent
+            if item["depth"] > 0:
+                tree_structure += _righttreechars(remaining_children[item["depth"] - 1])
+            print(
+                cumulative_format_str.format(c=item["cumulative"])
+                + " "
+                + self_format_str.format(s=item["self"])
+                + " "
+                + duplicates_format_str.format(d=self.duplicates[item["key"]])
+                + " "
+                + parents_format_str.format(p=len(self.parents[item["key"]]))
+                + " "
+                + tree_structure
+                + item["name"]
+            )
+
+            # Since the child has now been drawn, reduce the parents count of
+            # their remaining children (except for the topmost node which has
+            # no parent)
+            if remaining_children:
+                remaining_children[-1] -= 1
+
+            if item["self"] > 0:
+                remaining_children.append(item["self"])
+
+
+def main(argv=None):
+    # Python 3 stdout accepts unicode by default
+    # So we only need to force python 2 stdout to accept unicode
+    if sys.version_info[0] < 3:
+        UTF8Writer = codecs.getwriter("utf8")
+        sys.stdout = UTF8Writer(sys.stdout)
+
+    cap = compiletools.apptools.create_parser(
+        "Create a tree of header dependencies starting at a given C/C++ file", argv=argv
+    )
+    cap.add("filename", help="File to start tracing headers from", nargs="+")
+
+    # Figure out what style classes are available and add them to the command
+    # line options
+    styles = [st[:-5].lower() for st in dict(globals()) if st.endswith("Style")]
+    cap.add("--style", choices=styles, default="tree", help="Output formatting style")
+
+    compiletools.headerdeps.add_arguments(cap)
+    args = compiletools.apptools.parseargs(cap, argv)
+    ht = compiletools.headerdeps.DirectHeaderDeps(args)
+
+    if not compiletools.wrappedos.isfile(args.filename[0]):
+        sys.stderr.write(
+            "The supplied filename ({0}) isn't a file.  Did you spell it correctly?  Another possible reason is that you didn't supply a filename and that configargparse has picked an unused positional argument from the config file.\n".format(
+                args.filename[0]
+            )
+        )
+        exit(1)
+
+    # Create the headertree then print it in the appropriate style
+    inctree = ht.generatetree(args.filename[0])
+    styleclass = globals()[args.style.title() + "Style"]
+
+    # Construct an instance of the style class which will print the header
+    # tree as a side effect
+    try:
+        styleobject = styleclass(inctree, args)
+    except IOError:
+        pass
+
+    return 0
+
+
+if __name__ == "__main__":
+    cap = compiletools.apptools.create_parser(
+        "Create a tree of header dependencies starting at a given C/C++ file."
+    )
+    sys.exit(main())
