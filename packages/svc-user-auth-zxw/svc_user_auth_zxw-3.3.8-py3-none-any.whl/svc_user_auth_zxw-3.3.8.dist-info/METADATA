@@ -1,0 +1,1507 @@
+Metadata-Version: 2.4
+Name: svc_user_auth_zxw
+Version: 3.3.8
+Summary: 用户权限验证工具包
+Home-page: https://github.com/sunshineinwater/
+Author: 景募
+Author-email: 
+Classifier: Programming Language :: Python :: 3.10
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Description-Content-Type: text/markdown
+Requires-Dist: pycryptodome<=3.22.0,>=3.20.0
+Requires-Dist: fastapi<0.113,>=0.112.0
+Requires-Dist: jose<1.1.0,>=1.0.0
+Requires-Dist: aiohttp>=3.12.14
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: sqlalchemy==2.0.32
+Requires-Dist: greenlet==3.0.3
+Requires-Dist: databases==0.9.0
+Requires-Dist: python-jose>=3.4.0
+Requires-Dist: passlib==1.7.4
+Requires-Dist: bcrypt==4.2.0
+Requires-Dist: asyncpg==0.29.0
+Requires-Dist: uvicorn<0.31.0,>=0.30.0
+Requires-Dist: python-multipart>=0.0.19
+Requires-Dist: app-tools-zxw>=2.2.1
+Requires-Dist: alibabacloud_dysmsapi20170525==3.0.0
+Requires-Dist: redis==5.2.0
+Requires-Dist: apscheduler==3.10.4
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: summary
+
+# svc_user_auth_zxw - 用户权限验证工具包
+
+一个基于 FastAPI 的用户认证和权限管理系统，支持多种登录方式、JWT 认证、会员系统和权限控制。
+
+## 版本信息
+
+
+## 📈 版本历史
+
+- **3.3.8**
+  - 新增手机号管理api: 更新绑定手机号
+  - 优化login逻辑，登录回调功能放入 login.py中统一管理，其他api中无需重复实现。
+  - 手机号一键注册登录，支持传入username, 如果传入username，则username写入数据库，否则写入phone
+
+- **3.3.7**
+  - 修复SQLAlchemy 2.x兼容性问题: 解决ArgumentError异常，selectinload不再接受字符串参数
+  - 更新所有selectinload调用: 从字符串格式改为类属性格式，提升代码兼容性
+  - 完善类型导入: 在所有登录API文件中添加Role类导入，确保类型安全
+  - 修改文件详情:
+    - `apis/api_登录注册/账号密码注册登录/api_注册登录.py`: 修复3处selectinload调用，添加Role类导入
+    - `apis/api_登录注册/手机注册登录/api_注册登录.py`: 修复4处selectinload调用，添加Role类导入
+    - `apis/api_登录注册/微信H5快捷登录/api_注册登录.py`: 修复2处selectinload调用，添加Role类导入
+- **3.3.6**
+  - 修复SQLAlchemy异步关系访问错误: 解决MissingGreenlet异常，确保所有登录注册场景正确预加载用户角色和应用关系
+  - 优化数据库查询性能: 使用selectinload预加载策略，避免N+1查询问题
+  - 更新所有登录相关API: 账号密码登录、手机号登录、微信登录均已修复异步关系访问问题
+  - 修改文件详情:
+    - `db/models.py`: 优化User.to_payload()方法中的关系访问逻辑
+    - `apis/api_登录注册/账号密码注册登录/api_注册登录.py`: 添加selectinload预加载用户角色和应用关系
+    - `apis/api_登录注册/手机注册登录/api_注册登录.py`: 修复手机号登录的关系预加载问题
+    - `apis/api_登录注册/微信H5快捷登录/api_注册登录.py`: 修复微信登录的关系预加载问题
+- **3.3.5**
+  - 不再需要在外部运行内部定时任务, 自动运行会员管理相关定时任务(清理过期会员等)
+
+- **3.3.4**
+  - 新增手机号管理api: 更新绑定手机号
+  - 新增uniapp前端页面demo: 手机号管理, 更新绑定手机号, 发送验证码, 验证验证码, 获取当前手机号, 获取当前用户信息, 获取当前用户信息
+  - 优化login逻辑，登录回调功能放入 login.py中统一管理，其他api中无需重复实现。
+
+- **3.3.3**
+  - 账号密码注册登录：username不再写入phone,email,openid字段
+  - 账号密码注册登录 测试通过
+  - 新增uniapp前端页面demo: 账号密码注册登录
+- **3.3.2**
+  - 更新依赖库httpx版本号
+- **3.3.1**
+  - 手机号注册登录api 支持配置测试账号,在user_auth_config中配置
+- **3.3.0**
+  - 新增会员表crud接口，成功经验编程，未测试
+- **3.2.1**
+  - 更新:uniapp前端页面demo,开箱即用
+- **3.2.0**
+  - 新增邀请码功能:用户ID与邀请码互转,支持批量处理
+  - 优化api - 手机注册登录:支持邀请码转换为推荐人ID
+  - 添加邀请码相关工具函数:编码/解码/验证
+- **3.1.32**
+  - 兼容性更新,与svc_order_zxw兼容: 会员数据库,price类型改为float,相关schemas同步更改
+- **3.1.31**
+  - api_会员类型管理:存在未定位bug,添加debug输出
+- **3.1.3**
+  - useExamples： 添加 登录回调样例代码
+- **3.1.2**
+  - api:/register-or-login-phone/ , 添加登录回调功能,在config中配置回调地址
+- **3.1.1**
+  - 手机验证码登录后,添加POST回调功能,传送user信息,在config中配置回调地址
+- **3.1.0**
+  - 新增完整的邀请功能系统
+  - 添加邀请用户管理接口（获取邀请列表、统计、查询邀请人信息）
+  - 新增邀请汇总和统计功能（包含二级邀请统计）
+  - 添加邀请功能Interface类，支持异步操作
+  - 完善邀请关系数据模型和权限控制
+- **3.0.2**
+  - 会员类型管理 - internal函数去除管理员身份验证, 移到API函数内验证
+- **3.0.1**
+  - 将api_会员类型管理.py文件重构为可内部调用的函数和API接口
+  - 新增的内部函数（以internal_开头）
+### **非兼容性更新**
+- **3.0.0** 🎉 **重大更新**:
+  - 安全漏洞修复
+  - 敏感权限操作由api改为内部函数
+
+### **非兼容性更新**
+- **2.1.0** 🎉 **重大更新**: 新增完整的会员体系功能
+  - 添加会员类型管理（创建、查询、更新、删除）
+  - 添加用户会员管理（购买、续费、状态管理）
+  - 添加会员权限验证装饰器和API
+  - 添加定时任务自动清理过期会员
+  - 会员权限与角色权限系统无缝整合
+  - ⚠️ **非兼容性更新**，与之前版本不兼容
+
+### 近期版本
+- **2.0.4**: 添加uniApp手机号登录页(具备完备的api请求逻辑, 复制到项目内直接使用)
+- **2.0.3**: 阿里云sms发送增加logger记录
+- **2.0.2**: 阿里云sms发送配置使用config中配置, 为None时使用默认配置
+- **2.0.1**: 修正使用文档错误
+- **2.0.0**: 项目由 user_auth_zxw 更名为 svc_user_auth_zxw
+
+### 1.0.x 版本（适配VUE-ELEMENT-PLUS-ADMIN框架）
+- **1.0.5**: 用户文档错误修正
+- **1.0.4**: 添加用户文档
+- **1.0.3**: bug fix，新用户注册后to_payload()报错修复，优化用户角色关联数据加载
+- **1.0.2**: 优化账号密码注册登录返回值，变更数据表结构：Role采用联合主键：(app_id, name)
+- **1.0.1**: 新增vue-element-plus-admin api: 退出登录
+- **1.0.0**: 统一API返回值，符合vue-element-plus-admin框架原生标准
+
+### 早期版本
+- **0.1.1**: 支持多线程任务，集成修改: 短信验证码验证，redis存储与验证
+- **0.1.0**: 修改: jwt验证失败, 弹出401 HTTPException_AppToolsSZXW异常
+- **0.0.9**: 表结构User新增字段:referer_id,referer,invitees，手机号注册登录新增相应字段，增加邀请人信息
+- **0.0.8**: 新增:批量删除用户角色(delete_roles)
+
+## 功能特性
+
+### 🔐 用户认证
+- JWT Token 认证
+- 多种登录方式：账号密码、手机短信、微信公众号
+- Token 刷新机制
+- 安全的密码加密
+
+### 👥 权限管理
+- 基于角色的权限控制（RBAC）
+- 多应用权限隔离
+- 权限验证装饰器
+- 动态角色分配和删除
+- 自动创建应用和角色
+- 批量权限管理
+
+### 💎 会员系统
+- 定期会员功能
+- 会员类型管理
+- 基于会员的权限控制
+- 自动过期处理
+
+### 🎯 邀请系统
+- 用户邀请关系管理
+- 邀请数量统计和查询
+- 邀请人信息获取
+- 二级邀请统计支持
+- 邀请汇总信息展示
+- 支持分页查询和异步操作
+
+### ⏰ 定时任务
+- 自动清理过期会员
+- 会员统计报表
+- 定时任务调度
+
+## 快速开始
+
+### 1. 安装
+
+#### 通过 pip 安装
+```bash
+pip install svc_user_auth_zxw
+```
+
+#### 从源码安装
+```bash
+git clone [项目地址]
+cd svc_user_auth_zxw
+pip install -e .
+```
+
+### 2. 环境配置
+
+#### 数据库配置
+在 `configs/config_user_auth.py` 中配置数据库连接：
+
+```python
+# PostgreSQL 数据库
+DATABASE_URL = "postgresql+asyncpg://user:password@localhost:5432/database"
+
+# Redis 数据库
+REDIS_URL_AUTH = "redis://:password@localhost:6379/0"
+```
+
+或通过环境变量：
+```bash
+export USER_CENTER_DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/database"
+export REDIS_URL_AUTH="redis://:password@localhost:6379/0"
+```
+
+#### 回调配置
+```python
+class 回调配置:
+    login_recall = ""
+```
+
+#### JWT 配置
+```python
+class JWT:
+    SECRET_KEY = "your-secret-key"  # 生产环境请使用强密钥
+    ALGORITHM = "HS256"
+    expire_time = timedelta(seconds=30)  # token过期时间
+```
+
+#### 短信服务配置（阿里云）
+```python
+class AliyunSMS:
+    ali_access_key_id = "your-access-key-id"
+    ali_access_key_secret = "your-access-key-secret"
+    ali_secretNo_pool_key = "your-pool-key"
+```
+
+#### 微信登录配置
+```python
+class WeChatPub:
+    app_id = "your-wechat-app-id"
+    app_secret = "your-wechat-app-secret"
+```
+
+### 3. 快速启动
+
+#### 方式一：直接运行
+```bash
+python main.py
+```
+
+#### 方式二：集成到现有 FastAPI 应用
+```python
+from fastapi import FastAPI
+from svc_user_auth_zxw.main import router
+from contextlib import asynccontextmanager
+from svc_user_auth_zxw.tools.scheduler import start_membership_scheduler, stop_membership_scheduler
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时
+    await start_membership_scheduler()  # 启动会员定时任务
+    yield
+    # 关闭时
+    await stop_membership_scheduler()
+
+app = FastAPI(lifespan=lifespan)
+app.include_router(router, prefix="/user_center")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8101)
+```
+
+### 4. 验证安装
+服务启动后访问：
+- 服务地址：http://localhost:8101
+- API 文档：http://localhost:8101/docs
+- 健康检查：http://localhost:8101/user_center/health
+
+## API 接口详细说明
+
+### 1. JWT Token 管理 (`/user_center/token`)
+
+#### 获取当前用户信息
+- **接口**: `POST /user_center/token/get-current-user/`
+- **认证**: 需要 JWT Token
+- **输入**: 无（从 Header 中获取 Token）
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "sub": "username",
+      "username": "username",
+      "nickname": "昵称",
+      "roles": [
+        {
+          "role_name": "admin",
+          "app_name": "myapp",
+          "app_id": 1
+        }
+      ]
+    }
+  }
+  ```
+
+#### 刷新 Token
+- **接口**: `POST /user_center/token/refresh-token/`
+- **输入**:
+  ```json
+  {
+    "refresh_token": "refresh_token_string"
+  }
+  ```
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "access_token": "new_access_token",
+      "refresh_token": "new_refresh_token"
+    }
+  }
+  ```
+
+#### 验证 Token（Body）
+- **接口**: `POST /user_center/token/check-token-from-body/`
+- **输入**:
+  ```json
+  {
+    "access_token": "access_token_string"
+  }
+  ```
+- **输出**: 返回解码后的 Payload
+
+#### 验证 Token（Header）
+- **接口**: `POST /user_center/token/check-token-from-header/`
+- **认证**: 需要在 Header 中传递 `Authorization: Bearer token`
+- **输出**: 返回解码后的 Payload
+
+### 2. 账号密码注册登录 (`/user_center/account`)
+
+#### 注册
+- **接口**: `POST /user_center/account/register/`
+- **输入**:
+  ```json
+  {
+    "username": "testuser",
+    "password": "password123",
+    "role_name": "l0",
+    "app_name": "app0"
+  }
+  ```
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "access_token": "jwt_token",
+      "refresh_token": "refresh_token",
+      "user_info": {
+        "sub": "testuser",
+        "username": "testuser",
+        "nickname": null,
+        "roles": [...]
+      }
+    }
+  }
+  ```
+
+#### 登录
+- **接口**: `POST /user_center/account/login/`
+- **输入**:
+  ```json
+  {
+    "username": "testuser",
+    "password": "password123"
+  }
+  ```
+- **输出**: 同注册接口
+
+#### 表单登录
+- **接口**: `POST /user_center/account/login-form/`
+- **输入**: 表单数据（`application/x-www-form-urlencoded`）
+  ```
+  username=testuser&password=password123
+  ```
+- **输出**: 同注册接口
+
+### 3. 手机注册登录 (`/user_center/account/phone`)
+
+#### 发送短信验证码
+- **接口**: `POST /user_center/account/phone/send-verification-code/`
+- **输入**: `phone=13800138000` (Query 参数)
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "message": "验证码已发送"
+    }
+  }
+  ```
+
+#### 手机注册
+- **接口**: `POST /user_center/account/phone/register-phone/`
+- **输入**:
+  ```json
+  {
+    "phone": "13800138000",
+    "sms_code": "1234",
+    "email": "user@example.com",
+    "role_name": "l0",
+    "app_name": "app0",
+    "referer_id": null
+  }
+  ```
+- **输出**: 登录成功信息
+
+#### 手机登录
+- **接口**: `POST /user_center/account/phone/login-phone/`
+- **输入**:
+  ```json
+  {
+    "phone": "13800138000",
+    "sms_code": "1234"
+  }
+  ```
+- **输出**: 登录成功信息
+
+#### 注册或登录（一键）
+- **接口**: `POST /user_center/account/phone/register-or-login-phone/`
+- **功能**: 自动判断用户是否存在，存在则登录，不存在则注册
+- **输入**: 同手机登录
+- **输出**: 登录成功信息
+
+#### 更换绑定手机号
+- **接口**: `POST /user_center/account/phone/change-phone/`
+- **认证**: 需要 JWT Token
+- **输入**: `new_phone` 和 `sms_code` (Query 参数)
+- **输出**: 更新后的用户信息
+
+### 4. 微信公众号登录 (`/user_center/wechat`)
+
+#### 获取登录二维码
+- **接口**: `POST /user_center/wechat/qr-login/get-qrcode`
+- **输入**:
+  ```json
+  {
+    "WECHAT_REDIRECT_URI": "https://your-domain.com/callback"
+  }
+  ```
+- **输出**:
+  ```json
+  {
+    "qr_code_url": "https://open.weixin.qq.com/connect/qrconnect?..."
+  }
+  ```
+
+#### 微信登录
+- **接口**: `POST /user_center/wechat/qr-login/login/`
+- **输入**:
+  ```json
+  {
+    "code": "wechat_auth_code",
+    "app_name": "myapp"
+  }
+  ```
+- **输出**: 登录成功信息
+
+### 5. 权限管理 (`/user_center/api/roles`)
+
+#### 分配角色
+- **接口**: `POST /user_center/api/roles/assign-role/`
+- **输入**:
+  ```json
+  {
+    "user_id": 1,
+    "role_name": "admin",
+    "app_name": "myapp"
+  }
+  ```
+- **输出**:
+  ```json
+  {
+    "status": true,
+    "message": "角色分配成功"
+  }
+  ```
+
+#### 验证角色权限
+- **接口**: `POST /user_center/api/roles/role-auth/`
+- **认证**: 需要 JWT Token
+- **输入**:
+  ```json
+  {
+    "role_name": "admin",
+    "app_name": "myapp"
+  }
+  ```
+- **输出**:
+  ```json
+  {
+    "status": true
+  }
+  ```
+
+#### Admin 权限示例
+- **接口**: `GET /user_center/api/roles/admin-data/`
+- **认证**: 需要 Admin 角色
+- **输出**: 管理员专属数据
+
+### 6. 会员类型管理 (`/user_center/membership-types`)
+
+#### 获取会员类型列表
+- **接口**: `GET /user_center/membership-types/`
+- **参数**: `skip=0&limit=100`
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": [
+      {
+        "id": 1,
+        "name": "VIP会员",
+        "description": "VIP会员享受所有高级功能",
+        "duration_days": 30,
+        "price": 9900,
+        "is_active": true,
+        "created_at": "2024-01-01T00:00:00Z"
+      }
+    ],
+    "message": "获取成功"
+  }
+  ```
+
+#### 获取会员类型详情
+- **接口**: `GET /user_center/membership-types/{membership_type_id}`
+- **输出**: 单个会员类型详情
+
+#### 创建会员类型（管理员）
+- **接口**: `POST /user_center/membership-types/admin/`
+- **认证**: 需要管理员权限
+- **输入**:
+  ```json
+  {
+    "name": "超级VIP",
+    "description": "超级VIP会员",
+    "duration_days": 90,
+    "price": 29900,
+    "role_names": ["super_vip", "premium_access"],
+    "app_name": "myapp"
+  }
+  ```
+- **输出**: 创建的会员类型信息
+
+#### 更新会员类型（管理员）
+- **接口**: `PUT /user_center/membership-types/admin/{membership_type_id}`
+- **认证**: 需要管理员权限
+- **输入**: 会员类型更新数据（字段可选）
+- **输出**: 更新后的会员类型信息
+
+#### 删除会员类型（管理员）
+- **接口**: `DELETE /user_center/membership-types/admin/{membership_type_id}`
+- **认证**: 需要管理员权限
+- **输出**: 删除确认信息
+
+### 7. 用户会员管理 (`/user_center/memberships`)
+
+#### 获取我的会员
+- **接口**: `GET /user_center/memberships/my`
+- **认证**: 需要 JWT Token
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": [
+      {
+        "id": 1,
+        "user_id": 1,
+        "membership_type_id": 1,
+        "membership_type_name": "VIP会员",
+        "start_time": "2024-01-01T00:00:00Z",
+        "end_time": "2024-01-31T00:00:00Z",
+        "status": "active",
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z",
+        "notes": "购买记录",
+        "is_valid": true
+      }
+    ],
+    "message": "获取成功"
+  }
+  ```
+
+#### 获取会员详情
+- **接口**: `GET /user_center/memberships/{membership_id}`
+- **认证**: 需要 JWT Token（只能查看自己的或管理员查看所有）
+- **输出**: 单个会员记录详情
+
+#### 管理员获取用户会员
+- **接口**: `GET /user_center/memberships/admin/user/{user_id}`
+- **认证**: 需要管理员权限
+- **输出**: 指定用户的所有会员记录
+
+#### 管理员更新会员状态
+- **接口**: `PUT /user_center/memberships/admin/{membership_id}/status`
+- **认证**: 需要管理员权限
+- **输入**:
+  ```json
+  {
+    "status": "suspended",
+    "notes": "用户违规，暂停会员"
+  }
+  ```
+- **输出**: 更新后的会员信息
+
+#### 管理员获取所有活跃会员
+- **接口**: `GET /user_center/memberships/admin/active/all`
+- **认证**: 需要管理员权限
+- **参数**: `skip=0&limit=100`
+- **输出**: 所有活跃会员列表
+
+#### 管理员获取所有过期会员
+- **接口**: `GET /user_center/memberships/admin/expired/all`
+- **认证**: 需要管理员权限
+- **参数**: `skip=0&limit=100`
+- **输出**: 所有过期会员列表
+
+### 8. 会员权限验证 (`/user_center/membership-auth`)
+
+#### 验证会员权限
+- **接口**: `POST /user_center/membership-auth/verify`
+- **认证**: 需要 JWT Token
+- **输入**:
+  ```json
+  {
+    "membership_type_name": "VIP会员",
+    "role_name": "vip_user",
+    "app_name": "myapp"
+  }
+  ```
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "has_membership": true,
+      "has_permission": true,
+      "membership_info": {
+        // 会员详细信息
+      }
+    },
+    "message": "验证成功"
+  }
+  ```
+
+#### 获取我的有效会员
+- **接口**: `GET /user_center/membership-auth/my-memberships`
+- **认证**: 需要 JWT Token
+- **输出**: 当前用户的所有有效会员列表
+
+### 9. 邀请管理 (`/user_center/invitation`)
+
+#### 获取用户邀请汇总信息
+- **接口**: `GET /user_center/invitation/summary/{user_id}`
+- **认证**: 需要 JWT Token
+- **参数**: `user_id` - 用户ID
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "inviter_info": {
+        "user_id": 1,
+        "username": "inviter",
+        "nickname": "邀请人",
+        "phone": "13900139000",
+        "email": "inviter@example.com"
+      },
+      "invitation_count": 25,
+      "invitees": [
+        {
+          "user_id": 123,
+          "username": "user123",
+          "nickname": "用户昵称",
+          "phone": "13800138000",
+          "email": "user@example.com",
+          "created_time": 1640995200,
+          "notes": "注册备注"
+        }
+      ],
+      "summary": {
+        "total_invitations": 25,
+        "displayed_invitations": 25,
+        "query_time": "2024-12-19T10:30:00"
+      }
+    },
+    "message": "获取成功"
+  }
+  ```
+
+#### 获取用户邀请列表（支持分页）
+- **接口**: `GET /user_center/invitation/invitees/{user_id}`
+- **认证**: 需要 JWT Token
+- **参数**:
+  - `user_id` - 用户ID
+  - `limit` - 限制返回数量（可选，默认10）
+  - `offset` - 跳过记录数（可选，默认0）
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": [
+      {
+        "user_id": 123,
+        "username": "user123",
+        "nickname": "用户昵称",
+        "phone": "13800138000",
+        "email": "user@example.com",
+        "created_time": 1640995200,
+        "notes": "注册备注"
+      }
+    ],
+    "message": "获取成功"
+  }
+  ```
+
+#### 获取用户邀请数量
+- **接口**: `GET /user_center/invitation/count/{user_id}`
+- **认证**: 需要 JWT Token
+- **参数**: `user_id` - 用户ID
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "invitation_count": 25
+    },
+    "message": "获取成功"
+  }
+  ```
+
+#### 获取用户的邀请人信息
+- **接口**: `GET /user_center/invitation/referrer/{user_id}`
+- **认证**: 需要 JWT Token
+- **参数**: `user_id` - 用户ID
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "referrer_info": {
+        "user_id": 1,
+        "username": "referrer",
+        "nickname": "邀请人昵称",
+        "phone": "13900139000",
+        "email": "referrer@example.com"
+      }
+    },
+    "message": "获取成功"
+  }
+  ```
+
+#### 获取邀请统计信息（包含二级邀请）
+- **接口**: `GET /user_center/invitation/statistics/{user_id}`
+- **认证**: 需要 JWT Token
+- **参数**: `user_id` - 用户ID
+- **输出**:
+  ```json
+  {
+    "code": 200,
+    "data": {
+      "user_id": 1,
+      "direct_invitations": 25,
+      "second_level_invitations": 8,
+      "total_network_size": 33,
+      "statistics_time": "2024-12-19T10:30:00"
+    },
+    "message": "获取成功"
+  }
+  ```
+
+#### 获取当前用户邀请汇总
+- **接口**: `GET /user_center/invitation/my-summary`
+- **认证**: 需要 JWT Token
+- **输入**: 无（从 Token 中获取当前用户）
+- **输出**: 同获取用户邀请汇总信息
+
+### 10. 登出 (`/user_center/logout`)
+
+#### 登出
+- **接口**: `POST /user_center/logout/`
+- **认证**: 需要 JWT Token
+- **功能**: 使当前 refresh_token 失效
+- **输出**: 登出成功确认
+
+## 可外部调用的核心函数
+
+**说明**: 以下函数是可以在您的代码中直接导入和调用的内部函数，区别于上述的 REST API 接口。这些函数通常用于服务端的业务逻辑处理，无需通过 HTTP 请求调用。
+
+### 1. JWT 相关函数
+
+#### `get_current_user(token: str) -> User`
+- **位置**: `svc_user_auth_zxw.SDK_jwt.jwt`
+- **作用**: 从 JWT Token 获取当前用户
+- **输入**: JWT Token 字符串
+- **输出**: User 对象
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.SDK_jwt.jwt import get_current_user
+  from fastapi import Depends
+
+  @app.get("/protected")
+  async def protected_route(user: User = Depends(get_current_user)):
+      return {"user": user.username}
+  ```
+
+#### `create_jwt_token(payload: dict) -> str`
+- **位置**: `svc_user_auth_zxw.SDK_jwt.jwt`
+- **作用**: 创建 JWT Token
+- **输入**: 用户信息字典
+- **输出**: JWT Token 字符串
+
+#### `check_jwt_token(token: str) -> Payload`
+- **位置**: `svc_user_auth_zxw.SDK_jwt.jwt`
+- **作用**: 验证并解码 JWT Token
+- **输入**: JWT Token 字符串
+- **输出**: Payload 对象或 None
+
+### 2. 权限管理函数
+
+#### `add_new_role(request: 请求_分配或创建角色, db: AsyncSession)`
+- **位置**: `svc_user_auth_zxw.apis.api_用户权限_增加`
+- **作用**: 给用户分配角色，如果角色或应用不存在则自动创建
+- **输入**: 分配角色请求对象、数据库会话
+- **输出**: 操作状态和消息
+- **功能**:
+  - 如果用户不存在则返回404
+  - 如果角色不存在则创建角色
+  - 如果应用不存在则创建应用
+  - 自动关联用户和角色
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_用户权限_增加 import add_new_role
+  from svc_user_auth_zxw.apis.schemas import 请求_分配或创建角色
+
+  request = 请求_分配或创建角色(
+      user_id=1,
+      role_name="admin",
+      app_name="myapp"
+  )
+  result = await add_new_role(request, db)
+  ```
+
+#### `delete_role(user_id: int, role_name: str, db: AsyncSession)`
+- **位置**: `svc_user_auth_zxw.apis.api_用户权限_增加`
+- **作用**: 解除用户与指定角色的关联
+- **输入**: 用户ID、角色名、数据库会话
+- **输出**: 操作状态和消息
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_用户权限_增加 import delete_role
+
+  result = await delete_role(user_id=1, role_name="admin", db=db)
+  ```
+
+#### `delete_roles(user_id: int, role_names: list[str], db: AsyncSession)`
+- **位置**: `svc_user_auth_zxw.apis.api_用户权限_增加`
+- **作用**: 批量解除用户与多个角色的关联
+- **输入**: 用户ID、角色名列表、数据库会话
+- **输出**: 操作状态和删除的角色数量
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_用户权限_增加 import delete_roles
+
+  result = await delete_roles(user_id=1, role_names=["admin", "user"], db=db)
+  ```
+
+### 3. 权限验证函数
+
+#### `require_role(role_name: str, app_name: str = None)`
+- **位置**: `svc_user_auth_zxw.apis.api_用户权限_验证`
+- **作用**: 装饰器，验证用户是否具有指定角色
+- **输入**: 角色名、应用名（可选）
+- **输出**: 用户对象或抛出权限异常
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_用户权限_验证 import require_role
+
+  @app.get("/admin-only")
+  async def admin_only(user: User = Depends(require_role("admin", "myapp"))):
+      return {"message": "管理员专用接口"}
+  ```
+
+### 4. 会员权限验证函数
+
+#### `require_membership(membership_type_name: str, app_name: str = None)`
+- **位置**: `svc_user_auth_zxw.apis.api_会员权限验证`
+- **作用**: 装饰器，验证用户是否具有有效会员
+- **输入**: 会员类型名、应用名（可选）
+- **输出**: 用户对象或抛出权限异常
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_会员权限验证 import require_membership
+
+  @app.get("/vip-content")
+  async def vip_content(user: User = Depends(require_membership("VIP会员"))):
+      return {"content": "VIP专享内容"}
+  ```
+
+#### `require_membership_or_role(membership_type_name: str, role_name: str, app_name: str = None)`
+- **位置**: `svc_user_auth_zxw.apis.api_会员权限验证`
+- **作用**: 装饰器，验证用户是否具有会员权限或角色权限（任一即可）
+- **输入**: 会员类型名、角色名、应用名（可选）
+- **输出**: 用户对象或抛出权限异常
+
+### 5. 内部会员管理函数
+
+#### `internal_purchase_membership()`
+- **位置**: `svc_user_auth_zxw.apis.api_用户会员管理`
+- **作用**: 内部会员购买函数（仅供内部调用）
+- **输入**: 用户ID、会员类型ID、验证状态等
+- **输出**: 会员响应对象
+- **安全性**: 受保护的内部函数，需要特定权限
+
+#### `internal_admin_grant_membership()`
+- **位置**: `svc_user_auth_zxw.apis.api_用户会员管理`
+- **作用**: 管理员内部赠送会员函数
+- **输入**: 管理员用户、目标用户ID、会员类型ID等
+- **输出**: 会员响应对象
+- **权限**: 需要管理员权限
+
+### 6. 内部会员类型管理函数
+
+#### `internal_get_membership_types()`
+- **位置**: `svc_user_auth_zxw.apis.api_会员类型管理`
+- **作用**: 内部获取会员类型列表函数
+- **输入**: skip（跳过记录数）、limit（限制记录数）、include_disabled（是否包含已停用）、db（数据库会话）
+- **输出**: 会员类型响应列表
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_会员类型管理 import internal_get_membership_types
+
+  # 获取所有启用的会员类型
+  membership_types = await internal_get_membership_types(
+      skip=0,
+      limit=10,
+      include_disabled=False,
+      db=db
+  )
+  ```
+
+#### `internal_get_membership_type_by_id()`
+- **位置**: `svc_user_auth_zxw.apis.api_会员类型管理`
+- **作用**: 内部获取单个会员类型详情函数
+- **输入**: membership_type_id（会员类型ID）、include_disabled（是否包含已停用）、db（数据库会话）
+- **输出**: 会员类型响应对象
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_会员类型管理 import internal_get_membership_type_by_id
+
+  # 获取指定会员类型详情
+  membership_type = await internal_get_membership_type_by_id(
+      membership_type_id=1,
+      include_disabled=False,
+      db=db
+  )
+  ```
+
+#### `internal_create_membership_type()`
+- **位置**: `svc_user_auth_zxw.apis.api_会员类型管理`
+- **作用**: 内部创建会员类型函数
+- **输入**: request（会员类型创建请求）、admin_user（管理员用户对象）、db（数据库会话）
+- **输出**: 会员类型响应对象
+- **权限**: 需要管理员权限
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_会员类型管理 import internal_create_membership_type
+  from svc_user_auth_zxw.apis.schemas import 会员类型创建请求
+
+  # 创建新的会员类型
+  request = 会员类型创建请求(
+      name="高级VIP",
+      description="高级VIP会员享受所有特权",
+      duration_days=90,
+      price=29900,
+      role_names=["advanced_vip"],
+      app_name="myapp"
+  )
+  result = await internal_create_membership_type(request, admin_user, db)
+  ```
+
+#### `internal_update_membership_type()`
+- **位置**: `svc_user_auth_zxw.apis.api_会员类型管理`
+- **作用**: 内部更新会员类型函数
+- **输入**: membership_type_id（会员类型ID）、request（会员类型更新请求）、admin_user（管理员用户对象）、db（数据库会话）
+- **输出**: 会员类型响应对象
+- **权限**: 需要管理员权限
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_会员类型管理 import internal_update_membership_type
+  from svc_user_auth_zxw.apis.schemas import 会员类型更新请求
+
+  # 更新会员类型信息
+  request = 会员类型更新请求(
+      name="超级VIP",
+      price=39900,
+      is_active=True
+  )
+  result = await internal_update_membership_type(1, request, admin_user, db)
+  ```
+
+#### `internal_delete_membership_type()`
+- **位置**: `svc_user_auth_zxw.apis.api_会员类型管理`
+- **作用**: 内部删除会员类型函数
+- **输入**: membership_type_id（会员类型ID）、admin_user（管理员用户对象）、db（数据库会话）
+- **输出**: 删除成功返回True
+- **权限**: 需要管理员权限
+- **安全性**: 会检查是否有用户使用此会员类型，有则无法删除
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.apis.api_会员类型管理 import internal_delete_membership_type
+
+  # 删除指定会员类型
+  deleted = await internal_delete_membership_type(1, admin_user, db)
+  if deleted:
+      print("会员类型删除成功")
+  ```
+
+### 7. 数据库相关函数
+
+#### `get_db() -> AsyncSession`
+- **位置**: `svc_user_auth_zxw.db.get_db`
+- **作用**: 获取数据库会话
+- **输入**: 无
+- **输出**: AsyncSession 对象
+- **使用示例**:
+  ```python
+  from svc_user_auth_zxw.db.get_db import get_db
+
+  @app.get("/users")
+  async def get_users(db: AsyncSession = Depends(get_db)):
+      # 数据库操作
+      pass
+  ```
+
+### 8. 邀请功能接口函数
+
+#### `InvitationInterface` 类
+- **位置**: `svc_user_auth_zxw.interface.invitation_interface`
+- **作用**: 提供完整的用户邀请关系管理功能
+- **创建方式**:
+  ```python
+  from svc_user_auth_zxw.interface.invitation_interface import InvitationInterface, create_invitation_interface
+  from svc_user_auth_zxw.db.get_db import get_async_session
+
+  # 方式一：直接创建
+  async with get_async_session() as db:
+      invitation_interface = InvitationInterface(db)
+
+  # 方式二：使用便捷函数
+  async with get_async_session() as db:
+      invitation_interface = await create_invitation_interface(db)
+  ```
+
+#### `get_invitation_count(user_id: int) -> int`
+- **作用**: 获取用户邀请数量
+- **输入**: 用户ID
+- **输出**: 邀请数量
+- **使用示例**:
+  ```python
+  user_id = 1
+  count = await invitation_interface.get_invitation_count(user_id)
+  print(f"用户{user_id}共邀请了{count}个用户")
+  ```
+
+#### `get_user_invitees(user_id: int, limit: int = None, offset: int = 0) -> List[Dict]`
+- **作用**: 获取邀请用户列表（支持分页）
+- **输入**: 用户ID、限制数量、偏移量
+- **输出**: 邀请用户信息列表
+- **使用示例**:
+  ```python
+  user_id = 1
+  invitees = await invitation_interface.get_user_invitees(
+      user_id=user_id,
+      limit=10,    # 限制返回10条记录
+      offset=0     # 从第0条开始
+  )
+
+  for invitee in invitees:
+      print(f"用户ID: {invitee['user_id']}, 用户名: {invitee['username']}")
+  ```
+
+#### `get_invitation_summary(user_id: int) -> Dict`
+- **作用**: 获取邀请汇总信息
+- **输入**: 用户ID
+- **输出**: 包含邀请人信息、邀请数量和邀请用户列表的字典
+- **使用示例**:
+  ```python
+  user_id = 1
+  summary = await invitation_interface.get_invitation_summary(user_id)
+
+  print(f"邀请人信息: {summary['inviter_info']}")
+  print(f"邀请数量: {summary['invitation_count']}")
+  print(f"邀请用户列表: {summary['invitees']}")
+  ```
+
+#### `get_user_referrer(user_id: int) -> Dict`
+- **作用**: 获取用户的邀请人信息
+- **输入**: 用户ID
+- **输出**: 邀请人信息字典或None
+- **使用示例**:
+  ```python
+  user_id = 2
+  referrer_info = await invitation_interface.get_user_referrer(user_id)
+
+  if referrer_info:
+      print(f"邀请人信息: {referrer_info['referrer_info']}")
+  else:
+      print("该用户没有邀请人")
+  ```
+
+#### `get_invitation_statistics(user_id: int) -> Dict`
+- **作用**: 获取邀请统计信息（包含二级邀请）
+- **输入**: 用户ID
+- **输出**: 包含直接邀请、二级邀请和总网络规模的统计信息
+- **使用示例**:
+  ```python
+  user_id = 1
+  statistics = await invitation_interface.get_invitation_statistics(user_id)
+
+  print(f"直接邀请数量: {statistics['direct_invitations']}")
+  print(f"二级邀请数量: {statistics['second_level_invitations']}")
+  print(f"总网络规模: {statistics['total_network_size']}")
+  ```
+
+### 9. 工具函数
+
+#### SMS 验证码相关
+- **类**: `SMSCodeChecker`
+- **位置**: `svc_user_auth_zxw.tools.check_sms_code`
+- **方法**:
+  - `store_verification_code(phone: str, code: str)`: 存储验证码
+  - `verify_code(phone: str, code: str) -> bool`: 验证验证码
+
+#### 定时任务管理
+- **函数**: `start_membership_scheduler()` / `stop_membership_scheduler()`
+- **位置**: `svc_user_auth_zxw.tools.scheduler`
+- **作用**: 启动/停止会员定时任务
+
+## 使用示例
+
+### 基础认证示例
+```python
+from fastapi import FastAPI, Depends
+from svc_user_auth_zxw.SDK_jwt.jwt import get_current_user
+from svc_user_auth_zxw.db.models import User
+
+app = FastAPI()
+
+@app.get("/profile")
+async def get_profile(user: User = Depends(get_current_user)):
+    return {
+        "username": user.username,
+        "nickname": user.nickname,
+        "roles": [{"name": role.name, "app": role.app.name} for role in user.roles]
+    }
+```
+
+### 权限控制示例
+```python
+from svc_user_auth_zxw.apis.api_用户权限_验证 import require_role
+
+@app.get("/admin-dashboard")
+async def admin_dashboard(user: User = Depends(require_role("admin"))):
+    return {"message": "欢迎管理员", "user": user.username}
+```
+
+### 权限管理示例
+```python
+from svc_user_auth_zxw.apis.api_用户权限_增加 import add_new_role, delete_role, delete_roles
+from svc_user_auth_zxw.apis.schemas import 请求_分配或创建角色
+from svc_user_auth_zxw.db.get_db import get_db
+
+async def assign_user_role():
+    """给用户分配角色示例"""
+    db = get_db()
+
+    # 分配管理员角色
+    request = 请求_分配或创建角色(
+        user_id=1,
+        role_name="admin",
+        app_name="myapp"
+    )
+    result = await add_new_role(request, db)
+    print(f"分配结果: {result}")
+
+async def remove_user_role():
+    """删除用户角色示例"""
+    db = get_db()
+
+    # 删除单个角色
+    result1 = await delete_role(user_id=1, role_name="admin", db=db)
+    print(f"删除单个角色: {result1}")
+
+    # 批量删除角色
+    result2 = await delete_roles(user_id=1, role_names=["user", "editor"], db=db)
+    print(f"批量删除角色: {result2}")
+```
+
+### 会员类型管理示例
+```python
+from svc_user_auth_zxw.apis.api_会员类型管理 import (
+    internal_get_membership_types,
+    internal_get_membership_type_by_id,
+    internal_create_membership_type,
+    internal_update_membership_type,
+    internal_delete_membership_type
+)
+from svc_user_auth_zxw.apis.schemas import 会员类型创建请求, 会员类型更新请求
+from svc_user_auth_zxw.db.get_db import get_db
+from svc_user_auth_zxw.SDK_jwt.jwt import get_current_user
+
+async def membership_type_management_example():
+    """会员类型管理示例"""
+    db = get_db()
+    admin_user = get_current_user()  # 需要管理员权限的用户
+
+    # 获取会员类型列表
+    membership_types = await internal_get_membership_types(
+        skip=0,
+        limit=10,
+        include_disabled=False,
+        db=db
+    )
+    print(f"会员类型列表: {len(membership_types)} 个")
+
+    # 创建新的会员类型
+    create_request = 会员类型创建请求(
+        name="钻石VIP",
+        description="钻石VIP会员享受最高级别权限",
+        duration_days=365,
+        price=99900,  # 999.00元
+        role_names=["diamond_vip", "premium_access"],
+        app_name="myapp"
+    )
+    new_membership_type = await internal_create_membership_type(
+        request=create_request,
+        admin_user=admin_user,
+        db=db
+    )
+    print(f"创建成功: {new_membership_type.name}")
+
+    # 获取会员类型详情
+    membership_type_detail = await internal_get_membership_type_by_id(
+        membership_type_id=new_membership_type.id,
+        include_disabled=False,
+        db=db
+    )
+    print(f"会员类型详情: {membership_type_detail.name}")
+
+    # 更新会员类型
+    update_request = 会员类型更新请求(
+        description="钻石VIP会员享受最高级别权限，包含所有高级功能",
+        price=89900,  # 降价到899.00元
+        is_active=True
+    )
+    updated_membership_type = await internal_update_membership_type(
+        membership_type_id=new_membership_type.id,
+        request=update_request,
+        admin_user=admin_user,
+        db=db
+    )
+    print(f"更新成功: {updated_membership_type.name}, 新价格: {updated_membership_type.price}")
+
+    # 删除会员类型（谨慎操作）
+    # deleted = await internal_delete_membership_type(
+    #     membership_type_id=new_membership_type.id,
+    #     admin_user=admin_user,
+    #     db=db
+    # )
+    # print(f"删除结果: {deleted}")
+```
+
+### 会员权限示例
+```python
+from svc_user_auth_zxw.apis.api_会员权限验证 import require_membership
+
+@app.get("/premium-feature")
+async def premium_feature(user: User = Depends(require_membership("VIP会员"))):
+    return {"feature": "高级功能", "user": user.username}
+```
+
+### 邀请功能使用示例
+```python
+from svc_user_auth_zxw.interface.invitation_interface import create_invitation_interface
+from svc_user_auth_zxw.db.get_db import get_async_session
+
+async def invitation_management_example():
+    """邀请功能管理示例"""
+    async with get_async_session() as db:
+        invitation_interface = await create_invitation_interface(db)
+
+        # 获取用户邀请数量
+        user_id = 1
+        count = await invitation_interface.get_invitation_count(user_id)
+        print(f"用户{user_id}共邀请了{count}个用户")
+
+        # 获取邀请用户列表（支持分页）
+        invitees = await invitation_interface.get_user_invitees(
+            user_id=user_id,
+            limit=10,    # 限制返回10条记录
+            offset=0     # 从第0条开始
+        )
+        print(f"邀请用户列表: {len(invitees)} 个用户")
+
+        # 获取邀请汇总信息
+        summary = await invitation_interface.get_invitation_summary(user_id)
+        print(f"邀请汇总: {summary}")
+
+        # 获取用户的邀请人信息
+        user_id = 2
+        referrer_info = await invitation_interface.get_user_referrer(user_id)
+        if referrer_info:
+            print(f"用户{user_id}的邀请人: {referrer_info['referrer_info']}")
+        else:
+            print(f"用户{user_id}没有邀请人")
+
+        # 获取邀请统计信息（包含二级邀请）
+        user_id = 1
+        statistics = await invitation_interface.get_invitation_statistics(user_id)
+        print(f"邀请统计:")
+        print(f"  直接邀请: {statistics['direct_invitations']}")
+        print(f"  二级邀请: {statistics['second_level_invitations']}")
+        print(f"  总网络规模: {statistics['total_network_size']}")
+
+# 批量查询示例
+async def batch_invitation_query_example():
+    """批量查询邀请信息示例"""
+    user_ids = [1, 2, 3, 4, 5]
+    results = {}
+
+    async with get_async_session() as db:
+        invitation_interface = await create_invitation_interface(db)
+
+        for user_id in user_ids:
+            try:
+                count = await invitation_interface.get_invitation_count(user_id)
+                results[user_id] = count
+            except Exception as e:
+                results[user_id] = f"错误: {e}"
+
+    print("批量查询结果:", results)
+
+# 分页查询示例
+async def paginated_invitation_query_example():
+    """分页查询邀请列表示例"""
+    user_id = 1
+    page_size = 20
+    page = 1
+    offset = (page - 1) * page_size
+
+    async with get_async_session() as db:
+        invitation_interface = await create_invitation_interface(db)
+
+        invitees = await invitation_interface.get_user_invitees(
+            user_id=user_id,
+            limit=page_size,
+            offset=offset
+        )
+
+        print(f"第{page}页邀请用户列表: {len(invitees)} 个用户")
+        for invitee in invitees:
+            print(f"  - {invitee['username']} ({invitee['user_id']})")
+```
+
+### API接口使用示例
+```python
+from fastapi import FastAPI, Depends
+from svc_user_auth_zxw.SDK_jwt.jwt import get_current_user
+from svc_user_auth_zxw.db.models import User
+
+app = FastAPI()
+
+@app.get("/invitation/my-summary")
+async def get_my_invitation_summary(user: User = Depends(get_current_user)):
+    """获取当前用户的邀请汇总信息"""
+    async with get_async_session() as db:
+        invitation_interface = await create_invitation_interface(db)
+        summary = await invitation_interface.get_invitation_summary(user.id)
+        return {"code": 200, "data": summary, "message": "获取成功"}
+
+@app.get("/invitation/my-invitees")
+async def get_my_invitees(
+    limit: int = 10,
+    offset: int = 0,
+    user: User = Depends(get_current_user)
+):
+    """获取当前用户的邀请列表"""
+    async with get_async_session() as db:
+        invitation_interface = await create_invitation_interface(db)
+        invitees = await invitation_interface.get_user_invitees(
+            user_id=user.id,
+            limit=limit,
+            offset=offset
+        )
+        return {"code": 200, "data": invitees, "message": "获取成功"}
+
+@app.get("/invitation/my-referrer")
+async def get_my_referrer(user: User = Depends(get_current_user)):
+    """获取当前用户的邀请人信息"""
+    async with get_async_session() as db:
+        invitation_interface = await create_invitation_interface(db)
+        referrer_info = await invitation_interface.get_user_referrer(user.id)
+        return {"code": 200, "data": referrer_info, "message": "获取成功"}
+```
+
+## 部署建议
+
+### 1. 生产环境配置
+- 使用强密钥和安全的数据库密码
+- 配置 HTTPS
+- 设置合适的 CORS 策略
+- 配置日志收集
+
+### 2. 数据库优化
+- 为高频查询字段添加索引
+- 定期备份用户数据和会员数据
+- 监控数据库性能
+
+### 3. 安全考虑
+- 定期更新依赖包
+- 监控异常登录行为
+- 实施 API 访问频率限制
+- 定期审查权限配置
+
+## 故障排除
+
+### 常见问题
+
+1. **Token 验证失败**
+   - 检查 JWT SECRET_KEY 配置
+   - 确认 Token 是否过期
+   - 验证 Header 格式是否正确
+
+2. **数据库连接失败**
+   - 检查数据库 URL 配置
+   - 确认数据库服务是否运行
+   - 验证用户权限
+
+3. **短信发送失败**
+   - 检查阿里云 SMS 配置
+   - 确认账户余额充足
+   - 验证短信模板是否正确
+
+4. **会员权限验证失败**
+   - 检查会员是否过期
+   - 确认会员类型配置正确
+   - 验证角色关联设置
+
+### 日志查看
+- 应用日志：`logs/app.log`
+- API 日志：`logs/svc_user_auth_zxw.apis.*.log`
+
+## 接口与函数使用说明
+
+### API 接口 vs 内部函数
+
+#### API 接口（REST API）
+- **使用场景**: 前端应用、移动端、第三方系统调用
+- **调用方式**: 通过 HTTP 请求（GET、POST、PUT、DELETE）
+- **认证方式**: 需要 JWT Token 或其他认证方式
+- **示例**: `POST /user_center/api/roles/assign-role/`
+
+#### 内部函数（Python 函数）
+- **使用场景**: 服务端内部业务逻辑、其他 Python 模块调用
+- **调用方式**: 直接导入并调用 Python 函数
+- **数据库操作**: 需要传递数据库会话对象
+- **示例**: `await add_new_role(request, db)`
+
+#### 选择建议
+- **前端开发**: 使用 REST API 接口
+- **后端集成**: 优先使用内部函数，性能更好
+- **微服务调用**: 使用 REST API 接口
+- **数据库事务**: 使用内部函数，便于事务管理
+
+## 更新日志
+
+### v2.1.0
+- 新增定期会员功能
+- 优化安全性
+- 完善文档
+- 补充权限管理内部函数说明
+
+### 联系方式
+- **作者**: 景募
+- **邮箱**: shuiheyangguang@gmail.com
+- **许可证**: MIT License
+
+---
+
+**注意**: 本文档基于 v2.1.0 版本编写，使用前请确保版本匹配。生产环境部署前请仔细配置安全参数。
