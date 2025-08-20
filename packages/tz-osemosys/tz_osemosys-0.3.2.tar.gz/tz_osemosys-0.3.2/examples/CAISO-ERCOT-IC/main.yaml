@@ -1,0 +1,188 @@
+# My Example Yaml-Loading Model
+
+# alias data
+# custom defined cross-references
+ELEC-DAILY-PROFILE:
+  s1-h1: 0.05 # 0 - 4
+  s1-h2: 0.10 # 4 - 8
+  s1-h3: 0.20 # 8 - 12
+  s1-h4: 0.20 # 12 - 16
+  s1-h5: 0.30 # 16 - 20
+  s1-h6: 0.15 # 20 - 24
+
+# Model Nameplate
+id: my-model
+long_name: "Example Model - California+Texas interconnection"
+description: >
+  California+Texas interconnection.
+  An example model to show how we can create an OSeMOSYS model from json/yaml.
+  In this model, California and Texas have comparative advantages in solar and wind respectively,
+  and start with very little interconnection.
+  Both states can import gas and coal from pacific and atlantic markets respectively.
+  Texas can also extract gas and coal, but their ability to do so diminishes with time.
+  The electricity system is constrained to acheive net zero by the end of the model period.
+
+
+# REGIONS
+regions:
+  - id: US-CA
+    long_name: California
+    description: "The US state of California"
+
+  - id: US-TX
+    long_name: Texas
+    description: "The US state of Texas"
+
+  - id: ATLANTIC-MARKET
+    long_name: atlantic market
+    description: a node representing atlantic import markets
+
+  - id: PACIFIC-MARKET
+    long_name: pacific market
+    description: a node representing pacific import markets
+
+regionsgroup:
+  - id: CA-TX
+    long_name: California-Texas group
+    description: combined CAL-TX region group
+    include_in_region_group:
+      "US-TX":
+        "*": True
+      "US-CA":
+        "*": True
+      "PACIFIC-MARKET":
+        "*": False
+      "ATLANTIC-MARKET":
+        "*": False
+
+  - id: PA-AT
+    long_name: Texas-Atlantic group
+    description: Texas-Atlantic group
+    include_in_region_group:
+      "PACIFIC-MARKET":
+        "*": True
+      "ATLANTIC-MARKET":
+        "*": True
+      "US-TX":
+        "*": False
+      "US-CA":
+        "*": False
+
+# TRADE ROUTES
+trade:
+  - id: "ELEC trade"
+    long_name: "Electricity trade"
+    description: "trade route instance for the ELEC commodity"
+    commodity: "ELEC"
+    trade_routes: {
+      "US-CA":
+        {
+        "US-TX": {"*": True},
+        "PACIFIC-MARKET": {"*": True}
+        },
+      "US-TX":
+        {
+        "ATLANTIC-MARKET": {"*": True},
+        },
+    }
+
+# TIME DEFINTIONS
+time_definition:
+  id: 2022_2040_6yrpart_12daypart
+  years: "range(2022,2041)"
+  daily_time_brackets: [1,2,3,4,5,6]
+  seasons: [1]
+  timeslices: ["s1-h1", "s1-h2", "s1-h3", "s1-h4", "s1-h5", "s1-h6"]
+  timeslice_in_timebracket: {"s1-h1": 1,
+                             "s1-h2": 2,
+                             "s1-h3": 3,
+                             "s1-h4": 4,
+                             "s1-h5": 5,
+                             "s1-h6": 6}
+  timeslice_in_season: {"s1-h1": 1, "s1-h2": 1, "s1-h3": 1, "s1-h4": 1, "s1-h5": 1, "s1-h6": 1}
+
+# FINANCIALS
+depreciation_method: "straight-line"
+discount_rate: 0.05
+
+# COMMODITIES
+commodities:
+  - id: ELEC
+    long_name: Electricity
+    description: Electricity
+    include_in_joint_reserve_margin: true
+    include_in_joint_renewable_target: true
+    demand_annual: # EJ/yr
+      US-CA: "{y:(0.7*1.1**(y-2022)) for y in ${time_definition.years}}"
+      US-TX: "{y:(1.73*1.1**(y-2022)) for y in ${time_definition.years}}"
+    demand_profile:
+      "*":                           # region
+        "*": "${ELEC-DAILY-PROFILE}"    # year: timeslice
+
+# IMPACTS
+impacts:
+  - id: CO2
+    long_name: equivalent carbon dioxide emissions
+    description: equivalent carbon dioxide emissions
+    penalty: # mn$/mntonne
+      US-CA: 0.
+      US-TX: 0.
+    constraint_annual_region_group:
+      CA-TX: "{y:225*((2041-y)/(2041-2022)) for y in ${time_definition.years}}"
+
+# RENEWABLE TARGETS
+renewable_production_target:
+  US-CA: "{y:0.1*((2041-y)/(2041-2022))+0.4 for y in ${time_definition.years}}"
+  US-TX: "{y:0.1*((2041-y)/(2041-2022))+0.2 for y in ${time_definition.years}}"
+
+region_group_renewable_production_target:
+  CA-TX: "{y:0.1*((2041-y)/(2041-2022))+0.4 for y in ${time_definition.years}}"
+
+# RESERVE MARGINS
+reserve_margin: 1.1
+
+# technologies:
+#   - id: SPV
+#     long_name: solar photovoltaic
+#     description: solar photovoltaic
+#     activity_unit_ratio: 30.41667
+#     capacity_addition_size: null
+#     availability_factor: 1.
+#     capacity_factor: 1.
+#     operating_life: 25
+#     include_in_joint_renewable_target: true
+#     include_regions: null
+#     exclude_regions:
+#       - ATLANTIC-MARKET
+#       - PACIFIC-MARKET
+#     capex:
+#       "*": "{y:700 - 100*(max(${time_definition.years})-y)/(max(${time_definition.years}) - min(${time_definition.years})) for y in ${time_definition.years}}"
+#     opex_fixed: 10
+#     operating_modes:
+#       - id: GEN
+#         long_name: generation mode
+#         description: default generation mode
+#         impact_activity_ratio: 0.
+#         input_activity_ratio: null
+#         output_activity_ratio:
+#           "*":            # all regions
+#             ELEC:
+#               "*":        # all years
+#                 1.
+#         to_storage: null
+#         from_storage: null
+#         opex_variable: 0.
+#     residual_capacity: 1.
+#     gross_capacity_max: 35.
+#     additional_capacity_max_ceil: null
+#     additional_capacity_max_floor: 5
+#     additional_capacity_max_growth_rate: 0.1
+#     gross_capacity_min: 0.
+#     additional_capacity_min: 0.
+#     additional_capacity_min_growth_rate: 0.
+
+#     # constraints - activity
+#     annual_activity_max: null
+#     annual_activity_min: null
+#     total_activity_max: null
+#     total_activity_min: null
