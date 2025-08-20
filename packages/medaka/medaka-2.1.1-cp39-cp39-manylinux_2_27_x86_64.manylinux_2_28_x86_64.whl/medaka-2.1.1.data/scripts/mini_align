@@ -1,0 +1,198 @@
+#!/bin/bash
+set -eo pipefail
+
+usage="$(basename "$0") [-h] -r <reference> -i <fastq>
+
+Align fastq/a or bam formatted reads to a genome using minimap2.
+
+    -h  show this help text.
+    -r  reference, should be a fasta file. If correspondng minimap indices
+        do not exist they will be created. (required).
+    -i  fastq/a or bam input reads (required).
+    -I  split index every ~NUM input bases (default: 16G, this is larger
+        than the usual minimap2 default).
+    -d  set the minimap2 preset, e.g. map-ont, asm5, asm10, asm20 [default: map-ont]
+    -f  force recreation of index file.
+    -a  aggressively extend gaps (sets -A1 -B2 -O2 -E1 for minimap2).
+    -P  filter to only primary alignments (i.e. run samtools view -F 2308).
+        Deprecated: this filter is now default and can be disabled with -A.
+    -y  filter to primary and supplementary alignments (i.e. run samtools view -F 260)
+    -A  do not filter alignments, output all.
+    -n  sort bam by read name.
+    -c  chunk size. Input reads/contigs will be broken into chunks
+        prior to alignment.
+    -t  alignment threads (default: 1).
+    -p  output file prefix (default: reads).
+    -m  fill MD tag.
+    -s  fill cs(=long) tag.
+    -C  copy comments from fastx info lines to bam tags.
+    -T  which input bam tags to retain if input is in bam format (implies -C, default: '*').
+    -X  only create reference index files.
+    -x  log all commands before running.
+    -M  match score. 
+    -S  mismatch score.
+    -O  open gap penalty.
+    -E  extend gap penalty."
+
+
+PREFIX="reads"
+minimap_PRESET="map-ont"
+ALIGN_OUTPUT_OPTS="--secondary=no -L"  # Holder for --MD --cs=long --secondary=no -L options 
+INDEX_SIZE="16G"
+THREADS=1
+FILTER="-F 2308"
+SORT=${SORT:-''}
+CHUNK=""
+rflag=false
+iflag=false
+ONLY_INDEX=false
+FORCE_INDEX=false
+filter_set=0
+csmd_set=0
+aflag=false
+aparamflag=false
+xflag=false
+#MATCH_SCORE="2"
+#MISMATCH_SCORE="4"
+#GAP_OPEN="4,24"
+#GAP_EXTEND="2,1"
+ALIGN_PARAMETERS=""  # match, mismatch, gap options combined
+BAM_TAGS_TO_KEEP="*"
+mm2copyfqtagsflag=false
+
+while getopts ':hr:i:d:I:M:S:O:E:fPAymsCT:np:ac:t:Xx' option; do
+  case "$option" in
+    h  ) echo "$usage" >&2; exit;;
+    r  ) rflag=true; REFERENCE=$OPTARG;;
+    i  ) iflag=true; INPUT=$OPTARG;;
+    d  ) minimap_PRESET=$OPTARG;;
+    I  ) INDEX_SIZE=$OPTARG;;
+    f  ) FORCE_INDEX=true;;
+    P  ) filter_set=$(($filter_set + 1)); echo "-P option is deprecated" >&2;;
+    A  ) filter_set=$(($filter_set + 1)); FILTER=""; ALIGN_OUTPUT_OPTS=${ALIGN_OUTPUT_OPTS/--secondary=no/} ;;
+    y  ) filter_set=$(($filter_set + 1)); FILTER="-F 260";;
+    m  ) csmd_set=$(($csmd_set + 1)); ALIGN_OUTPUT_OPTS="${ALIGN_OUTPUT_OPTS} --MD";;
+    s  ) csmd_set=$(($csmd_set + 1)); ALIGN_OUTPUT_OPTS="${ALIGN_OUTPUT_OPTS} --cs=long";;
+    C  ) mm2copyfqtagsflag=true;;
+    T  ) mm2copyfqtagsflag=true; BAM_TAGS_TO_KEEP=$OPTARG;;
+    n  ) SORT="${SORT} -n";;
+    p  ) PREFIX=$OPTARG;;
+    a  ) aflag=true; ALIGN_PARAMETERS="-A 1 -B 2 -O 2 -E 1";;
+    c  ) CHUNK=$OPTARG;;
+    t  ) THREADS=$OPTARG;;
+    X  ) ONLY_INDEX=true;;
+    x  ) xflag=true;;
+    M  ) aparamflag=true; ALIGN_PARAMETERS="${ALIGN_PARAMETERS} -A ${OPTARG}";;
+    S  ) aparamflag=true; ALIGN_PARAMETERS="${ALIGN_PARAMETERS} -B ${OPTARG}";;
+    O  ) aparamflag=true; ALIGN_PARAMETERS="${ALIGN_PARAMETERS} -O ${OPTARG}";;
+    E  ) aparamflag=true; ALIGN_PARAMETERS="${ALIGN_PARAMETERS} -E ${OPTARG}";;
+    \? ) echo "Invalid option: -${OPTARG}." >&2; exit 1;;
+    :  ) echo "Option -$OPTARG requires an argument." >&2; exit 1;;
+  esac
+done
+shift $(($OPTIND - 1))
+
+if [ "$filter_set" -gt 1 ]; then
+    echo "$usage" >&2;
+    echo "More than one filtering setting [-A, -P, -y] was specified; these are mutually incompatible (-P is deprecated)." >&2;
+    exit 1;
+fi
+
+if [ "$csmd_set" -gt 1 ]; then
+    echo "$usage" >&2;
+    echo "Both -s and -m were specified (only one can be set)." >&2;
+    exit 1;
+fi
+
+if [ $aflag  = true ] && [ $aparamflag = true ]; then
+    echo "$usage" >&2;
+    echo " -a is not compatible with -M, -S, -O or -E." >&2;
+    exit 1;
+fi
+
+if ! $rflag; then
+  echo "$usage" >&2;
+  echo "-r must be specified." >&2;
+  exit 1;
+fi
+
+if ! $iflag && ! ${ONLY_INDEX}; then
+  echo "$usage" >&2;
+  echo "-i or -X must be specified." >&2;
+  exit 1;
+fi
+
+if $xflag; then
+  set -x;
+fi
+
+if $mm2copyfqtagsflag; then
+ ALIGN_OUTPUT_OPTS="${ALIGN_OUTPUT_OPTS} -y";
+fi
+
+# Check if the indices are present and create them if not
+# fai index
+fai_index="${REFERENCE}.fai"
+if ${FORCE_INDEX}; then
+	echo "Removing previous fai index file ${fai_index}" >&2
+	rm -rf "${fai_index}"
+fi
+if [[ ! -e "${fai_index}" ]]; then
+	echo "Creating fai index file ${fai_index}" >&2
+	samtools faidx "${REFERENCE}"
+else 
+	echo "Using the existing fai index file ${fai_index}" >&2
+fi
+
+# mmi (minimap2) index - specific to the preset used
+mmi_index="${REFERENCE}.${minimap_PRESET}.mmi"
+if ${FORCE_INDEX}; then
+	echo "Removing previous mmi index file ${mmi_index}" >&2
+	rm -rf "${mmi_index}"
+fi
+if [[ ! -e "${mmi_index}" ]]; then
+	echo "Creating mmi index file ${mmi_index}" >&2
+	minimap2 -I "${INDEX_SIZE}" -x ${minimap_PRESET} -d "${mmi_index}" "${REFERENCE}" \
+      || { echo "Indexing draft failed" >&2; exit 1; }
+else 
+	echo "Using the existing mmi index file ${mmi_index}" >&2
+fi
+
+if ${ONLY_INDEX}; then
+    exit 0
+fi
+
+if [ "$CHUNK" != "" ]; then
+  echo "Splitting input into ${CHUNK} chunks." >&2
+  split_fastx "${INPUT}" "${INPUT}.chunks" "${CHUNK}" \
+      || { echo "Failed to split input into chunks." >&2; exit 1; }
+  INPUT="${INPUT}.chunks"
+fi
+
+# if INPUT is in bam format, convert to fastq in named pipe avoiding file IO
+baminputflag=false
+if [[ ${INPUT} == *.bam ]]; then
+    baminputflag=true
+    PIPEDIR=$(mktemp -d)
+    FQPIPE=${PIPEDIR}/bam_to_fq
+    mkfifo ${FQPIPE}
+	if ${mm2copyfqtagsflag}; then
+    	echo "Detected bam input, converting to fastq, retaining tags: ${BAM_TAGS_TO_KEEP}."
+		samtools fastq -T "${BAM_TAGS_TO_KEEP}" ${INPUT} -@ ${THREADS} > ${FQPIPE} &
+	else
+    	echo "Detected bam input, converting to fastq, discarding input bam tags."
+		samtools fastq ${INPUT} -@ ${THREADS} > ${FQPIPE} &
+	fi
+    INPUT=${FQPIPE}
+fi
+
+minimap2 -x ${minimap_PRESET} ${ALIGN_OUTPUT_OPTS} ${ALIGN_PARAMETERS} -t "${THREADS}" -a "${mmi_index}" "${INPUT}" |
+  samtools view -@ "${THREADS}" -T "${REFERENCE}" ${FILTER} -bS - |
+  samtools sort -@ "${THREADS}" ${SORT} -o "${PREFIX}.bam" - \
+    || { echo "Alignment pipeline failed." >&2; exit 1; }
+samtools index -@ "${THREADS}" "${PREFIX}.bam" "${PREFIX}.bam.bai" \
+    || { echo "Failed to index alignment file." >&2; exit 1; }
+
+if $baminputflag; then
+    rm -rf $PIPEDIR
+fi
