@@ -1,0 +1,204 @@
+# comet_mpm
+
+Python SDK for [Comet Model Production Monitoring](https://www.comet.com/site/products/model-production-monitoring/)
+
+## Installation
+
+```shell
+pip install comet_mpm --upgrade
+```
+
+To use these command-line functions, you'll need to have your Comet
+API key set in one of the following two ways.
+
+1. Environment variables (see below)
+2. Directly as an argument to `comet_mpm.API(api_key="...")`
+
+```
+export COMET_API_KEY="YOUR-COMET-API-KEY"
+```
+
+## API Usage
+
+The `comet_mpm` package provides a high-level API for interacting with Comet Model Production Monitoring. Here's how to get started:
+
+### Initialization
+
+```python
+from comet_mpm import API
+
+# Initialize with API key from environment variable
+api = API()
+
+# Or initialize with explicit API key
+api = API(api_key="YOUR-COMET-API-KEY")
+```
+
+### Working with Models
+
+#### Get a Model by Name
+
+```python
+# Get a specific model by workspace and model name
+model = api.get_model_by_name("my-workspace", "my-model")
+
+if model:
+    print(f"Model ID: {model.model_id}")
+    # Get model details
+    details = model.get_details()
+    print(f"Model details: {details}")
+else:
+    print("Model not found")
+```
+
+#### Get the Default Model (Python Panel in Dashboard)
+
+```python
+# Get the default model configured for the current panel
+model = api.get_model()
+
+if model:
+    print(f"Default model ID: {model.model_id}")
+else:
+    print("No default model configured")
+```
+
+### Model Analytics
+
+Once you have a model instance, you can perform various analytics:
+
+#### Prediction Counts
+
+```python
+# Get number of predictions for a time period
+predictions_df = model.get_nb_predictions(
+    start_date="2024-01-01",
+    end_date="2024-01-31",
+    interval_type="DAILY"
+)
+print(predictions_df)
+```
+
+#### Custom SQL Queries
+
+```python
+# Execute custom SQL queries
+custom_metric_df = model.get_custom_metric(
+    sql="SELECT count(*) FROM model WHERE prediction > 0.5",
+    start_date="2024-01-01",
+    end_date="2024-01-31",
+    interval_type="DAILY",
+    filters=["region=us-east", "version=1.0"],
+    model_version="1.0.0"
+)
+print(custom_metric_df)
+```
+
+#### Feature Analysis
+
+```python
+# Get available features
+numerical_features = model.get_numerical_features()
+categorical_features = model.get_categorical_features()
+print(f"Numerical features: {numerical_features}")
+print(f"Categorical features: {categorical_features}")
+
+# Feature drift analysis
+drift_df = model.get_feature_drift(
+    feature_name="age",
+    algorithm="EMD",  # Options: "EMD", "PSI", "KL"
+    start_date="2024-01-01",
+    end_date="2024-01-31",
+    interval_type="DAILY"
+)
+print(drift_df)
+
+# Feature distribution for categorical features
+distribution_df = model.get_feature_category_distribution(
+    feature_name="region",
+    normalize=True,  # Return percentages instead of counts
+    start_date="2024-01-01",
+    end_date="2024-01-31",
+    interval_type="DAILY"
+)
+print(distribution_df)
+
+# Feature density for numerical features
+density_df = model.get_feature_density(
+    feature_name="age",
+    start_date="2024-01-01",
+    end_date="2024-01-31"
+)
+print(density_df)
+
+# Feature percentiles for numerical features
+percentiles_df = model.get_feature_percentiles(
+    feature_name="age",
+    percentiles=[0, 0.25, 0.5, 0.75, 1.0],
+    start_date="2024-01-01",
+    end_date="2024-01-31",
+    interval_type="DAILY"
+)
+print(percentiles_df)
+```
+
+### Panel Configuration
+
+The API also provides access to panel configuration settings:
+
+```python
+# Get panel workspace
+workspace = api.get_panel_workspace()
+print(f"Panel workspace: {workspace}")
+
+# Get panel dimensions
+width = api.get_panel_width()
+height = api.get_panel_height()
+size = api.get_panel_size()  # Returns (width, height) tuple
+print(f"Panel size: {size}")
+```
+
+### Complete Example
+
+```python
+from comet_mpm import API
+
+# Initialize API
+api = API()
+
+# Get a model
+model = api.get_model_by_name("my-workspace", "fraud-detection-model")
+
+if model:
+    # Get model details
+    details = model.get_details()
+    print(f"Model: {details['name']}")
+
+    # Analyze predictions over time
+    predictions = model.get_nb_predictions(
+        start_date="2024-01-01",
+        end_date="2024-01-31",
+        interval_type="DAILY"
+    )
+
+    # Check feature drift for important features
+    for feature in ["transaction_amount", "user_age"]:
+        drift = model.get_feature_drift(
+            feature_name=feature,
+            algorithm="EMD",
+            start_date="2024-01-01",
+            end_date="2024-01-31"
+        )
+        print(f"Drift for {feature}: {drift}")
+
+    # Get custom metrics
+    fraud_rate = model.get_custom_metric(
+        sql="SELECT AVG(prediction) FROM model WHERE prediction > 0.5",
+        start_date="2024-01-01",
+        end_date="2024-01-31",
+        interval_type="DAILY"
+    )
+    print(f"Fraud rate over time: {fraud_rate}")
+```
+
+All methods return pandas DataFrames with metadata stored in the `.attrs` attribute, making it easy to track the parameters used for each query.
