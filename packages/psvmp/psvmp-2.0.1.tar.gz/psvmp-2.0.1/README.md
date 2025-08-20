@@ -1,0 +1,223 @@
+<h1 align="center">PS Vita Media Processor</h1>
+
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python Version"></a>
+  <a href="https://github.com/R0salman/PSVMP/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+  <a href="https://pypi.org/project/psvmp/"><img src="https://img.shields.io/pypi/v/psvmp.svg" alt="PyPI Version"></a>
+  <a href="https://github.com/R0salman/PSVMP"><img src="https://img.shields.io/badge/GitHub-Repository-black.svg?logo=github" alt="GitHub"></a>
+</p>
+
+A comprehensive media processing tool for PS Vita that downloads, converts, and transfers media files from various online sources directly to your PS Vita device.
+
+---
+
+## Features
+
+* Multi-platform support: Mega.nz, YouTube, SoundCloud, and more
+* Modern GUI interface with dark/light themes
+* Command-line interface for advanced users
+* Automatic media conversion for PS Vita compatibility
+* Direct FTP transfer to your PS Vita
+* Optimized output: video (960x544), audio (MP3 320kbps)
+* Real-time progress tracking for downloads and conversions
+* Smart file management with organized storage
+* Built-in update checker
+* Enhanced metadata handling for music files
+* Optional automatic cleanup of temporary files
+
+## Supported Sources
+
+* **Mega.nz** — via `megatools`
+* **YouTube** — via `yt-dlp`
+* **SoundCloud** — audio-only support with metadata preservation
+* **Other websites** — generic support via `yt-dlp`
+
+## Requirements
+
+- Python 3.8 or later
+- FFmpeg
+- yt-dlp
+- megatools
+- PyQt6 (for GUI interface)
+- PS Vita with VitaShell (FTP enabled)
+
+## Installation
+
+### Quick Install (Recommended)
+
+```bash
+pip install psvmp
+```
+
+### System Dependencies
+
+After installing via pip, you'll need to install system dependencies:
+
+#### Windows
+- [Download FFmpeg](https://ffmpeg.org/download.html) and add to PATH
+- [Download megatools](https://megatools.megous.com/) and add to PATH
+
+#### Linux (Ubuntu/Debian)
+```bash
+sudo apt update
+sudo apt install ffmpeg megatools
+```
+
+#### macOS
+```bash
+brew install ffmpeg megatools
+```
+
+### Verify Installation
+
+```bash
+psvmp --check-deps
+```
+
+## PS Vita Setup
+
+1. Install VitaShell on your PS Vita
+2. Launch VitaShell and press `SELECT` to start the FTP server
+3. Note the **IP** and **Port** address shown on your PS Vita
+4. Ensure your computer and PS Vita are connected to the same Wi-Fi network
+
+## Usage
+
+### GUI Interface
+
+Launch the graphical interface:
+
+```bash
+psvmp --gui
+```
+
+The GUI provides an intuitive interface with:
+* Clean, modern design with theme options
+* Easy URL input with paste button
+* Real-time console output with color-coded messages
+* Visual progress tracking
+* File management tools
+* Built-in update checker
+
+### Command Line Interface
+
+#### Basic Examples
+
+Download and convert a YouTube video:
+```bash
+psvmp "https://www.youtube.com/watch?v=VIDEO_ID" --type video
+```
+
+Download and convert SoundCloud music:
+```bash
+psvmp "https://soundcloud.com/artist/track" --type music
+```
+
+Download from Mega.nz with custom Vita IP:
+```bash
+psvmp "https://mega.nz/file/..." --ip 192.168.1.100 --port 1337
+```
+
+Check version:
+```bash
+psvmp --version
+```
+
+## Command Line Options
+
+```
+positional arguments:
+  url                   URL of the media file (Mega.nz, YouTube, SoundCloud, etc.)
+
+optional arguments:
+  -h, --help            Show this help message and exit
+  --type {video,music}  Type of media to process (default: video)
+  --ip IP               PS Vita IP address (default: 192.168.1.7)
+  --port PORT           PS Vita FTP port (default: 1337)
+  --check-deps          Check if required dependencies are installed
+  --gui                 Launch the GUI interface
+  -v, --version         Show version information and exit
+```
+
+## File Organization
+
+The application uses an organized folder structure in your Documents directory:
+
+```
+Documents/PSvita media processer/
+├── temp/           # Temporary downloads
+└── converted/      # Processed files ready for Vita
+```
+
+## Output Locations
+
+- **Videos**: `ux0:/video/shows/` (MP4 format)
+- **Music**: `ux0:/music/` (MP3 format with embedded metadata)
+
+## Technical Details
+
+### Video Conversion
+- **Resolution**: 960x544 (PS Vita native)
+- **Codec**: H.264 Baseline Profile
+- **Bitrate**: 1500k (max 2000k)
+- **Audio**: AAC 128kbps, 44.1kHz
+
+### Audio Conversion
+- **Format**: MP3
+- **Bitrate**: 320kbps
+- **Sample Rate**: 44.1kHz
+- **Metadata**: ID3v2.3 tags preserved and embedded
+
+## Troubleshooting
+
+### "Missing required tools" error
+- Run `psvmp --check-deps`
+- Follow the installation instructions for any missing dependencies
+
+### FTP connection failed
+- Confirm that VitaShell FTP server is running (press `SELECT` in VitaShell)
+- Check that your PS Vita and PC are on the same network
+- Verify that the IP address and port are correct
+
+### Download failed
+- Retry the command (some sites rate-limit)
+- For Mega links, confirm the link is still valid
+- Check your internet connection
+
+### Conversion failed
+- Ensure the downloaded file is not corrupted
+- Confirm FFmpeg is installed and on your system path
+- Try using a different media source
+
+### GUI Issues
+- Ensure PyQt6 is installed: `pip install PyQt6`
+- Try running with `--gui` flag
+- Check console output for detailed error messages
+
+## Tutorial
+
+For a comprehensive walkthrough, watch our tutorial video:
+[PS Vita Media Processor Tutorial](https://www.youtube.com/watch?v=Ej24JAy4vIM)
+
+## License
+
+This project is licensed under the [MIT License](https://github.com/R0salman/PSVMP/blob/main/LICENSE).
+
+## Acknowledgments
+
+* VitaShell team for FTP server functionality
+* FFmpeg team for media processing capabilities
+* yt-dlp developers for download handling
+* megatools developers for Mega.nz support
+* PyQt team for the GUI framework
+* PS Vita homebrew community for inspiration and support
+
+## Support
+
+* **GitHub Issues**: [Report bugs or request features](https://github.com/R0salman/PSVMP/issues)
+* **Documentation**: [Full documentation](https://github.com/R0salman/PSVMP)
+* **Community**: Join the PS Vita homebrew community discussions
+
+---
+
+<p align="center"><b>Made with ❤️ for the PS Vita community</b></p>
