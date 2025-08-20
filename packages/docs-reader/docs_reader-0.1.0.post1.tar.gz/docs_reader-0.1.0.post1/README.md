@@ -1,0 +1,88 @@
+# docs_reader
+
+- A simple tool to track previous or just nearest (immediate) import lines and show helper documents automatically.
+
+## installation
+
+```bash
+pip install docs-reader
+or
+pip install docs_reader
+```
+
+## usage
+```python
+ 1. ...
+ 2. from doc_reader import DocsReader
+ 3. DocsReader()
+ 4. ...
+ 5. ...
+```
+ - desciptions:
+    - it should be imported after <your import module> statement, not in top or first line, otherwise it will be dectect nothing.
+    - <your import module> statement
+    - than the next line will be -> <code>from doc_reader import DocsReader</code> 
+    - than ->  <code>DocsReader()</code>
+    
+## Examples:
+
+- this tool / module help to automatically find and show the essentials documents of the given nearest import module with offline mode.
+
+  ### Examples:
+    - example 1: 
+        - import in your <filename>.py (e.g. main.py)
+
+        ```python
+           1. import numpy # this will be first line
+           2. from docs_reader import DocsReader # next one
+           3. DocsReader() # next one
+           4. ...
+        
+        descriptions
+           # run the <file>.py (e.g. python main.py)
+           # after that it will automatically show it's documentation.
+              1. in the above 'numpy' is import that's why it show only 'numpy' documentation.
+        ```
+   
+    - example 2:
+       - if your file has contained multiple import statement than it will detect the just (immediate) previous import line and it shows the helper documnetation in your terminal by running your 
+       <code>filename.py</code> file.
+       ```python
+           1. import numpy # first one
+           2. import pandas as pd # this is the immediate previous line of DocsReader
+           3. from doc_reader import DocsReader
+           4. DocsReader()
+           5. ...
+        
+       descriptions:
+           # run the <file>.py (e.g. python main.py)
+           # now it show only the nearest modules documentation of pandas as: pd.
+        ```
+    - example 3:
+       - if any newline is contains before the <code>from doc_reader import DocsReader</code> , it can't be parse.
+       ```python
+           1. import numpy
+           2. import pandas as pd
+           3.                       # this is a newline, can't be parse
+           4. from doc_reader import DocsReader
+           5. DocsReader()
+           6. ....
+        
+       descriptions:
+           # run the <file>.py (e.g. python main.py)
+           # it will show that "could not parse the module" if newlines are contains.
+        ```
+
+## bugs fix
+- it's just a beta version, still working.
+- if any bugs found than let me know
+
+## module version
+<code> __version__ = 0.1.0 </code>
+
+
+## author 
+- Anjan maity
+
+## contact
+- [Email Me](mailto:anjanmaity1824@gmail.com?subject=Your%20Subject&body=Your%20Body%20Text)
