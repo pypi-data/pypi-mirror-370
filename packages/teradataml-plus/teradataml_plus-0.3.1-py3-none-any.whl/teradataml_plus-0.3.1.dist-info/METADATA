@@ -1,0 +1,117 @@
+Metadata-Version: 2.1
+Name: teradataml-plus
+Version: 0.3.1
+Summary: Python Package that extends the functionality of the popular teradataml package through monkey-patching.
+Author: Martin Hillebrand
+Author-email: martin.hillebrand@teradata.com
+Keywords: teradataml-plus,teradata,database,teradataml
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Database
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: teradataml >=20.0.00.00
+Requires-Dist: scikit-learn >=1.2.0
+Requires-Dist: numpy >=1.24.2
+Requires-Dist: sqlparse
+Provides-Extra: plot
+Requires-Dist: plotly >=5.0 ; extra == 'plot'
+Requires-Dist: seaborn >=0.11 ; extra == 'plot'
+Requires-Dist: networkx ; extra == 'plot'
+Requires-Dist: sqlparse ; extra == 'plot'
+
+![Logo](https://raw.githubusercontent.com/martinhillebrand/tdmlplus/refs/heads/main/media/tdmlplus-logo.png)
+
+# teradataml-plus
+
+Python Package that extends the functionality of the popular [teradataml](https://pypi.org/project/teradataml/) package through [monkey-patching](https://en.wikipedia.org/wiki/Monkey_patch).
+This is to use field-developed assets more naturally with the existing interface.
+
+## Installation
+
+* `pip install teradataml-plus`
+
+## Quickstart
+
+```python
+#always import teradata-plus (tdmlplus) first
+import tdmlplus
+
+#then import teradataml. It will have all the additional functionality
+import teradataml as tdml
+
+# one additional function is for instance to get a correlation matrix straight from the DataFrame, just like in pandas
+
+DF = tdml.DataFrame("some_table")
+DF_corr = DF.corr() # not possible withot tdmlplus
+```
+
+
+
+# History
+
+## v0.1.0 (2025-07-25)
+
+* `teradataml.DataFrame`
+  * `corr(method="pearson")` – correlation matrix like in pandas
+
+* `teradataml.random`
+  * `randn(n, mean=0.0, std=1.0)` – random normally distributed variables
+
+* `teradataml.dba`
+  * `get_amps_count()` – get number of AMPs
+
+
+## v0.2.0 (2025-07-30)
+
+* `teradataml.DataFrame`
+  * `show_CTE_query()` – generate full lineage SQL with CTEs
+  * `deploy_CTE_view(view_name, replace=False)` – create a view from the full CTE SQL
+  * `easyjoin(other, on, how="left", lsuffix=None, rsuffix=None)` – simplified join using common column names with suffix handling
+
+* `tdml.dataframe.sql._SQLColumnExpression` - aka DataFrameColumn
+  * `trycast(dtype)` – apply TRYCAST SQL expression to a column
+  * `hashbin(num_bins, salt=None)` – compute hash bin from a column with optional salt
+  * `_power_transform_get_lambda(method="yeo-johnson")` – estimate lambda for power transform
+  * `power_transform(method="yeo-johnson", lambda_val=None)` – apply power transform
+  * `power_fit_transform(method="yeo-johnson")` – estimate lambda and transform in one step
+
+* `teradataml.random`
+  * `_generate_sql_for_correlated_normals(cov_matrix)` – internal SQL generator for correlated normals
+  * `correlated_normals(df, mean=None, cov=None)` – generate synthetic data with correlation structure
+
+* `tdml.widgets`
+  * `tab_dfs(dfs)` – display multiple DataFrames/tables in widget tabs
+
+* `teradataml`
+  * `prettyprint_sql(query)` – pretty-print SQL with indentation and keyword formatting
+
+
+## v0.3.0 (2025-08-18)
+
+* `teradataml.DataFrame`
+  * `top(n=10, percentage=None)` – efficient limiting via Teradata `TOP`/`TOP PERCENT`
+  * `head(n=5, sort_index=False)` – overridden to support `sort_index`; original preserved as `_head`
+  * `select_dtypes(include=None, exclude=None)` – filter columns by logical dtypes
+  * `select_tdtypes(include=None, exclude=None)` – filter columns by Teradata types
+  * `histogram(bins=10, exclude_index=True, target_columns=None, groupby_columns=None)` – equal-width histograms for numeric columns
+  * `plot_hist(bins=10, exclude_index=True, target_columns=None, groupby_columns=None, library="plotly", absolute_values=True, percentage_values=False)` – plot histograms with Plotly or Seaborn
+  * `hist(...)` – alias for `plot_hist`
+  * `categorical_summary(target_columns=None, exclude_index=True, include_percentages=False)` – summaries for `CHAR`/`VARCHAR` columns
+  * `column_summary(target_columns=None, exclude_index=True)` – general per-column summary
+  * `fill_RowId(rowid_columnname="row_id")` – add sequential row id
+  * `reset_index(...)` – alias for `fill_RowId`
+
+* `tdml.dataframe.sql._SQLColumnExpression` - aka DataFrameColumn
+  * `histogram(bins=10)` – column-level histogram with numeric type validation
+  * `plot_hist(bins=10, library="plotly", absolute_values=True, percentage_values=False, **plotting_args)` – column-level plotting wrapper
+  * `hist(...)` – alias for `plot_hist`
+  * `map(value_map, keep_original=True, default_else_value=None, output_type=None)` – SQL `CASE` mapping with output type inference
