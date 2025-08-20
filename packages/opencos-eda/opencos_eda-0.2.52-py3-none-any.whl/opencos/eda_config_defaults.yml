@@ -1,0 +1,467 @@
+
+# Note that a user config may applied to this Table/dict using
+# python mergedeep with Strategy.TYPESAFE_REPLACE. I considered doing TYPESAFE_ADDITIVE but then
+# the user would lose full control over existing list values.
+
+DEFAULT_HANDLERS:
+  # These commands (sim, elab, etc) require a tool, but have a default handler
+  # base class:
+  sim         : opencos.commands.CommandSim
+  elab        : opencos.commands.CommandElab
+  synth       : opencos.commands.CommandSynth
+  proj        : opencos.commands.CommandProj
+  build       : opencos.commands.CommandBuild
+  upload      : opencos.commands.CommandUpload
+  open        : opencos.commands.CommandOpen
+  lec         : opencos.commands.CommandLec
+  # These commands don't necessarily require a tool
+  multi       : opencos.commands.CommandMulti
+  tools-multi : opencos.commands.CommandToolsMulti
+  sweep       : opencos.commands.CommandSweep
+  flist       : opencos.commands.CommandFList
+  # These commands (waves, export, targets) do not require a tool, or
+  # will self determine the tool:
+  waves       : opencos.commands.CommandWaves
+  export      : opencos.commands.CommandExport
+  shell       : opencos.commands.CommandShell
+  targets     : opencos.commands.CommandTargets
+
+
+defines: { } # Add these defines to every eda call
+
+dep_command_enables:
+  shell:             true # Support DEPS.yml shell commands
+  work_dir_add_srcs: true # Support DEPS.yml commands adding artifacts to sources (files_sv, etc)
+  peakrdl:           true # Support DEPS.yml peakrdl commands
+  var_subst_args:    true # Support var substitution from eda/DEPS args
+  var_subst_os_env:  true # Support var substitution from os.environ
+  tee:               true # Support renaming eda command log file names (instead of auto-named from <target>)
+
+dep_tags_enables:
+  with-tools:            true
+  with-args:             true
+  args:                  true
+  replace-config-tools:  true
+  additive-config-tools: true
+
+
+deps_markup_supported: true  # Support DEPS.yml files (also .yaml, .toml, .json)
+deps_subprocess_shell: true  # Support subprocess commands using shell=True
+bare_plusarg_supported: true # Support for CLI, DEPS args or deps: +<string> that isn't +define or +incdirs
+
+dep_sub: [ ] # Legacy, no longer supported.
+vars: { }    # Legacy, no longer supported.
+
+file_extensions:
+  verilog:
+    - .v
+  systemverilog:
+    - .sv
+  vhdl:
+    - .vhd
+    - .vhdl
+  cpp:
+    - .cpp
+    - .cc
+  synth_constraints:
+    - .sdc
+    - .xdc
+
+  inferred_top:
+    # file extensions that we can infer "top" module from, if --top omitted.
+    - .v
+    - .sv
+    - .vhd
+    - .vhdl
+
+command_determines_tool:
+  # eda commands that will self-determine the tool to use
+  - waves
+
+command_tool_is_optional:
+  # eda commands that may not need to use a tool at all, will skip auto_tools_order if --tool=None (default)
+  - flist
+  - export
+  - targets
+
+
+tools:
+
+  # <tool-name>:
+  #   defines:             <Table, macroName: <value|null|> >
+  #   log-bad-strings:     <Array of strings>
+  #   log-must-strings:    <Array of strings>
+  #   sim-libraries:       <Array of strings>
+  #   compile-args:        <string space separated>
+  #   compile-coverage-args: <string space separated>
+  #   compile-waves-args:  <string space separated>
+  #   compile-waivers:     <Array of strings, no spaces>
+  #   elab-args:           <string space separated>
+  #   elab-waves-args:     <string space separated>
+  #   simulate-args:       <string space separated>
+  #   simulate-waves-args: <string space separated>
+  #   simulate-waivers:    <Array of strings, no spaces>
+  #   coverage-args:       <string space separated>
+
+  slang:
+    defines:
+      OC_TOOL_SLANG: null
+    log-bad-strings:
+      - 'Build failed: '
+    log-must-strings:
+      - 'Build succeeded: '
+      - '0 warnings'
+    compile-args: |
+      --single-unit
+      --timescale=1ns/1ns
+      --allow-dup-initial-drivers
+      -Wno-missing-top
+
+  verilator:
+    defines: { }
+    log-bad-strings:
+      - "%Error"
+      - "%Fatal"
+    log-must-strings:
+      - "R e p o r t: Verilator" # These come at end of compile or simulation, since we don't suppress it.
+    compile-args: |
+      --timing
+      --assert
+      --autoflush
+      -j 2
+      -sv
+    compile-coverage-args: |
+      --coverage
+    compile-waves-args: |
+      --trace-structs
+      --trace-params
+    compile-waivers:
+      - CASEINCOMPLETE
+      - REALCVT  # Implicit conversion of real to integer
+      - SELRANGE
+      - TIMESCALEMOD  # If one file has `timescale, then they all must
+      - UNSIGNED
+      - WIDTH
+      # Other potential verilator compilers Warnings to waive:
+      # - ALWCOMBORDER
+      # - ASCRANGE
+      # - CASEOVERLAP
+      # - CASEX
+      # - CMPCONST
+      # - COMBDLY
+      # - CONSTRAINTIGN
+      # - COVERIGN
+      # - IGNOREDRETURN
+      # - IMPLICIT
+      # - IMPLICITSTATIC
+      # - INITIALDLY
+      # - LATCH
+      # - MISINDENT
+      # - MODDUP
+      # - MULTIDRIVEN
+      # - NULLPORT
+      # - PINMISSING
+      # - RISEFALLDLY
+      # - SIDEEFFECT
+      # - SHORTREAL
+      # - UNOPTFLAT
+      # - WIDTHCONCAT
+      # Or categories:
+      # - style
+      # - lint
+      # Or more holistic waivers if you want to run past compile
+      # - fatal
+
+    simulate-args: |
+
+    # You could set +verilator+error+limit+1 in simulate-args, but the default value is 1
+    # from verilator so we do not set it.
+
+    coverage-args: |
+      --annotate logs/annotated
+      coverage.dat
+
+    # If you want to set your own run-time plusarg on all verilator exe's for --waves,
+    # add it here:
+    simulate-waves-args: |
+
+
+  surelog:
+    defines:
+      OC_TOOL_SURELOG: null
+    compile-args: |
+      -parse
+      -timescale=1ns/1ns
+
+  invio:
+    defines:
+      OC_TOOL_INVIO: null
+      INVIO: null
+      VERIFIC: null
+
+
+  riviera:
+    defines:
+      OC_TOOL_RIVIERA: 1
+    log-bad-strings:
+      - "Error:"
+    log-must-strings:
+      - "VSIM: Simulation has finished"
+    compile-args: |
+      -echo -sv -input_ports net -lcu -dbg +accb +accr +accs +dacc
+    compile-coverage-args: |
+      -coverage sbecam -coverage_options count
+    # -uvm -ovm
+    simulate-waves-args: |
+      +accb +accr +access +r+w
+    coverage-args: |
+      -acdb -acdb_cov sbfectapm
+
+
+  modelsim_ase:
+    defines:
+      OC_ASSERT_PROPERTY_NOT_SUPPORTED: 1
+      OC_TOOL_MODELSIM_ASE: 1
+    log-bad-strings:
+      - "Error:"
+    log-must-strings:
+      - " vsim "
+      - "Errors: 0"
+    compile-args: |
+      -sv -svinputport=net -lint
+    compile-waivers:
+      - 2275 # 2275 - Existing package 'myname_pkg' will be overwritten.
+      - 2555 # 2555 - assignment to input port myname
+      - 2583 # 2583 - [SVCHK] - Extra checking for conflicts with always_comb and
+             #        always_latch variables is done at vopt time.
+    simulate-waivers:
+      - 3009 # 3009: [TSCALE] - Module 'myname' does not have a timeunit/timeprecision
+             #       specification in effect, but other modules do.
+    simulate-waves-args: |
+      +acc
+
+
+  questa_fse:
+    defines:
+      OC_TOOL_QUESTA_FSE: 1
+    log-bad-strings:
+      - "Error:"
+    log-must-strings:
+      - " vsim "
+      - "Errors: 0"
+    compile-args: |
+      -sv -svinputport=net -lint
+    compile-waivers:
+      - 2275 # 2275 - Existing package 'myname_pkg' will be overwritten.
+      - 2555 # 2555 - assignment to input port myname
+      - 2583 # 2583 - [SVCHK] - Extra checking for conflicts with always_comb and
+             #        always_latch variables is done at vopt time.
+    simulate-waivers:
+      - 3009 # 3009: [TSCALE] - Module 'myname' does not have a timeunit/timeprecision
+             #       specification in effect, but other modules do.
+    simulate-waves-args: |
+      -voptargs=+acc=bcgnprst
+
+
+  iverilog:
+    log-bad-strings:
+      - "Error:"
+      - "ERROR:"
+      - "error:"
+      - "FATAL:"
+      - "Fatal:"
+      - "fatal:"
+      - ": syntax error"
+      - "I give up"
+    compile-args: |
+      -g2012
+      -gsupported-assertions
+      -grelative-include
+    simulate-waves-args: |
+      +trace
+
+  cocotb:
+    defines:
+      OC_TOOL_COCOTB: null
+    log-bad-strings:
+      - "ERROR"
+      - "FAILED"
+      - "AssertionError"
+      - "Exception"
+      - "Traceback"
+      - "COCOTB_TEST_FAILED"
+    log-must-strings:
+      - "passed"
+      - "Cocotb test completed successfully!"
+
+
+  vivado:
+    sim-libraries:
+      - xil_defaultlib
+      - unisims_ver
+      - unimacro_ver
+      - xpm
+      - secureip
+      - xilinx_vip
+    compile-args: ""
+    elab-args: |
+      -s snapshot -timescale 1ns/1ps --stats
+    # CommandSimVivado we don't set elab-waves-args (does gui + waves differently),
+    # but you could set: -debug all if you wanted that on every run:
+    #elab-waves-args: |
+    #  -debug all
+    simulate-args: |
+      snapshot --stats --onerror quit
+
+
+#
+# auto_tools_order
+# -- should be used when a new tool is added.
+# -- Is in-order for the handlers, so Verilator is the default simulator if
+#    verilator is installed and the eda command is "sim".
+#
+auto_tools_order:
+  - # This is a list so config changes use Strategy.REPLACE to replace it
+
+    slang:
+      exe: slang
+      requires_cmd:
+        - slang --version
+      handlers:
+        elab: opencos.tools.slang.CommandElabSlang
+
+    verilator:
+      exe: verilator
+      handlers:
+        elab: opencos.tools.verilator.VerilatorElab
+        sim: opencos.tools.verilator.VerilatorSim
+
+    # TODO(drew): surelog is disabled from `eda tools-multi`. It is still
+    # enabled for `eda [multi] elab --tool surelog`. It does not support
+    # type comparisons:
+    #   if type(myname) == type(othername)
+    # [ERR:UH0700] ... Unsupported expression
+    # modelsim_ase also doesn't, but it won't fail elab, whereas surelog does.
+    surelog:
+      disable-tools-multi: true # surelog doesn't support enough of IEEE-1800
+      exe: surelog
+      requires_cmd:
+        - surelog --version
+      handlers:
+        elab: opencos.tools.surelog.CommandElabSurelog
+
+    invio:
+      exe: python3
+      requires_cmd:
+        - python -c "import invio"
+      requires_py:
+        - invio
+      handlers:
+        elab:  opencos.tools.invio.CommandElabInvio
+
+    vaporview:
+      exe: code
+      requires_vscode_extension:
+        - lramseyer.vaporview
+      handlers: { }
+
+    surfer:
+      exe: code
+      requires_vscode_extension:
+        - surfer-project.surfer
+      handlers: { }
+
+    gtkwave:
+      exe: gtkwave
+      handlers: { }
+
+    vivado:
+      exe: vivado
+      handlers:
+        elab:   opencos.tools.vivado.CommandElabVivado
+        sim:    opencos.tools.vivado.CommandSimVivado
+        synth:  opencos.tools.vivado.CommandSynthVivado
+        proj:   opencos.tools.vivado.CommandProjVivado
+        upload: opencos.tools.vivado.CommandUploadVivado
+        open:   opencos.tools.vivado.CommandOpenVivado
+        flist:  opencos.tools.vivado.CommandFListVivado
+        build:  opencos.tools.vivado.CommandBuildVivado
+
+    slang_yosys:
+      exe: yosys
+      requires_cmd:
+        - yosys -m slang
+      handlers:
+        elab:  opencos.tools.slang_yosys.CommandElabSlangYosys
+        synth: opencos.tools.slang_yosys.CommandSynthSlangYosys
+        lec:   opencos.tools.slang_yosys.CommandLecSlangYosys
+
+    tabbycad_yosys:
+      exe: yosys
+      requires_env:
+        - YOSYSHQ_LICENSE
+      handlers:
+        synth: opencos.tools.tabbycad_yosys.CommandSynthTabbyCadYosys
+
+    invio_yosys:
+      exe: yosys
+      requires_cmd:
+        - python -c "import invio"
+      requires_py:
+        - invio
+      handlers:
+        elab:  opencos.tools.invio_yosys.CommandElabInvioYosys
+        synth: opencos.tools.invio_yosys.CommandSynthInvioYosys
+
+    yosys:
+      exe: yosys
+      requires_cmd:
+        - yosys
+      handlers:
+        synth: opencos.tools.slang_yosys.CommonSynthYosys
+        lec:   opencos.tools.slang_yosys.CommandLecYosys
+
+    questa:
+      exe: qrun
+      requires_vsim_helper: True
+      handlers:
+        elab: opencos.tools.queta.CommandElabQuesta
+        sim: opencos.tools.queta.CommandSimQuesta
+
+    riviera:
+      exe: vsim
+      requires_cmd:
+        - which riviera  # Do not run it, make sure it's in PATH
+      requires_vsim_helper: True
+      handlers:
+        elab: opencos.tools.riviera.CommandElabRiviera
+        sim:  opencos.tools.riviera.CommandSimRiviera
+
+    modelsim_ase:
+      exe: vsim
+      requires_vsim_helper: True
+      handlers:
+        elab: opencos.tools.modelsim_ase.CommandElabModelsimAse
+        sim:  opencos.tools.modelsim_ase.CommandSimModelsimAse
+
+    questa_fse:  # free student edition, works similar to modelsim_ase
+      exe: vsim
+      requires_vsim_helper: True
+      handlers:
+        elab: opencos.tools.questa_fse.CommandElabQuestaFse
+        sim:  opencos.tools.questa_fse.CommandSimQuestaFse
+
+    iverilog:
+      exe: iverilog
+      handlers:
+        elab: opencos.tools.iverilog.CommandElabIverilog
+        sim:  opencos.tools.iverilog.CommandSimIverilog
+
+    cocotb:
+      exe: python
+      requires_cmd:
+        - python -c "import cocotb; print(cocotb.__version__)"
+      requires_py:
+        - cocotb
+      handlers:
+        sim:  opencos.tools.cocotb.CommandSimCocotb
