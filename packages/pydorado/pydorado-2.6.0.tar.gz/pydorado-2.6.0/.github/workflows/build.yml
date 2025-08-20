@@ -1,0 +1,131 @@
+# This workflow installs and tests dorado on multiple python versions and operating systems.
+
+name: build
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 0 3 * *'  # run workflow at 12AM on third day of every month
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11.0", "3.12.0"]
+    env:
+      OS: ${{ matrix.os }}
+      PYTHON: ${{ matrix.python-version }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov coveralls
+        pip install -r requirements.txt
+    - name: Install dorado
+      run: |
+        pip install -e .
+    - name: Test with pytest
+      run: |
+        pytest --cov=dorado/ --cov-report=xml
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: ./coverage.xml
+        env_vars: OS,PYTHON
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  examples:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11.0"]
+    env:
+      OS: ${{ matrix.os }}
+      PYTHON: ${{ matrix.python-version }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov coveralls
+        pip install -r requirements.txt
+    - name: Install dorado
+      run: |
+        pip install -e .
+    - name: Run examples
+      run: |
+        python examples/steady_anuga_particles.py
+        python examples/steady_deltarcm_particles.py
+        python examples/steepest_descent_deltarcm.py
+        python examples/timing_anuga_particles.py
+        python examples/set_timestep_anuga_particles.py
+        python examples/draw_anuga_particle_paths.py
+        python examples/draw_deltarcm_particle_paths.py
+        python examples/true_random_walk.py
+        python examples/parallel_comparison.py
+        python examples/traveltime_straight_channel.py
+        python examples/nourishment_example.py
+        cd examples
+        python unsteady_example.py
+
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Set up Python 3.11.0
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11.0'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install sphinx
+        sudo apt update -y && sudo apt install -y latexmk texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended dvipng
+        pip install m2r2
+        pip install ipython
+        pip install ipykernel
+    - name: Install dorado
+      run: |
+        pip install .
+    - name: Build and test documentation
+      run: |
+        (cd docs && make docs)
+        (cd docs && make html)
+    - name: Debug
+      run: |
+        echo $REF
+        echo $EVENT_NAME
+        echo ${{ github.event_name == 'push' }}
+        echo ${{ github.ref == 'refs/heads/master' }}
+        echo ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    - name: Deploy to GitHub Pages
+      uses: JamesIves/github-pages-deploy-action@v4
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+      with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BRANCH: gh-pages
+          FOLDER: docs/build/html
