@@ -1,0 +1,1 @@
+from docxcomtpl.docxcom_template import DocxComTemplate
