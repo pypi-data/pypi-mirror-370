@@ -1,0 +1,74 @@
+from com.terraquantum.experiment.v1.experimentrun.algorithm import ml_shared_pb2 as _ml_shared_pb2
+from com.terraquantum.experiment.v1.experimentrun.algorithm.ml_layers import shared_pb2 as _shared_pb2
+from buf.validate import validate_pb2 as _validate_pb2
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from typing import ClassVar as _ClassVar, Mapping as _Mapping, Optional as _Optional, Union as _Union
+
+DESCRIPTOR: _descriptor.FileDescriptor
+
+class TSHQMLPTrainParametersProto(_message.Message):
+    __slots__ = ("input_width", "label_width", "hidden_size", "num_qubits", "depth", "measurement_mode", "rotation", "entangling", "measure", "diff_method", "qubit_type", "act_func", "dropout", "dropout_p", "bn", "num_epochs", "batch_size", "learning_rate", "optim", "loss_func", "train_model_info", "time_column", "target_column")
+    INPUT_WIDTH_FIELD_NUMBER: _ClassVar[int]
+    LABEL_WIDTH_FIELD_NUMBER: _ClassVar[int]
+    HIDDEN_SIZE_FIELD_NUMBER: _ClassVar[int]
+    NUM_QUBITS_FIELD_NUMBER: _ClassVar[int]
+    DEPTH_FIELD_NUMBER: _ClassVar[int]
+    MEASUREMENT_MODE_FIELD_NUMBER: _ClassVar[int]
+    ROTATION_FIELD_NUMBER: _ClassVar[int]
+    ENTANGLING_FIELD_NUMBER: _ClassVar[int]
+    MEASURE_FIELD_NUMBER: _ClassVar[int]
+    DIFF_METHOD_FIELD_NUMBER: _ClassVar[int]
+    QUBIT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    ACT_FUNC_FIELD_NUMBER: _ClassVar[int]
+    DROPOUT_FIELD_NUMBER: _ClassVar[int]
+    DROPOUT_P_FIELD_NUMBER: _ClassVar[int]
+    BN_FIELD_NUMBER: _ClassVar[int]
+    NUM_EPOCHS_FIELD_NUMBER: _ClassVar[int]
+    BATCH_SIZE_FIELD_NUMBER: _ClassVar[int]
+    LEARNING_RATE_FIELD_NUMBER: _ClassVar[int]
+    OPTIM_FIELD_NUMBER: _ClassVar[int]
+    LOSS_FUNC_FIELD_NUMBER: _ClassVar[int]
+    TRAIN_MODEL_INFO_FIELD_NUMBER: _ClassVar[int]
+    TIME_COLUMN_FIELD_NUMBER: _ClassVar[int]
+    TARGET_COLUMN_FIELD_NUMBER: _ClassVar[int]
+    input_width: int
+    label_width: int
+    hidden_size: int
+    num_qubits: int
+    depth: int
+    measurement_mode: _shared_pb2.MeasurementModeProto
+    rotation: _shared_pb2.MeasureProto
+    entangling: _shared_pb2.EntanglingProto
+    measure: _shared_pb2.MeasureProto
+    diff_method: _shared_pb2.DiffMethodProto
+    qubit_type: _shared_pb2.QubitTypeProto
+    act_func: _shared_pb2.ActFuncProto
+    dropout: bool
+    dropout_p: float
+    bn: bool
+    num_epochs: int
+    batch_size: int
+    learning_rate: float
+    optim: _ml_shared_pb2.OptimProto
+    loss_func: _ml_shared_pb2.LossFuncProto
+    train_model_info: _ml_shared_pb2.TrainModelInfoProto
+    time_column: str
+    target_column: str
+    def __init__(self, input_width: _Optional[int] = ..., label_width: _Optional[int] = ..., hidden_size: _Optional[int] = ..., num_qubits: _Optional[int] = ..., depth: _Optional[int] = ..., measurement_mode: _Optional[_Union[_shared_pb2.MeasurementModeProto, str]] = ..., rotation: _Optional[_Union[_shared_pb2.MeasureProto, str]] = ..., entangling: _Optional[_Union[_shared_pb2.EntanglingProto, str]] = ..., measure: _Optional[_Union[_shared_pb2.MeasureProto, str]] = ..., diff_method: _Optional[_Union[_shared_pb2.DiffMethodProto, str]] = ..., qubit_type: _Optional[_Union[_shared_pb2.QubitTypeProto, str]] = ..., act_func: _Optional[_Union[_shared_pb2.ActFuncProto, str]] = ..., dropout: bool = ..., dropout_p: _Optional[float] = ..., bn: bool = ..., num_epochs: _Optional[int] = ..., batch_size: _Optional[int] = ..., learning_rate: _Optional[float] = ..., optim: _Optional[_Union[_ml_shared_pb2.OptimProto, str]] = ..., loss_func: _Optional[_Union[_ml_shared_pb2.LossFuncProto, str]] = ..., train_model_info: _Optional[_Union[_ml_shared_pb2.TrainModelInfoProto, _Mapping]] = ..., time_column: _Optional[str] = ..., target_column: _Optional[str] = ...) -> None: ...
+
+class TSHQMLPTrainMetadataProto(_message.Message):
+    __slots__ = ("parameters", "inputs")
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    INPUTS_FIELD_NUMBER: _ClassVar[int]
+    parameters: TSHQMLPTrainParametersProto
+    inputs: _ml_shared_pb2.MLTrainInputsProto
+    def __init__(self, parameters: _Optional[_Union[TSHQMLPTrainParametersProto, _Mapping]] = ..., inputs: _Optional[_Union[_ml_shared_pb2.MLTrainInputsProto, _Mapping]] = ...) -> None: ...
+
+class TSHQMLPTrainOutcomeProto(_message.Message):
+    __slots__ = ("result", "outputs")
+    RESULT_FIELD_NUMBER: _ClassVar[int]
+    OUTPUTS_FIELD_NUMBER: _ClassVar[int]
+    result: _ml_shared_pb2.TSTrainResultProto
+    outputs: _ml_shared_pb2.MLTrainOutputsProto
+    def __init__(self, result: _Optional[_Union[_ml_shared_pb2.TSTrainResultProto, _Mapping]] = ..., outputs: _Optional[_Union[_ml_shared_pb2.MLTrainOutputsProto, _Mapping]] = ...) -> None: ...

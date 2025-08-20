@@ -1,0 +1,15 @@
+from com.terraquantum.storage.v1alpha1 import storage_pb2 as _storage_pb2
+from com.terraquantum.storage.v1alpha1 import list_storages_pb2 as _list_storages_pb2
+from com.terraquantum.storage.v1alpha1 import delete_storage_pb2 as _delete_storage_pb2
+from com.terraquantum.storage.v1alpha1 import export_storage_pb2 as _export_storage_pb2
+from com.terraquantum.storage.v1alpha1 import get_storage_request_pb2 as _get_storage_request_pb2
+from com.terraquantum.storage.v1alpha1 import get_storage_count_pb2 as _get_storage_count_pb2
+from com.terraquantum.storage.v1alpha1 import create_storage_from_external_pb2 as _create_storage_from_external_pb2
+from com.terraquantum.storage.v1alpha1 import create_storage_from_file_pb2 as _create_storage_from_file_pb2
+from com.terraquantum.storage.v1alpha1 import validate_storage_pb2 as _validate_storage_pb2
+from com.terraquantum.storage.v1alpha1 import create_output_storage_pb2 as _create_output_storage_pb2
+from com.terraquantum.storage.v1alpha1 import update_storage_status_pb2 as _update_storage_status_pb2
+from google.protobuf import descriptor as _descriptor
+from typing import ClassVar as _ClassVar
+
+DESCRIPTOR: _descriptor.FileDescriptor

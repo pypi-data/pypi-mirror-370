@@ -1,0 +1,9 @@
+from com.terraquantum.experiment.v1.bffexperimentrun import get_experiment_runs_count_pb2 as _get_experiment_runs_count_pb2
+from com.terraquantum.experiment.v1.bffexperimentrun import list_bff_experiment_runs_request_pb2 as _list_bff_experiment_runs_request_pb2
+from com.terraquantum.experiment.v1.bffexperimentrun import list_bff_experiment_runs_response_pb2 as _list_bff_experiment_runs_response_pb2
+from com.terraquantum.experiment.v1.bffexperimentrun import bff_get_experiment_run_pb2 as _bff_get_experiment_run_pb2
+from com.terraquantum.experiment.v1.bffexperimentrun import bff_experiment_run_pb2 as _bff_experiment_run_pb2
+from google.protobuf import descriptor as _descriptor
+from typing import ClassVar as _ClassVar
+
+DESCRIPTOR: _descriptor.FileDescriptor
