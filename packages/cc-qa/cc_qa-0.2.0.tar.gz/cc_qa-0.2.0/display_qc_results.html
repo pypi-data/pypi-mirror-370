@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="/ress/favico.ico">
+    <title>QC Result Viewer</title>
+    <style>
+        @font-face {
+            font-family: 'Inter';
+            src: url('/ress/Inter-Regular.woff2') format('woff2'),
+                 url('fonts/Inter-Regular.woff2') format('woff2');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Inter';
+            src: url('/ress/Inter-SemiBold.woff2') format('woff2'),
+                 url('fonts/Inter-SemiBold.woff2') format('woff2');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        #banner {
+            background: linear-gradient(to right, #7dbde8, #2980b9);
+            border: 1px solid #b2dfdb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: left;
+            justify-content: left;
+            gap: 10px; /* space between logo and text */
+            margin: 20px 0;
+        }
+
+        #banner h1 {
+            margin: 0;
+            font-size: 3.6em;
+            color: #2c3e50;
+            letter-spacing: 1px;
+        }
+
+        #logo {
+            height: 75px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            margin: 0;
+            padding: 2rem;
+        }
+        h1 {
+            text-align: left;
+            font-size: 2em;
+            margin-bottom: 0.3em;
+            color: #2c3e50;
+            padding-bottom: 0.2em;
+        }
+
+        h2, h3 {
+            text-align: left;
+            font-weight: normal;
+            color: #555;
+            margin-top: 0;
+            margin-bottom: 0.5em;
+        }
+
+        #subtitle, #subtitle2 {
+            font-size: 1.1em;
+            color: #777;
+        }
+        header {
+            margin-bottom: 1em;
+            padding-bottom: 0.5em;
+            border-bottom: 2px solid #ccc;
+        }
+
+        #main-title {
+            font-size: 2em;
+            margin-bottom: 0.2em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .file-info {
+            font-size: 1.1em;
+            color: #555;
+            margin-bottom: 0.2em;
+        }
+
+        .file-meta {
+            font-size: 0.95em;
+            color: #777;
+            font-style: italic;
+        }
+
+        #disclaimer {
+            background: #fff3cd;
+            border-left: 6px solid #ffecb5;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 6px;
+        }
+
+        select,
+        input[type="file"] {
+            width: 640px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            font-size: 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-family: 'Inter', sans-serif;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            margin-right: 12px;
+            margin-bottom: 1rem;
+        }
+
+        select:hover,
+        input[type="file"]:hover {
+            background-color: #2c80b4;
+        }
+
+        select {
+            max-width: 100%;
+            appearance: none;
+            padding-right: 36px;
+            background-image: url("data:image/svg+xml,%3Csvg width='14' height='10' viewBox='0 0 14 10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7 10L0.937822 0.25H13.0622L7 10Z' fill='white'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 12px;
+        }
+
+        .expand-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 14px;
+            margin: 10px 5px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+
+        .expand-btn:hover {
+            background-color: #2980b9;
+        }
+
+        #json-container {
+            background-color: #ffffff;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-top: 1rem;
+            overflow-x: auto;
+        }
+
+        ul {
+            list-style-type: none;
+            padding-left: 1rem;
+        }
+
+        .toggle {
+            cursor: pointer;
+            font-weight: 600;
+            color: #2c3e50;
+            user-select: text;
+        }
+
+        .toggle:hover {
+            color: #2980b9;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .triangle {
+            display: inline-block;
+            width: 1em;
+            text-align: center;
+            color: #999;
+            user-select: none;
+        }
+
+        li {
+            margin-bottom: 4px;
+            line-height: 1.4em;
+        }
+        li:not(:has(ul)):hover {
+            background-color: #f0f0f0;
+            cursor: default;
+        }
+        li:not(:has(ul)) {
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        #footer {
+            background-color: #f1f1f1;  /* Light gray background for the footer */
+            padding: 10px 0;  /* Some padding for better spacing */
+            text-align: center;  /* Centering the links */
+            font-size: 14px;  /* Slightly smaller font size */
+            position: fixed;  /* Fixed at the bottom of the page */
+            left: 0;
+            bottom: 0;
+            width: 100%;  /* Full width */
+            z-index: 1000;  /* Make sure it is above other content */
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);  /* Optional: subtle shadow for the footer */
+        }
+
+        /* Styling for the footer links */
+        #footer a {
+            color: #007bff;  /* Link color */
+            text-decoration: none;  /* Remove underline */
+            margin: 0 15px;  /* Space between links */
+            transition: color 0.3s ease;  /* Smooth color transition */
+        }
+
+        #footer a:hover {
+            color: #0056b3;  /* Darker blue color when hovering */
+            text-decoration: underline;  /* Optional: underline on hover */
+        }
+    </style>
+</head>
+<body>
+    <div id="banner">
+        <img id="logo" src="/ress/cc-qa_Logo.png" alt="" onerror="this.style.display='none'">
+        <h1>QC Result Viewer</h1>
+    </div>
+    <br>
+    <div id="disclaimer">
+        <b>Disclaimer:</b><br><br>
+        Please note that this website will access and interpret the files you select. The interpretation will happen locally in your browser.
+        <br>
+        <li style="margin-left: 50px">If you select a file from your local machine, the data will remain local and will not be sent to the server.</li>
+
+        <li style="margin-left: 50px">If you load data from the repository, the website will fetch the relevant QC results directly from the server.<br>
+            This does not involve submitting any personal or sensitive data to the server.<br>
+            The data retrieved will only be used for local interpretation and display within your browser.
+        </li>
+        <br>
+        By making use of the file selection or repository-based selection, you acknowledge that you understand and agree to these terms.
+    </div>
+    <br>
+
+    <h2>Load QC Results From Repository:</h2>
+    <select id="qc-dropdown">
+        <option value="">Select a result...</option>
+    </select>
+
+    <br><br>
+
+    <h2>Or Select a Local QC Summary File:</h2>
+    <input type="file" id="file-input" accept=".json">
+    <header>
+        <h1 id="main-title" style="border-bottom: 2px solid #ccc;">Quality Control Summary</h1>
+        <p id="title" class="file-info"></p>
+        <p id="subtitle" class="file-meta"></p>
+        <p id="subtitle2" class="file-meta"></p>
+    </header>
+
+    <button id="buttonerr" class="expand-btn">Expand/Collapse Runetime Errors</button>
+    <button id="buttonfail" class="expand-btn">Expand/Collapse Failed Checks</button>
+
+    <div id="json-container"></div>
+
+    <script>
+
+        const repoBaseUrl = "https://qa-results-04a949.gitlab-pages.dkrz.de";
+        const allowedHosts = ['cmiphub.dkrz.de', 'c6dreq.dkrz.de', 'cmiphub.cloud.dkrz.de'];
+        const isHosted = allowedHosts.includes(window.location.hostname);
+
+        if (isHosted) {
+            document.getElementById('qc-dropdown').style.display = 'block';
+        } else {
+            // Not on the official server, hide the repo selection
+            const elem = document.getElementById('qc-dropdown');
+            const errorMsg = document.createElement('span');
+            errorMsg.id = 'qc-dropdown';
+            errorMsg.innerHTML = 'Repository-based selection is only available on the <a style="color: darkred" href="https://cmiphub.dkrz.de/info/display_qc_results.html">official server</a>.';
+            errorMsg.style.color = 'darkred';
+            errorMsg.style.fontStyle = 'italic';
+
+            elem.replaceWith(errorMsg);
+        }
+
+        async function fetchManifest() {
+            try {
+                const res = await fetch(`${repoBaseUrl}/manifest_latest.json`);
+                const data = await res.json();
+                populateDropdown(data);
+            } catch (err) {
+                console.error("Failed to load manifest:", err);
+                const dropdown = document.getElementById("qc-dropdown");
+                dropdown.innerHTML = `<option>Error loading manifest</option>`;
+            }
+        }
+
+        function populateDropdown(entries) {
+            const dropdown = document.getElementById("qc-dropdown");
+            dropdown.innerHTML = `<option value="">Select a QC result...</option>`;
+
+            entries.forEach(entry => {
+                const label = `${entry.date}: ${entry.common_dsid}`;
+                dropdown.innerHTML += `<option value="/${entry.qc_results_filename}">${label}</option>`;
+            });
+
+            dropdown.addEventListener("change", async (e) => {
+                const filePath = e.target.value;
+                if (filePath) {
+                    try {
+                        const res = await fetch(`${repoBaseUrl}/${filePath}`);
+                        const qcData = await res.json();
+                        processQCResults(qcData); // Define this in your app
+                    } catch (err) {
+                        console.error("Failed to load QC result:", err);
+                    }
+                }
+            });
+        }
+
+        if (isHosted) {
+            fetchManifest();
+        }
+
+
+	// Function to handle the file processing
+        function processQCResults(data) {
+            const info = data.info;
+            document.getElementById("title").textContent = `QC Results for '${info.id}' (from: ${info.date})`;
+            document.getElementById("subtitle").textContent = `    IOOS Compliance Checker (${info.cc_version}) - ${info.checkers}`;
+            document.getElementById("subtitle2").textContent = `  -= checked ${info.datasets} datasets & ${info.files} files  =-`;
+            const hasErrors = data["error"] && Object.keys(data["error"]).length > 0;
+            document.getElementById("buttonerr").style.display = hasErrors ? "inline-block" : "none";
+
+            const transformedData = transformKeys(data);
+            if (!transformedData["Runtime Errors"] || Object.keys(transformedData["Runtime Errors"]).length === 0) {
+                delete transformedData["Runtime Errors"];
+            }
+
+            const container = document.getElementById("json-container");
+            container.innerHTML = "";
+            container.appendChild(renderTree(transformedData));
+        }
+
+        // Handling local file input
+        document.getElementById("file-input").addEventListener("change", function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = JSON.parse(e.target.result);
+                processQCResults(data);
+            };
+            reader.readAsText(file);
+        });
+
+        function transformKeys(data) {
+            return {
+                "Runtime Errors": data["error"],
+                "Failed Checks": renameWeightKeys(data["fail"])
+            };
+        }
+
+        function renameWeightKeys(section) {
+            if (!section) return {};
+            const weightMap = { 3: "Required", 2: "Recommended", 1: "Suggested" };
+            //return Object.fromEntries(Object.entries(section).map(([key, value]) => [weightMap[key] || key, value]));
+            return Object.assign({}, {
+                [weightMap[3]]: section[3] ?? ["No problems found."],
+                [weightMap[2]]: section[2] ?? ["No problems found."],
+                [weightMap[1]]: section[1] ?? ["No problems found."],
+            });
+        }
+
+        function renderTree(data) {
+            const ul = document.createElement("ul");
+
+            Object.entries(data).forEach(([key, value]) => {
+                const li = document.createElement("li");
+                const label = document.createElement("span");
+                const triangleSpan = document.createElement("span");
+                triangleSpan.className = "triangle";
+                triangleSpan.textContent = "▶";
+                label.textContent = "";
+                label.appendChild(triangleSpan);
+                label.appendChild(document.createTextNode(` ${key}`));
+                label.classList.add("toggle");
+
+                if (typeof value === "object" && value !== null && Object.keys(value).length > 0) {
+                    label.onclick = () => toggleNode(label);
+                    const subTree = renderTree(value);
+                    subTree.classList.add("hidden");
+                    li.appendChild(label);
+                    li.appendChild(subTree);
+                } else {
+                    if (!isNaN(key)) {
+                        const span = document.createElement("span");
+                        span.textContent = typeof value === 'string' ? value : JSON.stringify(value);
+                        if (typeof value === 'string' && value.includes("files affected")) {
+                            span.style.fontStyle = "italic";
+                            span.style.color = "#555";
+                        }
+                        li.appendChild(span);
+                    }
+                    else {
+                        if (typeof value === 'string') {
+                            const span = document.createElement("span");
+                            span.textContent = `${key}: ${value}`;
+                            if (value.includes("files affected")) {
+                                span.style.fontStyle = "italic";
+                                span.style.color = "#555";
+                            }
+                            li.appendChild(span);
+                        } else {
+                            li.textContent = `${key}: ${JSON.stringify(value)}`;
+                        }
+                    }
+                }
+                ul.appendChild(li);
+            });
+
+            return ul;
+        }
+
+        function toggleNode(label) {
+            const triangleSpan = label.querySelector(".triangle");
+            const subTree = label.nextElementSibling;
+            if (!subTree) return;
+
+            const isHidden = subTree.classList.contains("hidden");
+            subTree.classList.toggle("hidden", !isHidden);
+            triangleSpan.textContent = isHidden ? "▼" : "▶";
+        }
+
+        const expandedStates = {};
+
+        function toggleExpandCollapse(button, section, levels) {
+            console.log("toggleExpandCollapse called for section " + section);
+            if (!(button.id in expandedStates)) {
+                expandedStates[button.id] = false;
+            }
+
+            const labels = [...document.querySelectorAll("span.toggle")].filter(label => label.textContent.includes(section));
+            labels.forEach(label => {
+                if (!expandedStates[button.id]) {
+                    console.log(labels);
+                    expandSubtree(label, levels);
+                } else {
+                    collapseSubtree(label);
+                }
+            });
+            expandedStates[button.id] = !expandedStates[button.id];
+        }
+
+        function getDepthFromRoot(element, root) {
+            let depth = 0;
+            while (element !== root && element.parentElement) {
+                if (element.parentElement.tagName === "UL") {
+                    depth++;
+                }
+                element = element.parentElement;
+            }
+            return depth;
+        }
+
+        function expandSubtree(label, levels) {
+            console.log("expandSubtree called");
+
+            // Ensure the main section is expanded
+            if (label.nextElementSibling.classList.contains("hidden")) {
+                toggleNode(label);
+            }
+
+            const sectionRoot = label.parentElement;
+            const subLabels = [...label.nextElementSibling.querySelectorAll("span.toggle")];
+
+            subLabels.forEach(subLabel => {
+                let depth = getDepthFromRoot(subLabel.parentElement, sectionRoot);
+                if (depth < levels && subLabel.nextElementSibling.classList.contains("hidden")) {
+                    toggleNode(subLabel);
+                }
+            });
+        }
+
+        function collapseSubtree(label) {
+            console.log("collapseSubtree called");
+            let parents = [label.parentElement];
+            if (!label.nextElementSibling.classList.contains("hidden")) {
+                toggleNode(label);
+            }
+            const subLabels = label.nextElementSibling.querySelectorAll("span.toggle");
+            subLabels.forEach(subLabel => {
+                if (!subLabel.nextElementSibling.classList.contains("hidden")) {
+                    toggleNode(subLabel);
+                }
+            });
+        }
+
+        document.addEventListener("click", event => {
+            if (event.target.id === "buttonfail") {
+                toggleExpandCollapse(event.target, "Failed Checks", 3);
+            } else if (event.target.id === "buttonerr") {
+                toggleExpandCollapse(event.target, "Runtime Errors", 2);
+            }
+        });
+    </script>
+</body>
+
+<footer id="footer" style="display: none;">
+    <div class="footer-content">
+        <a href="https://www.dkrz.de/about-en/contact/impressum">About</a>
+        <a href="https://www.dkrz.de/about-en/contact/en-datenschutzhinweise">DKRZ Privacy Policy</a>
+    </div>
+</footer>
+<script>
+    if (isHosted) {
+        document.getElementById('footer').style.display = "block";
+    }
+</script>
+
+</html>
