@@ -1,0 +1,1 @@
+from .scraper import get_amazon_product_details, get_multiple_product_details
