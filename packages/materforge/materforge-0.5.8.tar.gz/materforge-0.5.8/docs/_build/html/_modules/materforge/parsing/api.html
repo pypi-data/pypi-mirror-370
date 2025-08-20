@@ -1,0 +1,453 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.parsing.api &mdash; materforge 0.5.8.dev5+g521c12249.d20250819 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=65b9bb72"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.parsing.api</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.parsing.api</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Main API module for MaterForge material property library.</span>
+
+<span class="sd">This module provides the primary interface for creating and working with material objects</span>
+<span class="sd">from YAML configuration files. It includes functions for material creation, validation,</span>
+<span class="sd">property evaluation, and information extraction.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.core.materials</span><span class="w"> </span><span class="kn">import</span> <span class="n">Material</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.material_yaml_parser</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaterialYAMLParser</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.yaml_keys</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NAME_KEY</span><span class="p">,</span> <span class="n">MATERIAL_TYPE_KEY</span><span class="p">,</span> <span class="n">COMPOSITION_KEY</span><span class="p">,</span> <span class="n">PROPERTIES_KEY</span><span class="p">,</span>
+    <span class="n">PURE_METAL_KEY</span><span class="p">,</span> <span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">BOILING_TEMPERATURE_KEY</span><span class="p">,</span>
+    <span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">,</span>
+    <span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span>
+    <span class="n">ALLOY_KEY</span>
+<span class="p">)</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># CORE MATERIAL CREATION AND VALIDATION</span>
+<span class="c1"># ====================================================================</span>
+
+<div class="viewcode-block" id="create_material">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.create_material">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_material</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">dependency</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">,</span>
+                    <span class="n">enable_plotting</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Material</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create material instance from YAML configuration file.</span>
+
+<span class="sd">    This function serves as the main entry point for creating material</span>
+<span class="sd">    objects from YAML configuration files. It handles the parsing of the configuration</span>
+<span class="sd">    and creation of the material with the specified temperature.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    yaml_path : Union[str, Path]</span>
+<span class="sd">        Path to the YAML configuration file</span>
+<span class="sd">    dependency : sp.Symbol</span>
+<span class="sd">        Sympy symbol for property evaluation. Use a symbolic variable</span>
+<span class="sd">        (e.g., sp.Symbol(&#39;T&#39;) or sp.Symbol(&#39;u_C&#39;)) for symbolic temperature expressions</span>
+<span class="sd">    enable_plotting : bool, optional</span>
+<span class="sd">        Whether to generate visualization plots (default: True)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Material</span>
+<span class="sd">        The material instance with all properties initialized</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    FileNotFoundError</span>
+<span class="sd">        If the YAML file doesn&#39;t exist</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the YAML content is invalid or material creation fails</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If temperature parameter has invalid type</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    In YAML files, always use &#39;T&#39; as the temperature variable in equations.</span>
+<span class="sd">    The system will automatically substitute this with your provided symbol.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Create a material with symbolic temperature expressions:</span>
+
+<span class="sd">    &gt;&gt;&gt; import sympy as sp</span>
+<span class="sd">    &gt;&gt;&gt; T = sp.Symbol(&#39;T&#39;)</span>
+<span class="sd">    &gt;&gt;&gt; material = create_material(&#39;steel.yaml&#39;, T)</span>
+<span class="sd">    &gt;&gt;&gt; print(material.name)</span>
+<span class="sd">    Steel</span>
+
+<span class="sd">    Create a material with a custom temperature symbol:</span>
+
+<span class="sd">    &gt;&gt;&gt; u_C = sp.Symbol(&#39;u_C&#39;)</span>
+<span class="sd">    &gt;&gt;&gt; material_copper = create_material(&#39;copper.yaml&#39;, u_C)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating material from: </span><span class="si">%s</span><span class="s2"> with dependency=</span><span class="si">%s</span><span class="s2">, plotting=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">,</span> <span class="n">dependency</span><span class="p">,</span> <span class="n">enable_plotting</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Accept symbolic temperatures only</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dependency</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dependency &#39;</span><span class="si">{</span><span class="n">dependency</span><span class="si">}</span><span class="s2">&#39; must be a sympy Symbol, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">dependency</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">parser</span> <span class="o">=</span> <span class="n">MaterialYAMLParser</span><span class="p">(</span><span class="n">yaml_path</span><span class="o">=</span><span class="n">yaml_path</span><span class="p">)</span>
+        <span class="n">material</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">create_material</span><span class="p">(</span><span class="n">dependency</span><span class="o">=</span><span class="n">dependency</span><span class="p">,</span> <span class="n">enable_plotting</span><span class="o">=</span><span class="n">enable_plotting</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully created material: </span><span class="si">%s</span><span class="s2"> with </span><span class="si">%d</span><span class="s2"> properties&quot;</span><span class="p">,</span>
+                    <span class="n">material</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">([</span><span class="n">attr</span> <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">material</span><span class="p">)</span>
+                                        <span class="k">if</span> <span class="ow">not</span> <span class="n">attr</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">material</span><span class="p">,</span> <span class="n">attr</span><span class="p">)]))</span>
+        <span class="k">return</span> <span class="n">material</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to create material from </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">raise</span></div>
+
+
+
+<div class="viewcode-block" id="validate_yaml_file">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.validate_yaml_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_yaml_file</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a YAML file without creating the material.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        yaml_path: Path to the YAML configuration file to validate</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: True if the file is valid</span>
+<span class="sd">    Raises:</span>
+<span class="sd">        FileNotFoundError: If the file doesn&#39;t exist</span>
+<span class="sd">        ValueError: If the YAML content is invalid</span>
+<span class="sd">    Example:</span>
+<span class="sd">        try:</span>
+<span class="sd">            is_valid = validate_yaml_file(&#39;steel.yaml&#39;)</span>
+<span class="sd">            print(f&quot;YAML file is valid: {is_valid}&quot;)</span>
+<span class="sd">        except ValueError as e:</span>
+<span class="sd">            print(f&quot;Validation failed: {e}&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Validating YAML file: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">MaterialYAMLParser</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;YAML validation successful for: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">except</span> <span class="ne">FileNotFoundError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;YAML file not found: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;YAML file not found: </span><span class="si">{</span><span class="n">yaml_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;YAML validation failed for </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;YAML validation failed: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Unexpected error validating YAML </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected error validating YAML: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># MATERIAL INFORMATION AND PROPERTIES</span>
+<span class="c1"># ====================================================================</span>
+
+<div class="viewcode-block" id="get_material_info">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.get_material_info">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_material_info</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get basic information about a material configuration without full processing.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        yaml_path: Path to the YAML configuration file</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict: Dictionary containing material information including:</span>
+<span class="sd">            - name: Material name</span>
+<span class="sd">            - material_type: Type of material (pure_metal or alloy)</span>
+<span class="sd">            - composition: Element composition dictionary</span>
+<span class="sd">            - properties: List of available property names</span>
+<span class="sd">            - total_properties: Number of properties defined</span>
+<span class="sd">            - property_types: Count of each property type</span>
+<span class="sd">            - Temperature properties based on material type</span>
+<span class="sd">    Raises:</span>
+<span class="sd">        FileNotFoundError: If the YAML file doesn&#39;t exist</span>
+<span class="sd">        ValueError: If the YAML content is invalid</span>
+<span class="sd">    Example:</span>
+<span class="sd">        info = get_material_info(&#39;steel.yaml&#39;)</span>
+<span class="sd">        print(f&quot;Material: {info[&#39;name&#39;]}&quot;)</span>
+<span class="sd">        print(f&quot;Properties: {info[&#39;total_properties&#39;]}&quot;)</span>
+<span class="sd">        print(f&quot;Type: {info[&#39;material_type&#39;]}&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Extracting material info from: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">parser</span> <span class="o">=</span> <span class="n">MaterialYAMLParser</span><span class="p">(</span><span class="n">yaml_path</span><span class="o">=</span><span class="n">yaml_path</span><span class="p">)</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">config</span>
+        <span class="c1"># Base information</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">NAME_KEY</span><span class="p">,</span> <span class="s1">&#39;Unknown&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;material_type&#39;</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">MATERIAL_TYPE_KEY</span><span class="p">,</span> <span class="s1">&#39;Unknown&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;composition&#39;</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">COMPOSITION_KEY</span><span class="p">,</span> <span class="p">{}),</span>
+        <span class="p">}</span>
+        <span class="c1"># Add properties information</span>
+        <span class="n">properties</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">PROPERTIES_KEY</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">info</span><span class="p">[</span><span class="s1">&#39;properties&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">properties</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">info</span><span class="p">[</span><span class="s1">&#39;total_properties&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">properties</span><span class="p">)</span>
+        <span class="c1"># Add temperature-specific properties based on material type</span>
+        <span class="k">if</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;material_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">PURE_METAL_KEY</span><span class="p">:</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;melting_temperature&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="s1">&#39;Undefined&#39;</span><span class="p">)</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;boiling_temperature&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="s1">&#39;Undefined&#39;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;material_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">ALLOY_KEY</span><span class="p">:</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;solidus_temperature&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="s1">&#39;Undefined&#39;</span><span class="p">)</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;liquidus_temperature&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="s1">&#39;Undefined&#39;</span><span class="p">)</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;initial_boiling_temperature&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="s1">&#39;Undefined&#39;</span><span class="p">)</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;final_boiling_temperature&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="s1">&#39;Undefined&#39;</span><span class="p">)</span>
+        <span class="c1"># Add property categorization info if available</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="s1">&#39;categorized_properties&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">parser</span><span class="o">.</span><span class="n">categorized_properties</span><span class="p">:</span>
+            <span class="n">info</span><span class="p">[</span><span class="s1">&#39;property_types&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">prop_type</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">props</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">prop_type</span><span class="p">,</span> <span class="n">props</span> <span class="ow">in</span> <span class="n">parser</span><span class="o">.</span><span class="n">categorized_properties</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">props</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="p">}</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully extracted info for material: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">info</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">info</span>
+    <span class="k">except</span> <span class="ne">FileNotFoundError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;YAML file not found: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;YAML file not found: </span><span class="si">{</span><span class="n">yaml_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+    <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Missing required field in YAML </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required field in YAML: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to extract material info from </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to extract material info: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+
+<div class="viewcode-block" id="get_supported_properties">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.get_supported_properties">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_supported_properties</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a list of all supported material properties.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    List[str]</span>
+<span class="sd">        List of strings representing valid property names that can be</span>
+<span class="sd">        defined in YAML files</span>
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; props = get_supported_properties()</span>
+<span class="sd">    &gt;&gt;&gt; print(f&quot;Supported properties: {len(props)}&quot;)</span>
+<span class="sd">    Supported properties: 12</span>
+<span class="sd">    &gt;&gt;&gt; for prop in props[:3]:</span>
+<span class="sd">    ...     print(f&quot;  - {prop}&quot;)</span>
+<span class="sd">      - density</span>
+<span class="sd">      - heat_capacity</span>
+<span class="sd">      - thermal_conductivity</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">MaterialYAMLParser</span><span class="o">.</span><span class="n">VALID_YAML_PROPERTIES</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="get_material_property_names">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.get_material_property_names">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_material_property_names</span><span class="p">(</span><span class="n">material</span><span class="p">:</span> <span class="n">Material</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get list of all available property names for a material instance.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        material: Material instance</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        List[str]: List of property names that exist (are not None) on the material</span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If material is not a Material instance</span>
+<span class="sd">    Example:</span>
+<span class="sd">        material = create_material(&#39;steel.yaml&#39;, dependency=sp.Symbol(&#39;T&#39;))</span>
+<span class="sd">        available = get_material_property_names(material)</span>
+<span class="sd">        print(f&quot;Available properties: {available}&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">material</span><span class="p">,</span> <span class="n">Material</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected Material instance, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">material</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="c1"># Define all possible property names</span>
+    <span class="n">property_names</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s1">&#39;density&#39;</span><span class="p">,</span> <span class="s1">&#39;dynamic_viscosity&#39;</span><span class="p">,</span> <span class="s1">&#39;energy_density&#39;</span><span class="p">,</span> <span class="s1">&#39;heat_capacity&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;heat_conductivity&#39;</span><span class="p">,</span> <span class="s1">&#39;kinematic_viscosity&#39;</span><span class="p">,</span> <span class="s1">&#39;latent_heat_of_fusion&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;latent_heat_of_vaporization&#39;</span><span class="p">,</span> <span class="s1">&#39;specific_enthalpy&#39;</span><span class="p">,</span> <span class="s1">&#39;surface_tension&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;thermal_diffusivity&#39;</span><span class="p">,</span> <span class="s1">&#39;thermal_expansion_coefficient&#39;</span>
+    <span class="p">]</span>
+    <span class="c1"># Return only properties that exist and are not None</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">property_names</span> <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">material</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span></div>
+
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># PROPERTY EVALUATION</span>
+<span class="c1"># ====================================================================</span>
+
+<div class="viewcode-block" id="evaluate_material_properties">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.evaluate_material_properties">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">evaluate_material_properties</span><span class="p">(</span><span class="n">material</span><span class="p">:</span> <span class="n">Material</span><span class="p">,</span> <span class="n">temperature</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+                                 <span class="n">properties</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                                 <span class="n">include_constants</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convenience function to evaluate material properties at a specific temperature.</span>
+
+<span class="sd">    This is a wrapper around Material.evaluate_properties_at_temperature() for</span>
+<span class="sd">    functional-style usage.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        material: Material instance</span>
+<span class="sd">        temperature: Temperature value in Kelvin</span>
+<span class="sd">        properties: List of specific property names to evaluate. If None, evaluates all.</span>
+<span class="sd">        include_constants: Whether to include constant properties in the result</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict[str, float]: Dictionary mapping property names to their evaluated values</span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If material is not a Material instance or temperature is invalid</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        # Evaluate all properties</span>
+<span class="sd">        values = evaluate_material_properties(material, 500.0)</span>
+<span class="sd">        # Evaluate specific properties</span>
+<span class="sd">        values = evaluate_material_properties(material, 500.0, [&#39;density&#39;, &#39;heat_capacity&#39;])</span>
+<span class="sd">        # Get only temperature-dependent properties</span>
+<span class="sd">        values = evaluate_material_properties(material, 500.0, include_constants=False)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Evaluating material properties via API function&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">material</span><span class="p">,</span> <span class="n">Material</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected Material instance, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">material</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">material</span><span class="o">.</span><span class="n">evaluate_properties_at_temperature</span><span class="p">(</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="n">temperature</span><span class="p">,</span>
+        <span class="n">properties</span><span class="o">=</span><span class="n">properties</span><span class="p">,</span>
+        <span class="n">include_constants</span><span class="o">=</span><span class="n">include_constants</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># INTERNAL/TESTING FUNCTIONS</span>
+<span class="c1"># ====================================================================</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_test_api</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Internal test function for API validation.</span>
+
+<span class="sd">    This function is used for internal testing and should not be called</span>
+<span class="sd">    by end users.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Test basic validation</span>
+        <span class="n">test_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;example.yaml&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">test_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">assert</span> <span class="n">validate_yaml_file</span><span class="p">(</span><span class="n">test_path</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;API test passed&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Test file not found, skipping API test&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">FileNotFoundError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">AssertionError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;API test failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="c1"># ====================================================================</span>
+<span class="c1"># MODULE EXPORTS</span>
+<span class="c1"># ====================================================================</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;create_material&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;validate_yaml_file&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;get_material_info&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;get_supported_properties&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;get_material_property_names&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;evaluate_material_properties&#39;</span>
+<span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,311 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.algorithms.regression_processor &mdash; materforge 0.5.8.dev7+g4109a05.d20250814 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=eccf598c"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.algorithms.regression_processor</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.algorithms.regression_processor</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pwlf</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessingConstants</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.yaml_keys</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">REGRESSION_KEY</span><span class="p">,</span> <span class="n">SIMPLIFY_KEY</span><span class="p">,</span> <span class="n">DEGREE_KEY</span><span class="p">,</span> <span class="n">SEGMENTS_KEY</span><span class="p">,</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">,</span> <span class="n">CONSTANT_KEY</span><span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.utils.utilities</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_sympy_compatible</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="RegressionProcessor">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.algorithms.RegressionProcessor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RegressionProcessor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Handles all regression-related functionality.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="RegressionProcessor.process_regression_params">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.algorithms.RegressionProcessor.process_regression_params">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_regression_params</span><span class="p">(</span><span class="n">prop_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data_length</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> \
+            <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="kc">None</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Process regression parameters from configuration.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Processing regression parameters for property: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+        <span class="n">has_regression</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prop_config</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">REGRESSION_KEY</span> <span class="ow">in</span> <span class="n">prop_config</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_regression</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No regression configuration found for property: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">regression_config</span> <span class="o">=</span> <span class="n">prop_config</span><span class="p">[</span><span class="n">REGRESSION_KEY</span><span class="p">]</span>
+            <span class="n">simplify_type</span> <span class="o">=</span> <span class="n">regression_config</span><span class="p">[</span><span class="n">SIMPLIFY_KEY</span><span class="p">]</span>
+            <span class="n">degree</span> <span class="o">=</span> <span class="n">regression_config</span><span class="p">[</span><span class="n">DEGREE_KEY</span><span class="p">]</span>
+            <span class="n">segments</span> <span class="o">=</span> <span class="n">regression_config</span><span class="p">[</span><span class="n">SEGMENTS_KEY</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Regression config for &#39;</span><span class="si">%s</span><span class="s2">&#39;: type=</span><span class="si">%s</span><span class="s2">, degree=</span><span class="si">%d</span><span class="s2">, segments=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                        <span class="n">prop_name</span><span class="p">,</span> <span class="n">simplify_type</span><span class="p">,</span> <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="p">)</span>
+            <span class="c1"># Validation</span>
+            <span class="k">if</span> <span class="n">segments</span> <span class="o">&gt;=</span> <span class="n">data_length</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Too many segments for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%d</span><span class="s2"> segments &gt;= </span><span class="si">%d</span><span class="s2"> data points&quot;</span><span class="p">,</span>
+                             <span class="n">prop_name</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="n">data_length</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Number of segments (</span><span class="si">{</span><span class="n">segments</span><span class="si">}</span><span class="s2">) must be less than number of data points (</span><span class="si">{</span><span class="n">data_length</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">segments</span> <span class="o">&gt;</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">MAX_REGRESSION_SEGMENTS</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Segments exceed maximum for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%d</span><span class="s2"> &gt; </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                             <span class="n">prop_name</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">MAX_REGRESSION_SEGMENTS</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Number of segments (</span><span class="si">{</span><span class="n">segments</span><span class="si">}</span><span class="s2">) is too high for </span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Please reduce it to </span><span class="si">{</span><span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">MAX_REGRESSION_SEGMENTS</span><span class="si">}</span><span class="s2"> or less.&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">segments</span> <span class="o">&gt;</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">WARNING_REGRESSION_SEGMENTS</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;High segment count for &#39;</span><span class="si">%s</span><span class="s2">&#39; (</span><span class="si">%d</span><span class="s2">) may lead to overfitting&quot;</span><span class="p">,</span>
+                               <span class="n">prop_name</span><span class="p">,</span> <span class="n">segments</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">degree</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid degree for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%d</span><span class="s2"> (must be &gt;= 1)&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">degree</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Regression degree must be at least 1, got </span><span class="si">{</span><span class="n">degree</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Regression parameters validated successfully for: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">has_regression</span><span class="p">,</span> <span class="n">simplify_type</span><span class="p">,</span> <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span>
+        <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Missing regression parameter for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing regression parameter for &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Error processing regression parameters for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span></div>
+
+
+<div class="viewcode-block" id="RegressionProcessor.process_regression">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.algorithms.RegressionProcessor.process_regression">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_regression</span><span class="p">(</span><span class="n">temp_array</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">,</span>
+                           <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">DEFAULT_REGRESSION_SEED</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Centralized regression processing logic.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Starting regression processing: degree=</span><span class="si">%d</span><span class="s2">, segments=</span><span class="si">%d</span><span class="s2">, seed=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Data range: T∈[</span><span class="si">%.1f</span><span class="s2">, </span><span class="si">%.1f</span><span class="s2">], prop∈[</span><span class="si">%.3e</span><span class="s2">, </span><span class="si">%.3e</span><span class="s2">]&quot;</span><span class="p">,</span>
+                     <span class="n">temp_array</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                     <span class="nb">min</span><span class="p">(</span><span class="n">prop_array</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">prop_array</span><span class="p">))</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Initialize piecewise linear fit</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Initializing PWLF with degree=</span><span class="si">%d</span><span class="s2">, seed=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">degree</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span>
+            <span class="n">v_pwlf</span> <span class="o">=</span> <span class="n">pwlf</span><span class="o">.</span><span class="n">PiecewiseLinFit</span><span class="p">(</span><span class="n">temp_array</span><span class="p">,</span> <span class="n">prop_array</span><span class="p">,</span> <span class="n">degree</span><span class="o">=</span><span class="n">degree</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
+            <span class="c1"># Perform fitting</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Fitting </span><span class="si">%d</span><span class="s2"> segments to </span><span class="si">%d</span><span class="s2"> data points&quot;</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">))</span>
+            <span class="n">fit_result</span> <span class="o">=</span> <span class="n">v_pwlf</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">n_segments</span><span class="o">=</span><span class="n">segments</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_result</span><span class="p">,</span> <span class="s1">&#39;success&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">fit_result</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;PWLF fitting may not have converged optimally&quot;</span><span class="p">)</span>
+            <span class="c1"># Log fit quality metrics if available</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">v_pwlf</span><span class="p">,</span> <span class="s1">&#39;ssr&#39;</span><span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Regression fit quality - SSR: </span><span class="si">%.6e</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">v_pwlf</span><span class="o">.</span><span class="n">ssr</span><span class="p">)</span>
+            <span class="c1"># Log breakpoints</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">v_pwlf</span><span class="p">,</span> <span class="s1">&#39;fit_breaks&#39;</span><span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Fit breakpoints: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">v_pwlf</span><span class="o">.</span><span class="n">fit_breaks</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+            <span class="c1"># Create symbolic conditions</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Creating symbolic conditions with bounds: lower=</span><span class="si">%s</span><span class="s2">, upper=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                         <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">)</span>
+            <span class="n">conditions</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">get_symbolic_conditions</span><span class="p">(</span>
+                <span class="n">v_pwlf</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">(</span><span class="o">*</span><span class="n">conditions</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully completed regression processing with </span><span class="si">%d</span><span class="s2"> conditions&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">conditions</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Regression processing failed: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Regression processing failed: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+<div class="viewcode-block" id="RegressionProcessor.get_symbolic_conditions">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.algorithms.RegressionProcessor.get_symbolic_conditions">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_symbolic_conditions</span><span class="p">(</span><span class="n">pwlf_</span><span class="p">:</span> <span class="n">pwlf</span><span class="o">.</span><span class="n">PiecewiseLinFit</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">,</span> <span class="n">lower_</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">upper_</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create symbolic conditions for a piecewise function from a pwlf fit.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Creating symbolic conditions for </span><span class="si">%d</span><span class="s2"> segments&quot;</span><span class="p">,</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span><span class="p">)</span>
+        <span class="n">fit_breaks</span> <span class="o">=</span> <span class="p">[</span><span class="n">ensure_sympy_compatible</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">fit_breaks</span><span class="p">]</span>
+        <span class="n">conditions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Special case: single segment with extrapolation at both ends</span>
+        <span class="k">if</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">lower_</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span> <span class="ow">and</span> <span class="n">upper_</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Single segment with full extrapolation&quot;</span><span class="p">)</span>
+            <span class="n">eqn</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">get_symbolic_eqn</span><span class="p">(</span><span class="n">pwlf_</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+            <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">eqn</span><span class="p">,</span> <span class="n">x</span> <span class="o">&gt;=</span> <span class="o">-</span><span class="n">sp</span><span class="o">.</span><span class="n">oo</span><span class="p">))</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Created universal condition for single segment&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">conditions</span>
+        <span class="c1"># Handle lower bound for all cases</span>
+        <span class="k">if</span> <span class="n">lower_</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+            <span class="n">eqn</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">get_symbolic_eqn</span><span class="p">(</span><span class="n">pwlf_</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+            <span class="n">const_value</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">evalf</span><span class="p">(</span><span class="n">subs</span><span class="o">=</span><span class="p">{</span><span class="n">x</span><span class="p">:</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="mi">0</span><span class="p">]})</span>
+            <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">const_value</span><span class="p">,</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added lower constant boundary: value=</span><span class="si">%.3f</span><span class="s2"> at x&lt;</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span>
+                         <span class="nb">float</span><span class="p">(</span><span class="n">const_value</span><span class="p">),</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="c1"># Process all segments</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span><span class="p">):</span>
+            <span class="n">eqn</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">get_symbolic_eqn</span><span class="p">(</span><span class="n">pwlf_</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+            <span class="c1"># First segment with extrapolation</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">lower_</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">:</span>
+                <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">eqn</span><span class="p">,</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added first segment with extrapolation: x&lt;</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="c1"># Last segment with extrapolation</span>
+            <span class="k">elif</span> <span class="n">i</span> <span class="o">==</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">upper_</span> <span class="o">==</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">:</span>
+                <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">eqn</span><span class="p">,</span> <span class="n">x</span> <span class="o">&gt;=</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added last segment with extrapolation: x&gt;=</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># Regular intervals</span>
+                <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">eqn</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">And</span><span class="p">(</span><span class="n">x</span> <span class="o">&gt;=</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added regular segment </span><span class="si">%d</span><span class="s2">: </span><span class="si">%.1f</span><span class="s2">&lt;=x&lt;</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span>
+                             <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+        <span class="c1"># Handle upper bound</span>
+        <span class="k">if</span> <span class="n">upper_</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+            <span class="n">eqn</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">get_symbolic_eqn</span><span class="p">(</span><span class="n">pwlf_</span><span class="p">,</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+            <span class="n">const_value</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">evalf</span><span class="p">(</span><span class="n">subs</span><span class="o">=</span><span class="p">{</span><span class="n">x</span><span class="p">:</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]})</span>
+            <span class="n">conditions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">const_value</span><span class="p">,</span> <span class="n">x</span> <span class="o">&gt;=</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added upper constant boundary: value=</span><span class="si">%.3f</span><span class="s2"> at x&gt;=</span><span class="si">%.1f</span><span class="s2">&quot;</span><span class="p">,</span>
+                         <span class="nb">float</span><span class="p">(</span><span class="n">const_value</span><span class="p">),</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Created </span><span class="si">%d</span><span class="s2"> symbolic conditions total&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">conditions</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">conditions</span></div>
+
+
+<div class="viewcode-block" id="RegressionProcessor.get_symbolic_eqn">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.algorithms.RegressionProcessor.get_symbolic_eqn">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_symbolic_eqn</span><span class="p">(</span><span class="n">pwlf_</span><span class="p">:</span> <span class="n">pwlf</span><span class="o">.</span><span class="n">PiecewiseLinFit</span><span class="p">,</span> <span class="n">segment_number</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get symbolic equation for a specific segment.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Getting symbolic equation for segment </span><span class="si">%d</span><span class="s2"> (degree=</span><span class="si">%d</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">segment_number</span><span class="p">,</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">degree</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">degree</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid degree: </span><span class="si">%d</span><span class="s2"> (must be &gt;= 1)&quot;</span><span class="p">,</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">degree</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Degree must be at least 1&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">segment_number</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">segment_number</span> <span class="o">&gt;</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid segment number: </span><span class="si">%d</span><span class="s2"> (valid range: 1-</span><span class="si">%d</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">segment_number</span><span class="p">,</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;segment_number not possible&#39;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Convert NumPy types to Python floats for SymPy compatibility</span>
+            <span class="n">beta_values</span> <span class="o">=</span> <span class="p">[</span><span class="n">ensure_sympy_compatible</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">beta</span><span class="p">]</span>
+            <span class="n">fit_breaks</span> <span class="o">=</span> <span class="p">[</span><span class="n">ensure_sympy_compatible</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">fit_breaks</span><span class="p">]</span>
+            <span class="n">my_eqn</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="c1"># Assemble degree = 1 first</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">segment_number</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">line</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">my_eqn</span> <span class="o">=</span> <span class="n">beta_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">beta_values</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Base equation: </span><span class="si">%.6f</span><span class="s2"> + </span><span class="si">%.6f</span><span class="s2">*(x - </span><span class="si">%.1f</span><span class="s2">)&quot;</span><span class="p">,</span>
+                                 <span class="n">beta_values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">beta_values</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">my_eqn</span> <span class="o">+=</span> <span class="p">(</span><span class="n">beta_values</span><span class="p">[</span><span class="n">line</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">line</span><span class="p">])</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added linear term </span><span class="si">%d</span><span class="s2">: </span><span class="si">%.6f</span><span class="s2">*(x - </span><span class="si">%.1f</span><span class="s2">)&quot;</span><span class="p">,</span>
+                                 <span class="n">line</span><span class="p">,</span> <span class="n">beta_values</span><span class="p">[</span><span class="n">line</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">line</span><span class="p">])</span>
+            <span class="c1"># Assemble all other degrees</span>
+            <span class="k">if</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">degree</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Adding higher-order terms (degree </span><span class="si">%d</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">degree</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">degree</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+                    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">segment_number</span><span class="p">):</span>
+                        <span class="n">beta_index</span> <span class="o">=</span> <span class="n">pwlf_</span><span class="o">.</span><span class="n">n_segments</span> <span class="o">*</span> <span class="p">(</span><span class="n">k</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">line</span> <span class="o">+</span> <span class="mi">1</span>
+                        <span class="n">term</span> <span class="o">=</span> <span class="p">(</span><span class="n">beta_values</span><span class="p">[</span><span class="n">beta_index</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">line</span><span class="p">])</span> <span class="o">**</span> <span class="n">k</span>
+                        <span class="n">my_eqn</span> <span class="o">+=</span> <span class="n">term</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added degree-</span><span class="si">%d</span><span class="s2"> term: </span><span class="si">%.6f</span><span class="s2">*(x - </span><span class="si">%.1f</span><span class="s2">)^</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+                                     <span class="n">k</span><span class="p">,</span> <span class="n">beta_values</span><span class="p">[</span><span class="n">beta_index</span><span class="p">],</span> <span class="n">fit_breaks</span><span class="p">[</span><span class="n">line</span><span class="p">],</span> <span class="n">k</span><span class="p">)</span>
+            <span class="c1"># Only call simplify if x is symbolic</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="p">(</span><span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">)):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Simplifying symbolic equation for segment </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">segment_number</span><span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">my_eqn</span><span class="o">.</span><span class="n">simplify</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Returning numeric equation for segment </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">segment_number</span><span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">my_eqn</span>
+            <span class="k">return</span> <span class="n">result</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Error creating symbolic equation for segment </span><span class="si">%d</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">segment_number</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to create equation for segment </span><span class="si">{</span><span class="n">segment_number</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

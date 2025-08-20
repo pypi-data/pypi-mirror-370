@@ -1,0 +1,360 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.parsing.validation.property_type_detector &mdash; materforge 0.5.8.dev7+g4109a05.d20250814 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=eccf598c"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.parsing.validation.property_type_detector</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.parsing.validation.property_type_detector</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">auto</span><span class="p">,</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Set</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.yaml_keys</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FILE_PATH_KEY</span><span class="p">,</span> <span class="n">DEPENDENCY_COLUMN_KEY</span><span class="p">,</span> <span class="n">PROPERTY_COLUMN_KEY</span><span class="p">,</span> <span class="n">BOUNDS_KEY</span><span class="p">,</span>
+    <span class="n">REGRESSION_KEY</span><span class="p">,</span> <span class="n">DEPENDENCY_KEY</span><span class="p">,</span> <span class="n">EQUATION_KEY</span><span class="p">,</span> <span class="n">CONSTANT_KEY</span><span class="p">,</span>
+    <span class="n">EXTRAPOLATE_KEY</span><span class="p">,</span> <span class="n">SIMPLIFY_KEY</span><span class="p">,</span> <span class="n">DEGREE_KEY</span><span class="p">,</span> <span class="n">SEGMENTS_KEY</span><span class="p">,</span> <span class="n">PRE_KEY</span><span class="p">,</span> <span class="n">POST_KEY</span><span class="p">,</span>
+    <span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">,</span>
+    <span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">VALUE_KEY</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessingConstants</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1"># --- Enum ---</span>
+<div class="viewcode-block" id="PropertyType">
+<a class="viewcode-back" href="../../../../reference/api.html#materforge.PropertyType">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PropertyType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">CONSTANT_VALUE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">STEP_FUNCTION</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">FILE_IMPORT</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">TABULAR_DATA</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">PIECEWISE_EQUATION</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">COMPUTED_PROPERTY</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">INVALID</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span></div>
+
+
+
+<span class="c1"># --- Main Class ---</span>
+<div class="viewcode-block" id="PropertyTypeDetector">
+<a class="viewcode-back" href="../../../../reference/api.html#materforge.PropertyTypeDetector">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PropertyTypeDetector</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Utility class for detecting and validating property types from configuration values.&quot;&quot;&quot;</span>
+
+    <span class="c1"># --- DETECTION RULES ---</span>
+    <span class="c1"># The order is crucial: more specific patterns must come before general ones.</span>
+    <span class="n">DETECTION_RULES</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="c1"># Unique key checks first (most efficient)</span>
+        <span class="p">(</span><span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">FILE_PATH_KEY</span> <span class="ow">in</span> <span class="n">c</span><span class="p">,</span> <span class="n">PropertyType</span><span class="o">.</span><span class="n">FILE_IMPORT</span><span class="p">),</span>
+        <span class="c1"># Patterns sharing keys (order matters)</span>
+        <span class="p">(</span><span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">DEPENDENCY_KEY</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="n">VALUE_KEY</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_is_step_function</span><span class="p">(</span><span class="n">c</span><span class="p">),</span>
+         <span class="n">PropertyType</span><span class="o">.</span><span class="n">STEP_FUNCTION</span><span class="p">),</span>
+        <span class="p">(</span><span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">DEPENDENCY_KEY</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="n">VALUE_KEY</span> <span class="ow">in</span> <span class="n">c</span><span class="p">,</span> <span class="n">PropertyType</span><span class="o">.</span><span class="n">TABULAR_DATA</span><span class="p">),</span>
+        <span class="p">(</span><span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">DEPENDENCY_KEY</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="n">EQUATION_KEY</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">EQUATION_KEY</span><span class="p">),</span> <span class="nb">list</span><span class="p">),</span>
+         <span class="n">PropertyType</span><span class="o">.</span><span class="n">PIECEWISE_EQUATION</span><span class="p">),</span>
+        <span class="p">(</span><span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">DEPENDENCY_KEY</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="n">EQUATION_KEY</span> <span class="ow">in</span> <span class="n">c</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">EQUATION_KEY</span><span class="p">),</span> <span class="nb">str</span><span class="p">),</span>
+         <span class="n">PropertyType</span><span class="o">.</span><span class="n">COMPUTED_PROPERTY</span><span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="c1"># --- Main Public API ---</span>
+<div class="viewcode-block" id="PropertyTypeDetector.determine_property_type">
+<a class="viewcode-back" href="../../../../reference/api.html#materforge.PropertyTypeDetector.determine_property_type">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">determine_property_type</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PropertyType</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Determines the property type using a declarative, rule-based approach.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Determining property type for &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_is_constant_format</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">PropertyType</span><span class="o">.</span><span class="n">CONSTANT_VALUE</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Property &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39; has an invalid format. &quot;</span>
+                             <span class="sa">f</span><span class="s2">&quot;Expected a dictionary or a numeric constant, but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">config</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">detector</span><span class="p">,</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">DETECTION_RULES</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">detector</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Detected property &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39; as type: </span><span class="si">{</span><span class="n">prop_type</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">prop_type</span>
+        <span class="n">present_keys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Property &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39; doesn&#39;t match any known configuration pattern. &quot;</span>
+                         <span class="sa">f</span><span class="s2">&quot;Present keys: </span><span class="si">{</span><span class="n">present_keys</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span></div>
+
+
+    <span class="c1"># --- High-Level Detectors (for DETECTION_RULES) ---</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_constant_format</span><span class="p">(</span><span class="n">val</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks if the value has the format of a numeric constant.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;must be defined as a float, not an integer. Use decimal format like &#39;</span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">.0&#39;&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="s1">&#39;.&#39;</span> <span class="ow">in</span> <span class="n">val</span> <span class="ow">or</span> <span class="s1">&#39;e&#39;</span> <span class="ow">in</span> <span class="n">val</span><span class="o">.</span><span class="n">lower</span><span class="p">()))</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_step_function</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        A quick, non-validating check if a config looks like a step function.</span>
+<span class="sd">        A step function has a list of 2 values AND a single temperature point (not a list).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">val_list</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">VALUE_KEY</span><span class="p">)</span>
+        <span class="n">temp_def</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">DEPENDENCY_KEY</span><span class="p">)</span>
+        <span class="n">is_two_values</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">val_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+        <span class="n">is_single_temp</span> <span class="o">=</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_def</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>  <span class="c1"># Must be a string or number</span>
+        <span class="k">return</span> <span class="n">is_two_values</span> <span class="ow">and</span> <span class="n">is_single_temp</span>
+
+    <span class="c1"># --- Strict Validators (called by the parser) ---</span>
+<div class="viewcode-block" id="PropertyTypeDetector.validate_property_config">
+<a class="viewcode-back" href="../../../../reference/api.html#materforge.PropertyTypeDetector.validate_property_config">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate_property_config</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">prop_type</span><span class="p">:</span> <span class="n">PropertyType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Performs strict validation based on the detected property type.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validating property &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39; for type: </span><span class="si">{</span><span class="n">prop_type</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">validator_map</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">PropertyType</span><span class="o">.</span><span class="n">CONSTANT_VALUE</span><span class="p">:</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_validate_constant_value</span><span class="p">,</span>
+            <span class="n">PropertyType</span><span class="o">.</span><span class="n">STEP_FUNCTION</span><span class="p">:</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_validate_step_function</span><span class="p">,</span>
+            <span class="n">PropertyType</span><span class="o">.</span><span class="n">FILE_IMPORT</span><span class="p">:</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_validate_file_import</span><span class="p">,</span>
+            <span class="n">PropertyType</span><span class="o">.</span><span class="n">TABULAR_DATA</span><span class="p">:</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_validate_tabular_data</span><span class="p">,</span>
+            <span class="n">PropertyType</span><span class="o">.</span><span class="n">PIECEWISE_EQUATION</span><span class="p">:</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_validate_piecewise_equation</span><span class="p">,</span>
+            <span class="n">PropertyType</span><span class="o">.</span><span class="n">COMPUTED_PROPERTY</span><span class="p">:</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_validate_computed_property</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">validator</span> <span class="o">=</span> <span class="n">validator_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">prop_type</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">validator</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">validator</span><span class="p">(</span><span class="n">prop_name</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Invalid configuration for &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39; (expected type </span><span class="si">{</span><span class="n">prop_type</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No validation implemented for property type: </span><span class="si">{</span><span class="n">prop_type</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+    <span class="c1"># --- Strict Validators (called by validate_property_config) ---</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_constant_value</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">val</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39; could not be converted to a float. Invalid value: &#39;</span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_step_function</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="n">DEPENDENCY_KEY</span><span class="p">,</span> <span class="n">VALUE_KEY</span><span class="p">}</span>
+        <span class="n">optional</span> <span class="o">=</span> <span class="p">{</span><span class="n">BOUNDS_KEY</span><span class="p">}</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_keys</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">required</span><span class="p">,</span> <span class="n">optional</span><span class="p">,</span> <span class="s2">&quot;STEP_FUNCTION&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">BOUNDS_KEY</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
+            <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_bounds</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">BOUNDS_KEY</span><span class="p">])</span>
+        <span class="n">val_list</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="n">VALUE_KEY</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">val_list</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;value&#39; for a step function must be a list of exactly two numbers, got </span><span class="si">{</span><span class="n">val_list</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">val_list</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">val_list</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;step function values must be numeric, got </span><span class="si">{</span><span class="n">val_list</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">temp_def</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="n">DEPENDENCY_KEY</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_def</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>  <span class="c1"># Check if it&#39;s a valid arithmetic expression</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">TEMP_ARITHMETIC_REGEX</span><span class="p">,</span> <span class="n">temp_def</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">match</span><span class="p">:</span>  <span class="c1"># If it matches, check if the base reference is valid</span>
+                <span class="n">base_ref</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">valid_refs</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">,</span>
+                    <span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">BOILING_TEMPERATURE_KEY</span>
+                <span class="p">}</span>
+                <span class="k">if</span> <span class="n">base_ref</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid_refs</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;invalid base temperature reference &#39;</span><span class="si">{</span><span class="n">base_ref</span><span class="si">}</span><span class="s2">&#39; in expression &#39;</span><span class="si">{</span><span class="n">temp_def</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                                     <span class="sa">f</span><span class="s2">&quot;Allowed base references are: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">valid_refs</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># If not arithmetic, it must be an exact reference</span>
+                <span class="n">valid_refs</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">,</span>
+                    <span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">BOILING_TEMPERATURE_KEY</span>
+                <span class="p">}</span>
+                <span class="k">if</span> <span class="n">temp_def</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid_refs</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;invalid temperature reference &#39;</span><span class="si">{</span><span class="n">temp_def</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                                     <span class="sa">f</span><span class="s2">&quot;Must be a numeric value, a valid transition name, or an arithmetic expression &quot;</span>
+                                     <span class="sa">f</span><span class="s2">&quot;(e.g., &#39;melting_temperature + 10&#39;).&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_def</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;temperature&#39; must be a numeric value or a valid transition reference, got &#39;</span><span class="si">{</span><span class="n">temp_def</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_file_import</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="n">FILE_PATH_KEY</span><span class="p">,</span> <span class="n">DEPENDENCY_COLUMN_KEY</span><span class="p">,</span> <span class="n">PROPERTY_COLUMN_KEY</span><span class="p">,</span> <span class="n">BOUNDS_KEY</span><span class="p">}</span>
+        <span class="n">optional</span> <span class="o">=</span> <span class="p">{</span><span class="n">REGRESSION_KEY</span><span class="p">}</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_keys</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">required</span><span class="p">,</span> <span class="n">optional</span><span class="p">,</span> <span class="s2">&quot;FILE_IMPORT&quot;</span><span class="p">)</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_bounds</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">BOUNDS_KEY</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">REGRESSION_KEY</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
+            <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_regression</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">REGRESSION_KEY</span><span class="p">])</span>
+
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_tabular_data</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="n">DEPENDENCY_KEY</span><span class="p">,</span> <span class="n">VALUE_KEY</span><span class="p">,</span> <span class="n">BOUNDS_KEY</span><span class="p">}</span>
+        <span class="n">optional</span> <span class="o">=</span> <span class="p">{</span><span class="n">REGRESSION_KEY</span><span class="p">}</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_keys</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">required</span><span class="p">,</span> <span class="n">optional</span><span class="p">,</span> <span class="s2">&quot;TABULAR_DATA&quot;</span><span class="p">)</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_bounds</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">BOUNDS_KEY</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">REGRESSION_KEY</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
+            <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_regression</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">REGRESSION_KEY</span><span class="p">])</span>
+        <span class="n">temp_def</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="n">DEPENDENCY_KEY</span><span class="p">]</span>
+        <span class="n">val_list</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="n">VALUE_KEY</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;value&#39; for a key-val property must be a list.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_def</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_def</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">val_list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;temperature list (length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">temp_def</span><span class="p">)</span><span class="si">}</span><span class="s2">) and value list (length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">val_list</span><span class="p">)</span><span class="si">}</span><span class="s2">) &quot;</span>
+                             <span class="sa">f</span><span class="s2">&quot;must have the same length&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_piecewise_equation</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="n">DEPENDENCY_KEY</span><span class="p">,</span> <span class="n">EQUATION_KEY</span><span class="p">,</span> <span class="n">BOUNDS_KEY</span><span class="p">}</span>
+        <span class="n">optional</span> <span class="o">=</span> <span class="p">{</span><span class="n">REGRESSION_KEY</span><span class="p">}</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_keys</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">required</span><span class="p">,</span> <span class="n">optional</span><span class="p">,</span> <span class="s2">&quot;PIECEWISE_EQUATION&quot;</span><span class="p">)</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_bounds</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">BOUNDS_KEY</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">REGRESSION_KEY</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
+            <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_regression</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">REGRESSION_KEY</span><span class="p">])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">EQUATION_KEY</span><span class="p">],</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;equation&#39; for a piecewise equation must be a list of strings&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_computed_property</span><span class="p">(</span><span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="n">DEPENDENCY_KEY</span><span class="p">,</span> <span class="n">EQUATION_KEY</span><span class="p">,</span> <span class="n">BOUNDS_KEY</span><span class="p">}</span>
+        <span class="n">optional</span> <span class="o">=</span> <span class="p">{</span><span class="n">REGRESSION_KEY</span><span class="p">}</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_keys</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">required</span><span class="p">,</span> <span class="n">optional</span><span class="p">,</span> <span class="s2">&quot;COMPUTED_PROPERTY&quot;</span><span class="p">)</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_bounds</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">BOUNDS_KEY</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">REGRESSION_KEY</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
+            <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_regression</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">REGRESSION_KEY</span><span class="p">])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">EQUATION_KEY</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;equation&#39; for a computed property must be a string&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sp</span><span class="o">.</span><span class="n">sympify</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="n">EQUATION_KEY</span><span class="p">])</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">sp</span><span class="o">.</span><span class="n">SympifyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;invalid mathematical expression in &#39;equation&#39;: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># --- Low-Level Validation Helpers ---</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_keys</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">required</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">optional</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">context</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="n">required</span> <span class="o">-</span> <span class="n">keys</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;missing required keys for </span><span class="si">{</span><span class="n">context</span><span class="si">}</span><span class="s2"> property: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">missing</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">extra</span> <span class="o">=</span> <span class="n">keys</span> <span class="o">-</span> <span class="n">required</span> <span class="o">-</span> <span class="n">optional</span>
+        <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;found unexpected keys for </span><span class="si">{</span><span class="n">context</span><span class="si">}</span><span class="s2"> property: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">extra</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_bounds</span><span class="p">(</span><span class="n">bounds</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">bounds</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;bounds&#39; must be a list of exactly two elements&quot;</span><span class="p">)</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="p">{</span><span class="n">CONSTANT_KEY</span><span class="p">,</span> <span class="n">EXTRAPOLATE_KEY</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid</span> <span class="ow">or</span> <span class="n">bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;bound types must be one of </span><span class="si">{</span><span class="n">valid</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">bounds</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_regression</span><span class="p">(</span><span class="n">reg</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">_check_keys</span><span class="p">(</span><span class="n">reg</span><span class="p">,</span> <span class="p">{</span><span class="n">SIMPLIFY_KEY</span><span class="p">,</span> <span class="n">DEGREE_KEY</span><span class="p">,</span> <span class="n">SEGMENTS_KEY</span><span class="p">},</span> <span class="nb">set</span><span class="p">(),</span> <span class="s2">&quot;regression&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reg</span><span class="p">[</span><span class="n">SIMPLIFY_KEY</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="n">PRE_KEY</span><span class="p">,</span> <span class="n">POST_KEY</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;regression &#39;simplify&#39; must be &#39;</span><span class="si">{</span><span class="n">PRE_KEY</span><span class="si">}</span><span class="s2">&#39; or &#39;</span><span class="si">{</span><span class="n">POST_KEY</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reg</span><span class="p">[</span><span class="n">DEGREE_KEY</span><span class="p">],</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">reg</span><span class="p">[</span><span class="n">DEGREE_KEY</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;regression &#39;degree&#39; must be a positive integer&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reg</span><span class="p">[</span><span class="n">SEGMENTS_KEY</span><span class="p">],</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">reg</span><span class="p">[</span><span class="n">SEGMENTS_KEY</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;regression &#39;segments&#39; must be a positive integer&quot;</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
