@@ -1,0 +1,1 @@
+DEFAULT_ACK_MSG_SIGN = b"ACK!"
