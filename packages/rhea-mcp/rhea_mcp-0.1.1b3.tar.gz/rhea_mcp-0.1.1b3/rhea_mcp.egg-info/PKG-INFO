@@ -1,0 +1,156 @@
+Metadata-Version: 2.4
+Name: rhea-mcp
+Version: 0.1.1b3
+Summary: A scalable MCP (Model Context Protocol) tool framework to serve thousands of biomedical tools for Large Language Models.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: academy-py>=0.2.0
+Requires-Dist: asyncpg>=0.30.0
+Requires-Dist: black>=25.1.0
+Requires-Dist: cachetools>=6.1.0
+Requires-Dist: cheetah3>=3.2.6.post1
+Requires-Dist: conda-pack>=0.8.1
+Requires-Dist: coverage[toml]>=7.9.1
+Requires-Dist: debugpy>=1.8.14
+Requires-Dist: fastapi[standard]>=0.115.14
+Requires-Dist: filetype>=1.2.0
+Requires-Dist: genbadge[all]>=1.1.2
+Requires-Dist: greenlet>=3.2.3
+Requires-Dist: griffe-inherited-docstrings>=1.1.1
+Requires-Dist: kubernetes>=33.1.0
+Requires-Dist: matplotlib>=3.10.5
+Requires-Dist: mcp[cli]>=1.10.1
+Requires-Dist: minio>=7.2.15
+Requires-Dist: mkdocs>=1.6.1
+Requires-Dist: mkdocs-autorefs>=1.4.2
+Requires-Dist: mkdocs-material>=9.6.17
+Requires-Dist: mkdocs-mermaid2-plugin>=1.2.1
+Requires-Dist: mkdocstrings[python]>=0.30.0
+Requires-Dist: mypy>=1.16.1
+Requires-Dist: openai>=1.93.0
+Requires-Dist: parsl>=2025.6.23
+Requires-Dist: pgvector>=0.4.1
+Requires-Dist: prometheus-client>=0.22.1
+Requires-Dist: proxystore[all]>=0.8.2
+Requires-Dist: psycopg2-binary>=2.9.10
+Requires-Dist: pymdown-extensions>=10.16.1
+Requires-Dist: pyright>=1.1.403
+Requires-Dist: pytest>=8.4.1
+Requires-Dist: pytest-asyncio>=1.0.0
+Requires-Dist: pytest-cov>=6.2.1
+Requires-Dist: pytest-xdist>=3.8.0
+Requires-Dist: python-magic>=0.4.27
+Requires-Dist: requests>=2.32.4
+Requires-Dist: shellcheck-py>=0.10.0.1
+Requires-Dist: sqlalchemy>=2.0.41
+Requires-Dist: tqdm>=4.67.1
+Requires-Dist: trio>=0.30.0
+Requires-Dist: zstandard>=0.23.0
+
+# Rhea
+[![PyPI - Version](https://img.shields.io/pypi/v/rhea-mcp.svg)](https://pypi.org/project/rhea-mcp/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/chrisagrams/rhea-worker-agent.svg)](https://hub.docker.com/r/chrisagrams/rhea-worker-agent)
+![coverage](https://raw.githubusercontent.com/chrisagrams/rhea/main/.github/badges/coverage.svg)
+![tests](https://raw.githubusercontent.com/chrisagrams/rhea/main/.github/badges/tests.svg)
+
+
+A scalable MCP (Model Context Protocol) tool framework to serve *thousands* of biomedical tools for Large Language Models.
+
+Example executions with Claude:
+
+- [A multi-step conversion from FASTA -> FASTQ -> CSV](https://claude.ai/share/37e6cf45-7139-405c-9280-61a469edf81f)
+- [A simple CSV to Tabular conversion](https://claude.ai/share/ce922736-ab3a-4e1a-8901-8ca26cfb59cb)
+
+
+## How it works? 
+The MCP server first provides a single tool, `find_tools` which accepts a natural language query to select relevant tools. For example, an LLM (or user) can provide a query of "I need a tool to convert a CSV file to tabular.", which the server will then perform a RAG on a collection of tools to populate the server with `n` most relevant tools to the query. Once the server is populated, the LLM/user will have access to those relevant tools, along with their parameter annotations and documentations.
+
+To provide file inputs/outputs with the tool agents, we utilize ProxyStore with a Redis backend, providing keys to the tool when a file input is required. 
+
+When a tool is called, the server utilizes Parsl to spawn an Academy agent that creates an environment for the tool, installing necessary requirements and pulling program files from a S3 object store. The agent will be provided the arguments provided by the MCP server, and return its stdout/stderr along with any output files as ProxyStore keys.
+
+## Setup
+
+### Requirements
+- `uv` - Package manager for Python projects.
+- `docker` - To run tools locally (external executor comming soon!)
+
+Additionally, the server will need to point to an existing OpenAI-like endpoint (for embedding), Postgres, Redis, and MinIO server. Documentation coming soon.
+
+### Instalation
+After cloning the repository, use `uv` to configure the virtual environment. 
+
+``` bash
+uv sync
+```
+
+### Configuring Environment
+An example `.env` file is provided in `.env.example`.
+Datasets coming soon!
+
+### Installing into Claude Desktop
+In your `claude_desktop_config.json` file, add the following entry (Make sure to replace `location_of_repo` with the actual location!):
+
+
+#### macOS/Linux
+```json
+{
+  "mcpServers": {
+    "Rhea": {
+        "command": "bash",
+        "args": [
+            "-lc",
+            "cd location_of_repo && uv run -m server.mcp_server"
+        ]
+    }
+  }
+}
+```
+
+#### Windows (WSL)
+```json
+{
+  "mcpServers": {
+    "Rhea": {
+        "command": "wsl.exe",
+        "args": [
+            "bash",
+            "-lc",
+            "cd location_of_repo && uv run -m server.mcp_server"
+        ]
+    }
+  }
+}
+```
+
+### Testing with MCP Inspector
+To test the tools with MCP Inspector:
+
+```
+npx @modelcontextprotocol/inspector
+```
+
+And set the following configuration parameters:
+
+| Parameter | Value |
+| --------- | ----- |
+| Transport Type | STDIO |
+| Command | uv |
+| Arguments | run -m server.mcp_server |
+| Request Timeout | 600000 |
+| Reset Timeouts on Progress | True |
+| Maximum Total Timeout | 600000 | 
+| Proxy Session Token | Token provided within CLI | 
+
+
+> **Note:** The timeouts are a temporary workaround to make sure the MCP client does not timeout during long tool executions. Better progress reporting is coming soon.
+
+### Running with SSE Transport
+By default, the MCP server will start with STDIO transport for use with Claude Desktop. To enable SSE transport layer:
+
+```bash
+uv run -m rhea.server.mcp_server --transport sse
+```
+
+### Running with Streamable HTTP 
+*Work in progress!*
