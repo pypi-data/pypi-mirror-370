@@ -1,0 +1,78 @@
+# This file is a part of Remoulade.
+#
+# Copyright (C) 2017,2018 CLEARTYPE SRL <bogdan@cleartype.io>
+#
+# Remoulade is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+#
+# Remoulade is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public
+# License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import platform
+
+from .age_limit import AgeLimit, AgeLimitException
+from .catch_error import CatchError
+from .current_message import CurrentMessage
+from .logging_metadata import LoggingMetadata
+from .max_memory import MaxMemory
+from .max_tasks import MaxTasks
+from .middleware import Middleware, MiddlewareError, SkipMessage
+from .pipelines import Pipelines
+from .retries import Retries
+from .shutdown import Shutdown, ShutdownNotifications
+from .threading import Interrupt, raise_thread_exception
+from .time_limit import TimeLimit, TimeLimitExceeded
+from .worker_thread_logging import WorkerThreadLogging
+
+CURRENT_OS = platform.system()
+
+if CURRENT_OS != "Windows":
+    from .prometheus import Prometheus  # noqa: F401
+
+__all__ = [
+    # Basics
+    "Middleware",
+    "MiddlewareError",
+    "SkipMessage",
+    # Threading
+    "Interrupt",
+    "raise_thread_exception",
+    # Middlewares
+    "AgeLimit",
+    "AgeLimitException",
+    "CatchError",
+    "CurrentMessage",
+    "default_middleware",
+    "LoggingMetadata",
+    "Pipelines",
+    "Retries",
+    "Shutdown",
+    "ShutdownNotifications",
+    "TimeLimit",
+    "TimeLimitExceeded",
+    "MaxMemory",
+    "MaxTasks",
+    "WorkerThreadLogging",
+]
+
+if CURRENT_OS != "Windows":
+    __all__.append("Prometheus")
+
+#: The list of middleware that are enabled by default.
+default_middleware = [
+    WorkerThreadLogging,
+    AgeLimit,
+    TimeLimit,
+    ShutdownNotifications,
+    Pipelines,
+    Retries,
+    CatchError,
+    CurrentMessage,
+]
