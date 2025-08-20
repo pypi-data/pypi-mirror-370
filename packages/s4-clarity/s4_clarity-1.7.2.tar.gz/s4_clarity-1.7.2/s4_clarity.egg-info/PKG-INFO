@@ -1,0 +1,101 @@
+Metadata-Version: 2.4
+Name: s4-clarity
+Version: 1.7.2
+Summary: A general purpose library for interacting with Clarity LIMS
+Home-page: https://github.com/SemaphoreSolutions/s4-clarity-lib
+Author: Semaphore Solutions
+Author-email: info@semaphoresolutions.ca
+Project-URL: Documentation, https://readthedocs.org/projects/s4-clarity-lib
+Project-URL: Source, https://github.com/SemaphoreSolutions/s4-clarity-lib
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: >=2.7
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: requests>=2.22.0
+Requires-Dist: argparse
+Requires-Dist: python-dateutil
+Requires-Dist: six
+Requires-Dist: future
+Requires-Dist: typing; python_version < "3.5"
+Requires-Dist: urllib3>=1.25.2
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+
+==================
+S4-Clarity Library
+==================
+
+
+.. image:: https://github.com/SemaphoreSolutions/s4-clarity-lib/actions/workflows/ci.yml/badge.svg?branch=master
+    :target: https://github.com/SemaphoreSolutions/s4-clarity-lib/actions
+
+
+Used in numerous labs around the world, the S4-Clarity library provides an easy-to-use integration with the BaseSpace Clarity LIMS API. The package includes:
+   - Classes representing familiar Clarity API entities that provide read-write access to most properties.
+   - Helper methods that simplify common operations.
+   - Base classes for scripts that integrate with Clarity: EPPs, DSAs, and shell scripts.
+   - Utilities that help with Clarity-related tasks, such as managing config slices, or automating the completion of a Step.
+
+The S4-Clarity library lets developers interact with the Clarity API in fewer lines of code. With HTTP and XML boilerplate out of the way, you'll have your integration built in no time at all.
+
+
+.. code-block:: python
+
+    from s4.clarity.scripts import TriggeredStepEPP
+
+    LibraryVolume = 2.0
+    MolWeightBasePair = 660 * 1e6  # micrograms / mol
+    AssumedBasePairs = 400.0
+    TargetMolarity = 4.0
+    Overage = 4
+
+
+    class Normalization (TriggeredStepEPP):
+        def on_record_details_enter(self):
+            self.prefetch(self.PREFETCH_INPUTS, self.PREFETCH_OUTPUTS)
+
+            for iomap in self.step.details.iomaps:
+                library_concentration = iomap.input["Concentration"]
+                library_molarity = library_concentration / (AssumedBasePairs * MolWeightBasePair)
+                iomap.output["Concentration"] = library_concentration
+                iomap.output["Molarity (nM)"] = library_molarity
+                iomap.output["Library Vol (uL)"] = LibraryVolume
+                iomap.output["Tris HCl (uL)"] = LibraryVolume * (library_molarity / TargetMolarity - 1)
+
+            self.lims.artifacts.batch_update(self.step.details.outputs)
+
+
+    if __name__ == "__main__":
+        Normalization.main()
+
+Installation
+------------
+
+To install s4-clarity, simply use pip::
+
+    $ pip install s4-clarity
+
