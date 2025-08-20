@@ -1,0 +1,106 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.13']
+        test-type: ['regular', 'edge-cases']
+    env:
+      # Real API keys for regular tests, dummy for edge cases (mocked)
+      ANTHROPIC_API_KEY: ${{ matrix.test-type == 'regular' && secrets.ANTHROPIC_API_KEY || 'test_key' }}
+      OPENAI_API_KEY: ${{ matrix.test-type == 'regular' && secrets.OPENAI_API_KEY || 'test_key' }}
+      GEMINI_API_KEY: ${{ matrix.test-type == 'regular' && secrets.GEMINI_API_KEY || 'test_key' }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '${{ matrix.python-version }}'
+      - name: Install dependencies
+        run: uv sync --dev --all-extras
+      - name: Run tests
+        run: |
+          if [[ "${{ matrix.test-type }}" == "edge-cases" ]]; then
+            uv run pytest tests/unit/test_edge_cases.py -v
+          else
+            uv run pytest tests/unit/ -v
+          fi
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'run-integration-tests')
+    strategy:
+      matrix:
+        provider: [openai, anthropic, gemini]
+      fail-fast: false
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: uv sync --dev --all-extras
+      - name: Validate API key
+        run: |
+          key_var="${{ matrix.provider }}_API_KEY"
+          key_var=$(echo "$key_var" | tr '[:lower:]' '[:upper:]')
+          if [[ -z "${!key_var}" ]]; then
+            echo "❌ ${key_var} not configured"
+            exit 1
+          fi
+      - name: Run integration tests
+        run: uv run pytest tests/integration/ -v -k "${{ matrix.provider }}"
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: always()
+    
+    steps:
+      - name: Check results
+        run: |
+          unit_result="${{ needs.unit-tests.result }}"
+          integration_result="${{ needs.integration-tests.result }}"
+          integration_skipped="${{ needs.integration-tests.result == 'skipped' }}"
+          
+          echo "Unit tests: $unit_result"
+          echo "Integration tests: $integration_result"
+          
+          if [[ "$unit_result" != "success" ]]; then
+            echo "❌ Unit tests failed"
+            exit 1
+          fi
+          
+          if [[ "$integration_skipped" == "false" && "$integration_result" != "success" ]]; then
+            echo "❌ Integration tests failed"
+            exit 1
+          fi
+          
+          echo "✅ All tests passed!" 
