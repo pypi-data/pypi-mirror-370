@@ -1,0 +1,339 @@
+name: Release from Tag
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write  # MANDATORY for OIDC PyPI publishing
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+        # Checkout main branch instead of tag
+        ref: main
+
+    - name: Verify this is a tag event
+      run: |
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+
+        # Check if this is actually a tag push event
+        if [[ "$GITHUB_EVENT_NAME" != "push" ]]; then
+          echo "❌ This workflow should only run on push events"
+          exit 1
+        fi
+
+        # Check if ref is a tag
+        if [[ ! "$GITHUB_REF" =~ ^refs/tags/ ]]; then
+          echo "❌ This workflow should only run for tags, got: $GITHUB_REF"
+          exit 1
+        fi
+
+        # Extract tag name and check format
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Tag must be in format vX.Y.Z, got: $TAG_NAME"
+          exit 1
+        fi
+
+        echo "✅ Valid tag event: $TAG_NAME"
+
+    - name: Check if tag exists on current HEAD
+      run: |
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+
+        # Get latest changes from main
+        git pull origin main
+
+        # Get the commit that the tag points to
+        TAG_COMMIT=$(git rev-list -n 1 $TAG_NAME 2>/dev/null || echo "")
+
+        if [ -z "$TAG_COMMIT" ]; then
+          echo "❌ Tag $TAG_NAME not found"
+          exit 1
+        fi
+
+        # Get current HEAD commit
+        HEAD_COMMIT=$(git rev-parse HEAD)
+
+        # Check if tag is on HEAD
+        if [ "$TAG_COMMIT" != "$HEAD_COMMIT" ]; then
+          echo "❌ Tag $TAG_NAME (commit: $TAG_COMMIT) is not on current HEAD (commit: $HEAD_COMMIT)"
+          echo "Release tags must be created from the latest main branch"
+          exit 1
+        fi
+
+        echo "✅ Tag $TAG_NAME is on current HEAD of main branch"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y portaudio19-dev
+
+    - name: Install dependencies and run tests
+      run: |
+        uv sync --all-extras --dev
+        echo "Running tests to ensure code quality..."
+        uv run pytest --tb=short -q
+        echo "✅ All tests passed!"
+
+    - name: Extract version from tag
+      id: extract_version
+      run: |
+        # Get tag name and remove 'v' prefix
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+        VERSION="${TAG_NAME#v}"
+        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Tag: $TAG_NAME, Version: $VERSION"
+
+    - name: Update version in pyproject.toml, __init__.py and uv.lock
+      run: |
+        VERSION="${{ steps.extract_version.outputs.version }}"
+
+        # Update pyproject.toml, __init__.py and uv.lock using Python for safety
+        python << 'EOF'
+        import re
+        import os
+        import time
+
+        version = os.environ.get('VERSION', '${{ steps.extract_version.outputs.version }}')
+
+        # Update pyproject.toml
+        with open('pyproject.toml', 'r') as f:
+            content = f.read()
+        pattern = r'(version\s*=\s*["\'])([0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc|dev)[0-9]+)?)(["\'])'
+        replacement = rf'\g<1>{version}\g<3>'
+        content = re.sub(pattern, replacement, content)
+        with open('pyproject.toml', 'w') as f:
+            f.write(content)
+
+        # Update src/palabra_ai/__init__.py
+        with open('src/palabra_ai/__init__.py', 'r') as f:
+            content = f.read()
+        pattern = r'(__version__\s*=\s*["\'])([0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc|dev)[0-9]+)?)(["\'])'
+        replacement = rf'\g<1>{version}\g<3>'
+        content = re.sub(pattern, replacement, content)
+        with open('src/palabra_ai/__init__.py', 'w') as f:
+            f.write(content)
+
+        # Update uv.lock if it exists
+        if os.path.exists('uv.lock'):
+            with open('uv.lock', 'r') as f:
+                content = f.read()
+            pattern = r'(\[\[package\]\]\s*\nname\s*=\s*"palabra-ai"\s*\nversion\s*=\s*")[^"]+(")'
+            replacement = rf'\g<1>{version}\g<2>'
+            content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+            with open('uv.lock', 'w') as f:
+                f.write(content)
+
+        # Always add a timestamp to ensure file changes
+        os.makedirs('.github', exist_ok=True)
+        with open('.github/.release_timestamp', 'w') as f:
+            f.write(f"Release {version} at {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+        EOF
+
+        # Configure git
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+        # Always commit changes (including timestamp file)
+        git add pyproject.toml src/palabra_ai/__init__.py .github/.release_timestamp
+
+        # Add uv.lock if it exists
+        if [ -f "uv.lock" ]; then
+          git add uv.lock
+        fi
+
+        git commit -m "🔖 Update version to $VERSION for release ${{ steps.extract_version.outputs.tag_name }}"
+
+        echo "✅ Version update commit created"
+
+    - name: Push commit to main and update tag
+      run: |
+        TAG_NAME="${{ steps.extract_version.outputs.tag_name }}"
+
+        # Push the commit to main branch
+        git push origin main
+
+        # Delete the old tag locally and remotely
+        git tag -d $TAG_NAME
+        git push origin :refs/tags/$TAG_NAME
+
+        # Create new tag at current HEAD
+        git tag $TAG_NAME
+        git push origin $TAG_NAME
+
+        echo "✅ Version updated in main and tag $TAG_NAME moved to new commit"
+
+    - name: Build package
+      run: |
+        # uv builds packages using hatchling
+        uv build
+
+    - name: Check package
+      run: |
+        # Install twine as a tool (not in system Python)
+        uv tool install twine
+        uv tool run twine check dist/*
+        ls -la dist/
+
+    - name: Get version from tag
+      id: get_version
+      run: |
+        TAG_NAME="${{ steps.extract_version.outputs.tag_name }}"
+        VERSION="${{ steps.extract_version.outputs.version }}"
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+
+    # Publish to PyPI FIRST (before GitHub Release and Docker)
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      # No 'with' parameters needed - OIDC authentication is automatic
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
+        name: Release ${{ steps.get_version.outputs.TAG_NAME }}
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, 'a') || contains(steps.get_version.outputs.VERSION, 'b') || contains(steps.get_version.outputs.VERSION, 'rc') || contains(steps.get_version.outputs.VERSION, 'dev') }}
+        generate_release_notes: true
+        files: |
+          dist/*.whl
+          dist/*.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Docker image for package distribution
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Try to link the package to this repository if it exists
+    - name: Link Docker package to repository
+      continue-on-error: true
+      run: |
+        OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+        IMAGE_BASE_NAME=$(echo "$REPO_NAME" | sed 's/^draft-//')
+
+        # Try to link the package to this repository
+        echo "Attempting to link ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME} to ${{ github.repository }}..."
+
+        # Get repository ID
+        REPO_ID=$(curl -s \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/${{ github.repository }}" | jq -r '.id')
+
+        if [ "$REPO_ID" != "null" ] && [ -n "$REPO_ID" ]; then
+          # Try to link the package to this repository
+          curl -X PUT \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${IMAGE_BASE_NAME}" \
+            -d "{\"repository_id\": ${REPO_ID}}" || true
+        fi
+
+    - name: Create Dockerfile for package
+      run: |
+        cat > Dockerfile << EOF
+        FROM python:3.11-slim
+        LABEL org.opencontainers.image.source=https://github.com/${{ github.repository }}
+        LABEL org.opencontainers.image.description="Palabra AI Python SDK"
+        LABEL org.opencontainers.image.licenses=MIT
+        LABEL org.opencontainers.image.url=https://github.com/${{ github.repository }}
+        LABEL org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
+        LABEL org.opencontainers.image.vendor="${{ github.repository_owner }}"
+        LABEL org.opencontainers.image.version="${{ steps.get_version.outputs.VERSION }}"
+
+        COPY dist/*.whl /tmp/
+        RUN pip install /tmp/*.whl && rm /tmp/*.whl
+
+        # This is a library image, not meant to be run directly
+        CMD ["python", "-c", "import palabra_ai; print(f'Palabra AI SDK v{palabra_ai.__version__} installed')"]
+        EOF
+
+    - name: Build and push Docker image with package
+      run: |
+        PACKAGE_VERSION=${{ steps.get_version.outputs.VERSION }}
+        # Convert repository owner to lowercase for Docker
+        OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        # Extract repository name from full repository path
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+        # Remove 'draft-' prefix if present for cleaner image name
+        IMAGE_BASE_NAME=$(echo "$REPO_NAME" | sed 's/^draft-//')
+        IMAGE_NAME=ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME}
+
+        docker build -t $IMAGE_NAME:$PACKAGE_VERSION -t $IMAGE_NAME:latest .
+
+        # Try to push, but don't fail the whole workflow if it doesn't work
+        if docker push $IMAGE_NAME:$PACKAGE_VERSION && docker push $IMAGE_NAME:latest; then
+          echo "📦 Successfully pushed Docker images:"
+          echo "  - $IMAGE_NAME:$PACKAGE_VERSION"
+          echo "  - $IMAGE_NAME:latest"
+
+          # Save image name for use in summary
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "IMAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+          echo "DOCKER_PUSH_SUCCESS=true" >> $GITHUB_ENV
+        else
+          echo "⚠️ Failed to push Docker images to $IMAGE_NAME"
+          echo "This might be due to permissions or existing package conflicts"
+          echo "PyPI publishing will continue..."
+          echo "DOCKER_PUSH_SUCCESS=false" >> $GITHUB_ENV
+        fi
+
+    - name: Release Summary
+      run: |
+        echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ✅ Pre-release Checks" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tests**: ✅ Passed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version Sync**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Package Information" >> $GITHUB_STEP_SUMMARY
+        echo "- **Repository**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag**: ${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Published Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- **GitHub Release**: https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ env.DOCKER_PUSH_SUCCESS }}" == "true" ]; then
+          echo "- **Docker Image**: \`${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Docker Image**: ⚠️ Failed to publish (permissions issue)" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "- **PyPI Package**: https://pypi.org/project/palabra-ai/" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 Installation" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# PyPI" >> $GITHUB_STEP_SUMMARY
+        echo "pip install palabra-ai==${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ env.DOCKER_PUSH_SUCCESS }}" == "true" ]; then
+          echo "# Docker" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "# From release assets" >> $GITHUB_STEP_SUMMARY
+        echo "pip install https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.TAG_NAME }}/palabra_ai-${{ steps.get_version.outputs.VERSION }}-py3-none-any.whl" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
