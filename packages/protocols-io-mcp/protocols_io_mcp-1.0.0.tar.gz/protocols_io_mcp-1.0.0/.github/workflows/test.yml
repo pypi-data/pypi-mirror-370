@@ -1,0 +1,33 @@
+name: Test with uv and pytest
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Create virtual environment
+      run: uv venv
+    - name: Sync dependencies and install package
+      run: uv sync --all-extras
+    - name: Run tests
+      env:
+        PROTOCOLS_IO_CLIENT_ACCESS_TOKEN: ${{ secrets.PROTOCOLS_IO_CLIENT_ACCESS_TOKEN }}
+      run: uv run pytest -vx
