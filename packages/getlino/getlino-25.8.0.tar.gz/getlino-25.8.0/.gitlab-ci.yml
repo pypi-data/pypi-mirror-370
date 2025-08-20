@@ -1,0 +1,147 @@
+# Official language image. Look for the different tagged releases at:
+# https://hub.docker.com/r/library/python/tags/
+image: python:3.12
+
+# Change pip's cache directory to be inside the project directory since we can
+# only cache local items.
+
+variables:
+  DEBIAN_FRONTEND: noninteractive
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  TERM: linux
+  PYTHONUNBUFFERED: 1
+  LC_ALL: en_US.UTF-8
+  LANG: en_US.UTF-8
+  TZ: Europe/Brussels
+
+
+# Pip's cache doesn't store the python packages
+# https://pip.pypa.io/en/stable/reference/pip_install/#caching
+#
+# If you want to also cache the installed packages, you have to install
+# them in a virtualenv and cache it as well.
+# cache:
+###   paths:
+###     - .cache/pip
+###     - venv/
+
+# test_python:
+#    script:
+#      - inv prep
+#      - inv test
+
+
+test_shell:
+    rules:
+      - if: $CI_PIPELINE_SOURCE != "pipeline"
+
+    script:
+      - echo success
+
+
+# The rules gitlab option must be set to avoid running
+# the case from trigger pipelines
+
+test_production_server_mysql_nginx:
+    rules:
+      - if: $CI_PIPELINE_SOURCE != "pipeline"
+
+#    services:
+#      - mysql:latest
+
+#    variables:
+#      MYSQL_HOST: mysql
+##      MYSQL_USER: lino
+##      MYSQL_PASSWORD: password
+#      MYSQL_ALLOW_EMPTY_PASSWORD: 1
+##      MYSQL_DATABASE: lino
+##      MYSQL_ROOT_PASSWORD: password
+
+    timeout: 10h
+
+    script:
+      - ./ci/test_production_server.sh mysql nginx
+
+# test_production_server_mysql_apache:
+#     image: debian:latest
+#
+#     rules:
+#       - if: $CI_PIPELINE_SOURCE != "pipeline"
+#
+#     services:
+#       - mysql:latest
+#
+#     variables:
+#       MYSQL_DATABASE: lino
+#       MYSQL_USER: lino
+#       MYSQL_PASSWORD: password
+#       MYSQL_ROOT_PASSWORD: password
+#
+#     script:
+#       - ./ci/test_production_server.sh mysql apache 1
+#       # $3 (the third argument) says this srcipt is running in gitlab ci
+
+test_production_server_postgresql:
+    rules:
+      - if: $CI_PIPELINE_SOURCE != "pipeline"
+
+    services:
+      - postgres:latest
+
+    # variables:
+    #   POSTGRES_DB: lino
+    #   POSTGRES_USER: lino
+    #   POSTGRES_PASSWORD: password
+    #   POSTGRES_HOST_AUTH_METHOD: trust
+
+    timeout: 10h
+
+    script:
+      - ./ci/test_production_server.sh postgresql nginx 1
+
+pages:
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "pipeline" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+  script:
+    - ./ci/install_getlino_from_repo.sh
+    - . venv/bin/activate
+    - inv bd
+    - mv docs/.build/ public/
+  artifacts:
+    paths:
+    - public
+
+
+test_developer_env:
+    rules:
+      - if: $CI_PIPELINE_SOURCE != "pipeline"
+
+    variables:
+      CI_DEBUG_TRACE: "true"
+
+    timeout: 10h
+
+    script:
+      - ./ci/test_developer_env.sh
+      # $3 (the third argument) says this srcipt is running in gitlab ci
+
+
+test_project_specific_startsite:
+    rules:
+      - if: $CI_PIPELINE_SOURCE == "pipeline"
+
+    services:
+      - mysql:latest
+
+    variables:
+      MYSQL_DATABASE: lino
+      MYSQL_USER: lino
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: password
+
+    timeout: 10h
+
+    script:
+      - ./ci/test_production_server.sh mysql nginx 1 $SOURCE_PRJ_NAME
+      # $3 (the third argument) says this srcipt is running in gitlab ci
