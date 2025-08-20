@@ -1,0 +1,785 @@
+# SolDet
+SolDet is an object-oriented package for solitonic feature detection in absorption images of Bose-Einstein condensates, with wider use for cold atom image analysis. 
+It is featured with classifier, object detector, and physics informed metric methods. 
+Technical details of the original package are explained in https://arxiv.org/abs/2111.04881.
+
+The dataset used to prepare SolDet is available at https://data.nist.gov/od/id/mds2-2363.
+
+
+## Installing SolDet
+
+Installing SolDet requires python to be between 3.8 and 3.12.
+
+To install soldet it is recommended to create a fresh environment.
+* For regular python you can make use of venv to create a virtual environment. Create a folder for the environment and pass the path to this directory to venv.
+    ```console
+    python -m venv /Users/User1/SolDetEnv
+    ```
+    You must then activate it, which is dependent on platform. For systems with bash this can be done with the activate script.
+    ```bash
+    source path_to_env/bin/activate
+    ```
+    For systems with a Windows console you can use the activate batch script.
+    ```console
+    path_to_env/bin/activate.bat
+    ```
+
+* For Anaconda you can use its built in environment manager.
+    ```console
+    conda create --name SolDetEnv python=3.11
+    ```
+    You must then activate it, which can be done with the activate command.
+    ```console
+    conda activate SolDetEnv
+    ```
+
+Next clone or download the github repository and place it in your desired directory. Change to this directory before installing SolDet. Assuming the usage of git you can use the git command in Anaconda, Python, or your system environment.
+```console
+git clone url_to_repository
+cd path_to_soldet_dir
+```
+
+There are two ways you can install SolDet into your environment, depending on your needs.
+* Install SolDet directly via pip. This can be done by simply calling pip with the install command.
+    ```console
+    python -m pip install -e soldet
+    ```
+
+* Build the SolDet library and install via the usage of the resulting wheel. This requires the package build to be installed into your environment.
+    ```console
+    pip install build
+    python -m build path_to_soldet
+    ```
+
+    Then you can install via the resulting built distribution file. Note that the resulting name may not be the same as below.
+    ```console
+    pip install path_to_soldet/dist/soldet-0.0.2-py3.whl
+    ```
+
+## Getting started
+
+All features of SolDet are integrated into the `SolitonDetector` object, and some helper functions are available as part of the SolDet library to assist with its usage. 
+
+To start import SolDet and create a SolitonDetector object using the SolitonDetector class.
+
+```python
+import soldet
+
+sd = soldet.SolitonDetector()
+```
+
+On import, or when creating the SolitonDetector object, SolDet will check to confirm if a configuration file, CONFIG.ini, exists in its package path. If not this is created with default values. 
+
+[PATHS]\
+data_path = \<path to home directory\>/soldet\
+def_exp_name = soldet_ds
+
+These set up the target directories for the required folder structure to run SolDet. The <em>data_path</em> points to the directory all experimental data folders will reside in. An experiment can be specified with <em>def_exp_name</em>, which will set the target directory for where SolDet's class data will be saved to. The default structure is,
+
+data_path\
+|- def_exp_name\
+    |- data\
+        |- data_files\
+            |- class-0\
+            |- class-1\
+            |- ...\
+            |- class-9\
+        |- data_info\
+            |- data_roster.csv\
+            |- data_roster.h5\
+    |- models\
+|- ...
+
+The class folder names will differ if you've used a different processing function for data importation.
+
+Multiple experiment folders can reside in the data path, and any SolDet detector objects created will reference the current def_exp_name. Changing to a different experiment folder requires creating another SolitonDetector object.
+
+Although you can modify the configuration file manually, helper functions exist to do this for you.
+
+To change the data path you can use the utility function change_path().
+
+
+```python
+soldet.change_path('../Documents/Machine Learning/SolitonDetector/')
+```
+
+To change the current experiment directory you can use change_exp().
+
+
+```python
+soldet.change_exp('TestExp')
+```
+
+Although by default SolDet will create the necessary folder structure if it does not exist, you may also manually trigger this creation with the use of the config() function. This will also create the CONFIG file if it is not found.
+
+
+```python
+EXP_PATH, EXP_NAME = soldet.config()
+print(EXP_PATH)
+print(EXP_NAME)
+```
+
+    User path not found, creating.
+    ../Documents/Machine Learning/SolitonDetector/TestExp
+    TestExp
+
+## Loading and Importing Data
+
+You may optionally use the helper function download_ds() to download the original SolDet dataset. Note that this will also create the necessary folder structure if it does not exist in your experiment path.
+
+
+```python
+soldet.download_ds()
+```
+
+    Downloading SolDet data. This may take a while. Please wait..
+
+
+    Downloading data_info.zip.: 100%|██████████| 1.48M/1.48M [00:00<00:00, 23.3MB/s]
+
+
+    Extracting data. Please wait..
+
+
+    Downloading data_files.zip.: 100%|██████████| 4.03G/4.03G [01:28<00:00, 49.1MB/s]
+
+
+    Extracting data. Please wait..
+
+
+The original SolDet dataset format is no longer supported in the newest SolDet library. The library now expects HDF5 files of the following structure, at minimum:
+
+* A HDF Group named after the filename
+    * Group attributes containing information about the soliton image.
+        * label - The class label.
+        * original_file - The filename of the old SolDet file.
+        * Other relevant attributes. 
+    * cloud_data - Dataset holding the pre-processed image data of the cloud.
+    * masked_data - Dataset holding the masked pre-processed image data of the cloud.
+    * fitted_parameters - An empty dataset holding the cloud fit parameters as attributes.
+
+For more information on the expected structure of the h5 files, please see full documentation on import_data, process_data, and soldet_to_h5.
+
+If you are still using the old format, a helper function is available to convert the dataset to the new format, soldet_to_h5().
+
+
+```python
+soldet.soldet_to_h5(EXP_PATH, delete_old = True)
+```
+
+    Converting data..: 100%|██████████| 16478/16478 [25:38<00:00, 10.71it/s]
+
+
+To load in preprocessed data into the SolitonDetector you can use load_data(). This will load all files located in the roster file and you can specify which classes to load with the labels argument. SolDet can use the full cloud images or the masked images (default). This function will also scale the data to be between 0 and 1 and can be controlled with the minmax argument. For the SolDet dataset this should be set to (-1, 3). The amount of data to use for training the ML models can be specified with the argument data_frac.
+
+
+```python
+sd.load_data(labels= [0, 1], masked = True, data_frac = 0.9, minmax = [-1, 3])
+```
+
+    Loading processed data..: 100%|██████████| 16478/16478 [00:59<00:00, 275.71it/s]
+    Normalizing Data..: 100%|██████████| 4342/4342 [00:00<00:00, 18655.75it/s]
+
+
+To import new data into the class folders you can call import_data(). This requires a path to be given where the new data is located. It will then call whatever preprocessing function has been specified in the SolitonDetector. By default this uses the SolDet preprocessing, but a custom one can be supplied by passing a function call to the argument process_fn when creating a SolitonDetector object. Additional arguments can be supplied to the pre-processing function via kwargs. 
+
+For more information on pre-processing functions see the full documentation on process_data().
+
+
+```python
+args = {'target': 'xy', 'atoms_name': 'atoms', 'bg_name': 'background', 'probe_name': 'probe', 'label': 9}
+sd.import_data(path='../BEC_data_2023_0613/0001', **args)
+sd.load_data(labels= [9], masked = True, data_frac = 0.9, minmax = [-1, 3])
+```
+
+    Getting Raw Data..: 100%|██████████| 50/50 [00:01<00:00, 31.44it/s]
+    Processing Raw Data..: 100%|██████████| 50/50 [00:49<00:00,  1.01it/s]
+    Writing data files..: 100%|██████████| 50/50 [00:00<00:00, 77.12it/s]
+    Loading processed data..: 100%|██████████| 50/50 [00:00<00:00, 111.12it/s]
+    Normalizing Data..: 100%|██████████| 50/50 [00:00<00:00, 12369.66it/s]
+
+## Training The Models
+
+SolDet comes with pre-trained weights for its original dataset, but it is possible to retrain the machine learning (ML) models on this data or new data loaded into the detector. To train the ML models you can use the SolitonDetector function train_ML(). The argument model_list specifies which models to train on the data. This expects a list of the available models, 'classifier' or 'object detector'. The arguments epochs and patience control how long to train the models. The trained weights will be saved to the models folder in your experiment directory. 
+
+```python
+import soldet
+
+sd = soldet.SolitonDetector()
+sd.load_data(labels = [0, 1], masked = True, data_frac = 0.9, minmax = [-1, 3])
+sd.train_ML(model_list = ['classifier', 'object detector'], patience = 10, epochs = 50)
+```
+
+    Loading processed data..: 100%|██████████| 16478/16478 [00:31<00:00, 520.28it/s] 
+    Normalizing Data..: 100%|██████████| 4342/4342 [00:00<00:00, 14533.09it/s]
+
+    Dataset loaded for Classifier.
+    Classifier model run: 1
+
+    Epoch: 50/50 | Loss: 0.000034 | Test Loss: 0.002480 | Acc.: 0.999107:  98%|█████████▊| 49/50 [08:36<00:10, 10.55s/it]
+
+    Done! Minimum Test Loss: 0.0010950952629952683 with Accuracy: 1.0.
+    Dataset loaded for Object Detector.
+    
+    Object Detector model run: 1
+
+    Epoch: 50/50 | Loss: 0.672539 | Avg. Test Loss: 1.913660 | Acc.: 0.955682: 100%|██████████| 50/50 [09:18<00:00, 11.17s/it] 
+
+    Done! Minimum Test Loss: 1.8960855658608253 with Accuracy: 0.9388888888888889.
+
+The default state of SolDet is to use the data loaded into the current detector object. However, if you require a different set of data to train from you can change the argument *data* from None to the desired set of data. Note that this list or dictionary of samples must have the structure anticipated by SolDet.
+
+```python
+import soldet
+
+sd = soldet.SolitonDetector()
+sd.load_data(labels = [0, 1], masked = True, data_frac = 0.9, minmax = [-1, 3])
+tr_set = []
+for item in sd.data:
+    if item['label'] == 1:
+        tr_set.append({'data':item['data'], 'label':item['label'], 'positions':item['positions']})
+
+sd.train_models(model_list = ['classifier', 'object detector'], patience = 10, epochs = 50, data = tr_set)
+
+```
+
+## Building Physics Informed Models
+
+The physics informed models require building a metric to transform the data before doing any of the relevant calculations. By default SolDet provides prebuilt metrics in its library. These can be overwritten by generating new models on the data loaded into the current detector.
+
+To train the physics informed models you can use the define functions to build the metrics for the PIE classifier and the Quality Scorer. For these functions the default values are sufficient and it will save the results to the detector. Optionally, if the argument save is set to True these metrics can be saved as a file in the models folder of the experiment path.
+
+
+```python
+import soldet
+
+sd = soldet.SolitonDetector()
+sd.load_data(labels = [0, 1], masked = True, data_frac = 0.9, minmax = [-1, 3])
+sd.define_PIE_classifier(save = True)
+sd.define_quality_estimate(save = True)
+```
+
+    Loading processed data..: 100%|██████████| 16478/16478 [00:41<00:00, 398.73it/s] 
+    Normalizing Data..: 100%|██████████| 4342/4342 [00:00<00:00, 22647.95it/s]
+
+
+    Building PIE metric.
+
+
+    100%|██████████| 3212/3212 [00:42<00:00, 76.28it/s]
+
+
+    Building QE metric.
+
+
+    100%|██████████| 2229/2229 [00:28<00:00, 78.82it/s]
+
+
+## Making Use of SolDet Models
+
+To use any of these models you can make use of the use_models() function of the SolitonDetector object. Specifying any of the options 'classifier', 'object detector', 'pie classifier', or 'quality estimator' in the argument model_list will make the function use those features. The argument model_paths can be used to dictate the trained weights or metric files in the models folder of the experiment path. If no paths are provided then the library will attempt to use provided model files. Results are saved in the data dictionary for each sample.
+
+```python
+import soldet
+
+sd = soldet.SolitonDetector()
+sd.load_data(labels = [1], masked = True, data_frac = 0.9, minmax = [-1, 3])
+
+sd.use_models(model_list = ['classifier', 'object detector', 'pie classifier', 'quality estimator'], 
+              model_paths = ['20240318_215015_classifier.pt', '20240318_225331_object.pt', 
+                             '20241210_223439_PIE_classifier.pkl', '20241210_223508_QE.pkl'])      
+```
+
+    Loading processed data..: 100%|██████████| 16478/16478 [00:18<00:00, 891.10it/s] 
+    Normalizing Data..: 100%|██████████| 3212/3212 [00:00<00:00, 22169.88it/s]
+
+    Loaded ../Documents/Machine Learning/SolitonDetector/TestExp/models/20240318_215015_classifier.pt.
+    Loaded ../Documents/Machine Learning/SolitonDetector/TestExp/models/20240318_225331_object.pt.
+    Loaded ../Documents/Machine Learning/SolitonDetector/TestExp/models/20241210_223439_PIE_classifier.pkl.
+    Loaded ../Documents/Machine Learning/SolitonDetector/TestExp/models/20241210_223508_QE.pkl.
+    Starting ML Classifier.
+    Classifier model loaded.
+    Running model, please wait..
+
+    Running..: 100%|██████████| 3212/3212 [00:44<00:00, 71.86it/s]
+
+    Finished.
+    Starting ML Object Detector.
+    Object Detector model loaded.
+    Running model, please wait..
+
+    Running..: 100%|██████████| 3212/3212 [00:18<00:00, 169.40it/s]
+
+    Finished.
+    Starting Physics Informed Classifier.
+
+    PIE Classifier running..: 100%|██████████| 3212/3212 [01:55<00:00, 27.81it/s]
+
+    Starting Physics Informed Quality Estimator.
+    
+    Quality Estimate running..: 100%|██████████| 3212/3212 [00:50<00:00, 64.01it/s]
+
+## SolDet Demonstration
+
+If you wish to see a full demonstration of SolDet, you can run the demo functionality, demo_pipeline(). When this is used SolDet will create a new experiment folder called soldet_demo, download the SolDet dataset, and go through most functionality one at a time.
+
+```python
+import soldet
+
+sd = soldet.SolitonDetector()
+sd.demo_pipeline()
+```
+
+    Running demo of Soldet.
+    Soldet demo directory not found, creating.
+    Downloading SolDet data. This may take a while. Please wait..
+
+    Downloading data_info.zip.: 100%|██████████| 1.48M/1.48M [00:00<00:00, 28.3MB/s]
+
+    Extracting data. Please wait..
+
+    Downloading data_files.zip.: 100%|██████████| 4.03G/4.03G [01:26<00:00, 49.9MB/s]
+
+    Extracting data. Please wait..
+    Converting to modern data format. Now using 'soldet_to_h5()'.
+
+    Converting data..: 100%|██████████| 16478/16478 [20:01<00:00, 13.72it/s]
+
+    Loading in data. Now using 'load_data()' to load in Class-1.
+
+    Loading processed data..: 100%|██████████| 16478/16478 [00:59<00:00, 277.79it/s]
+    Normalizing Data..: 100%|██████████| 3212/3212 [00:00<00:00, 19904.06it/s]
+
+    Begin use of all models. Now using 'use_models()'.
+    Starting ML Classifier.
+    Classifier model loaded.
+    Running model, please wait..
+
+    Running..: 100%|██████████| 3212/3212 [00:43<00:00, 73.61it/s]
+
+    Finished.
+    Starting ML Object Detector.
+    Object Detector model loaded.
+    Running model, please wait..
+
+    Running..: 100%|██████████| 3212/3212 [00:19<00:00, 160.94it/s]
+    Finished.
+    Starting Physics Informed Classifier.
+    PIE Classifier running..: 100%|██████████| 3212/3212 [01:59<00:00, 26.84it/s]
+
+    Starting Physics Informed Quality Estimator.
+
+    Quality Estimate running..: 100%|██████████| 3212/3212 [00:50<00:00, 64.05it/s]
+
+    Demo complete.
+    Access ML Classifier labels with key 'soldet_CL' in data samples.
+    Access ML Object Detector positions with key 'soldet_OD' in data samples.
+    Access Physics Informed Classifier types with key 'soldet_PIE' in data samples.
+    Access Physics Informed Quality Estimator values with key 'soldet_QE' in data samples.
+
+## Replacing SolDet functionality
+
+Aspects of SolDet can be replaced by replacing the function calls in the initialization process. These
+will override the default behavior of the library to enable usage on data outside the scope of the original SolDet
+dataset. Note: performance can not be guaranteed if overwriting the default behavior of SolDet.
+
+Currently you can replace the following:
+
+* The data preprocessing function when importing new data, process_fn.
+* The ML object detector, od_model.
+* The ML classifier, cl_model.
+* The pytorch dataset handler for the object detector data, od_dataset_fn.
+* The pytorch dataset handler for the classifier data, cl_dataset_fn.
+* The loss function used when training the object detector, od_loss_fn.
+* The loss function used when training the classifier, cl_loss_fn.
+
+### Processing Data for Import
+The processing function should be written to import data such that it satisfies SolDet's requirements to function, or the requirements of any modules you replace. When using SolDet's default soliton functionalities and importing new data, such as labscript data from a different physical experiment, you can change the way the image data is retrieved by passing in a kwargs dictionary to the default processing function.
+
+```python
+args = {'target': 'images', 'atoms_name': 'MOT', 'bg_name': 'MOT_DARK', 'probe_name': 'MOT_PROBE', 'label': 9}
+sd.import_data(path='../BEC_data_2023_0613/0001', **args)
+```
+
+Replacing the processing functionality with your own can be done by providing a callable function to the process_fn argument during initialization.
+```python
+import soldet
+
+def dummy_proc_fn(dir: str, labels: str, augment: bool):
+    # Do Stuff
+    return data_samples
+
+kwargs = {'labels': 'Training', 'augment': False}
+sd = soldet.SolitonDetector(process_fn = dummy_proc_fn)
+sd.import_data(path='../Exp/001', **kwargs)
+```
+
+### Replacing ML Models
+The ML models used by SolDet can be replaced by providing a callable pytorch model during initialization. These models should have the typical pytorch forward function that accepts a tensor input. The Object_Control and Classifier_Control classes will invoke these models, pass any needed arguments provided by you, and call them for training and inference.
+```python
+import soldet
+import torch
+
+class DummyDetector(torch.nn.Module):
+    def __init__(self, dropout: float, layers: int, compression: list):
+        super().__init__()
+        # Do Stuff
+
+    def forward(self, x):
+        #Do Stuff
+        return x
+
+params = {'dropout' : 0.1, 'layers' : 4, 'compression' : [1, 16, 32, 64]}
+
+sd = soldet.SolitonDetector(od_model = DummyDetector, od_kwargs = params) 
+```
+
+The output of these models should be in a form the provided loss function expects, including the target tensors you're training against. The loss functions used by the controllers can be changed by providing a callable pytorch module appropriate for generating a loss value.
+```python
+import soldet 
+import torch
+
+class DummyDetector(torch.nn.Module):
+    def __init__(self, dropout: float, layers: int, compression: list):
+        super().__init__()
+        # Do Stuff
+
+    def forward(self, x):
+        #Do Stuff
+        return x
+
+params = {'dropout' : 0.1, 'layers' : 4, 'compression' : [1, 16, 32, 64]}
+
+sd = soldet.SolitonDetector(od_model = DummyDetector, od_kwargs = params, od_loss_fn = torch.nn.MSELoss) 
+```
+
+If the data expected by these models requires something different than the default implementation of SolDet, you can replace the default pytorch dataset functionality with your own. At minimum these should contain __len__ and __getitem__ function definitions for proper functionality by a pytorch DataLoader. The ML controllers of SolDet expect the output of the datasets to be in the form of (data, target). Note that if you do not have an argument called 'augment' you should specify augment = None when initializing a SolitonDetector.
+
+```python
+import soldet 
+import torch
+
+class DummyDetector(torch.nn.Module):
+    def __init__(self, dropout: float, layers: int, compression: list):
+        super().__init__()
+        # Do Stuff
+
+    def forward(self, x):
+        #Do Stuff
+        return x
+
+class DummyDataset(torch.utils.data.Dataset):
+    def __init__(self, data: list):
+        #Do Stuff
+            
+    def __len__(self):
+        #Do Stuff
+        return len(self.data)
+    
+    def __getitem__(self, idx: int):
+        #Do Stuff
+
+        return data, label
+
+params = {'dropout' : 0.1, 'layers' : 4, 'compression' : [1, 16, 32, 64]}
+
+sd = soldet.SolitonDetector(od_model = DummyDetector, od_kwargs = params, od_loss_fn = torch.nn.MSELoss, od_dataset_fn = DummyDataset, augment = None) 
+```
+
+### Demonstration using MNIST
+
+SolDet is designed to work with the classification and identification of excitations in trapped clouds of atoms. However, it is possible to adapt it for other uses and as a demonstration of its flexibility we will override aspects of it to apply it to a standard dataset such as the MNIST handwritten digits dataset.
+
+First lets get the data directories and the MNIST data set up properly.
+
+```python
+import soldet
+
+soldet.change_exp('MNIST')
+soldet.change_path('/Users/soldet')
+exp_path, exp = soldet.config()
+```
+
+    User path not found, creating.
+
+We will be creating a new detector class we'll call MNISTDetector. We will inherit the functionality of SolitonDetector and override functionality with our own. We will do this by passing in custom calls to the initialization of SolitonDetector, or overriding its function calls with our own. We will have 10 classes now instead of the default three of SolDet, so we'll override this using the classifier model parameter dictionary.
+
+```python
+class MNISTDetector(soldet.SolitonDetector):
+    def __init__(self):
+        super().__init__(cl_kwargs = {'num_classes': 10})
+
+```
+
+Since we will be adapting SolDet to run with MNIST instead of solitons, we will need to create a new processing function to prepare the data for importing into our new class folders of SolDet. These class folders will be the digits themselves, 0 - 9, which conveniently fits some of the existing soldet class structure. We will tell SolDet this by making use of the 'class_dir' label. The digit labels themselves will be passed to the 'label' label. Since these are digits we have no use of the distinction between an image being an experimental image of a MOT cloud, or a masked image, so we will copy the MNIST data to both labels. SolDet also requires a filename entry, which we will just set to 'None'.
+
+We will further identify the data with a label of training or validation, signified by the train boolean flag. We will save this to the sample dictionary as additional meta information.
+
+```python
+import torch
+from tqdm import tqdm
+from torchvision.datasets import MNIST
+from torchvision.transforms.functional import resize
+import matplotlib.pyplot as plt
+import numpy as np
+import soldet
+
+class MNISTDetector(soldet.SolitonDetector):
+    def __init__(self):
+        super().__init__(process_fn = self.MNIST_process_fn, cl_kwargs = {'num_classes': 10})
+    
+    def MNIST_process_fn(self, input: MNIST, train: bool = True):
+        data_samples = []
+        data_set = MNIST(input, train = train, download=True)
+        for (image, label) in tqdm(data_set, desc='Processing data..'):
+            sample = {}
+            img = np.array(image)
+            
+            sample['Original Data Size'] = img.shape
+            sample['cloud_data'] = img
+            sample['masked_data'] = img
+            sample['label'] = label
+            sample['class_dir'] = 'class-{}'.format(label)
+            sample['training'] = train 
+            sample['filename'] = 'None'
+            data_samples += [sample]
+
+        return data_samples
+
+mnsit_det = MNISTDetector()
+mnsit_det.import_data(exp_path, **{'train': True})
+mnsit_det.import_data(exp_path, **{'train': False})
+```
+
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz to /Users/soldet/MNIST/MNIST/raw/train-images-idx3-ubyte.gz
+    100%|██████████| 9912422/9912422 [00:00<00:00, 41760459.52it/s]
+    Extracting /Users/soldet/MNIST/MNIST/raw/train-images-idx3-ubyte.gz to /Users/soldet/MNIST/MNIST/raw
+
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz to /Users/soldet/MNIST/MNIST/raw/train-labels-idx1-ubyte.gz
+    100%|██████████| 28881/28881 [00:00<00:00, 3654389.22it/s]
+    Extracting /Users/soldet/MNIST/MNIST/raw/train-labels-idx1-ubyte.gz to /Users/soldet/MNIST/MNIST/raw
+
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/t10k-images-idx3-ubyte.gz
+
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/t10k-images-idx3-ubyte.gz to /Users/soldet/MNIST/MNIST/raw/t10k-images-idx3-ubyte.gz
+    100%|██████████| 1648877/1648877 [00:00<00:00, 27373624.16it/s]
+    Extracting /Users/soldet/MNIST/MNIST/raw/t10k-images-idx3-ubyte.gz to /Users/soldet/MNIST/MNIST/raw
+
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/t10k-labels-idx1-ubyte.gz
+    Downloading https://ossci-datasets.s3.amazonaws.com/mnist/t10k-labels-idx1-ubyte.gz to /Users/soldet/MNIST/MNIST/raw/t10k-labels-idx1-ubyte.gz
+    100%|██████████| 4542/4542 [00:00<00:00, 1898786.88it/s]
+    Extracting /Users/soldet/MNIST/MNIST/raw/t10k-labels-idx1-ubyte.gz to /Users/soldet/MNIST/MNIST/raw
+
+    Processing data..: 100%|██████████| 60000/60000 [00:02<00:00, 25486.82it/s]
+    Writing data files..: 100%|██████████| 60000/60000 [52:22<00:00, 19.09it/s]  
+    Processing data..: 100%|██████████| 10000/10000 [00:00<00:00, 23534.11it/s]
+    Writing data files..: 100%|██████████| 10000/10000 [11:01<00:00, 15.12it/s]
+
+Now we can load the data into the detector using load_data(). We want all the digits so we list off 0 - 9 in the class labels. It doesn't matter which data we load so we'll stick with the default masked = True. We also need to rescale our data to be between 0 and 1 so we set scale = True and give the pixel value range. Finally, we want a 90/10 split for the data we'll train on.
+
+```python
+mnsit_det.load_data(labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], masked = True, data_frac = 0.9, minmax = [0, 255], scale = True)
+```
+
+    Loading processed data..: 100%|██████████| 70000/70000 [03:19<00:00, 351.13it/s]
+    Normalizing Data..: 100%|██████████| 70000/70000 [00:00<00:00, 103637.38it/s]
+
+Although the built in SolDet classifier dataset would work for us if we turn the augmentation off, we will override it with our own for demonstration purposes. We will then pass this in as an argument to the initialization of our new detector like was done previously. Since we have no augmentation we set augment = None so SolDet knows not to look for an augment argument in our dataset class.
+
+```python
+class MNISTDetector(soldet.SolitonDetector):
+    def __init__(self):
+        super().__init__(process_fn = self.MNIST_process_fn, cl_dataset_fn = self.MNISTDataset, 
+                         augment = None, cl_kwargs = {'num_classes': 10})
+    
+    def MNIST_process_fn(self, input: MNIST, train: bool = True):
+        data_samples = []
+        data_set = MNIST(input, train = train, download=True)
+        for (image, label) in tqdm(data_set, desc='Processing data..'):
+            sample = {}
+            img = np.array(image)
+            
+            sample['Original Data Size'] = img.shape
+            sample['cloud_data'] = img
+            sample['masked_data'] = img
+            sample['label'] = label
+            sample['class_dir'] = 'class-{}'.format(label)
+            sample['training'] = train 
+            sample['filename'] = 'None'
+            data_samples += [sample]
+
+        return data_samples
+    
+    class MNISTDataset(torch.utils.data.Dataset):
+        def __init__(self, data):
+            self.data = list(data)
+            return
+        
+        def __len__(self):  
+            return len(self.data)
+        
+        def __getitem__(self, idx: int):
+            # SolDet expects array to be in shape 1xHxW of float values
+            # MNIST is too small for default SolDet classifier model, so we resize it up by 2
+            img = torch.from_numpy(self.data[idx]['data'][np.newaxis, np.newaxis, :]).float()
+            img = torch.nn.functional.interpolate(img, 56)[0]
+            label = int(self.data[idx]['label'])
+            return img, label
+
+mnsit_det = MNISTDetector()
+mnsit_det.load_data(labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], masked = True,
+             data_frac = 1, minmax = [0, 255], scale = True)
+
+img, label = mnsit_det.class_top.dataset_fn(mnsit_det.data).__getitem__(0)
+print(label)
+plt.imshow(img.numpy()[0])
+```
+    Loading processed data..: 100%|██████████| 70000/70000 [03:59<00:00, 292.55it/s]
+    Normalizing Data..: 100%|██████████| 70000/70000 [00:00<00:00, 86730.60it/s] 
+    5
+![An image of a handwritten numeral 5](docs/_static/dsoutput.png)
+
+Now we just need to override the the train models function call to separate the data for training via the extra key we added to the data during import. SolDet by default uses the data loaded into the detector for creating a training and testing subset. But we have data intended for both training and validation loaded which we need to separate. Thankfully we have tagged everything with a boolean 'training' key, so data with this key set to True will be used for training purposes. Then we can invoke SolDet's ML training functionality on this subset by telling it to use our data instead of the default of data = None.
+
+```python
+class MNISTDetector(soldet.SolitonDetector):
+    def __init__(self):
+        super().__init__(process_fn = self.MNIST_process_fn, cl_dataset_fn = self.MNISTDataset, 
+                         augment = None, cl_kwargs = {'num_classes': 10})
+    
+    def MNIST_process_fn(self, input: MNIST, train: bool = True):
+        data_samples = []
+        data_set = MNIST(input, train = train, download=True)
+        for (image, label) in tqdm(data_set, desc='Processing data..'):
+            sample = {}
+            img = np.array(image)
+            
+            sample['Original Data Size'] = img.shape
+            sample['cloud_data'] = img
+            sample['masked_data'] = img
+            sample['label'] = label
+            sample['class_dir'] = 'class-{}'.format(label)
+            sample['training'] = train 
+            sample['filename'] = 'None'
+            data_samples += [sample]
+
+        return data_samples
+    
+    class MNISTDataset(torch.utils.data.Dataset):
+        def __init__(self, data):
+            self.data = list(data)
+            return
+        
+        def __len__(self):  
+            return len(self.data)
+        
+        def __getitem__(self, idx: int):
+            # SolDet expects array to be in shape 1xHxW of float values
+            # MNIST is too small for default SolDet classifier model, so we resize it up by 2
+            img = torch.from_numpy(self.data[idx]['data'][np.newaxis, np.newaxis, :]).float()
+            img = torch.nn.functional.interpolate(img, 56)[0]
+            label = int(self.data[idx]['label'])
+            return img, label
+        
+    def train_ML(self, patience: int = 30, epochs: int = 30):
+        tr_idx = []
+        for idx, item in enumerate(self.data):
+            if item['training'] == True:
+                tr_idx.append(idx)
+
+        tr_set = map(self.data.__getitem__, tr_idx)
+
+        super().train_ML(model_list = ['classifier'], patience = patience, epochs = epochs, data = list(tr_set))
+
+        return
+    
+mnsit_det.train_ML()
+```
+    Device: cuda | Epoch: 30/30 | Loss: 0.036941 |                                  Test Loss: 0.062874 | Acc.: 0.984043: 100%|██████████| 30/30 [10:15<00:00, 20.51s/it]
+    Done! Minimum Test Loss: 0.052880093455314636 with Accuracy: 0.984375.
+
+The resulting weights are saved to the models folder of the experiment with the current date and time, ending in "_classifier.pt". We can use these weights to apply our trained model to all of the data loaded into the detector. This is done by calling use_models() and listing the weights file in the model_paths argument.
+
+```python
+mnsit_det.use_models(model_list = ['classifier'], model_paths = ['20250514_140413_classifier.pt'])
+```
+    Loaded /Users/soldet/MNIST/models/20250514_140413_classifier.pt.
+    Starting ML Classifier.
+    Classifier model loaded.
+    Running model, please wait..
+    Running..: 100%|██████████| 70000/70000 [03:50<00:00, 303.28it/s]
+    Finished.
+
+The results can be shown in a truth table by making use of a built in convenience function that plots the labels in the loaded dataset. By calling plot_metrics() and choosing the relevant model the function will output various plots. These plots require the labels and structure SolDet expects. By choosing 'classifier' we will get a truth table, whose code will look for ground labels via the 'label' key and the predicted values by the classifier via the 'soldet_CL' key. See the documentation for plot metrics() for more information. We will again override this function so we can only select the validation data by checking the 'training' key for False.
+
+```python
+class MNISTDetector(soldet.SolitonDetector):
+    def __init__(self):
+        super().__init__(process_fn = self.MNIST_process_fn, cl_dataset_fn = self.MNISTDataset,
+                         augment = None, cl_kwargs = {'num_classes': 10})
+
+    def MNIST_process_fn(self, input: MNIST, train: bool = True):
+        data_samples = []
+        data_set = MNIST(input, train = train, download=True)
+        for (image, label) in tqdm(data_set, desc='Processing data..'):
+            sample = {}
+            img = np.array(image)
+
+            sample['Original Data Size'] = img.shape
+            sample['cloud_data'] = img
+            sample['masked_data'] = img
+            sample['label'] = label
+            sample['class_dir'] = 'class-{}'.format(label)
+            sample['training'] = train
+            sample['filename'] = 'None'
+            data_samples += [sample]
+
+        return data_samples
+
+    class MNISTDataset(torch.utils.data.Dataset):
+        def __init__(self, data):
+            self.data = list(data)
+            return
+
+        def __len__(self):
+            return len(self.data)
+
+        def __getitem__(self, idx: int):
+            # SolDet expects array to be in shape 1xHxW of float values
+            # MNIST is too small for default SolDet classifier model, so we resize it up by 2
+            img = torch.from_numpy(self.data[idx]['data'][np.newaxis, np.newaxis, :]).float()
+            img = torch.nn.functional.interpolate(img, 56)[0]
+            label = int(self.data[idx]['label'])
+            return img, label
+
+    def train_ML(self, patience: int = 30, epochs: int = 30):
+        tr_idx = []
+        for idx, item in enumerate(self.data):
+            if item['training'] == True:
+                tr_idx.append(idx)
+
+        tr_set = map(self.data.__getitem__, tr_idx)
+
+        super().train_ML(model_list = ['classifier'], patience = patience, epochs = epochs, data = list(tr_set))
+
+        return
+    
+    def plot_metrics(self):
+        val_idx = []
+        for idx, item in enumerate(self.data):
+            if item['training'] == False:
+                val_idx.append(idx)
+
+        val_set = map(self.data.__getitem__, val_idx)
+
+        return super().plot_metrics(types = ['classifier'], data = list(val_set))
+```
+
+Now if we call this we should get the results of our model in table form.
+
+```python
+mnsit_det.plot_metrics()
+```
+![A truth table](docs/_static/taboutput.png)
