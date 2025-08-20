@@ -1,0 +1,73 @@
+# langgraph-deploy
+
+A lightweight wrapper that adds a **`langgraph deploy`** subcommand to ship your built Docker image to **Google Cloud Run**.
+
+## Quick start
+
+```bash
+# 1) Install alongside langgraph CLI (prefer venv or pipx)
+pip install langgraph-cli
+pip install langgraph-deploy
+
+# 2) Build your app image as usual
+langgraph build -t langgraph-app:latest
+
+# 3) Deploy to Cloud Run
+# gloud auth login  # If you are not logged in
+langgraph deploy \
+  --service my-agent \
+  --project my-gcp-project \
+  --region asia-northeast1 \
+  --allow-unauthenticated
+```
+
+If `langgraph deploy` doesn’t find the local image tag, it will run `langgraph build` for you.
+
+## Requirements
+
+- `gcloud` CLI installed and authenticated
+- Permission to push to Artifact Registry and deploy Cloud Run (e.g. `roles/run.admin`, `roles/artifactregistry.writer`)
+- Docker installed and running
+
+## Config resolution
+
+By default this tool looks for `langgraph.json` and tries to resolve the image tag:
+
+- `--image` flag (highest precedence)
+- `LG_IMAGE` env
+- first entry of `docker_image_tags` in `langgraph.json`
+- fallback: `langgraph-app:latest`
+
+Optional custom keys in `langgraph.json` (not required):
+
+```jsonc
+{
+  "graphs": {"app": "./src/app.py:graph"},
+  "dependencies": ["."],
+  "python_version": "3.11",
+  "dockerfile_lines": [],
+
+  // used by this wrapper for defaults
+  "docker_image_tags": ["langgraph-app:latest"]
+}
+```
+
+## How it works
+
+This package registers a **`langgraph`** console script that intercepts only the `deploy` subcommand.
+For every other subcommand, it delegates to the official CLI by executing `python -m langgraph` (and falls back to the `langgraph` binary if needed).
+
+## Notes & caveats
+
+- Because this wrapper shadows the official entry point, ensure that your PATH resolves this script **before** the official one (e.g. install into an isolated venv and activate it).
+- If delegation ever loops (unlikely), we set `LANGGRAPH_DEPLOY_WRAPPER_BYPASS=1` to ensure the official CLI is called directly.
+- You can safely uninstall this package to remove the `deploy` subcommand without touching the official CLI.
+
+## Security
+
+- Prefer CI with Workload Identity Federation or service-account impersonation to avoid long-lived credentials.
+- Review `--allow-unauthenticated` usage; omit it for private services.
+
+## License
+
+MIT
