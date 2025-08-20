@@ -1,0 +1,543 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.core.materials &mdash; materforge 0.5.8.dev7+g4109a05.d20250814 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=eccf598c"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.core.materials</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.core.materials</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.core.elements</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">ChemicalElement</span><span class="p">,</span>
+                                    <span class="n">interpolate_atomic_mass</span><span class="p">,</span>
+                                    <span class="n">interpolate_atomic_number</span><span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.core.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaterialCompositionError</span><span class="p">,</span> <span class="n">MaterialTemperatureError</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Material">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.Material">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Material</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Represents a material with its composition and properties.</span>
+
+<span class="sd">    This class supports both pure metals and alloys with comprehensive</span>
+<span class="sd">    temperature validation and property calculation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Basic material information</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">material_type</span><span class="p">:</span> <span class="nb">str</span>  <span class="c1"># &#39;pure_metal&#39; or &#39;alloy&#39;</span>
+    <span class="n">elements</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChemicalElement</span><span class="p">]</span>
+    <span class="n">composition</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">]</span>  <span class="c1"># List of fractions summing to 1.0</span>
+    <span class="c1"># Temperature properties for pure metals</span>
+    <span class="n">melting_temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">boiling_temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Temperature properties for alloys</span>
+    <span class="n">solidus_temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">liquidus_temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">initial_boiling_temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">final_boiling_temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Optional properties with default values</span>
+    <span class="n">bulk_modulus</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">density</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">dynamic_viscosity</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">elastic_modulus</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Young&#39;s modulus</span>
+    <span class="n">electrical_conductivity</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">electrical_resistivity</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">energy_density</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Piecewise</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">energy_density_solidus</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">energy_density_liquidus</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">fracture_toughness</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">hardness</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">heat_capacity</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">heat_conductivity</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">kinematic_viscosity</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">latent_heat_of_fusion</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">latent_heat_of_vaporization</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">magnetic_permeability</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">melting_point_pressure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">poisson_ratio</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">shear_modulus</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">specific_enthalpy</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">surface_tension</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">thermal_diffusivity</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">thermal_expansion_coefficient</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">ultimate_tensile_strength</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">viscosity</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">Expr</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">yield_strength</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Calculated properties (set during initialization)</span>
+    <span class="n">atomic_number</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">atomic_mass</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1"># Pure metal ranges (based on periodic table data)</span>
+    <span class="n">MIN_MELTING_TEMP</span> <span class="o">=</span> <span class="mf">302.0</span>  <span class="c1"># Cesium (lowest solid metal at room conditions)</span>
+    <span class="n">MAX_MELTING_TEMP</span> <span class="o">=</span> <span class="mf">3695.0</span>  <span class="c1"># Tungsten (highest melting point)</span>
+    <span class="n">MIN_BOILING_TEMP</span> <span class="o">=</span> <span class="mf">630.0</span>  <span class="c1"># Mercury (lowest, but practical metals ~1000K)</span>
+    <span class="n">MAX_BOILING_TEMP</span> <span class="o">=</span> <span class="mf">6203.0</span>  <span class="c1"># Tungsten (highest boiling point)</span>
+    <span class="c1"># Alloy ranges (engineering alloys have wider practical ranges)</span>
+    <span class="n">MIN_SOLIDUS_TEMP</span> <span class="o">=</span> <span class="mf">250.0</span>  <span class="c1"># Low-temperature solders (Bi-based alloys)</span>
+    <span class="n">MAX_SOLIDUS_TEMP</span> <span class="o">=</span> <span class="mf">2000.0</span>  <span class="c1"># High-temperature superalloys</span>
+    <span class="n">MIN_LIQUIDUS_TEMP</span> <span class="o">=</span> <span class="mf">300.0</span>  <span class="c1"># Low-melting alloys</span>
+    <span class="n">MAX_LIQUIDUS_TEMP</span> <span class="o">=</span> <span class="mf">2200.0</span>  <span class="c1"># Refractory alloys (Mo-Re, W-Re systems)</span>
+    <span class="c1"># Extend to include other material properties as needed</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize and validate the material properties.</span>
+<span class="sd">        Called automatically after the dataclass initialization.</span>
+<span class="sd">        Validates composition and temperatures, then calculates derived properties.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Initializing material: </span><span class="si">%s</span><span class="s2"> (type: </span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_composition</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_temperatures</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_calculate_properties</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_composition</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the material composition.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Validating composition for material: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Elements list cannot be empty&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Number of elements (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span><span class="si">}</span><span class="s2">) must match composition length (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="p">),</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MaterialCompositionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The sum of the composition array must be 1.0, got </span><span class="si">{</span><span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;pure_metal&#39;</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialCompositionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Pure metals must have exactly 1 element, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;alloy&#39;</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialCompositionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Alloys must have at least 2 elements, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_temperatures</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate temperature properties based on material type.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting temperature validation for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">material_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;pure_metal&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_validate_pure_metal_temperatures</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;alloy&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_validate_alloy_temperatures</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">available_types</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;pure_metal&#39;</span><span class="p">,</span> <span class="s1">&#39;alloy&#39;</span><span class="p">,]</span>  <span class="c1"># Extend with other types as needed</span>
+                <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown material type: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">material_type</span><span class="si">}</span><span class="s2">. &quot;</span>
+                                               <span class="sa">f</span><span class="s2">&quot;Supported types: </span><span class="si">{</span><span class="n">available_types</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature validation passed for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">material_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">MaterialTemperatureError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature validation failed for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_pure_metal_temperatures</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate temperature properties for pure metals.&quot;&quot;&quot;</span>
+        <span class="c1"># Check required temperatures are present</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">melting_temperature</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span><span class="s2">&quot;Pure metals must specify melting_temperature&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">boiling_temperature</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span><span class="s2">&quot;Pure metals must specify boiling_temperature&quot;</span><span class="p">)</span>
+        <span class="c1"># Validate temperature types</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">melting_temperature</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;melting_temperature must be a SymPy Float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">melting_temperature</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boiling_temperature</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;boiling_temperature must be a SymPy Float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boiling_temperature</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Validate temperature ranges</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_temperature_value</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">melting_temperature</span><span class="p">,</span> <span class="s2">&quot;melting_temperature&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">MIN_MELTING_TEMP</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX_MELTING_TEMP</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_temperature_value</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">boiling_temperature</span><span class="p">,</span> <span class="s2">&quot;boiling_temperature&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">MIN_BOILING_TEMP</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX_BOILING_TEMP</span>
+        <span class="p">)</span>
+        <span class="c1"># Validate temperature relationships</span>
+        <span class="k">if</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">melting_temperature</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boiling_temperature</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;melting_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">melting_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K) must be less than &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;boiling_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boiling_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K)&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_alloy_temperatures</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate temperature properties for alloys.&quot;&quot;&quot;</span>
+        <span class="c1"># Check required temperatures are present</span>
+        <span class="n">required_temps</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s1">&#39;solidus_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">solidus_temperature</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;liquidus_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;initial_boiling_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;final_boiling_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">final_boiling_temperature</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="n">missing_temps</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">temp</span> <span class="ow">in</span> <span class="n">required_temps</span> <span class="k">if</span> <span class="n">temp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">missing_temps</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Alloys must specify all temperature properties. Missing: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">missing_temps</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Validate temperature types</span>
+        <span class="n">temp_checks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s1">&#39;solidus_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">solidus_temperature</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;liquidus_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;initial_boiling_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;final_boiling_temperature&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">final_boiling_temperature</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">temp_name</span><span class="p">,</span> <span class="n">temp_val</span> <span class="ow">in</span> <span class="n">temp_checks</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">temp_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_val</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temp_name</span><span class="si">}</span><span class="s2"> must be a SymPy Float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">temp_val</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="c1"># Validate temperature ranges</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_temperature_value</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">solidus_temperature</span><span class="p">,</span> <span class="s2">&quot;solidus_temperature&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">MIN_SOLIDUS_TEMP</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX_SOLIDUS_TEMP</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_temperature_value</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span><span class="p">,</span> <span class="s2">&quot;liquidus_temperature&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">MIN_LIQUIDUS_TEMP</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX_LIQUIDUS_TEMP</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_temperature_value</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span><span class="p">,</span> <span class="s2">&quot;initial_boiling_temperature&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">MIN_BOILING_TEMP</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX_BOILING_TEMP</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_temperature_value</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">final_boiling_temperature</span><span class="p">,</span> <span class="s2">&quot;final_boiling_temperature&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">MIN_BOILING_TEMP</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">MAX_BOILING_TEMP</span>
+        <span class="p">)</span>
+        <span class="c1"># Validate temperature relationships</span>
+        <span class="c1"># Solidus &lt;= Liquidus</span>
+        <span class="k">if</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solidus_temperature</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;solidus_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solidus_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K) must be less than or equal to &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;liquidus_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K)&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Initial boiling &lt;= Final boiling</span>
+        <span class="k">if</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">final_boiling_temperature</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;initial_boiling_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K) must be &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;less than or equal to final_boiling_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">final_boiling_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K)&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Liquidus &lt; Initial boiling</span>
+        <span class="k">if</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;liquidus_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K) must be less than &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;initial_boiling_temperature (</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span><span class="p">)</span><span class="si">}</span><span class="s2">K)&quot;</span>
+            <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_temperature_value</span><span class="p">(</span><span class="n">temperature</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">],</span> <span class="n">temp_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                                    <span class="n">min_temp</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">max_temp</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate a single temperature value.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">temperature</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temp_name</span><span class="si">}</span><span class="s2"> cannot be None&quot;</span><span class="p">)</span>
+        <span class="c1"># Convert to float for validation</span>
+        <span class="n">temp_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">temperature</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">PhysicalConstants</span>
+        <span class="c1"># Check absolute zero</span>
+        <span class="k">if</span> <span class="n">temp_val</span> <span class="o">&lt;=</span> <span class="n">PhysicalConstants</span><span class="o">.</span><span class="n">ABSOLUTE_ZERO</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temp_name</span><span class="si">}</span><span class="s2"> must be above absolute zero, got </span><span class="si">{</span><span class="n">temp_val</span><span class="si">}</span><span class="s2">K&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Check range if specified</span>
+        <span class="k">if</span> <span class="n">min_temp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">temp_val</span> <span class="o">&lt;</span> <span class="n">min_temp</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temp_name</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">temp_val</span><span class="si">}</span><span class="s2">K is below minimum allowed value (</span><span class="si">{</span><span class="n">min_temp</span><span class="si">}</span><span class="s2">K)&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">max_temp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">temp_val</span> <span class="o">&gt;</span> <span class="n">max_temp</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaterialTemperatureError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">temp_name</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">temp_val</span><span class="si">}</span><span class="s2">K is above maximum allowed value (</span><span class="si">{</span><span class="n">max_temp</span><span class="si">}</span><span class="s2">K)&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_calculate_properties</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate interpolated atomic properties based on composition.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Calculating interpolated properties for </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;pure_metal&#39;</span><span class="p">:</span>
+            <span class="c1"># For pure metals, use the single element&#39;s properties</span>
+            <span class="n">element</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">atomic_number</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">atomic_number</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">atomic_mass</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">atomic_mass</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Pure metal properties - atomic_number: </span><span class="si">%.1f</span><span class="s2">, atomic_mass: </span><span class="si">%.3f</span><span class="s2">&quot;</span><span class="p">,</span>
+                         <span class="bp">self</span><span class="o">.</span><span class="n">atomic_number</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">atomic_mass</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;alloy&#39;</span><span class="p">:</span>
+            <span class="c1"># For alloys, calculate weighted averages</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">atomic_number</span> <span class="o">=</span> <span class="n">interpolate_atomic_number</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">atomic_mass</span> <span class="o">=</span> <span class="n">interpolate_atomic_mass</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Alloy properties - atomic_number: </span><span class="si">%.3f</span><span class="s2">, atomic_mass: </span><span class="si">%.3f</span><span class="s2">&quot;</span><span class="p">,</span>
+                         <span class="bp">self</span><span class="o">.</span><span class="n">atomic_number</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">atomic_mass</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">available_types</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;pure_metal&#39;</span><span class="p">,</span> <span class="s1">&#39;alloy&#39;</span><span class="p">,]</span>  <span class="c1"># Extend with other types as needed</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown material type: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">material_type</span><span class="si">}</span><span class="s2">. &quot;</span>
+                             <span class="sa">f</span><span class="s2">&quot;Supported types: </span><span class="si">{</span><span class="n">available_types</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Material.solidification_interval">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.Material.solidification_interval">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solidification_interval</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the solidification interval for alloys.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Tuple of (solidus_temperature, liquidus_temperature)</span>
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If called on a pure metal</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">!=</span> <span class="s1">&#39;alloy&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Solidification interval is only applicable to alloys&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solidus_temperature</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">liquidus_temperature</span></div>
+
+
+<div class="viewcode-block" id="Material.melting_point">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.Material.melting_point">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">melting_point</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the melting point.</span>
+
+<span class="sd">        For pure metals, returns melting_temperature.</span>
+<span class="sd">        For alloys, returns solidus_temperature.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Melting point temperature</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;pure_metal&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">melting_temperature</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solidus_temperature</span></div>
+
+
+<div class="viewcode-block" id="Material.boiling_point">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.Material.boiling_point">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">boiling_point</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the boiling point.</span>
+
+<span class="sd">        For pure metals, returns boiling_temperature.</span>
+<span class="sd">        For alloys, returns initial_boiling_temperature.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Boiling point temperature</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;pure_metal&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">boiling_temperature</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_boiling_temperature</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;String representation of the material.&quot;&quot;&quot;</span>
+        <span class="n">element_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">element</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">material_type</span> <span class="o">==</span> <span class="s1">&#39;pure_metal&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Pure Metal: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">element_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">composition_str</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">comp</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span>
+                                         <span class="k">for</span> <span class="n">elem</span><span class="p">,</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">element_names</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="p">)])</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Alloy: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">composition_str</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Detailed representation of the material.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Material(name=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;, material_type=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">material_type</span><span class="si">}</span><span class="s2">&#39;, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;elements=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span><span class="si">}</span><span class="s2">, composition=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">composition</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Material.evaluate_properties_at_temperature">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.Material.evaluate_properties_at_temperature">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_properties_at_temperature</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temperature</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+                                           <span class="n">properties</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                                           <span class="n">include_constants</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Evaluate all or specified material properties at a given temperature.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            temperature: Temperature value in Kelvin</span>
+<span class="sd">            properties: List of specific property names to evaluate. If None, evaluates all properties.</span>
+<span class="sd">            include_constants: Whether to include constant properties in the result</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionary mapping property names to their evaluated values</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            # Evaluate all properties</span>
+<span class="sd">            values = material.evaluate_properties_at_temperature(500.0)</span>
+
+<span class="sd">            # Evaluate specific properties</span>
+<span class="sd">            values = material.evaluate_properties_at_temperature(500.0, [&#39;density&#39;, &#39;heat_capacity&#39;])</span>
+
+<span class="sd">            # Exclude constants</span>
+<span class="sd">            values = material.evaluate_properties_at_temperature(500.0, include_constants=False)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Evaluating properties at T=</span><span class="si">%.1f</span><span class="s2"> K for material: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">temperature</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="c1"># Validate temperature</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temperature</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature must be numeric, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">temperature</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">temperature</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature must be positive, got </span><span class="si">{</span><span class="n">temperature</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># Get all property attributes</span>
+        <span class="n">all_properties</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;density&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">density</span><span class="p">,</span>
+            <span class="s1">&#39;dynamic_viscosity&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamic_viscosity</span><span class="p">,</span>
+            <span class="s1">&#39;energy_density&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_density</span><span class="p">,</span>
+            <span class="s1">&#39;heat_capacity&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">heat_capacity</span><span class="p">,</span>
+            <span class="s1">&#39;heat_conductivity&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">heat_conductivity</span><span class="p">,</span>
+            <span class="s1">&#39;kinematic_viscosity&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">kinematic_viscosity</span><span class="p">,</span>
+            <span class="s1">&#39;latent_heat_of_fusion&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">latent_heat_of_fusion</span><span class="p">,</span>
+            <span class="s1">&#39;latent_heat_of_vaporization&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">latent_heat_of_vaporization</span><span class="p">,</span>
+            <span class="s1">&#39;specific_enthalpy&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">specific_enthalpy</span><span class="p">,</span>
+            <span class="s1">&#39;surface_tension&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">surface_tension</span><span class="p">,</span>
+            <span class="s1">&#39;thermal_diffusivity&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">thermal_diffusivity</span><span class="p">,</span>
+            <span class="s1">&#39;thermal_expansion_coefficient&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">thermal_expansion_coefficient</span>
+        <span class="p">}</span>
+        <span class="c1"># Filter to only properties that exist (not None)</span>
+        <span class="n">existing_properties</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">prop</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">prop</span> <span class="ow">in</span> <span class="n">all_properties</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">prop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
+        <span class="c1"># Filter to requested properties if specified</span>
+        <span class="k">if</span> <span class="n">properties</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">properties</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Properties must be a list of strings&quot;</span><span class="p">)</span>
+            <span class="n">invalid_props</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">properties</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">existing_properties</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">invalid_props</span><span class="p">:</span>
+                <span class="n">available</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">existing_properties</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid properties: </span><span class="si">{</span><span class="n">invalid_props</span><span class="si">}</span><span class="s2">. Available: </span><span class="si">{</span><span class="n">available</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">existing_properties</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">prop</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">prop</span> <span class="ow">in</span> <span class="n">existing_properties</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                                   <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">properties</span><span class="p">}</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Evaluating </span><span class="si">%d</span><span class="s2"> properties: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">existing_properties</span><span class="p">),</span> <span class="nb">list</span><span class="p">(</span><span class="n">existing_properties</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># Find the temperature symbol used in this material</span>
+        <span class="n">temp_symbol</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">prop_value</span> <span class="ow">in</span> <span class="n">existing_properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">prop_value</span><span class="p">,</span> <span class="s1">&#39;free_symbols&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">prop_value</span><span class="o">.</span><span class="n">free_symbols</span><span class="p">:</span>
+                <span class="n">temp_symbol</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">prop_value</span><span class="o">.</span><span class="n">free_symbols</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">break</span>
+        <span class="k">if</span> <span class="n">temp_symbol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No symbolic temperature found, assuming all properties are constants&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Using temperature symbol: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">temp_symbol</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">prop_value</span> <span class="ow">in</span> <span class="n">existing_properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">prop_value</span><span class="p">,</span> <span class="s1">&#39;free_symbols&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">prop_value</span><span class="o">.</span><span class="n">free_symbols</span><span class="p">:</span>
+                    <span class="c1"># Symbolic property - substitute and evaluate</span>
+                    <span class="k">if</span> <span class="n">temp_symbol</span><span class="p">:</span>
+                        <span class="n">evaluated</span> <span class="o">=</span> <span class="n">prop_value</span><span class="o">.</span><span class="n">subs</span><span class="p">(</span><span class="n">temp_symbol</span><span class="p">,</span> <span class="n">temperature</span><span class="p">)</span>
+                        <span class="c1"># Handle any remaining symbolic expressions</span>
+                        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">evaluated</span><span class="p">,</span> <span class="s1">&#39;evalf&#39;</span><span class="p">):</span>
+                            <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">evaluated</span><span class="o">.</span><span class="n">evalf</span><span class="p">())</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">evaluated</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">prop_value</span><span class="p">)</span>
+                    <span class="n">results</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prop_value</span><span class="p">,</span> <span class="p">(</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Integer</span><span class="p">)):</span>
+                    <span class="c1"># SymPy numeric constant</span>
+                    <span class="k">if</span> <span class="n">include_constants</span><span class="p">:</span>
+                        <span class="n">results</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">prop_value</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prop_value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+                    <span class="c1"># Python numeric constant</span>
+                    <span class="k">if</span> <span class="n">include_constants</span><span class="p">:</span>
+                        <span class="n">results</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">prop_value</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unknown property type for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">prop_value</span><span class="p">))</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to evaluate property &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                <span class="c1"># Continue with other properties instead of failing completely</span>
+                <span class="n">results</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Remove None values</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully evaluated </span><span class="si">%d</span><span class="s2"> properties at T=</span><span class="si">%.1f</span><span class="s2"> K&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">),</span> <span class="n">temperature</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">results</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

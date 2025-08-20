@@ -1,0 +1,509 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.visualization.plotters &mdash; materforge 0.5.8.dev7+g4109a05.d20250814 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=eccf598c"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.visualization.plotters</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.visualization.plotters</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="kn">import</span> <span class="n">GridSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.core.materials</span><span class="w"> </span><span class="kn">import</span> <span class="n">Material</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.algorithms.regression_processor</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegressionProcessor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.yaml_keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">CONSTANT_KEY</span><span class="p">,</span> <span class="n">PRE_KEY</span><span class="p">,</span> <span class="n">POST_KEY</span><span class="p">,</span> <span class="n">NAME_KEY</span><span class="p">,</span> <span class="n">MATERIAL_TYPE_KEY</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">PhysicalConstants</span><span class="p">,</span> <span class="n">ProcessingConstants</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="PropertyVisualizer">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PropertyVisualizer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PropertyVisualizer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Handles visualization of material properties.&quot;&quot;&quot;</span>
+
+    <span class="c1"># --- Constructor ---</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parser</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parser</span> <span class="o">=</span> <span class="n">parser</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_subplot</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">yaml_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">base_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">plot_directory</span> <span class="o">=</span> <span class="n">yaml_dir</span> <span class="o">/</span> <span class="s2">&quot;materforge_plots&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visualized_properties</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_enabled</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_style</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;PropertyVisualizer initialized for parser: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">parser</span><span class="o">.</span><span class="n">config_path</span><span class="p">)</span>
+
+<div class="viewcode-block" id="PropertyVisualizer.setup_style">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PropertyVisualizer.setup_style">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setup_style</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="o">.</span><span class="n">update</span><span class="p">({</span>
+            <span class="s1">&#39;font.size&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+            <span class="s1">&#39;font.family&#39;</span><span class="p">:</span> <span class="s1">&#39;sans-serif&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;font.sans-serif&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;DejaVu Sans&#39;</span><span class="p">,</span> <span class="s1">&#39;Arial&#39;</span><span class="p">,</span> <span class="s1">&#39;Helvetica&#39;</span><span class="p">,</span> <span class="s1">&#39;Liberation Sans&#39;</span><span class="p">],</span>
+            <span class="s1">&#39;axes.titlesize&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span>
+            <span class="s1">&#39;axes.labelsize&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+            <span class="s1">&#39;xtick.labelsize&#39;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span>
+            <span class="s1">&#39;ytick.labelsize&#39;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span>
+            <span class="s1">&#39;legend.fontsize&#39;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span>
+            <span class="s1">&#39;figure.titlesize&#39;</span><span class="p">:</span> <span class="mi">14</span><span class="p">,</span>
+            <span class="s1">&#39;axes.grid&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s1">&#39;grid.alpha&#39;</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span>
+            <span class="s1">&#39;grid.linestyle&#39;</span><span class="p">:</span> <span class="s1">&#39;--&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;axes.axisbelow&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s1">&#39;figure.facecolor&#39;</span><span class="p">:</span> <span class="s1">&#39;white&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;axes.facecolor&#39;</span><span class="p">:</span> <span class="s1">&#39;white&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;savefig.facecolor&#39;</span><span class="p">:</span> <span class="s1">&#39;white&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;savefig.edgecolor&#39;</span><span class="p">:</span> <span class="s1">&#39;none&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;savefig.dpi&#39;</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+            <span class="s1">&#39;figure.autolayout&#39;</span><span class="p">:</span> <span class="kc">True</span>
+        <span class="p">})</span></div>
+
+
+<div class="viewcode-block" id="PropertyVisualizer.is_visualization_enabled">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PropertyVisualizer.is_visualization_enabled">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_visualization_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if visualization is currently enabled.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_enabled</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+
+
+    <span class="c1"># --- Public API Methods ---</span>
+<div class="viewcode-block" id="PropertyVisualizer.initialize_plots">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PropertyVisualizer.initialize_plots">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialize_plots</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize plots only if visualization is enabled.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_enabled</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Visualization disabled, skipping plot initialization&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">categorized_properties</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;categorized_properties is None - cannot initialize plots&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No properties to plot.&quot;</span><span class="p">)</span>
+        <span class="n">property_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">props</span><span class="p">)</span> <span class="k">for</span> <span class="n">props</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">categorized_properties</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Initializing visualization for </span><span class="si">%d</span><span class="s2"> properties&quot;</span><span class="p">,</span> <span class="n">property_count</span><span class="p">)</span>
+        <span class="n">fig_width</span> <span class="o">=</span> <span class="mi">12</span>
+        <span class="n">fig_height</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">property_count</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>  <span class="c1"># Minimum height for readability</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="n">fig_width</span><span class="p">,</span> <span class="n">fig_height</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gs</span> <span class="o">=</span> <span class="n">GridSpec</span><span class="p">(</span><span class="n">property_count</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fig</span><span class="p">,</span> <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_subplot</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">plot_directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Plot directory created: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">plot_directory</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="PropertyVisualizer.reset_visualization_tracking">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PropertyVisualizer.reset_visualization_tracking">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset_visualization_tracking</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Resetting visualization tracking - clearing </span><span class="si">%d</span><span class="s2"> tracked properties&quot;</span><span class="p">,</span>
+                     <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">visualized_properties</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visualized_properties</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="PropertyVisualizer.visualize_property">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PropertyVisualizer.visualize_property">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">visualize_property</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">material</span><span class="p">:</span> <span class="n">Material</span><span class="p">,</span>
+            <span class="n">prop_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">T</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">],</span>
+            <span class="n">prop_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">x_data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">y_data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">has_regression</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="n">simplify_type</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="n">segments</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="n">lower_bound</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">upper_bound</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">lower_bound_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CONSTANT_KEY</span><span class="p">,</span>
+            <span class="n">upper_bound_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CONSTANT_KEY</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Visualize a single property.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">prop_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">visualized_properties</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Property &#39;</span><span class="si">%s</span><span class="s2">&#39; already visualized, skipping&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;fig&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No figure available for property &#39;</span><span class="si">%s</span><span class="s2">&#39; - visualization skipped&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Temperature is not symbolic for property &#39;</span><span class="si">%s</span><span class="s2">&#39; - visualization skipped&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Visualizing property: </span><span class="si">%s</span><span class="s2"> (type: </span><span class="si">%s</span><span class="s2">) for material: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">prop_name</span><span class="p">,</span> <span class="n">prop_type</span><span class="p">,</span> <span class="n">material</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Create subplot</span>
+            <span class="n">ax</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">current_subplot</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">current_subplot</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;auto&#39;</span><span class="p">)</span>
+            <span class="c1"># Grid and border styling</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_axisbelow</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="c1"># Border styling</span>
+            <span class="k">for</span> <span class="n">spine</span> <span class="ow">in</span> <span class="n">ax</span><span class="o">.</span><span class="n">spines</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">spine</span><span class="o">.</span><span class="n">set_color</span><span class="p">(</span><span class="s1">&#39;#CCCCCC&#39;</span><span class="p">)</span>
+                <span class="n">spine</span><span class="o">.</span><span class="n">set_linewidth</span><span class="p">(</span><span class="mf">1.2</span><span class="p">)</span>
+            <span class="c1"># Get property and prepare temperature array</span>
+            <span class="n">current_prop</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">material</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">x_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">x_data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="c1"># Use property&#39;s own temperature range</span>
+                <span class="n">data_lower</span><span class="p">,</span> <span class="n">data_upper</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">x_data</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">x_data</span><span class="p">)</span>
+                <span class="n">temp_range</span> <span class="o">=</span> <span class="n">data_upper</span> <span class="o">-</span> <span class="n">data_lower</span>
+                <span class="n">step</span> <span class="o">=</span> <span class="n">temp_range</span> <span class="o">/</span> <span class="mi">1000</span>  <span class="c1"># Create 1000 points for smooth visualization</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback for properties without explicit temperature data</span>
+                <span class="n">data_lower</span><span class="p">,</span> <span class="n">data_upper</span> <span class="o">=</span> <span class="p">(</span><span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">DEFAULT_TEMP_LOWER</span><span class="p">,</span>
+                                          <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">DEFAULT_TEMP_UPPER</span><span class="p">)</span>
+                <span class="n">step</span> <span class="o">=</span> <span class="p">(</span><span class="n">data_upper</span> <span class="o">-</span> <span class="n">data_lower</span><span class="p">)</span> <span class="o">/</span> <span class="mi">1000</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Using data temperature range: </span><span class="si">%.1f</span><span class="s2"> - </span><span class="si">%.1f</span><span class="s2"> K&quot;</span><span class="p">,</span> <span class="n">data_lower</span><span class="p">,</span> <span class="n">data_upper</span><span class="p">)</span>
+            <span class="c1"># Set bounds with property-specific defaults</span>
+            <span class="k">if</span> <span class="n">lower_bound</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">lower_bound</span> <span class="o">=</span> <span class="n">data_lower</span>
+            <span class="k">if</span> <span class="n">upper_bound</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">upper_bound</span> <span class="o">=</span> <span class="n">data_upper</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Using default temperature range: </span><span class="si">%.1f</span><span class="s2"> - </span><span class="si">%.1f</span><span class="s2"> K&quot;</span><span class="p">,</span> <span class="n">data_lower</span><span class="p">,</span> <span class="n">data_upper</span><span class="p">)</span>
+            <span class="c1"># Create extended temperature range for visualization</span>
+            <span class="n">padding</span> <span class="o">=</span> <span class="p">(</span><span class="n">upper_bound</span> <span class="o">-</span> <span class="n">lower_bound</span><span class="p">)</span> <span class="o">*</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">TEMPERATURE_PADDING_FACTOR</span>
+            <span class="n">ABSOLUTE_ZERO</span> <span class="o">=</span> <span class="n">PhysicalConstants</span><span class="o">.</span><span class="n">ABSOLUTE_ZERO</span>
+            <span class="n">padded_lower</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">lower_bound</span> <span class="o">-</span> <span class="n">padding</span><span class="p">,</span> <span class="n">ABSOLUTE_ZERO</span><span class="p">)</span>
+            <span class="n">padded_upper</span> <span class="o">=</span> <span class="n">upper_bound</span> <span class="o">+</span> <span class="n">padding</span>
+            <span class="n">num_points</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">((</span><span class="n">padded_upper</span> <span class="o">-</span> <span class="n">padded_lower</span><span class="p">)</span> <span class="o">/</span> <span class="n">step</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">extended_temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">padded_lower</span><span class="p">,</span> <span class="n">padded_upper</span><span class="p">,</span> <span class="n">num_points</span><span class="p">)</span>
+            <span class="c1"># Title and labels</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">prop_type</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Temperature&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">)</span>
+            <span class="c1"># Color scheme</span>
+            <span class="n">colors</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;constant&#39;</span><span class="p">:</span> <span class="s1">&#39;#1f77b4&#39;</span><span class="p">,</span>  <span class="c1"># blue</span>
+                <span class="s1">&#39;raw&#39;</span><span class="p">:</span> <span class="s1">&#39;#ff7f0e&#39;</span><span class="p">,</span>  <span class="c1"># orange</span>
+                <span class="s1">&#39;regression_pre&#39;</span><span class="p">:</span> <span class="s1">&#39;#2ca02c&#39;</span><span class="p">,</span>  <span class="c1"># green</span>
+                <span class="s1">&#39;regression_post&#39;</span><span class="p">:</span> <span class="s1">&#39;#d62728&#39;</span><span class="p">,</span>  <span class="c1"># red</span>
+                <span class="s1">&#39;bounds&#39;</span><span class="p">:</span> <span class="s1">&#39;#9467bd&#39;</span><span class="p">,</span>  <span class="c1"># purple</span>
+                <span class="s1">&#39;extended&#39;</span><span class="p">:</span> <span class="s1">&#39;#8c564b&#39;</span><span class="p">,</span>  <span class="c1"># brown</span>
+            <span class="p">}</span>
+            <span class="c1"># Initialize y_value for annotations</span>
+            <span class="n">_y_value</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">if</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s1">&#39;CONSTANT_VALUE&#39;</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">current_prop</span><span class="p">)</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="n">value</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">],</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span>
+                           <span class="n">linewidth</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;constant&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+                <span class="c1"># Annotation</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Value: </span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span>
+                        <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                        <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">,</span>
+                                  <span class="n">edgecolor</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;constant&#39;</span><span class="p">]))</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">value</span> <span class="o">*</span> <span class="mf">0.9</span><span class="p">,</span> <span class="n">value</span> <span class="o">*</span> <span class="mf">1.1</span><span class="p">)</span>
+                <span class="c1"># Add small offset to avoid overlap with horizontal line</span>
+                <span class="n">y_range</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_ylim</span><span class="p">()</span>
+                <span class="n">offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">y_range</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="mf">0.1</span>
+                <span class="n">_y_value</span> <span class="o">=</span> <span class="n">value</span> <span class="o">+</span> <span class="n">offset</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Plotted constant property &#39;</span><span class="si">%s</span><span class="s2">&#39; with value: </span><span class="si">%g</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s1">&#39;STEP_FUNCTION&#39;</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">f_current</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">lambdify</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">current_prop</span><span class="p">,</span> <span class="s1">&#39;numpy&#39;</span><span class="p">)</span>
+                    <span class="c1"># Always plot the extended behavior first (background)</span>
+                    <span class="n">y_extended</span> <span class="o">=</span> <span class="n">f_current</span><span class="p">(</span><span class="n">extended_temp</span><span class="p">)</span>
+                    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">extended_temp</span><span class="p">,</span> <span class="n">y_extended</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;extended&#39;</span><span class="p">],</span>
+                            <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;extended behavior&#39;</span><span class="p">,</span>
+                            <span class="n">zorder</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+                    <span class="c1"># Overlay data points if available (foreground)</span>
+                    <span class="k">if</span> <span class="n">x_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">y_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_data</span><span class="p">,</span> <span class="n">y_data</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;raw&#39;</span><span class="p">],</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span>
+                                <span class="n">linewidth</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+                                <span class="n">label</span><span class="o">=</span><span class="s1">&#39;step function&#39;</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+                        <span class="c1"># Add vertical line at transition point</span>
+                        <span class="n">transition_idx</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">x_data</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+                        <span class="n">transition_temp</span> <span class="o">=</span> <span class="n">x_data</span><span class="p">[</span><span class="n">transition_idx</span><span class="p">]</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">transition_temp</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span>
+                                   <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;transition point&#39;</span><span class="p">)</span>
+                        <span class="c1"># Annotations</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">transition_temp</span><span class="p">,</span> <span class="n">y_data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="sa">f</span><span class="s1">&#39; Before: </span><span class="si">{</span><span class="n">y_data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s1">.2e</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                                <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;bottom&#39;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">,</span>
+                                <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                                <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">))</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">transition_temp</span><span class="p">,</span> <span class="n">y_data</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="sa">f</span><span class="s1">&#39; After: </span><span class="si">{</span><span class="n">y_data</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s1">.2e</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                                <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">,</span>
+                                <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                                <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">))</span>
+                        <span class="n">_y_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">y_data</span><span class="p">)</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Plotted step function &#39;</span><span class="si">%s</span><span class="s2">&#39; with transition at </span><span class="si">%.1f</span><span class="s2"> K&quot;</span><span class="p">,</span>
+                                     <span class="n">prop_name</span><span class="p">,</span> <span class="n">transition_temp</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># No data points available, use function evaluation</span>
+                        <span class="n">_y_value</span> <span class="o">=</span> <span class="n">f_current</span><span class="p">(</span><span class="n">lower_bound</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not evaluate step function &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                    <span class="n">_y_value</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># Handle all other property types (FILE_IMPORT, TABULAR_DATA, PIECEWISE_EQUATION, COMPUTED_PROPERTY)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">f_current</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">lambdify</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">current_prop</span><span class="p">,</span> <span class="s1">&#39;numpy&#39;</span><span class="p">)</span>
+                    <span class="c1"># Determine the appropriate label and color based on regression status</span>
+                    <span class="k">if</span> <span class="n">has_regression</span> <span class="ow">and</span> <span class="n">simplify_type</span> <span class="o">==</span> <span class="n">PRE_KEY</span><span class="p">:</span>
+                        <span class="n">main_color</span> <span class="o">=</span> <span class="n">colors</span><span class="p">[</span><span class="s1">&#39;regression_pre&#39;</span><span class="p">]</span>
+                        <span class="n">main_label</span> <span class="o">=</span> <span class="s1">&#39;regression (pre)&#39;</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">main_color</span> <span class="o">=</span> <span class="n">colors</span><span class="p">[</span><span class="s1">&#39;extended&#39;</span><span class="p">]</span>
+                        <span class="n">main_label</span> <span class="o">=</span> <span class="s1">&#39;raw (extended)&#39;</span>
+                    <span class="k">try</span><span class="p">:</span>  <span class="c1"># Plot the main function over extended range</span>
+                        <span class="n">y_extended</span> <span class="o">=</span> <span class="n">f_current</span><span class="p">(</span><span class="n">extended_temp</span><span class="p">)</span>
+                        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">extended_temp</span><span class="p">,</span> <span class="n">y_extended</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">main_color</span><span class="p">,</span>
+                                <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">main_label</span><span class="p">,</span>
+                                <span class="n">zorder</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Plotted extended range for property &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not evaluate function over extended range for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                                       <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                        <span class="c1"># Fallback to data range if available</span>
+                        <span class="k">if</span> <span class="n">x_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">y_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_data</span><span class="p">,</span> <span class="n">y_data</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;raw&#39;</span><span class="p">],</span>
+                                    <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;data points&#39;</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="c1"># Plot data points if available (for FILE, KEY_VAL properties)</span>
+                    <span class="k">if</span> <span class="n">x_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">y_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;FILE_IMPORT&#39;</span><span class="p">,</span> <span class="s1">&#39;TABULAR_DATA&#39;</span><span class="p">,]:</span>
+                        <span class="c1"># marker_size = 6 if prop_type == &#39;KEY_VAL&#39; else 3</span>
+                        <span class="c1"># ax.scatter(x_data, y_data, color=colors[&#39;raw&#39;], marker=&#39;o&#39;, s=marker_size**2,</span>
+                        <span class="c1">#            alpha=0.7, label=&#39;data points&#39;, zorder=3)</span>
+                        <span class="k">pass</span>
+                    <span class="c1"># Set y_value for boundary annotations to avoid overlap</span>
+                    <span class="k">if</span> <span class="n">y_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="c1"># Use 25th percentile instead of max to avoid high regions</span>
+                        <span class="n">_y_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">y_data</span><span class="p">,</span> <span class="mi">25</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="c1"># Use midpoint instead of upper_bound</span>
+                            <span class="n">midpoint</span> <span class="o">=</span> <span class="p">(</span><span class="n">lower_bound</span> <span class="o">+</span> <span class="n">upper_bound</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+                            <span class="n">_y_value</span> <span class="o">=</span> <span class="n">f_current</span><span class="p">(</span><span class="n">midpoint</span><span class="p">)</span>
+                        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not evaluate function at midpoint for &#39;%s&#39;: %s&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                            <span class="n">_y_value</span> <span class="o">=</span> <span class="mf">0.0</span>
+                    <span class="c1"># Post-regression overlay</span>
+                    <span class="k">if</span> <span class="n">has_regression</span> <span class="ow">and</span> <span class="n">simplify_type</span> <span class="o">==</span> <span class="n">POST_KEY</span> <span class="ow">and</span> <span class="n">x_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">y_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">preview_pw</span> <span class="o">=</span> <span class="n">RegressionProcessor</span><span class="o">.</span><span class="n">process_regression</span><span class="p">(</span>
+                                <span class="n">temp_array</span><span class="o">=</span><span class="n">x_data</span><span class="p">,</span> <span class="n">prop_array</span><span class="o">=</span><span class="n">y_data</span><span class="p">,</span> <span class="n">T</span><span class="o">=</span><span class="n">T</span><span class="p">,</span>
+                                <span class="n">lower_bound_type</span><span class="o">=</span><span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="o">=</span><span class="n">upper_bound_type</span><span class="p">,</span>
+                                <span class="n">degree</span><span class="o">=</span><span class="n">degree</span><span class="p">,</span> <span class="n">segments</span><span class="o">=</span><span class="n">segments</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">DEFAULT_REGRESSION_SEED</span>
+                            <span class="p">)</span>
+                            <span class="n">f_preview</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">lambdify</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">preview_pw</span><span class="p">,</span> <span class="s1">&#39;numpy&#39;</span><span class="p">)</span>
+                            <span class="n">y_preview</span> <span class="o">=</span> <span class="n">f_preview</span><span class="p">(</span><span class="n">extended_temp</span><span class="p">)</span>
+                            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">extended_temp</span><span class="p">,</span> <span class="n">y_preview</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;regression_post&#39;</span><span class="p">],</span>
+                                    <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;regression (post)&#39;</span><span class="p">,</span>
+                                    <span class="n">zorder</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Added post-regression preview for property &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+                        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not generate post-regression preview for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                                           <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Error creating function for property &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                    <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span>
+                            <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                            <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">))</span>
+                    <span class="n">_y_value</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="c1"># Add boundary lines and annotations</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">lower_bound</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;bounds&#39;</span><span class="p">],</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span>
+                       <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;_nolegend_&#39;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">upper_bound</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;bounds&#39;</span><span class="p">],</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span>
+                       <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;_nolegend_&#39;</span><span class="p">)</span>
+            <span class="c1"># Ensure _y_value is valid for annotations</span>
+            <span class="k">if</span> <span class="n">_y_value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">_y_value</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">current_prop</span><span class="p">,</span> <span class="s1">&#39;subs&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">current_prop</span><span class="p">,</span> <span class="s1">&#39;evalf&#39;</span><span class="p">):</span>
+                        <span class="n">_y_value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">current_prop</span><span class="o">.</span><span class="n">subs</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">lower_bound</span><span class="p">)</span><span class="o">.</span><span class="n">evalf</span><span class="p">())</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">_y_value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">current_prop</span><span class="p">)</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">current_prop</span><span class="p">,</span> <span class="s1">&#39;__float__&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+                <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
+                    <span class="n">_y_value</span> <span class="o">=</span> <span class="mf">0.0</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not determine y_value for annotations for property &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="c1"># Add boundary type annotations</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">lower_bound</span><span class="p">,</span> <span class="n">_y_value</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">lower_bound_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;right&#39;</span><span class="p">,</span>
+                    <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                    <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">,</span>
+                              <span class="n">edgecolor</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;bounds&#39;</span><span class="p">]))</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">upper_bound</span><span class="p">,</span> <span class="n">_y_value</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39; </span><span class="si">{</span><span class="n">upper_bound_type</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                    <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">,</span>
+                    <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                    <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">,</span>
+                              <span class="n">edgecolor</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="s1">&#39;bounds&#39;</span><span class="p">]))</span>
+            <span class="c1"># Add regression info</span>
+            <span class="k">if</span> <span class="n">has_regression</span> <span class="ow">and</span> <span class="n">degree</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.98</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Simplify: </span><span class="si">{</span><span class="n">simplify_type</span><span class="si">}</span><span class="s2"> | Degree: </span><span class="si">{</span><span class="n">degree</span><span class="si">}</span><span class="s2"> | Segments: </span><span class="si">{</span><span class="n">segments</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                        <span class="n">transform</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span>
+                        <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                        <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightblue&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">))</span>
+            <span class="c1"># Add legend only if there are artists with labels</span>
+            <span class="n">handles</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_legend_handles_labels</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">handles</span> <span class="ow">and</span> <span class="n">labels</span><span class="p">:</span>
+                <span class="n">legend</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">handles</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s1">&#39;best&#39;</span><span class="p">,</span> <span class="n">framealpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+                                   <span class="n">fancybox</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">shadow</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+                <span class="n">legend</span><span class="o">.</span><span class="n">get_frame</span><span class="p">()</span><span class="o">.</span><span class="n">set_linewidth</span><span class="p">(</span><span class="mf">1.2</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No artists with labels found for property &#39;</span><span class="si">%s</span><span class="s2">&#39; - skipping legend&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+            <span class="c1"># Add property to visualized set</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">visualized_properties</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">prop_name</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully visualized property: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Unexpected error visualizing property &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected error in property </span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="PropertyVisualizer.save_property_plots">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.PropertyVisualizer.save_property_plots">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_property_plots</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Save plots only if visualization is enabled and plots exist.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_enabled</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;fig&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No plots to save - visualization disabled or no plots created&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;fig&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">material_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">MATERIAL_TYPE_KEY</span><span class="p">]</span>
+                <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Material Properties: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">NAME_KEY</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">material_type</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.98</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.98</span><span class="p">],</span> <span class="n">pad</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;tight_layout failed: </span><span class="si">%s</span><span class="s2">. Using subplots_adjust as fallback&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span>
+                        <span class="n">left</span><span class="o">=</span><span class="mf">0.08</span><span class="p">,</span>  <span class="c1"># Left margin</span>
+                        <span class="n">bottom</span><span class="o">=</span><span class="mf">0.08</span><span class="p">,</span>  <span class="c1"># Bottom margin</span>
+                        <span class="n">right</span><span class="o">=</span><span class="mf">0.92</span><span class="p">,</span>  <span class="c1"># Right margin</span>
+                        <span class="n">top</span><span class="o">=</span><span class="mf">0.88</span><span class="p">,</span>  <span class="c1"># Top margin (leave space for subtitle)</span>
+                        <span class="n">hspace</span><span class="o">=</span><span class="mf">0.8</span>  <span class="c1"># Height spacing between subplots</span>
+                    <span class="p">)</span>
+                <span class="n">material_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">NAME_KEY</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="s1">&#39;_&#39;</span><span class="p">)</span>
+                <span class="n">timestamp</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">_%H%M%S&quot;</span><span class="p">)</span>
+                <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">material_name</span><span class="si">}</span><span class="s2">_properties_</span><span class="si">{</span><span class="n">timestamp</span><span class="si">}</span><span class="s2">.png&quot;</span>
+                <span class="n">filepath</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">plot_directory</span> <span class="o">/</span> <span class="n">filename</span>
+                <span class="c1"># Save settings</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">),</span>
+                    <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>  <span class="c1"># High resolution</span>
+                    <span class="n">bbox_inches</span><span class="o">=</span><span class="s2">&quot;tight&quot;</span><span class="p">,</span>  <span class="c1"># Cropping</span>
+                    <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span>  <span class="c1"># Clean background</span>
+                    <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span>  <span class="c1"># No border</span>
+                    <span class="n">pad_inches</span><span class="o">=</span><span class="mf">0.4</span>  <span class="c1"># Padding</span>
+                <span class="p">)</span>
+                <span class="n">total_properties</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">props</span><span class="p">)</span> <span class="k">for</span> <span class="n">props</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">categorized_properties</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+                <span class="n">visualized_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">visualized_properties</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">visualized_count</span> <span class="o">!=</span> <span class="n">total_properties</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Not all properties visualized! &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Visualized: </span><span class="si">{</span><span class="n">visualized_count</span><span class="si">}</span><span class="s2">, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Total: </span><span class="si">{</span><span class="n">total_properties</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;All properties (</span><span class="si">{</span><span class="n">total_properties</span><span class="si">}</span><span class="s2">) visualized successfully.&quot;</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;All property plots saved as </span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>  <span class="c1"># Always close the figure to prevent memory leaks</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;fig&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fig</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fig</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Figure closed and memory cleaned up&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

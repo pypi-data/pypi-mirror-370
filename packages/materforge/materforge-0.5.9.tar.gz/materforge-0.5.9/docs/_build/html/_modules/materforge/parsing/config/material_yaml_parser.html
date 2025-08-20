@@ -1,0 +1,520 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.parsing.config.material_yaml_parser &mdash; materforge 0.5.8.dev7+g4109a05.d20250814 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=eccf598c"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.parsing.config.material_yaml_parser</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.parsing.config.material_yaml_parser</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">difflib</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_close_matches</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">sympy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ruamel.yaml</span><span class="w"> </span><span class="kn">import</span> <span class="n">YAML</span><span class="p">,</span> <span class="n">constructor</span><span class="p">,</span> <span class="n">scanner</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.core.materials</span><span class="w"> </span><span class="kn">import</span> <span class="n">Material</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessingConstants</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.processors.property_processor</span><span class="w"> </span><span class="kn">import</span> <span class="n">PropertyProcessor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.validation.property_type_detector</span><span class="w"> </span><span class="kn">import</span> <span class="n">PropertyType</span><span class="p">,</span> <span class="n">PropertyTypeDetector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.visualization.plotters</span><span class="w"> </span><span class="kn">import</span> <span class="n">PropertyVisualizer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.yaml_keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">PROPERTIES_KEY</span><span class="p">,</span> <span class="n">MATERIAL_TYPE_KEY</span><span class="p">,</span> \
+    <span class="n">COMPOSITION_KEY</span><span class="p">,</span> <span class="n">PURE_METAL_KEY</span><span class="p">,</span> <span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">,</span> \
+    <span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">ALLOY_KEY</span><span class="p">,</span> <span class="n">NAME_KEY</span><span class="p">,</span> \
+    <span class="n">INDEPENDENT_VARIABLES_KEY</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseFileParser</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for parsing configuration files.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">config_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="o">.</span><span class="n">parent</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_config</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Successfully loaded configuration from: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Subclasses must implement _load_config method&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">YAMLFileParser</span><span class="p">(</span><span class="n">BaseFileParser</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parser for YAML configuration files.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">yaml</span> <span class="o">=</span> <span class="n">YAML</span><span class="p">(</span><span class="n">typ</span><span class="o">=</span><span class="s1">&#39;safe&#39;</span><span class="p">)</span>
+        <span class="n">yaml</span><span class="o">.</span><span class="n">allow_duplicate_keys</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Loading YAML file: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">config</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;YAML file loaded successfully, found </span><span class="si">%d</span><span class="s2"> top-level keys&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">config</span><span class="p">)</span> <span class="k">if</span> <span class="n">config</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">config</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;YAML file not found: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;YAML file not found: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">except</span> <span class="n">constructor</span><span class="o">.</span><span class="n">DuplicateKeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Duplicate key found in YAML file </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">constructor</span><span class="o">.</span><span class="n">DuplicateKeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duplicate key in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">except</span> <span class="n">scanner</span><span class="o">.</span><span class="n">ScannerError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;YAML syntax error in file </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">scanner</span><span class="o">.</span><span class="n">ScannerError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;YAML syntax error in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Unexpected error parsing YAML file </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error parsing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+
+<div class="viewcode-block" id="MaterialYAMLParser">
+<a class="viewcode-back" href="../../../../reference/api.html#materforge.parsing.MaterialYAMLParser">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MaterialYAMLParser</span><span class="p">(</span><span class="n">YAMLFileParser</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parser for material configuration files in YAML format.&quot;&quot;&quot;</span>
+
+    <span class="n">VALID_YAML_PROPERTIES</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;bulk_modulus&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;density&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dynamic_viscosity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;elastic_modulus&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;electrical_conductivity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;electrical_resistivity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;energy_density&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;fracture_toughness&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;hardness&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;heat_capacity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;heat_conductivity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;kinematic_viscosity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;latent_heat_of_fusion&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;latent_heat_of_vaporization&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;magnetic_permeability&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;poisson_ratio&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;shear_modulus&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;specific_enthalpy&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;surface_tension&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;thermal_diffusivity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;thermal_expansion_coefficient&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ultimate_tensile_strength&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;viscosity&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;yield_strength&quot;</span><span class="p">,</span>
+        <span class="c1"># Extend to include other material properties as needed</span>
+    <span class="p">}</span>
+
+    <span class="c1"># --- Constructor ---</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Initializing MaterialYAMLParser for: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">yaml_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_config</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">categorized_properties</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_analyze_and_categorize_properties</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">PROPERTIES_KEY</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">property_processor</span> <span class="o">=</span> <span class="n">PropertyProcessor</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visualizer</span> <span class="o">=</span> <span class="n">PropertyVisualizer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;MaterialYAMLParser initialized successfully with </span><span class="si">%d</span><span class="s2"> property categories&quot;</span><span class="p">,</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">categorized_properties</span><span class="p">))</span>
+
+    <span class="c1"># --- Public API ---</span>
+<div class="viewcode-block" id="MaterialYAMLParser.create_material">
+<a class="viewcode-back" href="../../../../reference/api.html#materforge.parsing.MaterialYAMLParser.create_material">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_material</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dependency</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">],</span> <span class="n">enable_plotting</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Material</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a Material instance from the parsed configuration and temperature.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating material from configuration: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">NAME_KEY</span><span class="p">,</span> <span class="s2">&quot;Unnamed Material&quot;</span><span class="p">)</span>
+            <span class="n">material_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">MATERIAL_TYPE_KEY</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating material: </span><span class="si">%s</span><span class="s2"> (type: </span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">material_type</span><span class="p">)</span>
+            <span class="n">elements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_elements</span><span class="p">()</span>
+            <span class="n">composition</span> <span class="o">=</span> <span class="p">[</span><span class="n">val</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">COMPOSITION_KEY</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+            <span class="c1"># Create material with different parameters based on material_type</span>
+            <span class="k">if</span> <span class="n">material_type</span> <span class="o">==</span> <span class="n">PURE_METAL_KEY</span><span class="p">:</span>
+                <span class="n">material</span> <span class="o">=</span> <span class="n">Material</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                    <span class="n">elements</span><span class="o">=</span><span class="n">elements</span><span class="p">,</span>
+                    <span class="n">composition</span><span class="o">=</span><span class="n">composition</span><span class="p">,</span>
+                    <span class="n">material_type</span><span class="o">=</span><span class="n">material_type</span><span class="p">,</span>
+                    <span class="n">melting_temperature</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">]),</span>
+                    <span class="n">boiling_temperature</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">BOILING_TEMPERATURE_KEY</span><span class="p">]),</span>
+                <span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Created pure metal with melting temp: </span><span class="si">%s</span><span class="s2"> K, boiling temp: </span><span class="si">%s</span><span class="s2"> K&quot;</span><span class="p">,</span>
+                             <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">BOILING_TEMPERATURE_KEY</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># alloy</span>
+                <span class="n">material</span> <span class="o">=</span> <span class="n">Material</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                    <span class="n">elements</span><span class="o">=</span><span class="n">elements</span><span class="p">,</span>
+                    <span class="n">composition</span><span class="o">=</span><span class="n">composition</span><span class="p">,</span>
+                    <span class="n">material_type</span><span class="o">=</span><span class="n">material_type</span><span class="p">,</span>
+                    <span class="n">solidus_temperature</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">]),</span>
+                    <span class="n">liquidus_temperature</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">]),</span>
+                    <span class="n">initial_boiling_temperature</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">]),</span>
+                    <span class="n">final_boiling_temperature</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">]),</span>
+                <span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Created alloy with solidus: </span><span class="si">%s</span><span class="s2"> K, liquidus: </span><span class="si">%s</span><span class="s2"> K&quot;</span><span class="p">,</span>
+                             <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">])</span>
+            <span class="c1"># Initialize visualizer only if plotting is enabled AND dependency is symbolic</span>
+            <span class="n">visualizer</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">should_visualize</span> <span class="o">=</span> <span class="n">enable_plotting</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dependency</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">should_visualize</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">visualizer</span><span class="o">.</span><span class="n">initialize_plots</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">visualizer</span><span class="o">.</span><span class="n">reset_visualization_tracking</span><span class="p">()</span>
+                <span class="n">visualizer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">visualizer</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Visualization enabled for symbolic temperature&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dependency</span><span class="p">,</span> <span class="n">sp</span><span class="o">.</span><span class="n">Symbol</span><span class="p">):</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Visualization disabled - numeric temperature provided&quot;</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Visualization disabled - plotting not enabled&quot;</span><span class="p">)</span>
+            <span class="c1"># Process properties</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Starting property processing for material: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">property_processor</span><span class="o">.</span><span class="n">process_properties</span><span class="p">(</span>
+                <span class="n">material</span><span class="o">=</span><span class="n">material</span><span class="p">,</span>
+                <span class="n">dependency</span><span class="o">=</span><span class="n">dependency</span><span class="p">,</span>
+                <span class="n">properties</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">PROPERTIES_KEY</span><span class="p">],</span>
+                <span class="n">categorized_properties</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">categorized_properties</span><span class="p">,</span>
+                <span class="n">base_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">base_dir</span><span class="p">,</span>
+                <span class="n">visualizer</span><span class="o">=</span><span class="n">visualizer</span>
+            <span class="p">)</span>
+            <span class="c1"># Save plots only if visualization was actually enabled</span>
+            <span class="k">if</span> <span class="n">should_visualize</span> <span class="ow">and</span> <span class="n">visualizer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Saving property plots for material: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">visualizer</span><span class="o">.</span><span class="n">save_property_plots</span><span class="p">()</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Property plots saved for </span><span class="si">{</span><span class="n">material</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Successfully created material: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">material</span>
+        <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Configuration error for material creation - missing key: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Configuration error: Missing </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to create material from </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_path</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to create material </span><span class="se">\n</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+    <span class="c1"># --- Validation Methods ---</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the configuration structure and content.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Starting configuration validation&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid YAML structure - expected dictionary at root level&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The YAML file must start with a dictionary/object structure with key-value pairs,&quot;</span>
+                             <span class="s2">&quot;not a list or scalar value&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_required_fields</span><span class="p">()</span>
+        <span class="n">properties</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">PROPERTIES_KEY</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">properties</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Properties section is not a dictionary: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">properties</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The &#39;properties&#39; section in your YAML file must be a dictionary with key-value pairs&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_property_names</span><span class="p">(</span><span class="n">properties</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Configuration validation completed successfully&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_required_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all required fields are present.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Validating required fields&quot;</span><span class="p">)</span>
+        <span class="c1"># Check for material_type first</span>
+        <span class="k">if</span> <span class="n">MATERIAL_TYPE_KEY</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Missing required field: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">MATERIAL_TYPE_KEY</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Missing required field: material_type&quot;</span><span class="p">)</span>
+        <span class="n">material_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">MATERIAL_TYPE_KEY</span><span class="p">]</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Material type: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">material_type</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">material_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">ALLOY_KEY</span><span class="p">,</span> <span class="n">PURE_METAL_KEY</span><span class="p">]:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid material_type: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">material_type</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid material_type: </span><span class="si">{</span><span class="n">material_type</span><span class="si">}</span><span class="s2">. Must be </span><span class="si">{</span><span class="n">PURE_METAL_KEY</span><span class="si">}</span><span class="s2"> or </span><span class="si">{</span><span class="n">ALLOY_KEY</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># Common required fields</span>
+        <span class="n">common_fields</span> <span class="o">=</span> <span class="p">{</span><span class="n">NAME_KEY</span><span class="p">,</span> <span class="n">MATERIAL_TYPE_KEY</span><span class="p">,</span> <span class="n">COMPOSITION_KEY</span><span class="p">,</span> <span class="n">PROPERTIES_KEY</span><span class="p">}</span>
+        <span class="c1"># Material-type specific fields</span>
+        <span class="k">if</span> <span class="n">material_type</span> <span class="o">==</span> <span class="n">PURE_METAL_KEY</span><span class="p">:</span>
+            <span class="n">required_fields</span> <span class="o">=</span> <span class="n">common_fields</span> <span class="o">|</span> <span class="p">{</span><span class="n">MELTING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">BOILING_TEMPERATURE_KEY</span><span class="p">}</span>
+        <span class="k">elif</span> <span class="n">material_type</span> <span class="o">==</span> <span class="n">ALLOY_KEY</span><span class="p">:</span>
+            <span class="n">required_fields</span> <span class="o">=</span> <span class="n">common_fields</span> <span class="o">|</span> <span class="p">{</span><span class="n">SOLIDUS_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">LIQUIDUS_TEMPERATURE_KEY</span><span class="p">,</span>
+                                               <span class="n">INITIAL_BOILING_TEMPERATURE_KEY</span><span class="p">,</span> <span class="n">FINAL_BOILING_TEMPERATURE_KEY</span><span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Unsupported material_type: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">material_type</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported material_type: </span><span class="si">{</span><span class="n">material_type</span><span class="si">}</span><span class="s2">. &quot;</span>
+                             <span class="sa">f</span><span class="s2">&quot;Supported types are: </span><span class="si">{</span><span class="n">PURE_METAL_KEY</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">ALLOY_KEY</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="n">missing_fields</span> <span class="o">=</span> <span class="n">required_fields</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">missing_fields</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Missing required fields for </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">material_type</span><span class="p">,</span> <span class="n">missing_fields</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required fields for </span><span class="si">{</span><span class="n">material_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">missing_fields</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">extra_fields</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">required_fields</span>
+        <span class="k">if</span> <span class="n">extra_fields</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Extra fields found in configuration: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">extra_fields</span><span class="p">)</span>
+            <span class="n">suggestions</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">field</span><span class="p">:</span> <span class="n">get_close_matches</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">required_fields</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">extra_fields</span>
+            <span class="p">}</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="s2">&quot;Extra fields found in configuration: </span><span class="se">\n</span><span class="s2"> -&gt;&quot;</span>
+            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">matches</span> <span class="ow">in</span> <span class="n">suggestions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">suggestion</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; (did you mean &#39;</span><span class="si">{</span><span class="n">matches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39;?)&quot;</span> <span class="k">if</span> <span class="n">matches</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+                <span class="n">error_msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; - &#39;</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&#39;</span><span class="si">{</span><span class="n">suggestion</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_name</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_composition</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Required fields validation completed&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate the material name.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Validating material name&quot;</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">NAME_KEY</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Material name is None&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Material name cannot be None&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Material name is not a string: </span><span class="si">%s</span><span class="s2"> (type: </span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Material name must be a string, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> (value: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">100</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Material name &#39;</span><span class="si">%s</span><span class="s2">&#39; exceeds 100 characters&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Material name validation completed successfully&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_composition</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate composition for both pure metals and alloys.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Validating composition&quot;</span><span class="p">)</span>
+        <span class="n">composition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">COMPOSITION_KEY</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">material_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">MATERIAL_TYPE_KEY</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">composition</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Composition is not a dictionary: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">composition</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Composition must be a dictionary&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">composition</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Composition is empty&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Composition cannot be empty&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Composition contains </span><span class="si">%d</span><span class="s2"> elements: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">composition</span><span class="p">),</span> <span class="nb">list</span><span class="p">(</span><span class="n">composition</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+        <span class="c1"># Check that all fractions are valid numbers</span>
+        <span class="k">for</span> <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span> <span class="ow">in</span> <span class="n">composition</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fraction</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid composition fraction for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2"> (type: </span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
+                             <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">fraction</span><span class="p">))</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Composition fraction for &#39;</span><span class="si">{</span><span class="n">element</span><span class="si">}</span><span class="s2">&#39; must be a number, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">fraction</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">fraction</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Negative composition fraction for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Composition fraction for &#39;</span><span class="si">{</span><span class="n">element</span><span class="si">}</span><span class="s2">&#39; cannot be negative, got </span><span class="si">{</span><span class="n">fraction</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">fraction</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Composition fraction exceeds 1.0 for &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Composition fraction for &#39;</span><span class="si">{</span><span class="n">element</span><span class="si">}</span><span class="s2">&#39; cannot exceed 1.0, got </span><span class="si">{</span><span class="n">fraction</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># Check that fractions sum to 1.0</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">composition</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">abs</span><span class="p">(</span><span class="n">total</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">COMPOSITION_THRESHOLD</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Composition fractions sum to </span><span class="si">%s</span><span class="s2">, expected 1.0&quot;</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Composition fractions must sum to 1.0, got </span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># Material-type specific validation</span>
+        <span class="k">if</span> <span class="n">material_type</span> <span class="o">==</span> <span class="n">PURE_METAL_KEY</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_pure_metal_composition_rules</span><span class="p">(</span><span class="n">composition</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># alloy</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_alloy_composition_rules</span><span class="p">(</span><span class="n">composition</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Composition validation completed successfully&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_pure_metal_composition_rules</span><span class="p">(</span><span class="n">composition</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate composition rules specific to pure metals.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Validating pure metal composition rules&quot;</span><span class="p">)</span>
+        <span class="c1"># Count non-zero elements</span>
+        <span class="n">non_zero_elements</span> <span class="o">=</span> <span class="p">{</span><span class="n">element</span><span class="p">:</span> <span class="n">fraction</span> <span class="k">for</span> <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span> <span class="ow">in</span> <span class="n">composition</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                             <span class="k">if</span> <span class="n">fraction</span> <span class="o">&gt;</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">COMPOSITION_THRESHOLD</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">non_zero_elements</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Pure metal has no elements with non-zero composition&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Pure metals must have at least one element with non-zero composition&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">non_zero_elements</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">element_list</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">frac</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">elem</span><span class="p">,</span> <span class="n">frac</span> <span class="ow">in</span> <span class="n">non_zero_elements</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Pure metal has multiple non-zero elements: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">element_list</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Pure metals must contain exactly one element with composition 1.0. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Found multiple non-zero elements: </span><span class="si">{</span><span class="n">element_list</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Use material_type: &#39;alloy&#39; for multi-element materials.&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Check that the single element has composition 1.0</span>
+        <span class="n">single_element</span><span class="p">,</span> <span class="n">single_fraction</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">non_zero_elements</span><span class="o">.</span><span class="n">items</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">abs</span><span class="p">(</span><span class="n">single_fraction</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">COMPOSITION_THRESHOLD</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Pure metal element &#39;</span><span class="si">%s</span><span class="s2">&#39; has composition </span><span class="si">%s</span><span class="s2">, expected 1.0&quot;</span><span class="p">,</span>
+                         <span class="n">single_element</span><span class="p">,</span> <span class="n">single_fraction</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Pure metal element &#39;</span><span class="si">{</span><span class="n">single_element</span><span class="si">}</span><span class="s2">&#39; must have composition 1.0, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">single_fraction</span><span class="si">}</span><span class="s2">. Use material_type: &#39;alloy&#39; for fractional compositions.&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># ERROR for zero-valued elements in pure metals</span>
+        <span class="n">zero_elements</span> <span class="o">=</span> <span class="p">[</span><span class="n">element</span> <span class="k">for</span> <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span> <span class="ow">in</span> <span class="n">composition</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">fraction</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">zero_elements</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Pure metal composition includes zero-valued elements: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">zero_elements</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Pure metal composition should not include zero-valued elements: </span><span class="si">{</span><span class="n">zero_elements</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Remove these elements from the composition dictionary.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Pure metal composition rules validated successfully&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_alloy_composition_rules</span><span class="p">(</span><span class="n">composition</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate composition rules specific to alloys.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Validating alloy composition rules&quot;</span><span class="p">)</span>
+        <span class="n">non_zero_elements</span> <span class="o">=</span> <span class="p">{</span><span class="n">element</span><span class="p">:</span> <span class="n">fraction</span> <span class="k">for</span> <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span> <span class="ow">in</span> <span class="n">composition</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                             <span class="k">if</span> <span class="n">fraction</span> <span class="o">&gt;</span> <span class="mf">1e-10</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">non_zero_elements</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">non_zero_elements</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">single_element</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">non_zero_elements</span><span class="o">.</span><span class="n">keys</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Alloy has only one non-zero element: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">single_element</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Alloys must have at least 2 elements with non-zero composition. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Found only &#39;</span><span class="si">{</span><span class="n">single_element</span><span class="si">}</span><span class="s2">&#39;. Use material_type: &#39;pure_metal&#39; for single elements.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Alloy has no elements with non-zero composition&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Alloys must have at least 2 elements with non-zero composition&quot;</span><span class="p">)</span>
+        <span class="c1"># Warning for zero-valued elements in alloys - they might be intentional</span>
+        <span class="n">zero_elements</span> <span class="o">=</span> <span class="p">[</span><span class="n">element</span> <span class="k">for</span> <span class="n">element</span><span class="p">,</span> <span class="n">fraction</span> <span class="ow">in</span> <span class="n">composition</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">fraction</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">zero_elements</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Alloy composition includes zero-valued elements: </span><span class="si">%s</span><span class="s2">. Consider removing if not needed&quot;</span><span class="p">,</span>
+                <span class="n">zero_elements</span>
+            <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Alloy composition rules validated successfully&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_property_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">properties</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all property names are supported.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Validating property names for </span><span class="si">%d</span><span class="s2"> properties&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">properties</span><span class="p">))</span>
+        <span class="n">invalid_props</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">properties</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">VALID_YAML_PROPERTIES</span>
+        <span class="k">if</span> <span class="n">invalid_props</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid properties found: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">invalid_props</span><span class="p">)</span>
+            <span class="n">suggestions</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">prop</span><span class="p">:</span> <span class="n">get_close_matches</span><span class="p">(</span><span class="n">prop</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">VALID_YAML_PROPERTIES</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">prop</span> <span class="ow">in</span> <span class="n">invalid_props</span>
+            <span class="p">}</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="s2">&quot;Invalid properties found: </span><span class="se">\n</span><span class="s2"> -&gt;&quot;</span>
+            <span class="k">for</span> <span class="n">prop</span><span class="p">,</span> <span class="n">matches</span> <span class="ow">in</span> <span class="n">suggestions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">suggestion</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; (did you mean &#39;</span><span class="si">{</span><span class="n">matches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39;?)&quot;</span> <span class="k">if</span> <span class="n">matches</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+                <span class="n">error_msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; - &#39;</span><span class="si">{</span><span class="n">prop</span><span class="si">}</span><span class="s2">&#39;</span><span class="si">{</span><span class="n">suggestion</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Property names validation completed successfully&quot;</span><span class="p">)</span>
+
+    <span class="c1"># --- Processing Methods ---</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_elements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get element objects from composition keys.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data.elements.element_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">element_map</span>
+        <span class="n">element_symbols</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="n">COMPOSITION_KEY</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Looking up elements: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">element_symbols</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">elements</span> <span class="o">=</span> <span class="p">[</span><span class="n">element_map</span><span class="p">[</span><span class="n">sym</span><span class="p">]</span> <span class="k">for</span> <span class="n">sym</span> <span class="ow">in</span> <span class="n">element_symbols</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Successfully found all </span><span class="si">%d</span><span class="s2"> elements&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">elements</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">elements</span>
+        <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Invalid element symbol: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid element symbol: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_analyze_and_categorize_properties</span><span class="p">(</span><span class="n">properties</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">PropertyType</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Categorizes properties after detecting and validating their types.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Analyzing and categorizing </span><span class="si">%d</span><span class="s2"> properties&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">properties</span><span class="p">))</span>
+        <span class="n">categorized_properties</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">PropertyType</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">prop_type</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="n">PropertyType</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">config</span> <span class="ow">in</span> <span class="n">properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Processing property: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">)</span>
+                <span class="n">prop_type</span> <span class="o">=</span> <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">determine_property_type</span><span class="p">(</span><span class="n">prop_name</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+                <span class="n">PropertyTypeDetector</span><span class="o">.</span><span class="n">validate_property_config</span><span class="p">(</span><span class="n">prop_name</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">prop_type</span><span class="p">)</span>
+                <span class="n">categorized_properties</span><span class="p">[</span><span class="n">prop_type</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">prop_name</span><span class="p">,</span> <span class="n">config</span><span class="p">))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Property &#39;</span><span class="si">%s</span><span class="s2">&#39; categorized as: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">prop_type</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Configuration error for property &#39;</span><span class="si">%s</span><span class="s2">&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Configuration error for property &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="c1"># Log summary</span>
+        <span class="k">for</span> <span class="n">prop_type</span><span class="p">,</span> <span class="n">prop_list</span> <span class="ow">in</span> <span class="n">categorized_properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">prop_list</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Found </span><span class="si">%d</span><span class="s2"> properties of type </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                            <span class="nb">len</span><span class="p">(</span><span class="n">prop_list</span><span class="p">),</span> <span class="n">prop_type</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">[</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">prop_list</span><span class="p">])</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Categorized properties: </span><span class="si">{</span><span class="n">categorized_properties</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">categorized_properties</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

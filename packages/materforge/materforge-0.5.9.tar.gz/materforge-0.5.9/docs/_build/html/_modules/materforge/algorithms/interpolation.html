@@ -1,0 +1,221 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>materforge.algorithms.interpolation &mdash; materforge 0.5.8.dev7+g4109a05.d20250814 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=eccf598c"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            materforge
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/getting_started.html">Getting Started with materforge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/first_simulation.html">Creating Your First Material Simulation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/define_materials.html">Defining Custom Material Properties</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html">Converting Between Energy Density and Temperature</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/energy_temperature_conversion.html#use-inverse-function">Use inverse function</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/design_philosophy.html">Design Philosophy of MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanation/material_properties.html">Material Properties in MaterForge</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/yaml_schema.html">YAML Schema for Material Definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../reference/api/material.html">Material API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">materforge</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">materforge.algorithms.interpolation</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for materforge.algorithms.interpolation</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tuple</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.parsing.config.yaml_keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">CONSTANT_KEY</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">materforge.data.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcessingConstants</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="interpolate_value">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.interpolate_value">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">interpolate_value</span><span class="p">(</span><span class="n">T</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">x_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">y_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                      <span class="n">lower_bound_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Interpolate a value at temperature T using the provided data arrays.&quot;&quot;&quot;</span>
+    <span class="c1"># Input validation</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">T</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature T must be finite, got </span><span class="si">{</span><span class="n">T</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">x_array</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_array</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input arrays cannot be empty&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">x_array</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_array</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Array length mismatch: x_array(</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">x_array</span><span class="p">)</span><span class="si">}</span><span class="s2">) != y_array(</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">y_array</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Interpolating value at T=</span><span class="si">%.1f</span><span class="s2"> with bounds: lower=</span><span class="si">%s</span><span class="s2">, upper=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                 <span class="n">T</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Data range: T∈[</span><span class="si">%.1f</span><span class="s2">, </span><span class="si">%.1f</span><span class="s2">], y∈[</span><span class="si">%.3e</span><span class="s2">, </span><span class="si">%.3e</span><span class="s2">]&quot;</span><span class="p">,</span>
+                 <span class="n">x_array</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">y_array</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">y_array</span><span class="p">))</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Handle single-point arrays</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">x_array</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Single-point array: returning constant value </span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">y_array</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">y_array</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">T</span> <span class="o">&lt;</span> <span class="n">x_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;T below data range, applying lower bound: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">lower_bound_type</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">lower_bound_type</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">y_array</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Lower constant extrapolation: </span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">result</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># &#39;extrapolate&#39;</span>
+                <span class="n">denominator</span> <span class="o">=</span> <span class="n">x_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">x_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">denominator</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Cannot extrapolate: first two temperature values are equal&quot;</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot extrapolate: first two temperature values are equal.&quot;</span><span class="p">)</span>
+                <span class="n">slope</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">y_array</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="n">denominator</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">y_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">slope</span> <span class="o">*</span> <span class="p">(</span><span class="n">T</span> <span class="o">-</span> <span class="n">x_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Lower linear extrapolation: slope=</span><span class="si">%.6f</span><span class="s2">, result=</span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">slope</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">result</span>
+        <span class="k">elif</span> <span class="n">T</span> <span class="o">&gt;=</span> <span class="n">x_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;T above data range, applying upper bound: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">upper_bound_type</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">upper_bound_type</span> <span class="o">==</span> <span class="n">CONSTANT_KEY</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">y_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Upper constant extrapolation: </span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">result</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># &#39;extrapolate&#39;</span>
+                <span class="n">denominator</span> <span class="o">=</span> <span class="n">x_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">x_array</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">denominator</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Cannot extrapolate: last two temperature values are equal&quot;</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot extrapolate: last two temperature values are equal.&quot;</span><span class="p">)</span>
+                <span class="n">slope</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">y_array</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">])</span> <span class="o">/</span> <span class="n">denominator</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">y_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">slope</span> <span class="o">*</span> <span class="p">(</span><span class="n">T</span> <span class="o">-</span> <span class="n">x_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Upper linear extrapolation: slope=</span><span class="si">%.6f</span><span class="s2">, result=</span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">slope</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">result</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;T within data range, using linear interpolation&quot;</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">x_array</span><span class="p">,</span> <span class="n">y_array</span><span class="p">))</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Linear interpolation result: </span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Interpolation failed at T=</span><span class="si">%.1f</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Interpolation failed at T=</span><span class="si">{</span><span class="n">T</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+
+<div class="viewcode-block" id="ensure_ascending_order">
+<a class="viewcode-back" href="../../../reference/api.html#materforge.ensure_ascending_order">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">ensure_ascending_order</span><span class="p">(</span><span class="n">temp_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">*</span><span class="n">value_arrays</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Ensure temperature array is in ascending order, flipping all provided arrays if needed.&quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Checking array order for </span><span class="si">%d</span><span class="s2"> arrays (temp + </span><span class="si">%d</span><span class="s2"> value arrays)&quot;</span><span class="p">,</span>
+                 <span class="nb">len</span><span class="p">(</span><span class="n">value_arrays</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">value_arrays</span><span class="p">))</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Array too short for order check: length=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">))</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">temp_array</span><span class="p">,)</span> <span class="o">+</span> <span class="n">value_arrays</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">diffs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span>
+        <span class="c1"># Use tolerance for floating-point comparisons</span>
+        <span class="n">tolerance</span> <span class="o">=</span> <span class="n">ProcessingConstants</span><span class="o">.</span><span class="n">FLOATING_POINT_TOLERANCE</span>
+        <span class="n">ascending_count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">diffs</span> <span class="o">&gt;</span> <span class="n">tolerance</span><span class="p">)</span>
+        <span class="n">descending_count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">diffs</span> <span class="o">&lt;</span> <span class="o">-</span><span class="n">tolerance</span><span class="p">)</span>
+        <span class="n">constant_count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">diffs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">tolerance</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Array differences: </span><span class="si">%d</span><span class="s2"> ascending, </span><span class="si">%d</span><span class="s2"> descending, </span><span class="si">%d</span><span class="s2"> constant&quot;</span><span class="p">,</span>
+                     <span class="n">ascending_count</span><span class="p">,</span> <span class="n">descending_count</span><span class="p">,</span> <span class="n">constant_count</span><span class="p">)</span>
+        <span class="c1"># Check for strictly ascending (with tolerance)</span>
+        <span class="k">if</span> <span class="n">ascending_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">diffs</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">ascending_count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">constant_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">diffs</span><span class="p">)</span> <span class="o">-</span> <span class="n">ascending_count</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Array is ascending (within tolerance)&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">temp_array</span><span class="p">,)</span> <span class="o">+</span> <span class="n">value_arrays</span>
+        <span class="c1"># Check for strictly descending (with tolerance)</span>
+        <span class="k">elif</span> <span class="n">descending_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">diffs</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">descending_count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">constant_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">diffs</span><span class="p">)</span> <span class="o">-</span> <span class="n">descending_count</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Array is descending, flipping all arrays&quot;</span><span class="p">)</span>
+            <span class="n">flipped_temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span>
+            <span class="n">flipped_values</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flip</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">value_arrays</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Flipped arrays: temp range [</span><span class="si">%.1f</span><span class="s2">, </span><span class="si">%.1f</span><span class="s2">] -&gt; [</span><span class="si">%.1f</span><span class="s2">, </span><span class="si">%.1f</span><span class="s2">]&quot;</span><span class="p">,</span>
+                         <span class="n">temp_array</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">flipped_temp</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">flipped_temp</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">flipped_temp</span><span class="p">,)</span> <span class="o">+</span> <span class="n">flipped_values</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Array is neither strictly ascending nor descending&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Temperature array: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">temp_array</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">20</span>
+                         <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">temp_array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">, ..., </span><span class="si">{</span><span class="n">temp_array</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">] (length=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">temp_array</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Array is not strictly ascending or strictly descending: </span><span class="si">{</span><span class="n">temp_array</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Error checking array order: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to ensure ascending order: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Rahil Miten Doshi.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
