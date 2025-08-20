@@ -1,0 +1,54 @@
+name: release-main
+
+on:
+  release:
+    types: [published]
+
+jobs:
+
+  # This job updates the version in pyproject.toml and builds the package.
+  # We combine the versioning and build steps to avoid artifact overhead.
+  build_and_publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # Required for Trusted Publishing
+      contents: write # Needed to check out the repository
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # Re-use your custom setup action. This will handle `uv` and `python` installation.
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      # Step to update the project version based on the release tag.
+      - name: Update project version in pyproject.toml
+        run: |
+          # Extract the tag name from GITHUB_REF (e.g., v1.2.3 -> 1.2.3)
+          RELEASE_VERSION=${GITHUB_REF#refs/tags/}
+          sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" pyproject.toml
+
+      - name: Build package
+        # uv will build the sdist and wheel files, which uv publish will use.
+        run: uv build
+
+      - name: Publish package
+        # UV will automatically use the OIDC token and publish to PyPI.
+        # No UV_PUBLISH_TOKEN secret is needed.
+        run: uv publish
+
+  deploy-docs:
+    # This job now depends directly on the build_and_publish job.
+    needs: build_and_publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Deploy documentation
+        run: uv run mkdocs gh-deploy --force
