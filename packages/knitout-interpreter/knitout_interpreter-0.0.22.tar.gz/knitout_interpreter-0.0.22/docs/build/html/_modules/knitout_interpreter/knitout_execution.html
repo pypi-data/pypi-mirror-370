@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>knitout_interpreter.knitout_execution &mdash; knitout-interpreter 0.0.18 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+
+        <script src="../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../_static/documentation_options.js?v=8bafd125"></script>
+        <script src="../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+</head>
+
+<body class="wy-body-for-nav">
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+
+
+          <a href="../../index.html" class="icon icon-home">
+            knitout-interpreter
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modules.html">knitout_interpreter</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">knitout-interpreter</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">knitout_interpreter.knitout_execution</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+
+  <h1>Source code for knitout_interpreter.knitout_execution</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Module containing the knitout executer class&quot;&quot;&quot;</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">knit_graphs.Knit_Graph</span><span class="w"> </span><span class="kn">import</span> <span class="n">Knit_Graph</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">virtual_knitting_machine.Knitting_Machine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Knitting_Machine</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">knitout_interpreter.knitout_execution_structures.Carriage_Pass</span><span class="w"> </span><span class="kn">import</span> <span class="n">Carriage_Pass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">knitout_interpreter.knitout_operations.Header_Line</span><span class="w"> </span><span class="kn">import</span> <span class="n">Knitout_Header_Line</span><span class="p">,</span> <span class="n">Knitting_Machine_Header</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">knitout_interpreter.knitout_operations.Knitout_Line</span><span class="w"> </span><span class="kn">import</span> <span class="n">Knitout_Line</span><span class="p">,</span> <span class="n">Knitout_Comment_Line</span><span class="p">,</span> <span class="n">Knitout_Version_Line</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">knitout_interpreter.knitout_operations.Pause_Instruction</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pause_Instruction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">knitout_interpreter.knitout_operations.needle_instructions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Needle_Instruction</span>
+
+
+<div class="viewcode-block" id="Knitout_Executer">
+<a class="viewcode-back" href="../../knitout_interpreter.knitout_execution.html#knitout_interpreter.Knitout_Executer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Knitout_Executer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class used to execute a set of knitout instructions on a virtual knitting machine.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instructions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Knitout_Line</span><span class="p">],</span> <span class="n">knitting_machine</span><span class="p">:</span> <span class="n">Knitting_Machine</span><span class="p">,</span> <span class="n">accepted_error_types</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">knitout_version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the knitout executer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            instructions: List of knitout instructions to execute.</span>
+<span class="sd">            knitting_machine: The virtual knitting machine to execute instructions on.</span>
+<span class="sd">            accepted_error_types: List of exception types that can be resolved by</span>
+<span class="sd">                commenting them out. Defaults to None.</span>
+<span class="sd">            knitout_version: The knitout version to use. Defaults to 2.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">knitout_version</span> <span class="o">=</span> <span class="n">knitout_version</span>
+        <span class="k">if</span> <span class="n">accepted_error_types</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">accepted_error_types</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="p">:</span> <span class="n">Knitting_Machine</span> <span class="o">=</span> <span class="n">knitting_machine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">instructions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Knitout_Line</span><span class="p">]</span> <span class="o">=</span> <span class="n">instructions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Knitout_Line</span> <span class="o">|</span> <span class="n">Carriage_Pass</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">executed_header</span><span class="p">:</span> <span class="n">Knitting_Machine_Header</span> <span class="o">=</span> <span class="n">Knitting_Machine_Header</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Knitout_Line</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">test_and_organize_instructions</span><span class="p">(</span><span class="n">accepted_error_types</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_carriage_passes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Carriage_Pass</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">cp</span> <span class="k">for</span> <span class="n">cp</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">process</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cp</span><span class="p">,</span> <span class="n">Carriage_Pass</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_left_most_position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_right_most_position</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">cp</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriage_passes</span><span class="p">:</span>
+            <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">carriage_pass_range</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_left_most_position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_left_most_position</span> <span class="o">=</span> <span class="n">left</span>
+            <span class="k">elif</span> <span class="n">left</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_left_most_position</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_left_most_position</span><span class="p">,</span> <span class="n">left</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_right_most_position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_right_most_position</span> <span class="o">=</span> <span class="n">right</span>
+            <span class="k">elif</span> <span class="n">right</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_right_most_position</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_right_most_position</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">version_line</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Knitout_Version_Line</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the version line for the executed knitout.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The version line for the executed knitout.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">Knitout_Version_Line</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knitout_version</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execution_time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the execution time as measured by carriage passes.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Count of carriage passes in process as a measure of knitting time.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_carriage_passes</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">left_most_position</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the leftmost needle position used in execution.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The position of the left most needle used in execution, or None if</span>
+<span class="sd">            no needles were used.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_left_most_position</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">right_most_position</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the rightmost needle position used in execution.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The position of the right most needle used in the execution, or None</span>
+<span class="sd">            if no needles were used.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_right_most_position</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resulting_knit_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Knit_Graph</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the knit graph resulting from instruction execution.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Knit Graph that results from execution of these instructions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="o">.</span><span class="n">knit_graph</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">carriage_passes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Carriage_Pass</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the carriage passes from this execution.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The carriage passes resulting from this execution in execution order.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriage_passes</span>
+
+<div class="viewcode-block" id="Knitout_Executer.test_and_organize_instructions">
+<a class="viewcode-back" href="../../knitout_interpreter.knitout_execution.html#knitout_interpreter.Knitout_Executer.test_and_organize_instructions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_and_organize_instructions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">accepted_error_types</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test the given execution and organize the instructions in the class structure.</span>
+
+<span class="sd">        This method processes all instructions, organizing them into carriage passes</span>
+<span class="sd">        and handling any errors that occur during execution.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            accepted_error_types: A list of exceptions that instructions may throw</span>
+<span class="sd">                that can be resolved by commenting them out. Defaults to None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">accepted_error_types</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">accepted_error_types</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Knitout_Line</span> <span class="o">|</span> <span class="n">Carriage_Pass</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Knitout_Line</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">in_header</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">current_pass</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">instruction</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">instructions</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">instruction</span><span class="o">.</span><span class="n">interrupts_carriage_pass</span><span class="p">:</span>
+                    <span class="n">in_header</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="n">Needle_Instruction</span><span class="p">):</span>
+                    <span class="n">in_header</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="k">if</span> <span class="n">current_pass</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># Make a new Carriage Pass from this</span>
+                        <span class="n">current_pass</span> <span class="o">=</span> <span class="n">Carriage_Pass</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="o">.</span><span class="n">rack</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="o">.</span><span class="n">all_needle_rack</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>  <span class="c1"># Check if instruction can be added to the carriage pass, add it or create a new current carriage pass</span>
+                        <span class="n">was_added</span> <span class="o">=</span> <span class="n">current_pass</span><span class="o">.</span><span class="n">add_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="o">.</span><span class="n">rack</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="o">.</span><span class="n">all_needle_rack</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">was_added</span><span class="p">:</span>
+                            <span class="n">executed_pass</span> <span class="o">=</span> <span class="n">current_pass</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_pass</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">executed_pass</span><span class="p">)</span>
+                            <span class="n">current_pass</span> <span class="o">=</span> <span class="n">Carriage_Pass</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="o">.</span><span class="n">rack</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="o">.</span><span class="n">all_needle_rack</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="n">Knitout_Version_Line</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">knitout_version</span> <span class="o">=</span> <span class="n">instruction</span><span class="o">.</span><span class="n">version</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="n">Knitout_Header_Line</span><span class="p">):</span>
+                    <span class="n">_updated</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">executed_header</span><span class="o">.</span><span class="n">update_header</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="n">update_machine</span><span class="o">=</span><span class="n">in_header</span><span class="p">)</span>  <span class="c1"># only update the machine_state if in the header section</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">instruction</span><span class="o">.</span><span class="n">interrupts_carriage_pass</span> <span class="ow">and</span> <span class="n">current_pass</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># interrupt the current carriage pass with rack and carrier operations</span>
+                        <span class="n">executed_pass</span> <span class="o">=</span> <span class="n">current_pass</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_pass</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">executed_pass</span><span class="p">)</span>
+                        <span class="n">current_pass</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="n">updated</span> <span class="o">=</span> <span class="n">instruction</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">updated</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="n">Pause_Instruction</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">comment</span> <span class="o">=</span> <span class="n">Knitout_Comment_Line</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span>  <span class="c1"># create a no-op comment for this line because it did not cause an update.</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">comment</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">comment</span><span class="p">)</span>
+            <span class="k">except</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">accepted_error_types</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">error_comment</span> <span class="o">=</span> <span class="n">Knitout_Comment_Line</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Excluded </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">error_comment</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">error_comment</span><span class="p">)</span>
+                <span class="n">comment</span> <span class="o">=</span> <span class="n">Knitout_Comment_Line</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">comment</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">comment</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">current_pass</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">executed_pass</span> <span class="o">=</span> <span class="n">current_pass</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knitting_machine</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_pass</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">executed_pass</span><span class="p">)</span>
+        <span class="c1"># add the header and version line to the beginning of the executed instructions</span>
+        <span class="n">executed_process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">executed_header</span><span class="o">.</span><span class="n">get_header_lines</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">knitout_version</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">executed_process</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Knitout_Executer.write_executed_instructions">
+<a class="viewcode-back" href="../../knitout_interpreter.knitout_execution.html#knitout_interpreter.Knitout_Executer.write_executed_instructions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">write_executed_instructions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write a file with the organized knitout instructions.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            filename: The file path to write the executed instructions to.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">writelines</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">instruction</span><span class="p">)</span> <span class="k">for</span> <span class="n">instruction</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">executed_instructions</span><span class="p">])</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Megan Hofmann.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+</body>
+</html>
