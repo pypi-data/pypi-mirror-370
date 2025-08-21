@@ -1,0 +1,121 @@
+# Loaders
+
+Loaders in `flowerpower-io` are responsible for reading data from various sources and formats, and converting them into a standardized data structure (typically a Polars DataFrame, but also supporting Pandas DataFrames and PyArrow Tables). All loader classes inherit from `BaseFileReader` or `BaseDatabaseReader`, providing a consistent API for data ingestion.
+
+## Available Loader Classes
+
+Here's a list of the currently supported loader classes:
+
+*   `CSVFileReader` and `CSVDatasetReader`: For reading data from CSV files and CSV datasets (e.g., partitioned CSVs).
+*   `DeltaTableReader`: For reading data from Delta Lake tables.
+*   `DuckDBReader`: For reading data from DuckDB databases.
+*   `JsonFileReader` and `JsonDatasetReader`: For reading data from JSON files and JSON datasets.
+*   `MSSQLReader`: For reading data from Microsoft SQL Server databases.
+*   `MySQLReader`: For reading data from MySQL databases.
+*   `OracleDBReader`: For reading data from Oracle databases.
+*   `ParquetFileReader` and `ParquetDatasetReader`: For reading data from Parquet files and Parquet datasets.
+*   `PostgreSQLReader`: For reading data from PostgreSQL databases.
+*   `PydalaDatasetReader`: For reading data using Pydala's dataset capabilities.
+*   `SQLiteReader`: For reading data from SQLite databases.
+*   `MQTTLoader`: For subscribing to and reading data from MQTT topics.
+
+## Examples
+
+### CSV Loader (`CSVFileReader`)
+
+The `CSVFileReader` allows you to easily load data from a CSV file.
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import os
+from flowerpower_io.loader import CSVFileReader
+
+# Create a dummy CSV file
+dummy_csv_path = "temp_data.csv"
+pd.DataFrame({'id': [1, 2, 3], 'name': ['Alice', 'Bob', 'Charlie']}).to_csv(dummy_csv_path, index=False)
+
+# Load data from CSV
+loader = CSVFileReader(path=dummy_csv_path)
+df = loader.to_pandas()
+
+print("Data loaded from CSV:")
+print(df)
+
+# Clean up
+os.remove(dummy_csv_path)
+````
+
+### JSON Loader (`JsonFileReader`)
+
+The `JsonFileReader` is used to load data from JSON files.
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import os
+from flowerpower_io.loader import JsonFileReader
+
+# Create a dummy JSON file
+dummy_json_path = "temp_data.json"
+json_content = """
+[
+  {"product": "Laptop", "price": 1200},
+  {"product": "Mouse", "price": 25},
+  {"product": "Keyboard", "price": 75}
+]
+"""
+with open(dummy_json_path, "w") as f:
+    f.write(json_content)
+
+# Load data from JSON
+loader = JsonFileReader(path=dummy_json_path)
+df_polars = loader.to_polars()
+
+print("Data loaded from JSON (Polars DataFrame):")
+print(df_polars)
+
+# Clean up
+os.remove(dummy_json_path)
+````
+
+### SQLite Loader (`SQLiteReader`)
+
+The `SQLiteReader` enables reading data from SQLite databases, including the execution of custom SQL queries.
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import os
+import sqlite3
+from flowerpower_io.loader import SQLiteReader
+
+# Create a dummy SQLite database and table
+db_path = "temp_sales.db"
+conn = sqlite3.connect(db_path)
+conn.execute("CREATE TABLE IF NOT EXISTS orders (order_id INTEGER, item TEXT, quantity INTEGER);")
+conn.execute("INSERT INTO orders (order_id, item, quantity) VALUES (1, 'Book', 2), (2, 'Pen', 5), (3, 'Book', 1);")
+conn.commit()
+conn.close()
+
+# Load all data from 'orders' table
+loader = SQLiteReader(path=db_path, table_name="orders")
+df_all_orders = loader.to_pandas()
+
+print("All orders data:")
+print(df_all_orders)
+
+# Load data with a custom SQL query
+df_books = loader.to_pandas(query="SELECT * FROM orders WHERE item = 'Book'")
+print("\nOrders for 'Book':")
+print(df_books)
+
+# Clean up
+os.remove(db_path)
+```

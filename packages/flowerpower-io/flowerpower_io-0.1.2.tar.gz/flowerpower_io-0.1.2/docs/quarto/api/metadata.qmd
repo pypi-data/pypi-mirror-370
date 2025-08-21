@@ -1,0 +1,357 @@
+# Metadata Utilities
+
+The `metadata.py` module in `flowerpower-io` provides utility functions for extracting and managing metadata from various data structures. This metadata includes schema information, data dimensions, file paths, and timestamps, which are crucial for understanding data characteristics and lineage.
+
+## Functions
+
+### `get_serializable_schema`
+
+::: {.callout-note}
+## `get_serializable_schema`
+Converts the schema (data types) of a given DataFrame or data structure into a serializable dictionary format. This is useful for storing schema information in a persistent, human-readable way.
+:::
+
+**Definition**:
+```python
+def get_serializable_schema(
+    data: (
+        pd.DataFrame
+        | pl.DataFrame
+        | pl.LazyFrame
+        | duckdb.DuckDBPyRelation
+        | pa.Table
+        | pa.Schema
+        | pa.RecordBatch
+        | pa.RecordBatchReader
+        | pds.Dataset
+    ),
+) -> dict[str, str]:
+```
+
+**Arguments**:
+
+*   `data`: The input data structure (Pandas DataFrame, Polars DataFrame, PyArrow Table, DuckDB Relation, etc.) from which to extract the schema.
+
+**Returns**:
+
+*   `dict[str, str]`: A dictionary where keys are column names and values are their corresponding data types as strings.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import polars as pl
+import pyarrow as pa
+from flowerpower_io.metadata import get_serializable_schema
+
+# Example with Pandas DataFrame
+df_pandas = pd.DataFrame({'col1': [1, 2], 'col2': ['A', 'B']})
+pandas_schema = get_serializable_schema(df_pandas)
+print("Pandas Schema:", pandas_schema)
+
+# Example with Polars DataFrame
+df_polars = pl.DataFrame({'col3': [True, False], 'col4': [1.1, 2.2]})
+polars_schema = get_serializable_schema(df_polars)
+print("Polars Schema:", polars_schema)
+
+# Example with PyArrow Table
+table_arrow = pa.table({'col5': [10, 20], 'col6': ['X', 'Y']})
+pyarrow_schema = get_serializable_schema(table_arrow)
+print("PyArrow Schema:", pyarrow_schema)
+````
+
+### `get_dataframe_metadata`
+
+::: {.callout-note}
+## `get_dataframe_metadata`
+Generates a comprehensive metadata dictionary for a DataFrame, including information such as path, format, timestamp, schema, number of columns, rows, and files.
+:::
+
+**Definition**:
+```python
+def get_dataframe_metadata(
+    df: pd.DataFrame
+    | pl.DataFrame
+    | pl.LazyFrame
+    | pa.Table
+    | pa.RecordBatch
+    | pa.RecordBatchReader
+    | list[
+        pd.DataFrame
+        | pl.DataFrame
+        | pl.LazyFrame
+        | pa.Table
+        | pa.RecordBatch
+        | pa.RecordBatchReader
+    ],
+    path: str | list[str] | None = None,
+    format: str | None = None,
+    topic: str | None = None,
+    num_files: int | None = None,
+    partition_columns: list[str] | None = None,
+    fs: AbstractFileSystem | None = None,
+    **kwargs,
+) -> dict:
+```
+
+**Arguments**:
+
+*   `df`: The input DataFrame or list of DataFrames.
+*   `path` (`str | list[str] | None`, optional): Path to the file(s) from which the DataFrame was loaded.
+*   `format` (`str | None`, optional): Format of the data (e.g., `"csv"`, `"parquet"`).
+*   `topic` (`str | None`, optional): Topic name for stream-based data (e.g., MQTT).
+*   `num_files` (`int | None`, optional): Number of files if data is from multiple files.
+*   `partition_columns` (`list[str] | None`, optional): List of columns used for partitioning.
+*   `fs` (`AbstractFileSystem | None`, optional): Filesystem instance.
+*   `**kwargs`: Additional key-value pairs to include in the metadata.
+
+**Returns**:
+
+*   `dict`: A dictionary containing the extracted metadata.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+from flowerpower_io.metadata import get_dataframe_metadata
+import datetime as dt
+
+df_sample = pd.DataFrame({'colA': [1, 2], 'colB': ['X', 'Y']})
+metadata = get_dataframe_metadata(
+    df_sample,
+    path="/data/sample.csv",
+    format="csv",
+    custom_field="value"
+)
+print("DataFrame Metadata:", metadata)
+````
+
+### `get_duckdb_metadata`
+
+::: {.callout-note}
+## `get_duckdb_metadata`
+Retrieves metadata specifically for DuckDB relations, including schema, shape, and file information if applicable.
+:::
+
+**Definition**:
+```python
+def get_duckdb_metadata(
+    rel: duckdb.DuckDBPyRelation,
+    path: str,
+    format: str,
+    fs: AbstractFileSystem | None = None,
+    include_shape: bool = False,
+    include_num_files: bool = False,
+    partition_columns: list[str] | None = None,
+    **kwargs,
+) -> dict:
+```
+
+**Arguments**:
+
+*   `rel`: The DuckDBPyRelation object.
+*   `path` (`str`): Path to the file(s) that the DuckDBPyRelation was loaded from.
+*   `format` (`str`): Format of the data.
+*   `fs` (`AbstractFileSystem | None`, optional): Filesystem instance.
+*   `include_shape` (`bool`, optional): Whether to include the shape (rows, columns) in the metadata. Defaults to `False`.
+*   `include_num_files` (`bool`, optional): Whether to include the number of files in the metadata. Defaults to `False`.
+*   `partition_columns` (`list[str] | None`, optional): List of columns used for partitioning.
+*   `**kwargs`: Additional key-value pairs to include in the metadata.
+
+**Returns**:
+
+*   `dict`: A dictionary containing the extracted DuckDB metadata.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import duckdb
+from flowerpower_io.metadata import get_duckdb_metadata
+
+conn = duckdb.connect(database=":memory:")
+rel = conn.from_dict({'a': [1, 2], 'b': ['x', 'y']})
+duckdb_meta = get_duckdb_metadata(
+    rel,
+    path="memory_db",
+    format="duckdb",
+    include_shape=True
+)
+print("DuckDB Metadata:", duckdb_meta)
+conn.close()
+````
+
+### `get_pyarrow_dataset_metadata`
+
+::: {.callout-note}
+## `get_pyarrow_dataset_metadata`
+Extracts metadata from a PyArrow Dataset, including schema, file paths, and partitioning information.
+:::
+
+**Definition**:
+```python
+def get_pyarrow_dataset_metadata(
+    ds: pds.Dataset,
+    path: str,
+    format: str,
+    **kwargs,
+) -> dict:
+```
+
+**Arguments**:
+
+*   `ds`: The PyArrow Dataset object.
+*   `path` (`str`): Path to the dataset.
+*   `format` (`str`): Format of the dataset.
+*   `**kwargs`: Additional key-value pairs to include in the metadata.
+
+**Returns**:
+
+*   `dict`: A dictionary containing the extracted PyArrow Dataset metadata.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pyarrow.dataset as pds
+import pyarrow as pa
+import os
+import shutil
+from flowerpower_io.metadata import get_pyarrow_dataset_metadata
+
+# Create a dummy dataset directory
+dataset_dir = "temp_pyarrow_dataset"
+os.makedirs(dataset_dir, exist_ok=True)
+pa.csv.write_csv(pa.table({'a': [1, 2]}), os.path.join(dataset_dir, "data.csv"))
+
+# Create a PyArrow Dataset
+dataset = pds.dataset(dataset_dir, format="csv")
+pyarrow_dataset_meta = get_pyarrow_dataset_metadata(
+    dataset,
+    path=dataset_dir,
+    format="csv"
+)
+print("PyArrow Dataset Metadata:", pyarrow_dataset_meta)
+
+# Clean up
+shutil.rmtree(dataset_dir)
+````
+
+### `get_delta_metadata`
+
+::: {.callout-note}
+## `get_delta_metadata`
+Extracts metadata specifically from a DeltaTable object, providing details like name, description, ID, schema, partition columns, and number of files.
+:::
+
+**Definition**:
+```python
+def get_delta_metadata(
+    dtable: DeltaTable,
+    path: str,
+    **kwargs,
+) -> dict:
+```
+
+**Arguments**:
+
+*   `dtable`: The DeltaTable object.
+*   `path` (`str`): Path to the Delta Lake table.
+*   `**kwargs`: Additional key-value pairs to include in the metadata.
+
+**Returns**:
+
+*   `dict`: A dictionary containing the extracted DeltaTable metadata.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+# This example requires a Delta Lake table to exist.
+# For demonstration, we'll show the function call.
+from deltalake import DeltaTable
+from flowerpower_io.metadata import get_delta_metadata
+import os
+import shutil
+
+# Create a dummy Delta Lake table (requires deltalake package and rust toolchain)
+# from delta import DeltaTable, configure_spark_with_delta_pip
+# builder = configure_spark_with_delta_pip()
+# spark = builder.getOrCreate()
+# data = spark.range(0, 5).toDF("id")
+# delta_path = "temp_delta_table"
+# data.write.format("delta").save(delta_path)
+
+# Assuming a DeltaTable exists at 'path_to_delta_table'
+# delta_table = DeltaTable("path_to_delta_table")
+# delta_meta = get_delta_metadata(delta_table, path="path_to_delta_table")
+# print("DeltaTable Metadata:", delta_meta)
+
+# Placeholder for demonstration without actual DeltaTable setup
+print("DeltaTable example skipped as it requires Delta Lake setup.")
+````
+
+### `get_mqtt_metadata`
+
+::: {.callout-note}
+## `get_mqtt_metadata`
+Generates metadata for MQTT payloads, including topic, format, timestamp, schema, and basic data dimensions. This function requires the `orjson` library.
+:::
+
+**Definition**:
+```python
+def get_mqtt_metadata(
+    payload: bytes | dict[str, any],
+    topic: str | None = None,
+    **kwargs,
+) -> dict:
+```
+
+**Arguments**:
+
+*   `payload` (`bytes | dict[str, any]`): The MQTT message payload, either as bytes or a parsed dictionary.
+*   `topic` (`str | None`, optional): The MQTT topic from which the payload was received.
+*   `**kwargs`: Additional key-value pairs to include in the metadata.
+
+**Returns**:
+
+*   `dict`: A dictionary containing the extracted MQTT metadata.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import orjson
+import datetime as dt
+from flowerpower_io.metadata import get_mqtt_metadata
+
+# Example with a dictionary payload
+mqtt_payload_dict = {"sensor_id": "temp_01", "temperature": 25.5, "unit": "C"}
+mqtt_meta_dict = get_mqtt_metadata(
+    mqtt_payload_dict,
+    topic="sensors/temperature"
+)
+print("MQTT Metadata (Dict Payload):", mqtt_meta_dict)
+
+# Example with a bytes payload
+mqtt_payload_bytes = orjson.dumps({"event": "door_open", "timestamp": dt.datetime.now().isoformat()})
+mqtt_meta_bytes = get_mqtt_metadata(
+    mqtt_payload_bytes,
+    topic="home/security"
+)
+print("MQTT Metadata (Bytes Payload):", mqtt_meta_bytes)
+````

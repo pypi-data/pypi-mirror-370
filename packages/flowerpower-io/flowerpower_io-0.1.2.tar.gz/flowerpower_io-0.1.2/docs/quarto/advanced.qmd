@@ -1,0 +1,183 @@
+# Advanced Features
+
+`flowerpower-io` offers several advanced features and integration capabilities to handle complex data workflows, optimize performance, and connect with external systems.
+
+## Performance Optimization
+
+`flowerpower-io` leverages efficient Python libraries like Polars and PyArrow for data processing, ensuring high performance, especially with large datasets.
+
+*   **Lazy Loading/Processing**: For formats like Parquet, `flowerpower-io` can utilize lazy evaluation where supported, deferring computation until necessary, which can significantly reduce memory usage and improve performance.
+*   **Batch Processing**: When dealing with very large files, consider processing data in batches to manage memory effectively.
+
+## SQL Integration
+
+`flowerpower-io` provides robust integration with SQL databases, allowing you to not only load and save data but also execute custom SQL queries directly.
+
+````{python}
+#| eval: false
+#| echo: true
+
+from flowerpower_io.loader import SQLiteReader
+from flowerpower_io.saver import SQLiteWriter
+import pandas as pd
+import os
+
+# Setup a dummy SQLite database
+db_path = "temp_advanced.db"
+conn_str = f"sqlite:///{db_path}"
+df_data = pd.DataFrame({
+    'id': [1, 2, 3, 4, 5],
+    'name': ['Alice', 'Bob', 'Charlie', 'David', 'Eve'],
+    'age': [25, 30, 35, 40, 45],
+    'city': ['New York', 'London', 'New York', 'Paris', 'London']
+})
+
+# Write data to SQLite
+saver = SQLiteWriter(path=conn_str, table_name="users")
+saver.save(df_data)
+print(f"Data written to {db_path} in table 'users'.")
+
+# Read all data
+reader = SQLiteReader(path=conn_str, table_name="users")
+df_all = reader.load()
+print("\nAll data from 'users' table:")
+print(df_all)
+
+# Execute a custom SQL query
+query = "SELECT name, age FROM users WHERE city = 'New York'"
+df_filtered = reader.load(query=query)
+print("\nUsers from New York:")
+print(df_filtered)
+
+# Clean up
+os.remove(db_path)
+print(f"\nCleaned up {db_path}")
+````
+
+## DuckDB and DataFusion Integration
+
+`flowerpower-io` supports DuckDB and DataFusion, enabling powerful in-process analytical processing directly on your data files. This allows for SQL-like querying of various file formats without needing to load them entirely into memory.
+
+### DuckDB Example
+
+````{python}
+#| eval: false
+#| echo: true
+
+from flowerpower_io.loader import DuckDBLoader
+from flowerpower_io.saver import DuckDBSaver
+import pandas as pd
+import os
+
+# Create a dummy CSV file for demonstration
+csv_file = "temp_data.csv"
+pd.DataFrame({'a': [1, 2, 3], 'b': ['x', 'y', 'z']}).to_csv(csv_file, index=False)
+print(f"Created dummy CSV: {csv_file}")
+
+# Load data using DuckDBLoader and perform a SQL query
+# DuckDBLoader can query directly on files
+loader = DuckDBLoader(path=csv_file, table_name="temp_csv_table")
+# You can query the CSV file directly as a table
+df_result = loader.load(query=f"SELECT a, b FROM '{csv_file}' WHERE a > 1")
+print("\nResult from DuckDB query on CSV:")
+print(df_result)
+
+# Save data to DuckDB
+duckdb_path = "temp_duckdb.db"
+saver = DuckDBSaver(path=duckdb_path, table_name="my_table")
+saver.save(df_result)
+print(f"\nData saved to DuckDB at {duckdb_path} in table 'my_table'.")
+
+# Clean up
+os.remove(csv_file)
+if os.path.exists(duckdb_path):
+    os.remove(duckdb_path)
+print(f"Cleaned up {csv_file} and {duckdb_path}")
+````
+
+::: {.callout-note}
+## DataFusion
+DataFusion integration is primarily handled internally by the library for specific file formats (like Parquet). While there isn't a direct `DataFusionLoader` or `DataFusionSaver` class, the library leverages DataFusion's capabilities for efficient data manipulation when reading certain file types, especially when predicates are pushed down to the source.
+:::
+
+## Integration with External Systems
+
+`flowerpower-io` can be extended to integrate with various external systems.
+
+### Message Queues (e.g., MQTT)
+
+The library includes `MQTTLoader` and `MQTTSaver` for real-time data streaming.
+
+````{python}
+#| eval: false
+#| echo: true
+
+from flowerpower_io.loader import MQTTLoader
+from flowerpower_io.saver import MQTTSaver
+import polars as pl
+import time
+
+# This example requires an MQTT broker running.
+# For demonstration, we'll simulate the process without a live broker connection.
+
+# Simulate receiving data
+def simulate_mqtt_publish(topic, messages):
+    print(f"\nSimulating MQTT publish to topic: {topic}")
+    for i, msg in enumerate(messages):
+        print(f"Publishing: {msg}")
+        # In a real scenario, this would be mqtt_client.publish(topic, msg)
+        time.sleep(0.1) # Simulate network delay
+
+# Simulate MQTT loader
+class MockMQTTLoader(MQTTLoader):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._received_data = []
+
+    def load(self, timeout=1):
+        print(f"Simulating MQTT load from topic: {self.topic}")
+        # In a real scenario, this would connect and subscribe
+        # For demo, just return simulated data
+        if not self._received_data:
+            print("No simulated data to load.")
+            return pl.DataFrame()
+        df = pl.DataFrame(self._received_data)
+        self._received_data = [] # Clear after loading
+        return df
+
+    def _on_message(self, client, userdata, msg):
+        # This method would parse the message payload
+        payload = msg.payload.decode('utf-8')
+        print(f"Simulated MQTT message received: {payload}")
+        self._received_data.append({"message": payload, "timestamp": time.time()})
+
+# Simulate MQTT saver
+class MockMQTTSaver(MQTTSaver):
+    def save(self, data_frame):
+        print(f"\nSimulating MQTT save to topic: {self.topic}")
+        for row in data_frame.iter_rows(named=True):
+            print(f"Simulating publish: {row}")
+            # In a real scenario, this would be mqtt_client.publish(self.topic, json.dumps(row))
+
+# Example usage with mock classes
+topic = "flowerpower/data"
+mock_messages = [{"value": i} for i in range(3)]
+df_to_publish = pl.DataFrame(mock_messages)
+
+# Use MockMQTTSaver
+saver = MockMQTTSaver(topic=topic)
+saver.save(df_to_publish)
+
+# Use MockMQTTLoader (assuming some data was published to it)
+# For this demo, we'll manually add some data to its internal buffer
+loader = MockMQTTLoader(topic=topic)
+loader._received_data = [{"value": 10}, {"value": 20}] # Manually add data for demo
+df_loaded = loader.load()
+print("\nSimulated loaded data:")
+print(df_loaded)
+````
+
+::: {.callout-note}
+## Other External Systems
+`flowerpower-io` can be integrated with other external systems like cloud storage (S3, GCS, Azure Blob Storage) or data warehouses (Snowflake, BigQuery) by leveraging underlying libraries (e.g., PyArrow for S3/GCS, specific database connectors). While direct `flowerpower-io` classes for these might not be explicitly listed, the modular design allows for custom implementations or direct use of the underlying libraries where `flowerpower-io` acts as an orchestrator.
+:::
