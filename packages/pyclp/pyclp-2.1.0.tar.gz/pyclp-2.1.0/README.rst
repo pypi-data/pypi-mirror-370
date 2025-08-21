@@ -1,0 +1,45 @@
+Introduction
+############
+
+`PyCLP <https://github.com/pellico/pyclp>`_ 
+is a Python library to interface ECLiPSe Constraint Programming System.
+
+This module try to implement a pythonic interface to `ECLiPSe <http://www.eclipseclp.org/>`_ 
+(alias easy to use) by compromising on a little bit on performance.
+
+
+Documentation
+*************
+
+`PyCLP pythonhosted documentation <https://pyclp.readthedocs.io/en/latest/>`__
+
+
+Major differences from ECLiPSe standard interface libraries
+***********************************************************
+
+The main difference compared to embedded interface provided  by ECLiPSe system is 
+the persistence of constructed terms after calling the `pyclp.resume` (check 
+`3.1.2  Building ECLiPSe terms <http://www.eclipseclp.org/doc/embedding/embroot008.html#toc11>`_ ) function.
+In ECLiPSe standard interfaces compound terms are destroyed after resume while in PyCLP are
+stored in a reference that survives after resuming. PyCLP will destroy the reference only when python
+destroys the linked python object (garbage collection). This consumes more memory but now
+the python object and the related ECLiPSe object have the same *lifetime*.
+
+Moreover, in the definition of the API I tried to take advantage of a common property of python and 
+ECLiPSe: both are weak typed languages.
+
+
+Next steps
+**********
+
+   * Add support for multi-engine/multi-thread
+   * Extend functionality of set_option function
+
+
+  
+
+
+
+
+
+
