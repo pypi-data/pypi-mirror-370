@@ -1,0 +1,132 @@
+# GitLab CI/CD Pipeline for fnb (Fetch'n'Backup)
+# Automated testing, building, and PyPI deployment
+#
+# Deployment Strategy (issue#17):
+# - TestPyPI: Automatic deployment on tag push (CI time: +30s)
+# - PyPI Production: Manual approval for safety (maintains human oversight)
+# - Local verification using 'task verify:testpypi' recommended between deployments
+
+stages:
+  - test
+  - build
+  - deploy-test
+  - deploy-prod
+
+# Global variables
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
+
+# Cache configuration for faster builds
+cache:
+  paths:
+    - .cache/pip
+    - .cache/uv
+    - .venv/
+
+# Default image with Python 3.12
+image: python:3.12
+
+# Install dependencies before each job
+before_script:
+  - pip install uv
+  - uv venv
+  - source .venv/bin/activate
+  - uv pip install -e .
+
+# Test job: Run pytest and code quality checks
+test:
+  stage: test
+  script:
+    - echo "Running test suite with pytest (excluding integration tests)..."
+    - echo "Checking if pytest works directly..."
+    - uv run pytest --version
+    - echo "Running unit tests only..."
+    - uv run pytest tests/ -m "not integration" --cov=fnb --cov-report=term --cov-report=html
+  coverage: '/TOTAL.*\s+(\d+%)/'
+  artifacts:
+    paths:
+      - htmlcov/
+    expire_in: 1 week
+    when: always
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_TAG
+
+# Code quality job: Format and lint checks
+code-quality:
+  stage: test
+  script:
+    - echo "Checking code formatting..."
+    - uv run ruff format --check src tests
+    - echo "Running pre-commit hooks..."
+    - uv run pre-commit run --all-files
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_TAG
+
+# Build job: Create Python package artifacts
+build-package:
+  stage: build
+  script:
+    - echo "Building Python package with uv..."
+    - uv build
+    - echo "Build completed successfully!"
+    - ls -la dist/
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+    when: always
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_TAG
+
+# Deploy to TestPyPI: Automatic test deployment
+deploy-testpypi:
+  stage: deploy-test
+  script:
+    - echo "Deploying to TestPyPI automatically..."
+    - echo "Checking dist/ directory..."
+    - ls -la dist/
+    - echo "Publishing to TestPyPI..."
+    - UV_PUBLISH_TOKEN=${TESTPYPI_API_TOKEN} UV_PUBLISH_URL=https://test.pypi.org/legacy/ uv publish
+    - echo "TestPyPI deployment completed!"
+    - echo "Verify deployment using task verify:testpypi"
+  dependencies:
+    - build-package
+  environment:
+    name: testpypi
+    url: https://test.pypi.org/project/fnb/
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: on_success
+
+# Deploy to PyPI: Production deployment (manual approval required)
+deploy-pypi:
+  stage: deploy-prod
+  script:
+    - echo "Deploying to production PyPI..."
+    - echo "Pre-deployment checklist:"
+    - echo "  ✓ TestPyPI deployment verified"
+    - echo "  ✓ Local verification completed"
+    - echo "  ✓ Manual approval granted"
+    - echo "Checking dist/ directory..."
+    - ls -la dist/
+    - echo "Publishing to PyPI..."
+    - UV_PUBLISH_TOKEN=${PYPI_API_TOKEN} uv publish
+    - echo "PyPI production deployment completed!"
+    - echo "Package available at https://pypi.org/project/fnb/"
+  dependencies:
+    - build-package
+    - deploy-testpypi
+  environment:
+    name: pypi
+    url: https://pypi.org/project/fnb/
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual

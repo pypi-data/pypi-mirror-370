@@ -1,0 +1,169 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  GREETING: Let's Fetch and Backup!
+  GITLAB_REPOS: https://gitlab.com/qumasan/fnb
+  GITLAB_PAGES: https://qumasan.gitlab.io/fnb
+
+tasks:
+  default:
+    desc: Show greeting and available tasks
+    cmds:
+      - echo "{{.GREETING}}"
+      - task --list
+    silent: true
+
+  # Development Environment
+  code:
+    desc: Start VS Code
+    cmds:
+      - code .
+
+  deps:
+    desc: Show outdated Python packages
+    cmds:
+      - uv pip list --outdated
+
+  # Testing
+  test:
+    desc: Run all tests including integration tests
+    cmds:
+      - uv run pytest tests/ --cov=fnb --cov-report=term --cov-report=html
+
+  test:unit:
+    desc: Run unit tests only (CI equivalent)
+    cmds:
+      - uv run pytest tests/unit/ --cov=fnb --cov-report=term --cov-report=html
+
+  test:integration:
+    desc: Run integration tests only
+    cmds:
+      - uv run pytest tests/integration/ --cov=fnb --cov-report=term -v
+
+  test:ci:
+    desc: Simulate complete CI pipeline locally
+    cmds:
+      - task: test:unit
+      - echo "Checking code formatting..."
+      - uv run ruff format --check src tests
+      - echo "Running pre-commit hooks..."
+      - task: lint:pre-commit
+
+  # Code Quality
+  lint:
+    desc: Format code with ruff
+    cmds:
+      - uv run ruff format src tests
+
+  lint:check:
+    desc: Check code formatting without changes
+    cmds:
+      - uv run ruff format --check src tests
+
+  lint:pre-commit:
+    desc: Run all pre-commit hooks
+    cmds:
+      - uv run pre-commit run --all-files
+
+  # Documentation
+  docs:
+    desc: Serve documentation locally
+    cmds:
+      - uv run mkdocs serve -o
+
+  docs:build:
+    desc: Build documentation as static HTML
+    cmds:
+      - uv run mkdocs build
+
+  # Version Management
+  version:
+    desc: Preview version bump with changelog
+    cmds:
+      - cz bump --check-consistency --dry-run
+
+  version:bump:
+    desc: Bump version and update changelog
+    cmds:
+      - cz bump --changelog --check-consistency
+
+  # Release Management
+  release:
+    desc: Create GitLab release for current tag
+    cmds:
+      - git push origin main
+      - git push origin --tags
+      - glab release create {{.CLI_ARGS | default "$(git describe --tags)"}} --name "fnb {{.CLI_ARGS | default "$(git describe --tags)"}}"
+
+  release:full:
+    desc: Complete release workflow (test → format → bump → release)
+    cmds:
+      - task: test
+      - task: lint
+      - task: lint:pre-commit
+      - task: version:bump
+      - task: release
+
+  # Publishing
+  publish:test:
+    desc: Publish to TestPyPI
+    dotenv: ['.env']
+    cmds:
+      - uv build
+      - UV_PUBLISH_TOKEN=${TESTPYPI_API_TOKEN} UV_PUBLISH_URL=https://test.pypi.org/legacy/ uv publish
+
+  publish:prod:
+    desc: Publish to production PyPI
+    dotenv: ['.env']
+    cmds:
+      - uv build
+      - UV_PUBLISH_TOKEN=${PYPI_API_TOKEN} uv publish
+
+  verify:testpypi:
+    desc: Verify TestPyPI deployment (requires VERSION=x.y.z argument)
+    dir: /tmp/fnb-test
+    vars:
+      VERSION: '{{.VERSION}}'
+    preconditions:
+      - sh: 'mkdir -p /tmp/fnb-test'
+        msg: 'Creating test directory /tmp/fnb-test...'
+      - sh: 'test -n "$VERSION"'
+        msg: 'ERROR - VERSION is required. Usage - VERSION=1.0.0 task verify:testpypi'
+    cmds:
+      - echo "🔍 Verifying TestPyPI deployment for fnb v{{.VERSION}}"
+      - rm -rf test-env || true
+      - python3 -m venv test-env
+      - echo "📦 Installing fnb={{.VERSION}} from TestPyPI..."
+      - source test-env/bin/activate && pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ fnb=={{.VERSION}}
+      - echo "✓ Testing version command..."
+      - source test-env/bin/activate && fnb version
+      - echo "✓ Testing help command..."
+      - source test-env/bin/activate && fnb --help > /dev/null
+      - echo "✓ Testing init help..."
+      - source test-env/bin/activate && fnb init --help > /dev/null
+      - source test-env/bin/activate && python -c "import fnb; print('✓ Module import successful - ' + fnb.__version__)"
+      - echo "✅ TestPyPI verification completed for v{{.VERSION}}"
+      - echo "🚀 Ready for PyPI production deployment - task publish:prod"
+
+  # GitLab Integration
+  gitlab:repo:
+    desc: View GitLab repository
+    cmds:
+      - open {{.GITLAB_REPOS}}
+
+  gitlab:issues:
+    desc: View GitLab issues
+    cmds:
+      - open {{.GITLAB_REPOS}}/-/issues
+
+  gitlab:mrs:
+    desc: View Merge Requests
+    cmds:
+      - open {{.GITLAB_REPOS}}/-/merge_requests
+
+  gitlab:pages:
+    desc: View GitLab Pages documentation
+    cmds:
+      - open {{.GITLAB_PAGES}}
