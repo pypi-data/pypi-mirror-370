@@ -1,0 +1,42 @@
+trigger:
+  - main
+
+pr:
+  - "*" # All PRs regardless of target branch
+
+jobs:
+  - job: test
+    displayName: "Run Tests"
+    pool:
+      vmImage: "ubuntu-latest"
+    steps:
+      - checkout: self
+
+      - task: UsePythonVersion@0
+        displayName: "Setup Python 3.10"
+        inputs:
+          versionSpec: "3.10"
+          addToPath: true
+
+      - script: |
+          python -m pip install --upgrade pip
+          pip install flit
+          flit install --deps production --extras "test"
+        displayName: "Install dependencies"
+
+      - script: |
+          ruff check .
+        displayName: "Run ruff linter"
+
+      - script: |
+          pytest -s -v --junit-xml=test-results.xml
+        displayName: "Run tests"
+        env:
+          RAILTOWN_API_KEY: $(RAILTOWN_API_KEY)
+
+      - task: PublishTestResults@2
+        displayName: "Surface failing tests"
+        inputs:
+          testResultsFiles: "test-results.xml"
+          testRunTitle: "Test results"
+          failTaskOnFailedTests: true
