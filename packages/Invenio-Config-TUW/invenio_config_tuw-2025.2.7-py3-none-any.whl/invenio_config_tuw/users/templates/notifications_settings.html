@@ -1,0 +1,110 @@
+{# -*- coding: utf-8 -*-
+
+This file is part of Invenio.
+Copyright (C) 2023 Graz University of Technology.
+Copyright (C) 2025 TU Wien.
+
+Invenio-Config-TUW is free software; you can redistribute it and/or
+modify it under the terms of the MIT License; see LICENSE file for more
+details.
+#}
+{#- base: invenio_users_resources v5.2.0 -#}
+{#- file: invenio_users_resources/templates/semantic-ui/invenio_users_resources/settings/notifications.html -#}
+{#- changes: rewording & mild restructuring, adding input for secondary email; see "change:" comments in the code #}
+
+{%- extends config.USERPROFILES_SETTINGS_TEMPLATE %}
+{% from "invenio_userprofiles/settings/_macros.html" import render_field, form_errors %}
+
+{%- block settings_content scoped %}
+  <section aria-label="{{ _('Notifications') }}" class="ui segments">
+    <div class="ui segment secondary">
+      <i class="bell icon" aria-hidden="true"></i>
+      <h2 class="ui tiny header inline-block m-0">{{ _("Notifications") }}</h2>
+    </div>
+    <div class="ui segment">
+      <form {% if not read_only %}method="POST" {% endif %} name="notifications_form" class="ui form">
+
+        <div class="ui four column grid">
+          <div class="two column stackable tablet-mobile row">
+            <div class="column">
+              {%- set form = notifications_form %}
+              {%- for field in form %}
+                {%- if field.widget.input_type == 'hidden' %}
+                  {{ field() }}
+                {%- endif %}
+              {%- endfor %}
+
+              {#- change: create vars for other fields -#}
+              {%- set enabled_field = form.enabled %}
+              {%- set secondary_email_field = form.secondary_email %}
+              {%- set notif_enabled = current_user.preferences.get("notifications", {}).get("enabled", True) %}
+
+              <div class="field">
+                <label for="{{ enabled_field.id }}">{{ enabled_field.label }}</label>
+                {#- change: add contextual text, and restructure input #}
+                <p>
+                  <small>
+                    Note that this setting only affects <strong>automatic notifications</strong>.
+                    Contact requests will still be sent to both primary and secondary email address, regardless of this setting.
+                  </small>
+                </p>
+                <div class="ui toggle on-off checkbox">
+                  <input type="checkbox" name="{{ enabled_field.id }}" id="{{ enabled_field.id }}" {{ "checked" if notif_enabled else "" }}>
+                  <label for="{{ enabled_field.id }}">
+                    <small class="ml-10">{{ enabled_field.description }}</small>
+                  </label>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="column">
+              {#- change: remove use of url_for() #}
+              <div class="field">
+                <label>{{ _("Primary email") }}</label>
+                <p>
+                  <small>
+                    {#- change: remove mention of changing email address #}
+                    {% trans %}
+                      We use your primary email address for sending notifications.
+                    {% endtrans %}
+                  </small>
+                </p>
+
+                <div class="ui basic label large ml-0">{{ current_user.email }}</div>
+              </div>
+
+              {#- change: add input for secondary email address #}
+              <div class="field">
+                <label for="{{ secondary_email_field.id }}">{{ secondary_email_field.label }}</label>
+                <p>
+                  <small>
+                    {{ secondary_email_field.description }}
+                  </small>
+                </p>
+
+                <div class="ui">
+                  <input
+                    type="email" name="{{ secondary_email_field.id }}" id="{{ secondary_email_field.id }}"
+                    value={{ current_user.preferences.get("notifications", {}).get("secondary_email", "") }}>
+                </div>
+              </div>
+            </div>
+            {{ form.id }}
+            <div class="one column row">
+              <div class="form-actions">
+                <a href="./" class="ui labeled icon button mt-5">
+                  <i class="close icon" aria-hidden="true"></i> {{ _('Cancel') }}
+                </a>
+                <button type="submit" name="submit" value="{{ form._prefix }}" class="ui primary labeled icon button mt-5">
+                  <i class="check icon" aria-hidden="true"></i>
+                  {{ _('Update notification preferences') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+{% endblock settings_content%}
