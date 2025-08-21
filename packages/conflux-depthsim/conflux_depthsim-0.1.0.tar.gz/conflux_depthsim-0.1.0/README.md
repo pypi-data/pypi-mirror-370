@@ -1,0 +1,637 @@
+# DepthSim
+
+Professional-grade market depth simulation and execution modeling for backtesting, quantitative research, and algorithmic trading development.
+
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Coverage](https://img.shields.io/badge/coverage-85%25-green.svg)](https://github.com/depthsim/depthsim)
+
+## Overview
+
+DepthSim transforms OHLCV market data into realistic market microstructure by simulating:
+- **Bid-ask spreads** with multiple sophisticated models
+- **Order book depth** with realistic size clustering and price improvement
+- **Trade sequences** with institutional vs retail patterns
+- **Market impact** for large order execution analysis
+
+Built as a professional complement to [MockFlow](https://github.com/mockflow/mockflow), DepthSim provides the execution layer that bridges market data and realistic trading simulation.
+
+## Key Features
+
+### Core Simulation Engine
+- **L1 Quote Generation**: Sophisticated bid-ask spread modeling
+- **L2 Depth Snapshots**: Multi-level order books with microstructure realism
+- **Trade Print Simulation**: Realistic trade sequences with size distributions
+- **Market Impact Analysis**: Large order execution cost simulation
+
+### Advanced Spread Models
+- **Constant**: Fixed spreads for baseline scenarios
+- **Volatility-Linked**: Spreads widen with market volatility
+- **Volume-Sensitive**: Tighter spreads with higher volume
+- **Imbalance-Adjusted**: Spreads respond to order book imbalance
+- **Time-of-Day**: Spreads vary by market session (open/lunch/close)
+- **Combined Models**: Volatility + Volume interactions
+- **Custom Models**: User-defined spread functions
+
+### Market Microstructure Features
+- **Size Clustering**: Realistic size distribution at psychological levels
+- **Sub-penny Pricing**: Price improvement modeling
+- **Asymmetric Depth**: Natural bid/ask imbalances
+- **Tick Constraints**: Realistic minimum price increments
+- **Latency Modeling**: Quote staleness and network delays
+
+### Professional Analysis Tools
+- **Market Impact Simulation**: VWAP slippage analysis
+- **Institutional vs Retail**: Different trading pattern modeling
+- **Momentum-based Trading**: Price-dependent trade side bias
+- **Order Book Analytics**: Depth imbalance and stability metrics
+
+## Installation
+
+```bash
+pip install depthsim
+```
+
+For development and testing:
+```bash
+pip install depthsim[dev]
+```
+
+For integration with MockFlow:
+```bash
+pip install depthsim mockflow
+```
+
+## Quick Start
+
+### Basic Quote Generation
+
+```python
+import pandas as pd
+from depthsim import DepthSimulator
+
+# Create or load market data
+market_data = pd.DataFrame({
+    'close': [50000, 50100, 49900, 50200, 50050],
+    'volume': [1500000, 1800000, 1200000, 2100000, 1600000]
+}, index=pd.date_range('2024-01-01', periods=5, freq='1H'))
+
+# Create depth simulator with volatility-linked spreads
+sim = DepthSimulator(
+    spread_model='volatility',
+    base_spread_bps=4.0,
+    volatility_sensitivity=50.0
+)
+
+# Generate realistic bid-ask quotes
+quotes = sim.generate_quotes(market_data)
+print(quotes)
+```
+
+### Integration with MockFlow
+
+```python
+from mockflow import generate_mock_data
+from depthsim import DepthSimulator
+
+# Step 1: Generate market data with MockFlow
+market_data = generate_mock_data(
+    symbol="BTCUSDT",
+    timeframe="15m",
+    days=30,
+    scenario="auto"
+)
+
+# Step 2: Add execution layer with DepthSim
+execution_sim = DepthSimulator(
+    spread_model='time_of_day',
+    base_spread_bps=3.0,
+    open_close_multiplier=0.7,  # Tighter at open/close
+    lunch_multiplier=1.4        # Wider during lunch
+)
+
+# Step 3: Create complete trading environment
+quotes = execution_sim.generate_quotes(market_data)
+depth_snapshots = execution_sim.generate_l2_depth_snapshots(market_data)
+trade_sequence = execution_sim.generate_realistic_trade_sequence(market_data)
+
+print(f"Generated {len(quotes)} quotes, {len(depth_snapshots)} depth snapshots")
+print(f"Simulated {len(trade_sequence)} trades")
+```
+
+## Comprehensive Examples
+
+### Advanced Spread Modeling
+
+```python
+# 1. Volume-sensitive spreads (tighter with more volume)
+volume_sim = DepthSimulator(
+    spread_model='volume',
+    base_spread_bps=8.0,
+    volume_sensitivity=1.2,
+    volume_normalization=1_000_000
+)
+
+# 2. Combined volatility + volume model
+combined_sim = DepthSimulator(
+    spread_model='volatility_volume',
+    base_spread_bps=5.0,
+    volatility_sensitivity=60.0,
+    volume_sensitivity=0.8
+)
+
+# 3. Custom spread model
+def custom_spread_logic(mid_price, volatility, volume):
+    """Custom spread: wider at round thousands."""
+    base = 4.0 + volatility * 80.0
+    if mid_price % 1000 < 50:  # Near round thousands
+        base += 2.0
+    return base
+
+custom_sim = DepthSimulator(
+    spread_model='custom',
+    spread_function=custom_spread_logic,
+    min_spread_bps=1.0,
+    max_spread_bps=25.0
+)
+
+# Compare all models
+models = {'volume': volume_sim, 'combined': combined_sim, 'custom': custom_sim}
+results = {}
+
+for name, simulator in models.items():
+    quotes = simulator.generate_quotes(market_data)
+    results[name] = {
+        'avg_spread': quotes['spread_bps'].mean(),
+        'spread_vol': quotes['spread_bps'].std()
+    }
+
+print("\nSpread Model Comparison:")
+for name, metrics in results.items():
+    print(f"{name:>10}: {metrics['avg_spread']:>6.2f}bp avg, {metrics['spread_vol']:>6.2f}bp vol")
+```
+
+### L2 Order Book Simulation
+
+```python
+# Generate advanced L2 depth with microstructure features
+advanced_sim = DepthSimulator(
+    spread_model='imbalance',
+    base_spread_bps=4.0,
+    imbalance_sensitivity=15.0
+)
+
+# Create deep order book snapshots
+l2_snapshots = advanced_sim.generate_l2_depth_snapshots(
+    market_data,
+    levels=25,                    # 25 levels per side
+    asymmetry_factor=0.15,        # 15% asymmetry allowed
+    size_clustering=True,         # Cluster size at key levels
+    price_improvement=True        # Enable sub-penny pricing
+)
+
+# Analyze first snapshot
+first_book = next(iter(l2_snapshots.values()))
+print(f"\nOrder Book Analysis:")
+print(f"Mid Price: ${first_book.mid_price:,.2f}")
+print(f"Spread: {first_book.spread_bps:.2f}bp")
+print(f"Depth Imbalance: {first_book.depth_imbalance:+.3f}")
+print(f"Total Depth: {first_book.total_bid_size + first_book.total_ask_size:,.0f}")
+
+print(f"\nTop 5 Bid Levels:")
+for i, bid in enumerate(first_book.bids[:5]):
+    print(f"  L{i+1}: ${bid.price:>8.3f} | {bid.size:>8,} | {bid.orders} orders")
+
+print(f"\nTop 5 Ask Levels:")
+for i, ask in enumerate(first_book.asks[:5]):
+    print(f"  L{i+1}: ${ask.price:>8.3f} | {ask.size:>8,} | {ask.orders} orders")
+```
+
+### Market Impact Analysis
+
+```python
+# Generate deep order book for impact testing
+impact_sim = DepthSimulator(
+    spread_model='constant',
+    spread_bps=5.0,
+    depth_levels=30  # Deep book for large orders
+)
+
+depth_ladder = impact_sim.generate_depth_ladder(market_data, levels=30)
+sample_book = next(iter(depth_ladder.values()))
+
+# Test market impact for different order sizes
+order_sizes = [50_000, 200_000, 500_000, 1_000_000, 2_000_000]
+
+print("\nMarket Impact Analysis:")
+print(f"{'Order Size':>12} | {'Avg Price':>10} | {'Impact':>8} | {'Levels':>7} | {'Fill %':>7}")
+print(f"{'-'*12}|{'-'*11}|{'-'*9}|{'-'*8}|{'-'*8}")
+
+for size in order_sizes:
+    # Simulate buy order impact
+    impact = impact_sim.simulate_market_impact(size, 'buy', sample_book)
+    fill_pct = impact['executed_size'] / size * 100
+    
+    print(f"${size:>10,} | ${impact['average_price']:>9,.2f} | {impact['impact_bps']:>6.1f}bp | {impact['levels_consumed']:>6} | {fill_pct:>6.1f}%")
+
+# Analyze liquidity curve
+liquidity_curve = []
+test_sizes = range(10_000, 1_000_000, 50_000)
+
+for size in test_sizes:
+    impact = impact_sim.simulate_market_impact(size, 'buy', sample_book)
+    liquidity_curve.append({
+        'size': size,
+        'impact_bps': impact['impact_bps'],
+        'fill_rate': impact['executed_size'] / size
+    })
+
+print(f"\nLiquidity Analysis:")
+print(f"  Orders up to $500k: avg {sum(p['impact_bps'] for p in liquidity_curve[:10])/10:.1f}bp impact")
+print(f"  Fill rates >95%: up to ${max(p['size'] for p in liquidity_curve if p['fill_rate'] > 0.95):,}")
+```
+
+### Realistic Trade Sequence Generation
+
+```python
+# Generate realistic trade patterns
+trade_sim = DepthSimulator(
+    spread_model='volatility',
+    base_spread_bps=4.0
+)
+
+# Create institutional vs retail trading patterns
+institutional_trades = trade_sim.generate_realistic_trade_sequence(
+    market_data,
+    trade_intensity=1.5,
+    institutional_ratio=0.8  # 80% institutional
+)
+
+retail_trades = trade_sim.generate_realistic_trade_sequence(
+    market_data,
+    trade_intensity=2.0,
+    institutional_ratio=0.1  # 10% institutional  
+)
+
+# Analyze trading patterns
+def analyze_trades(trades, name):
+    if not trades:
+        return
+    
+    sizes = [t.size for t in trades]
+    buy_trades = [t for t in trades if t.side.value == 'buy']
+    
+    print(f"\n{name} Trading Analysis:")
+    print(f"  Total trades: {len(trades)}")
+    print(f"  Buy ratio: {len(buy_trades)/len(trades)*100:.1f}%")
+    print(f"  Avg trade size: {sum(sizes)/len(sizes):,.0f}")
+    print(f"  Median size: {sorted(sizes)[len(sizes)//2]:,.0f}")
+    print(f"  95th percentile: {sorted(sizes)[int(len(sizes)*0.95)]:,.0f}")
+
+analyze_trades(institutional_trades, "Institutional")
+analyze_trades(retail_trades, "Retail")
+
+# Sample trades
+print(f"\nSample Institutional Trades:")
+for i, trade in enumerate(institutional_trades[:5]):
+    side = "BUY" if trade.side.value == 'buy' else "SELL"
+    print(f"  {i+1}: {side} {trade.size:,} @ ${trade.price:.2f}")
+
+print(f"\nSample Retail Trades:")
+for i, trade in enumerate(retail_trades[:5]):
+    side = "BUY" if trade.side.value == 'buy' else "SELL"
+    print(f"  {i+1}: {side} {trade.size:,} @ ${trade.price:.2f}")
+```
+
+### Complete Backtesting Environment
+
+```python
+# Create comprehensive backtesting dataset
+def create_backtesting_environment(symbol, days=30):
+    """Create complete trading environment for backtesting."""
+    
+    # Step 1: Generate market data (using MockFlow or your data)
+    try:
+        from mockflow import generate_mock_data
+        market_data = generate_mock_data(symbol, "15m", days=days)
+    except ImportError:
+        # Fallback: create synthetic data
+        periods = days * 24 * 4  # 15-minute periods
+        market_data = pd.DataFrame({
+            'close': 50000 + np.cumsum(np.random.normal(0, 50, periods)),
+            'volume': np.random.randint(800_000, 2_000_000, periods)
+        }, index=pd.date_range('2024-01-01', periods=periods, freq='15min'))
+    
+    # Step 2: Create execution environment
+    execution_sim = DepthSimulator(
+        spread_model='volatility_volume',
+        base_spread_bps=3.5,
+        volatility_sensitivity=40.0,
+        volume_sensitivity=0.6
+    )
+    
+    # Step 3: Generate all execution components
+    quotes = execution_sim.generate_quotes(market_data)
+    
+    # Sample depth snapshots (every 4th period for performance)
+    sample_periods = market_data.iloc[::4]
+    depth_snapshots = execution_sim.generate_l2_depth_snapshots(sample_periods)
+    
+    trade_sequence = execution_sim.generate_realistic_trade_sequence(
+        market_data,
+        trade_intensity=1.2,
+        institutional_ratio=0.18
+    )
+    
+    # Step 4: Combine into backtesting dataset
+    backtest_data = market_data.copy()
+    backtest_data['bid'] = quotes['bid']
+    backtest_data['ask'] = quotes['ask']
+    backtest_data['spread_bps'] = quotes['spread_bps']
+    
+    return {
+        'market_data': backtest_data,
+        'depth_snapshots': depth_snapshots,
+        'trade_sequence': trade_sequence,
+        'summary': {
+            'periods': len(backtest_data),
+            'avg_spread': quotes['spread_bps'].mean(),
+            'total_trades': len(trade_sequence),
+            'total_volume': sum(t.size for t in trade_sequence)
+        }
+    }
+
+# Generate backtesting environment
+env = create_backtesting_environment("BTCUSDT", days=7)
+
+print("Backtesting Environment Created:")
+print(f"  Market periods: {env['summary']['periods']:,}")
+print(f"  Average spread: {env['summary']['avg_spread']:.2f}bp")
+print(f"  Simulated trades: {env['summary']['total_trades']:,}")
+print(f"  Total trade volume: {env['summary']['total_volume']:,.0f}")
+print(f"  Depth snapshots: {len(env['depth_snapshots']):,}")
+
+# Ready for strategy backtesting!
+backtest_data = env['market_data']
+print(f"\nBacktest data columns: {list(backtest_data.columns)}")
+print(f"Data range: {backtest_data.index[0]} to {backtest_data.index[-1]}")
+```
+
+## API Reference
+
+### DepthSimulator Class
+
+```python
+class DepthSimulator:
+    def __init__(
+        self,
+        spread_model: str = "volatility",
+        base_spread_bps: float = 5.0,
+        volatility_window: int = 20,
+        depth_levels: int = 10,
+        seed: Optional[int] = None,
+        **model_kwargs
+    )
+```
+
+**Parameters:**
+- `spread_model`: Model type (`'constant'`, `'volatility'`, `'volume'`, `'volatility_volume'`, `'imbalance'`, `'time_of_day'`, `'custom'`)
+- `base_spread_bps`: Base spread in basis points
+- `volatility_window`: Rolling window for volatility calculation
+- `depth_levels`: Default number of order book levels per side
+- `seed`: Random seed for reproducible results
+- `**model_kwargs`: Additional parameters for specific spread models
+
+### Core Methods
+
+#### `generate_quotes(market_data, price_column='close', volume_column='volume')`
+Generate L1 bid-ask quotes from market data.
+
+**Returns:** DataFrame with columns `['bid', 'ask', 'mid', 'spread_bps']`
+
+#### `generate_depth_ladder(market_data, levels=None, price_column='close', volume_column='volume')`
+Generate order book depth ladder with multiple price levels.
+
+**Returns:** Dict mapping timestamps to OrderBook objects
+
+#### `generate_l2_depth_snapshots(market_data, levels=20, asymmetry_factor=0.1, size_clustering=True, price_improvement=True)`
+Generate advanced L2 depth snapshots with microstructure features.
+
+**Returns:** Dict mapping timestamps to OrderBook objects with realistic microstructure
+
+#### `simulate_market_impact(order_size, order_side, order_book, impact_model='linear')`
+Simulate market impact of large orders.
+
+**Returns:** Dict with impact metrics (`average_price`, `impact_bps`, `levels_consumed`, `executed_size`)
+
+#### `generate_realistic_trade_sequence(market_data, trade_intensity=1.0, institutional_ratio=0.15)`
+Generate realistic trade sequence with institutional vs retail patterns.
+
+**Returns:** List of Trade objects with realistic timing and sizing
+
+#### `add_latency_effects(quotes, latency_ms=50, jitter_ratio=0.5)`
+Add network latency and quote staleness effects.
+
+**Returns:** Modified quotes DataFrame with latency effects
+
+## Spread Models Reference
+
+### Available Models
+
+| Model | Description | Key Parameters |
+|-------|-------------|----------------|
+| `constant` | Fixed spreads | `spread_bps` |
+| `volatility` | Volatility-linked spreads | `base_spread_bps`, `volatility_sensitivity` |
+| `volume` | Volume-sensitive spreads | `base_spread_bps`, `volume_sensitivity` |
+| `volatility_volume` | Combined vol + volume | `volatility_sensitivity`, `volume_sensitivity` |
+| `imbalance` | Order book imbalance-adjusted | `base_spread_bps`, `imbalance_sensitivity` |
+| `time_of_day` | Session-based spreads | `open_close_multiplier`, `lunch_multiplier` |
+| `custom` | User-defined function | `spread_function`, `min_spread_bps`, `max_spread_bps` |
+
+### Model-Specific Parameters
+
+**VolatilityLinkedSpreadModel:**
+- `base_spread_bps`: Base spread when volatility is zero
+- `volatility_sensitivity`: Spread increase per unit volatility
+- `min_spread_bps`, `max_spread_bps`: Spread bounds
+- `noise_level`: Random noise for realism
+
+**VolumeLinkedSpreadModel:**
+- `base_spread_bps`: Base spread for zero volume
+- `volume_sensitivity`: Spread reduction per normalized volume unit
+- `volume_normalization`: Volume level for normalization
+
+**TimeOfDaySpreadModel:**
+- `base_spread_bps`: Base spread during normal hours
+- `open_close_multiplier`: Multiplier for market open/close
+- `lunch_multiplier`: Multiplier for lunch period
+- `overnight_multiplier`: Multiplier for overnight hours
+
+## Performance Guide
+
+### Optimization Tips
+
+```python
+# 1. Use appropriate data sizes
+# Good: Process 1000-2000 periods at once
+market_data = market_data.iloc[:1000]  # Reasonable batch size
+
+# 2. Choose appropriate depth levels
+sim = DepthSimulator(depth_levels=15)  # 15 levels usually sufficient
+
+# 3. Sample depth snapshots for large datasets
+sample_data = market_data.iloc[::4]  # Every 4th period
+depth_snapshots = sim.generate_l2_depth_snapshots(sample_data)
+
+# 4. Use constant spread model for basic needs
+fast_sim = DepthSimulator(spread_model='constant', spread_bps=5.0)
+
+# 5. Cache results for repeated analysis
+quotes = sim.generate_quotes(market_data)
+# Save quotes for reuse rather than regenerating
+```
+
+### Performance Benchmarks
+
+| Operation | Dataset Size | Performance | Memory |
+|-----------|--------------|-------------|---------|
+| Quote Generation | 1,000 periods | >100 quotes/sec | <0.5MB |
+| Depth Ladder | 500 periods, 15 levels | >30 books/sec | <2MB |
+| L2 Snapshots | 200 periods, 20 levels | >15 snapshots/sec | <5MB |
+| Trade Sequence | 500 periods | >25 periods/sec | <1MB |
+| Market Impact | Single order | >1000 simulations/sec | <0.1MB |
+
+## Use Cases
+
+### Quantitative Research
+- **Market Microstructure Analysis**: Study bid-ask spreads and depth patterns
+- **Liquidity Research**: Analyze market impact and execution costs
+- **High-Frequency Patterns**: Model sub-second market dynamics
+
+### Strategy Development
+- **Algorithm Backtesting**: Test strategies with realistic execution costs
+- **Market Making**: Simulate spread capture and inventory risk
+- **Order Execution**: Optimize large order execution strategies
+
+### Risk Management
+- **Execution Risk**: Model slippage and market impact
+- **Liquidity Risk**: Analyze market depth and resilience
+- **Latency Sensitivity**: Test impact of network delays
+
+### Academic Research
+- **Market Efficiency Studies**: Analyze price discovery mechanisms
+- **Behavioral Finance**: Study institutional vs retail trading patterns
+- **Market Structure Research**: Compare different market designs
+
+## Integration with Other Tools
+
+### MockFlow Integration
+```python
+from mockflow import generate_mock_data
+from depthsim import DepthSimulator
+
+# Generate market data
+market_data = generate_mock_data("BTCUSDT", "1h", days=30)
+
+# Add execution layer
+sim = DepthSimulator(spread_model='volatility')
+quotes = sim.generate_quotes(market_data)
+```
+
+### Pandas Integration
+```python
+# DepthSim works seamlessly with pandas
+import pandas as pd
+
+# Load your own data
+df = pd.read_csv('your_market_data.csv', parse_dates=['timestamp'])
+df.set_index('timestamp', inplace=True)
+
+# Generate quotes
+sim = DepthSimulator()
+quotes = sim.generate_quotes(df)
+
+# Combine with original data
+combined = df.join(quotes)
+```
+
+### NumPy Integration
+```python
+import numpy as np
+
+# Use NumPy for advanced analysis
+quotes = sim.generate_quotes(market_data)
+
+# Vectorized spread analysis
+spread_vol = np.std(quotes['spread_bps'])
+spread_autocorr = np.corrcoef(quotes['spread_bps'][:-1], quotes['spread_bps'][1:])[0,1]
+
+print(f"Spread volatility: {spread_vol:.2f}bp")
+print(f"Spread autocorrelation: {spread_autocorr:.3f}")
+```
+
+## Testing and Validation
+
+### Running Tests
+```bash
+# Run basic tests
+python -m pytest tests/test_depthsim_basic.py -v
+
+# Run advanced feature tests
+python -m pytest tests/test_advanced_features.py -v
+
+# Run performance tests
+python -m pytest tests/test_performance.py -v
+
+# Run integration tests
+python -m pytest tests/test_mockflow_integration.py -v
+
+# Run all tests with coverage
+python -m pytest --cov=depthsim --cov-report=html
+```
+
+### Test Categories
+- **Unit Tests**: Individual component functionality
+- **Integration Tests**: Component interaction and data flow
+- **Performance Tests**: Speed and memory usage benchmarks
+- **Stress Tests**: Extreme conditions and edge cases
+- **MockFlow Tests**: Integration with MockFlow package
+
+## Contributing
+
+We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md) for details.
+
+### Development Setup
+```bash
+git clone https://github.com/depthsim/depthsim.git
+cd depthsim
+pip install -e .[dev]
+```
+
+### Running Tests
+```bash
+python run_tests.py --all --coverage
+```
+
+## License
+
+MIT License. See [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Documentation**: [https://depthsim.readthedocs.io](https://depthsim.readthedocs.io)
+- **Issues**: [GitHub Issues](https://github.com/depthsim/depthsim/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/depthsim/depthsim/discussions)
+
+## Citation
+
+If you use DepthSim in academic research, please cite:
+
+```bibtex
+@software{depthsim2024,
+  author = {DepthSim Contributors},
+  title = {DepthSim: Professional Market Depth Simulation},
+  url = {https://github.com/depthsim/depthsim},
+  year = {2024}
+}
+```
