@@ -1,0 +1,152 @@
+# Examples
+
+This section provides various examples demonstrating how to use `flowerpower-io` for common data loading, saving, and conversion tasks.
+
+## Setup for Examples
+
+To run these examples, you'll need `pandas`, `polars`, and `pyarrow` installed, in addition to `flowerpower-io`.
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import polars as pl
+import pyarrow as pa
+import tempfile
+import os
+from pathlib import Path
+
+# Import FlowerPower IO classes
+from flowerpower_io.loader.csv import CSVFileReader
+from flowerpower_io.saver.parquet import ParquetFileWriter
+from flowerpower_io.loader.sqlite import SQLiteReader
+from flowerpower_io.saver.sqlite import SQLiteWriter
+
+# Create sample data
+sample_data = {
+    'id': range(1, 101),
+    'name': [f'Person_{i}' for i in range(1, 101)],
+    'age': [20 + (i % 50) for i in range(1, 101)],
+    'city': ['New York', 'London', 'Tokyo', 'Paris', 'Berlin'] * 20,
+    'salary': [50000 + (i * 1000) for i in range(1, 101)]
+}
+
+# Create a temporary directory for our demo files
+temp_dir = tempfile.mkdtemp()
+csv_path = os.path.join(temp_dir, 'sample_data.csv')
+parquet_path = os.path.join(temp_dir, 'sample_data.parquet')
+db_path = os.path.join(temp_dir, 'sample_data.db')
+
+# Create CSV file using pandas
+df_pandas_original = pd.DataFrame(sample_data)
+df_pandas_original.to_csv(csv_path, index=False)
+
+print(f"Created sample CSV file at: {csv_path}")
+print(f"Sample data shape: {df_pandas_original.shape}")
+````
+
+## 1. Reading CSV and Converting Formats
+
+This example demonstrates how to read a CSV file using `CSVFileReader` and convert the data into Pandas DataFrame, Polars DataFrame, and PyArrow Table formats.
+
+````{python}
+#| eval: false
+#| echo: true
+
+# Reading CSV Files with CSVFileReader
+csv_reader = CSVFileReader(path=csv_path)
+
+# Convert to Pandas DataFrame
+df_pandas_converted = csv_reader.to_pandas()
+print("Pandas DataFrame (first 3 rows):")
+print(df_pandas_converted.head(3))
+
+# Convert to Polars DataFrame
+df_polars = csv_reader.to_polars()
+print("\nPolars DataFrame (first 3 rows):")
+print(df_polars.head(3))
+
+# Convert to PyArrow Table
+arrow_table = csv_reader.to_pyarrow_table()
+print("\nPyArrow Table (first 3 rows):")
+print(arrow_table.slice(0, 3).to_pandas())
+````
+
+## 2. Writing to Parquet
+
+This example shows how to write a Pandas DataFrame to a Parquet file using `ParquetFileWriter`.
+
+````{python}
+#| eval: false
+#| echo: true
+
+parquet_writer = ParquetFileWriter(path=parquet_path)
+print("Writing Pandas DataFrame to Parquet...")
+parquet_writer.write(df_pandas_original)
+print(f"Parquet file created at: {parquet_path}")
+print(f"Parquet file exists: {os.path.exists(parquet_path)}")
+````
+
+## 3. Reading from and Writing to SQLite
+
+This example demonstrates how to write data to a SQLite database using `SQLiteWriter` and then read it back using `SQLiteReader`. It also includes an advanced querying example.
+
+````{python}
+#| eval: false
+#| echo: true
+
+# Writing to SQLite Database
+sqlite_writer = SQLiteWriter(
+    table_name="employees",
+    path=db_path
+)
+print("Writing data to SQLite Database...")
+sqlite_writer.write(df_pandas_original)
+print(f"SQLite database created at: {db_path}")
+
+# Reading from SQLite Database
+sqlite_reader = SQLiteReader(
+    table_name="employees",
+    path=db_path
+)
+df_from_sqlite_pandas = sqlite_reader.to_pandas()
+print("\nData read from SQLite (first 5 rows):")
+print(df_from_sqlite_pandas.head())
+
+# Advanced Querying: Employees older than 50
+print("\nQuerying: Employees older than 50")
+query = "SELECT * FROM employees WHERE age > 50"
+df_older_employees = sqlite_reader.to_pandas(query=query)
+print(f"Number of employees older than 50: {len(df_older_employees)}")
+print(df_older_employees)
+
+# Advanced Querying: Average salary by city
+print("\nQuerying: Average salary by city")
+query = "SELECT city, AVG(salary) as avg_salary, COUNT(*) as count FROM employees GROUP BY city ORDER BY avg_salary DESC"
+df_salary_by_city = sqlite_reader.to_pandas(query=query)
+print("Average salary by city:")
+print(df_salary_by_city)
+````
+
+## Cleanup
+
+After running the examples, you can clean up the temporary files created:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import shutil
+
+print("\nCleaning up temporary files...")
+if os.path.exists(csv_path):
+    os.remove(csv_path)
+if os.path.exists(parquet_path):
+    os.remove(parquet_path)
+if os.path.exists(db_path):
+    os.remove(db_path)
+if os.path.exists(temp_dir):
+    shutil.rmtree(temp_dir)
+print("Cleanup complete.")
+````

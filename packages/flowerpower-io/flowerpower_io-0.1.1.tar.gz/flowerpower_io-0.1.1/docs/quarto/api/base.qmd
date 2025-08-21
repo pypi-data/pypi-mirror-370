@@ -1,0 +1,555 @@
+# Base Classes
+
+This section documents the foundational base classes within `flowerpower-io`, which provide the core functionality for file and database I/O operations.
+
+## `BaseFileIO`
+
+::: {.callout-note}
+## `BaseFileIO`
+`BaseFileIO` is the base class for file I/O operations, supporting various storage backends like AWS S3, Google Cloud Storage, Azure Blob Storage, GitHub, and GitLab. It handles filesystem initialization and provides methods for listing files.
+:::
+
+**Definition**:
+```python
+class BaseFileIO(msgspec.Struct):
+    path: str | list[str]
+    storage_options: (
+        StorageOptions
+        | AwsStorageOptions
+        | AzureStorageOptions
+        | GcsStorageOptions
+        | GitLabStorageOptions
+        | GitHubStorageOptions
+        | dict[str, Any]
+        | None
+    ) = field(default=None)
+    fs: AbstractFileSystem | None = field(default=None)
+    format: str | None = None
+```
+
+**Arguments**:
+
+*   `path` (`str | list[str]`): Path or list of paths to file(s).
+*   `storage_options` (`StorageOptions | ... | dict[str, Any] | None`, optional): Storage-specific options for accessing remote filesystems.
+*   `fs` (`AbstractFileSystem | None`, optional): Filesystem instance for handling file operations.
+*   `format` (`str | None`, optional): File format extension (without dot).
+
+**Methods**:
+
+*   `list_files()`: Lists files based on the configured path and filesystem.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+from flowerpower_io.base import BaseFileIO
+from fsspec_utils.storage_options import AwsStorageOptions
+
+# Example 1: Local file system
+file_io_local = BaseFileIO(path="data/my_file.csv")
+print(f"Local file protocol: {file_io_local.protocol}")
+
+# Example 2: S3 bucket with storage options
+# In a real scenario, replace with your actual key and secret
+file_io_s3 = BaseFileIO(
+    path="s3://my-bucket/path/to/data/",
+    storage_options=AwsStorageOptions(key="YOUR_ACCESS_KEY", secret="YOUR_SECRET_KEY")
+)
+print(f"S3 file protocol: {file_io_s3.protocol}")
+
+# Example 3: Listing files (hypothetical, requires actual files)
+# Assuming 'data/' contains 'file1.txt', 'file2.txt'
+# from fsspec import filesystem
+# fs = filesystem("file")
+# fs.makedirs("data", exist_ok=True)
+# with fs.open("data/file1.txt", "w") as f: f.write("hello")
+# with fs.open("data/file2.txt", "w") as f: f.write("world")
+# file_io_local_list = BaseFileIO(path="data/")
+# print(f"Files in data/: {file_io_local_list.list_files()}")
+````
+
+## `BaseFileReader`
+
+::: {.callout-note}
+## `BaseFileReader`
+`BaseFileReader` extends `BaseFileIO` to provide a foundation for reading data from various file formats (CSV, Parquet, JSON, etc.) into different data structures like Pandas DataFrames, Polars DataFrames, or PyArrow Tables. It supports batch processing and integration with DuckDB and DataFusion.
+:::
+
+**Definition**:
+```python
+class BaseFileReader(BaseFileIO):
+    include_file_path: bool = field(default=False)
+    concat: bool = field(default=True)
+    batch_size: int | None = field(default=None)
+    opt_dtypes: bool = field(default=False)
+    use_threads: bool = field(default=True)
+    conn: duckdb.DuckDBPyConnection | None = field(default=None)
+    ctx: datafusion.SessionContext | None = field(default=None)
+    jsonlines: bool | None = field(default=None)
+    partitioning: str | list[str] | pds.Partitioning | None = field(default=None)
+    verbose: bool | None = field(default=None)
+```
+
+**Arguments**:
+
+*   `path` (`str | list[str]`): Path or list of paths to file(s). (Inherited from `BaseFileIO`)
+*   `format` (`str`, optional): File format extension (without dot). (Inherited from `BaseFileIO`)
+*   `fs` (`AbstractFileSystem`, optional): Filesystem instance. (Inherited from `BaseFileIO`)
+*   `include_file_path` (`bool`, optional): Include file path in the output DataFrame. Defaults to `False`.
+*   `concat` (`bool`, optional): Concatenate multiple files into a single DataFrame. Defaults to `True`.
+*   `batch_size` (`int | None`, optional): Batch size for iteration.
+*   `opt_dtypes` (`bool`, optional): Optimize data types. Defaults to `False`.
+*   `use_threads` (`bool`, optional): Use threads for reading data. Defaults to `True`.
+*   `conn` (`duckdb.DuckDBPyConnection | None`, optional): DuckDB connection instance.
+*   `ctx` (`datafusion.SessionContext | None`, optional): DataFusion session context instance.
+*   `jsonlines` (`bool | None`, optional): Treat JSON files as JSON lines.
+*   `partitioning` (`str | list[str] | pds.Partitioning | None`, optional): Dataset partitioning scheme.
+*   `verbose` (`bool | None`, optional): Enable verbose output.
+
+**Methods**:
+
+*   `to_pandas(...)`: Converts data to Pandas DataFrame(s).
+*   `iter_pandas(...)`: Iterates over Pandas DataFrames.
+*   `to_polars(lazy=False, ...)`: Converts data to Polars DataFrame(s).
+*   `to_polars(lazy=True, ...)`: Converts data to Polars LazyFrame(s).
+*   `iter_polars(lazy=False, ...)`: Iterates over Polars DataFrames.
+*   `iter_polars(lazy=True, ...)`: Iterates over Polars LazyFrames.
+*   `to_pyarrow_table(...)`: Converts data to PyArrow Table(s).
+*   `iter_pyarrow_table(...)`: Iterates over PyArrow Tables.
+*   `to_duckdb_relation(...)`: Converts data to a DuckDB relation.
+*   `register_in_duckdb(...)`: Registers data in a DuckDB connection.
+*   `to_duckdb(...)`: Converts data to DuckDB relation or registers it.
+*   `register_in_datafusion(...)`: Registers data in a DataFusion session context.
+*   `filter(filter_expr)`: Filters data based on a given expression.
+*   `metadata`: Property that returns metadata about the loaded data.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import os
+from flowerpower_io.base import BaseFileReader
+
+# Create a dummy CSV file
+dummy_csv_path = "temp_reader_data.csv"
+pd.DataFrame({'col1': [1, 2, 3], 'col2': ['A', 'B', 'C']}).to_csv(dummy_csv_path, index=False)
+
+# Initialize BaseFileReader
+reader = BaseFileReader(path=dummy_csv_path, format="csv")
+
+# Convert to Pandas DataFrame
+df_pandas = reader.to_pandas()
+print("Pandas DataFrame:")
+print(df_pandas)
+
+# Convert to Polars DataFrame
+df_polars = reader.to_polars()
+print("\nPolars DataFrame:")
+print(df_polars)
+
+# Get metadata
+print("\nMetadata:")
+_, meta = reader.to_pandas(metadata=True)
+print(meta)
+
+# Clean up
+os.remove(dummy_csv_path)
+````
+
+## `BaseDatasetReader`
+
+::: {.callout-note}
+## `BaseDatasetReader`
+`BaseDatasetReader` is specialized for reading datasets, particularly useful for partitioned data. It builds upon `BaseFileReader` and provides specific methods for working with PyArrow Datasets and Pydala ParquetDatasets.
+:::
+
+**Definition**:
+```python
+class BaseDatasetReader(BaseFileReader):
+    schema_: pa.Schema | None = field(default=None)
+    _dataset: pds.Dataset | None = field(default=None)
+    _pydala_dataset: Any | None = field(default=None)
+```
+
+**Arguments**:
+
+*   Inherits all arguments from `BaseFileReader`.
+*   `schema_` (`pa.Schema | None`, optional): PyArrow schema for the dataset.
+*   `partitioning` (Inherited from `BaseFileReader`): Dataset partitioning scheme.
+
+**Methods**:
+
+*   `to_pyarrow_dataset(...)`: Converts data to PyArrow Dataset.
+*   `to_pandas(...)`: Converts data to Pandas DataFrame.
+*   `to_polars(lazy=True, ...)`: Converts data to Polars LazyFrame.
+*   `to_polars(lazy=False, ...)`: Converts data to Polars DataFrame.
+*   `to_pyarrow_table(...)`: Converts data to PyArrow Table.
+*   `to_pydala_dataset(...)`: Converts data to Pydala ParquetDataset.
+*   `to_duckdb_relation(...)`: Converts data to DuckDB relation.
+*   `register_in_duckdb(...)`: Registers data in DuckDB.
+*   `to_duckdb(...)`: Converts data to DuckDB relation or registers it.
+*   `register_in_datafusion(...)`: Registers data in DataFusion.
+*   `filter(filter_expr)`: Filters data based on a given expression.
+*   `metadata`: Property that returns metadata about the loaded data.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+import os
+import shutil
+from flowerpower_io.base import BaseDatasetReader
+
+# Create a dummy partitioned dataset
+dataset_path = "temp_dataset"
+os.makedirs(os.path.join(dataset_path, "year=2023"), exist_ok=True)
+os.makedirs(os.path.join(dataset_path, "year=2024"), exist_ok=True)
+
+table1 = pa.table({'col1': [1, 2], 'col2': ['A', 'B'], 'year': [2023, 2023]})
+table2 = pa.table({'col1': [3, 4], 'col2': ['C', 'D'], 'year': [2024, 2024]})
+
+pq.write_table(table1, os.path.join(dataset_path, "year=2023", "part1.parquet"))
+pq.write_table(table2, os.path.join(dataset_path, "year=2024", "part2.parquet"))
+
+# Initialize BaseDatasetReader for a partitioned dataset
+reader = BaseDatasetReader(
+    path=dataset_path,
+    format="parquet",
+    partitioning="hive" # Specify hive style partitioning
+)
+
+# Load as Polars DataFrame
+df_dataset = reader.to_polars()
+print("Polars DataFrame from partitioned dataset:")
+print(df_dataset)
+
+# Clean up
+shutil.rmtree(dataset_path)
+````
+
+## `BaseFileWriter`
+
+::: {.callout-note}
+## `BaseFileWriter`
+`BaseFileWriter` is the base class for writing data to files across various storage backends and formats. It supports different write modes (append, overwrite) and data deduplication.
+:::
+
+**Definition**:
+```python
+class BaseFileWriter(BaseFileIO):
+    basename: str | None = field(default=None)
+    concat: bool = field(default=False)
+    mode: str = field(default="append")  # append, overwrite, delete_matching, error_if_exists
+    unique: bool | list[str] | str = field(default=False)
+```
+
+**Arguments**:
+
+*   Inherits all arguments from `BaseFileIO`.
+*   `basename` (`str | None`, optional): Basename for the output file(s).
+*   `concat` (`bool`, optional): Concatenate multiple files into a single DataFrame. Defaults to `False`.
+*   `mode` (`str`, optional): Write mode (`"append"`, `"overwrite"`, `"delete_matching"`, `"error_if_exists"`). Defaults to `"append"`.
+*   `unique` (`bool | list[str] | str`, optional): Unique columns for deduplication. Defaults to `False`.
+
+**Methods**:
+
+*   `write(data, ...)`: Writes the provided data to the configured path.
+*   `metadata`: Property that returns metadata about the written data.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import os
+from flowerpower_io.base import BaseFileWriter
+
+# Create dummy data
+df_to_write = pd.DataFrame({'colA': [1, 2, 3], 'colB': ['X', 'Y', 'Z']})
+output_csv_path = "temp_writer_output.csv"
+
+# Initialize BaseFileWriter
+writer = BaseFileWriter(path=output_csv_path, format="csv", mode="overwrite")
+
+# Write data
+writer.write(data=df_to_write)
+print(f"Data written to {output_csv_path}")
+print(f"File exists: {os.path.exists(output_csv_path)}")
+
+# Clean up
+os.remove(output_csv_path)
+````
+
+## `BaseDatasetWriter`
+
+::: {.callout-note}
+## `BaseDatasetWriter`
+`BaseDatasetWriter` is designed for writing datasets, with enhanced control over partitioning, compression, and file sizing, building on `BaseFileWriter`. It's particularly useful for creating optimized data lakes.
+:::
+
+**Definition**:
+```python
+class BaseDatasetWriter(BaseFileWriter):
+    schema_: pa.Schema | None = None
+    partition_by: str | list[str] | pds.Partitioning | None = None
+    partitioning_flavor: str | None = None
+    compression: str = "zstd"
+    row_group_size: int | None = 250_000
+    max_rows_per_file: int | None = 2_500_000
+    is_pydala_dataset: bool = False
+```
+
+**Arguments**:
+
+*   Inherits all arguments from `BaseFileWriter`.
+*   `schema_` (`pa.Schema | None`, optional): PyArrow schema for the dataset.
+*   `partition_by` (`str | list[str] | pds.Partitioning | None`, optional): Dataset partitioning scheme.
+*   `partitioning_flavor` (`str | None`, optional): Partitioning flavor (e.g., `"hive"`).
+*   `compression` (`str`, optional): Compression codec. Defaults to `"zstd"`.
+*   `row_group_size` (`int | None`, optional): Row group size for Parquet. Defaults to `250_000`.
+*   `max_rows_per_file` (`int | None`, optional): Maximum rows per output file. Defaults to `2_500_000`.
+*   `is_pydala_dataset` (`bool`, optional): Whether to write as a Pydala ParquetDataset. Defaults to `False`.
+
+**Methods**:
+
+*   `write(data, ...)`: Writes the provided data as a dataset.
+*   `metadata`: Property that returns metadata about the written data.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import pyarrow as pa
+import os
+import shutil
+from flowerpower_io.base import BaseDatasetWriter
+
+# Create dummy data
+df_dataset_to_write = pd.DataFrame({
+    'col1': [1, 2, 3, 4],
+    'col2': ['A', 'B', 'C', 'D'],
+    'partition_col': ['P1', 'P1', 'P2', 'P2']
+})
+output_dataset_path = "temp_dataset_output"
+
+# Initialize BaseDatasetWriter for a partitioned Parquet dataset
+writer = BaseDatasetWriter(
+    path=output_dataset_path,
+    format="parquet",
+    mode="overwrite",
+    partition_by="partition_col",
+    partitioning_flavor="hive",
+    compression="snappy"
+)
+
+# Write data
+writer.write(data=df_dataset_to_write)
+print(f"Data written to partitioned dataset at {output_dataset_path}")
+print(f"Directory exists: {os.path.exists(output_dataset_path)}")
+print(f"Partition P1 exists: {os.path.exists(os.path.join(output_dataset_path, 'partition_col=P1'))}")
+
+# Clean up
+shutil.rmtree(output_dataset_path)
+````
+
+## `BaseDatabaseIO`
+
+::: {.callout-note}
+## `BaseDatabaseIO`
+`BaseDatabaseIO` serves as the base class for database input/output operations, abstracting away the specifics of connecting to various database systems like SQLite, DuckDB, PostgreSQL, MySQL, MSSQL, and Oracle. It handles connection string generation and query execution.
+:::
+
+**Definition**:
+```python
+class BaseDatabaseIO(msgspec.Struct):
+    type_: str
+    table_name: str = field(default="")
+    path: str | None = field(default=None)
+    username: str | None = field(default=None)
+    password: str | None = field(default=None)
+    server: str | None = field(default=None)
+    port: str | int | None = field(default=None)
+    database: str | None = field(default=None)
+    ssl: bool = field(default=False)
+    connection_string: str | None = field(default=None)
+```
+
+**Arguments**:
+
+*   `type_` (`str`): Database type (e.g., `"sqlite"`, `"duckdb"`, `"postgres"`).
+*   `table_name` (`str`, optional): Table name in the database. Defaults to `""`.
+*   `path` (`str | None`, optional): File path for file-based databases (SQLite, DuckDB).
+*   `username` (`str | None`, optional): Username for the database connection.
+*   `password` (`str | None`, optional): Password for the database connection.
+*   `server` (`str | None`, optional): Server address for the database.
+*   `port` (`str | int | None`, optional): Port number for the database.
+*   `database` (`str | None`, optional): Database name.
+*   `ssl` (`bool`, optional): Enable SSL connection. Defaults to `False`.
+*   `connection_string` (`str | None`, optional): Full connection string (if provided, overrides other connection parameters).
+
+**Methods**:
+
+*   `execute(query, cursor=True, ...)`: Executes a SQL query.
+*   `connect()`: Establishes a database connection.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import os
+from flowerpower_io.base import BaseDatabaseIO
+import sqlite3
+
+# Example with SQLite
+db_path_io = "temp_db_io.db"
+conn_str_io = f"sqlite:///{db_path_io}"
+
+# Create a dummy table and insert data using raw SQLite
+conn = sqlite3.connect(db_path_io)
+conn.execute("CREATE TABLE IF NOT EXISTS my_table (id INTEGER, name TEXT);")
+conn.execute("INSERT INTO my_table (id, name) VALUES (1, 'Test User');")
+conn.commit()
+conn.close()
+
+db_io = BaseDatabaseIO(type_="sqlite", table_name="my_table", path=db_path_io)
+
+# Execute a query
+result = db_io.execute("SELECT * FROM my_table;")
+print("Query result (from BaseDatabaseIO.execute):")
+for row in result:
+    print(row)
+
+# Clean up
+os.remove(db_path_io)
+````
+
+## `BaseDatabaseWriter`
+
+::: {.callout-note}
+## `BaseDatabaseWriter`
+`BaseDatabaseWriter` extends `BaseDatabaseIO` to provide functionality for writing data to various database systems. It supports different write modes like `append`, `replace`, and `fail`.
+:::
+
+**Definition**:
+```python
+class BaseDatabaseWriter(BaseDatabaseIO):
+    mode: str = field(default="append")  # append, replace, fail
+    concat: bool = field(default=False)
+    unique: bool | list[str] | str = field(default=False)
+```
+
+**Arguments**:
+
+*   Inherits all arguments from `BaseDatabaseIO`.
+*   `mode` (`str`, optional): Write mode (`"append"`, `"replace"`, `"fail"`). Defaults to `"append"`.
+*   `concat` (`bool`, optional): Concatenate multiple files into a single DataFrame (relevant for internal processing). Defaults to `False`.
+*   `unique` (`bool | list[str] | str`, optional): Unique columns for deduplication. Defaults to `False`.
+
+**Methods**:
+
+*   `write(data, ...)`: Writes the provided data to the database table.
+*   `metadata`: Property that returns metadata about the written data.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import os
+from flowerpower_io.base import BaseDatabaseWriter
+
+db_path_writer = "temp_writer_db.db"
+df_to_db = pd.DataFrame({'id': [101, 102], 'value': ['Alpha', 'Beta']})
+
+# Initialize BaseDatabaseWriter
+writer = BaseDatabaseWriter(type_="sqlite", table_name="new_table", path=db_path_writer)
+
+# Write data
+writer.write(data=df_to_db, mode="replace") # Use "replace" to create/overwrite table
+print(f"Data written to {db_path_writer} in table 'new_table'.")
+
+# Clean up
+os.remove(db_path_writer)
+````
+
+## `BaseDatabaseReader`
+
+::: {.callout-note}
+## `BaseDatabaseReader`
+`BaseDatabaseReader` extends `BaseDatabaseIO` to focus on reading data from databases. It provides methods to load data into various data structures and supports executing custom SQL queries.
+:::
+
+**Definition**:
+```python
+class BaseDatabaseReader(BaseDatabaseIO):
+    query: str | None = None
+```
+
+**Arguments**:
+
+*   Inherits all arguments from `BaseDatabaseIO`.
+*   `query` (`str | None`, optional): SQL query to execute. If `None`, loads all data from the specified `table_name`.
+
+**Methods**:
+
+*   `to_polars(...)`: Converts data to Polars DataFrame.
+*   `to_pandas(...)`: Converts data to Pandas DataFrame.
+*   `to_pyarrow_table(...)`: Converts data to PyArrow Table.
+*   `to_duckdb_relation(...)`: Converts data to DuckDB relation.
+*   `register_in_duckdb(...)`: Registers data in DuckDB.
+*   `register_in_datafusion(...)`: Registers data in DataFusion.
+*   `metadata`: Property that returns metadata about the loaded data.
+
+**Example**:
+
+````{python}
+#| eval: false
+#| echo: true
+
+import pandas as pd
+import os
+import sqlite3
+from flowerpower_io.base import BaseDatabaseReader
+
+db_path_reader = "temp_reader_db.db"
+# Create a dummy table and insert data
+conn = sqlite3.connect(db_path_reader)
+conn.execute("CREATE TABLE IF NOT EXISTS sales (product TEXT, amount INTEGER);")
+conn.execute("INSERT INTO sales (product, amount) VALUES ('A', 100), ('B', 150), ('A', 200);")
+conn.commit()
+conn.close()
+
+# Initialize BaseDatabaseReader
+reader = BaseDatabaseReader(type_="sqlite", table_name="sales", path=db_path_reader)
+
+# Read all data
+df_all_sales = reader.to_pandas()
+print("All sales data:")
+print(df_all_sales)
+
+# Read data with a custom query
+df_product_a = reader.to_pandas(query="SELECT * FROM sales WHERE product = 'A'")
+print("\nSales for product 'A':")
+print(df_product_a)
+
+# Clean up
+os.remove(db_path_reader)
+````
