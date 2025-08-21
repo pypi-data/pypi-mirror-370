@@ -1,0 +1,50 @@
+# Run some code checks with GitHub Actions.
+
+name: Code formatting checks
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # since we need to diff against origin/main.
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          cache: 'pip'  # cache pip dependencies
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install black==24.* isort==5.*
+
+      - name: Run "black --check"
+        run: |
+          python -m black --check .
+
+      - name: Run "isort --check"
+        run: |
+          python -m isort --profile black --check .
+
+      # Remind PR authors to update CHANGELOG.md
+      - name: Check that Changelog has been updated
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'no changelog')
+        run: |
+          # `git diff --exit-code` exits with 1 if there were
+          # differences and 0 means no differences. Here we negate
+          # that, because we want to fail if changelog has not been
+          # updated.
+          ! git diff --exit-code "origin/${GITHUB_BASE_REF}" -- CHANGELOG.md
