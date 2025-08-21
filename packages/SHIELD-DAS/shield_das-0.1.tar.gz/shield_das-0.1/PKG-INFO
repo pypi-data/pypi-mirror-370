@@ -1,0 +1,148 @@
+Metadata-Version: 2.4
+Name: SHIELD_DAS
+Version: 0.1
+Summary: SHIELD permeation rig data aquisition system
+Author: James Dark
+Author-email: darkj385@mit.edu
+License: MIT License
+        
+        Copyright (c) 2025 PTTEPxMIT
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/PTTEPxMIT/SHIELD_DAS
+Project-URL: Issues, https://github.com/PTTEPxMIT/SHIELD_DAS/issues
+Classifier: Natural Language :: English
+Classifier: Topic :: Scientific/Engineering
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: LabJackPython
+Requires-Dist: numpy
+Requires-Dist: dash
+Requires-Dist: dash_bootstrap_components
+Requires-Dist: pandas
+Requires-Dist: keyboard
+Requires-Dist: plotly-resampler
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: numpy; extra == "test"
+Provides-Extra: lint
+Requires-Dist: ruff; extra == "lint"
+Requires-Dist: mypy; extra == "lint"
+Provides-Extra: docs
+Requires-Dist: sphinx; extra == "docs"
+Requires-Dist: sphinx-book-theme; extra == "docs"
+Requires-Dist: sphinx-design; extra == "docs"
+Requires-Dist: matplotlib; extra == "docs"
+Dynamic: license-file
+
+# SHIELD permeation rig Data Aquisistion System
+
+This is a tool to be used with the SHIELD hydrogen permeation rig, providing a way to both record data from the rig and have a live UI displaying plots of the pressure values in the gauges connected to the rig and the temperature of the connected thermocouple.
+
+<img width="1435" alt="Image" src="https://github.com/user-attachments/assets/c88b2da4-6051-4302-baa7-43a56a5254d2" />
+
+## Example script
+
+This is an example of a script that can be used to activate the DAS.
+
+```python
+from shield_das import (
+    DataRecorder,
+    WGM701_Gauge,
+    DataPlotter,
+    CVM211_Gauge,
+    Baratron626D_Gauge
+)
+import time
+import sys
+
+# Define gauges
+gauge_1 = WGM701_Gauge(
+    gauge_location="downstream",
+    export_filename="WGM701_pressure_data.csv",
+)
+gauge_2 = CVM211_Gauge(
+    gauge_location="upstream",
+    export_filename="CVM211_pressure_data.csv",
+)
+gauge_3 = Baratron626D_Gauge(
+    name="Baratron626D_1KT",
+    gauge_location="upstream",
+    export_filename="Baratron626D_1KT_upstream_pressure_data.csv",
+    full_scale_Torr=1000,
+)
+gauge_4 = Baratron626D_Gauge(
+    name="Baratron626D_1T",
+    gauge_location="downstream",
+    export_filename="Baratron626D_1T_downstream_pressure_data.csv",
+    full_scale_Torr=1,
+)
+
+# Create recorder
+my_recorder = DataRecorder(
+    gauges=[gauge_1, gauge_2, gauge_3, gauge_4],
+)
+
+if __name__ == "__main__":
+    # Check if we're running in headless mode
+    headless = "--headless" in sys.argv
+    
+    if headless:
+        # Start recorder directly in headless mode
+        my_recorder.start()
+    else:
+        # Create and start the plotter
+        plotter = DataPlotter(my_recorder)
+        plotter.start()
+    
+    # Keep the main thread running (same for both modes)
+    try:
+        while True:
+            time.sleep(1)
+            # Print status every 10 seconds in headless mode
+            if headless and int(time.time()) % 10 == 0:
+                import datetime
+                print(f"Current time: {datetime.datetime.now()} - Recording in progress... Elapsed time: {my_recorder.elapsed_time:.1f}s")
+    except KeyboardInterrupt:
+        my_recorder.stop()
+        print("Recorder stopped")
+```
+
+# Test mode
+If the labjack is not connected, the program can be run in `test_mode`, where dummy data is generated which can then be recorded and veiwed for testing the program works.
+
+It can be activate with the argument `test_mode` in the `DataRecorder` class:
+
+```python
+# Create recorder
+my_recorder = DataRecorder(
+    gauges=[gauge_1, gauge_2, gauge_3, gauge_4],
+    test_mode=True
+)
+```
