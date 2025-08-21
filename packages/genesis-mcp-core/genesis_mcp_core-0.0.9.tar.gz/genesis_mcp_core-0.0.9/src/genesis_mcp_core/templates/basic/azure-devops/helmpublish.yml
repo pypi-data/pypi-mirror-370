@@ -1,0 +1,41 @@
+parameters:
+  - name: SERVICE_CONNECTION_NAME
+  - name: HELM_ACR_NAME
+  - name: CHART_PATH
+
+jobs:
+- job: HelmPackageAndPublish
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - checkout: self
+  - task: HelmInstaller@1
+    inputs:
+      helmVersionToInstall: '3.12.0'
+    displayName: 'Install Helm'
+  - script: |
+      helm version
+      helm plugin install https://github.com/chartmuseum/helm-push || true
+    displayName: 'Setup Helm'
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: '${{ "{{" }} parameters.SERVICE_CONNECTION_NAME {{ "}}" }}'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        # Login to ACR
+        az acr login --name ${{ "{{" }} parameters.HELM_ACR_NAME {{ "}}" }}
+        
+        # Package and push helm chart
+        cd ${{ "{{" }} parameters.CHART_PATH {{ "}}" }}
+        
+        # Update Chart.yaml with build number
+        sed -i "s/version: .*/version: $(Build.BuildNumber)/" {{ SERVICE_NAME }}/Chart.yaml
+        sed -i "s/appVersion: .*/appVersion: \"$(Build.BuildNumber)\"/" {{ SERVICE_NAME }}/Chart.yaml
+        
+        # Package the chart
+        helm package {{ SERVICE_NAME }}/
+        
+        # Push to ACR
+        helm push {{ SERVICE_NAME }}-$(Build.BuildNumber).tgz oci://${{ "{{" }} parameters.HELM_ACR_NAME {{ "}}" }}.azurecr.io/helm
+    displayName: 'Package and Publish Helm Chart'
