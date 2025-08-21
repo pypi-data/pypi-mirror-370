@@ -1,0 +1,1414 @@
+#
+# Program
+# ==================================================
+
+gql_program : (session_activity | transaction_activity) [ session_close_command ] | session_close_command
+
+session_activity : session_reset_command+ | session_set_command+ session_reset_command*
+
+transaction_activity : start_transaction_command [ query_specification [ end_transaction_command ] ] | query_specification [ end_transaction_command ] | end_transaction_command
+
+end_transaction_command : ROLLBACK | COMMIT
+
+session_close_command : SESSION CLOSE
+
+session_reset_command : SESSION RESET [ session_reset_arguments ]
+
+session_reset_arguments : [ ALL ] ( PARAMETERS | CHARACTERISTICS ) | SCHEMA | [ PROPERTY ] GRAPH | TIME ZONE | [ PARAMETER ] GENERAL_PARAMETER_REFERENCE
+
+session_set_command : SESSION SET ( session_set_schema_clause | session_set_graph_clause | session_set_time_zone_clause | session_set_parameter_clause )
+
+session_set_schema_clause : SCHEMA schema_reference
+
+session_set_graph_clause : [ PROPERTY ] GRAPH graph_expression
+
+session_set_time_zone_clause : TIME ZONE TIME_ZONE_STRING
+
+session_set_parameter_clause : session_set_graph_parameter_clause | session_set_binding_table_parameter_clause | session_set_value_parameter_clause
+
+session_set_graph_parameter_clause : [ PROPERTY ] GRAPH session_set_parameter_name graph_initializer
+
+session_set_binding_table_parameter_clause : [ BINDING ] TABLE session_set_parameter_name binding_table_initializer
+
+session_set_value_parameter_clause : VALUE session_set_parameter_name value_initializer
+
+session_set_parameter_name : [ IF NOT EXISTS ] GENERAL_PARAMETER_REFERENCE
+
+start_transaction_command : START TRANSACTION [ transaction_characteristics ]
+
+transaction_characteristics : transaction_mode (COMMA transaction_mode)*
+
+transaction_mode : READ (ONLY | WRITE)
+
+#
+# Query Specification
+# ==================================================
+
+query_specification : [ AT schema_reference ] binding_variable_definition* statement_block
+
+binding_variable_definition : graph_variable_definition | binding_table_variable_definition | value_variable_definition
+
+graph_variable_definition : [ PROPERTY ] GRAPH REGULAR_IDENTIFIER graph_initializer
+
+graph_initializer : [ [ DOUBLE_COLON | TYPED ] graph_reference_value_type ] EQUALS_OPERATOR graph_expression
+
+graph_reference_value_type : ( ANY [ PROPERTY ] GRAPH | [ PROPERTY ] GRAPH [ LEFT_BRACE element_type_list RIGHT_BRACE ] ) [ NOT NULL ]
+
+binding_table_variable_definition : [ BINDING ] TABLE REGULAR_IDENTIFIER binding_table_initializer
+
+binding_table_initializer : [ [ DOUBLE_COLON | TYPED ] binding_table_reference_value_type ] EQUALS_OPERATOR binding_table_expression
+
+binding_table_reference_value_type : [ BINDING ] TABLE field_types_specification [ NOT NULL ]
+
+#
+# Statements
+# ==================================================
+
+statement_block : statement (NEXT [ yield_clause ] statement)*
+
+statement : primitive_catalog_modifying_statement
+   | linear_data_modifying_statement
+   | composite_query_expression
+
+linear_data_modifying_statement : use_graph_clause? ( (simple_query_statement | primitive_data_modifying_statement | call_procedure_statement)+ [ primitive_result_statement ] |  LEFT_BRACE [ AT schema_reference ] binding_variable_definition* statement_block RIGHT_BRACE)
+
+primitive_catalog_modifying_statement : create_schema_statement
+   | drop_schema_statement
+   | create_graph_statement
+   | drop_graph_statement
+   | create_graph_type_statement
+   | drop_graph_type_statement
+
+primitive_data_modifying_statement : insert_statement | set_statement | remove_statement | delete_statement
+
+
+create_schema_statement : CREATE SCHEMA [ IF NOT EXISTS ] absolute_directory_path IDENTIFIER
+
+drop_schema_statement : DROP SCHEMA [ IF EXISTS ] absolute_directory_path IDENTIFIER
+
+create_graph_statement : CREATE ( [ PROPERTY ] GRAPH [ IF NOT EXISTS ] | OR REPLACE [ PROPERTY ] GRAPH ) [ catalog_object_parent_reference ] IDENTIFIER ( open_graph_type | of_graph_type ) [ AS COPY OF graph_expression ]
+
+open_graph_type : [ DOUBLE_COLON | TYPED ] ANY [ [ PROPERTY ] GRAPH ]
+
+of_graph_type : LIKE graph_expression 
+   | [ DOUBLE_COLON | TYPED ] graph_type_reference
+   | [ DOUBLE_COLON | TYPED ] [ [ PROPERTY ] GRAPH ] LEFT_BRACE element_type_list RIGHT_BRACE
+
+drop_graph_statement : DROP [ PROPERTY ] GRAPH [ IF EXISTS ] [ catalog_object_parent_reference ] IDENTIFIER
+
+create_graph_type_statement : CREATE ( [ PROPERTY ] GRAPH TYPE [ IF NOT EXISTS ] | OR REPLACE [ PROPERTY ] GRAPH TYPE ) [ catalog_object_parent_reference ] IDENTIFIER graph_type_source
+
+graph_type_source : [ AS ] COPY OF ( graph_type_reference | URI ) | LIKE graph_expression | [ AS ] LEFT_BRACE element_type_list RIGHT_BRACE
+
+drop_graph_type_statement : DROP [ PROPERTY ] GRAPH TYPE [ IF EXISTS ] [ catalog_object_parent_reference ] IDENTIFIER
+
+composite_query_expression : linear_query_statement (query_conjunction linear_query_statement)*
+
+query_conjunction : UNION [ set_quantifier ] | EXCEPT [ set_quantifier ] | INTERSECT [ set_quantifier ] | OTHERWISE
+
+linear_query_statement : select_statement
+   | use_graph_clause ( LEFT_BRACE query_specification RIGHT_BRACE ) | [ simple_query_statement+ (use_graph_clause simple_query_statement+ )* ] primitive_result_statement
+   | simple_query_statement* primitive_result_statement 
+   | LEFT_BRACE query_specification RIGHT_BRACE
+
+simple_query_statement : match_statement
+   | let_statement
+   | for_statement
+   | filter_statement
+   | order_by_and_page_statement 
+   | call_procedure_statement
+
+match_statement : simple_match_statement | optional_match_statement
+
+simple_match_statement : MATCH graph_pattern_binding_table
+
+graph_pattern_binding_table : graph_pattern [ YIELD (REGULAR_IDENTIFIER ( COMMA REGULAR_IDENTIFIER )* | NO BINDINGS) ]
+
+optional_match_statement : OPTIONAL (simple_match_statement | LEFT_BRACE match_statement+ RIGHT_BRACE | LEFT_PAREN match_statement+ RIGHT_PAREN)
+
+filter_statement : FILTER ( where_clause | boolean_value_expression )
+
+let_statement : LET let_variable_definition ( COMMA let_variable_definition )*
+
+for_statement : FOR for_item [ WITH ( ORDINALITY | OFFSET ) REGULAR_IDENTIFIER ]
+
+for_item : REGULAR_IDENTIFIER IN ( list_value_expression | binding_table_reference_value_expression)
+
+order_by_and_page_statement : order_by_clause [ offset_clause ] [ limit_clause ]
+   | offset_clause [ limit_clause ]
+   | limit_clause
+
+primitive_result_statement : RETURN ([ set_quantifier ] ( ASTERISK | return_item ( COMMA return_item )* ) [ group_by_clause ] | NO BINDINGS) [ order_by_and_page_statement ] | FINISH
+
+return_item : aggregating_value_expression [ AS IDENTIFIER ]
+
+select_statement : SELECT [ set_quantifier ] ( ASTERISK | select_item ( COMMA select_item )* ) [ select_statement_body [ where_clause ] [ group_by_clause ] [ HAVING boolean_value_expression ] [ order_by_clause ] [ offset_clause ] [ limit_clause ] ]
+
+select_item : aggregating_value_expression [ AS IDENTIFIER ]
+
+select_statement_body : FROM ( select_graph_match ( COMMA select_graph_match )* | select_query_specification )
+
+select_graph_match : graph_expression match_statement
+
+select_query_specification : graph_expression? LEFT_BRACE query_specification RIGHT_BRACE
+
+call_procedure_statement : [ OPTIONAL ] CALL (inline_procedure_call | named_procedure_call)
+
+inline_procedure_call : [ variable_scope_clause ] LEFT_BRACE query_specification RIGHT_BRACE
+
+variable_scope_clause : LEFT_PAREN [ REGULAR_IDENTIFIER ( COMMA REGULAR_IDENTIFIER )* ] RIGHT_PAREN
+
+named_procedure_call : procedure_reference LEFT_PAREN [ value_expression ( COMMA value_expression )* ] RIGHT_PAREN [ yield_clause ]
+
+use_graph_clause : USE graph_expression
+
+insert_statement : INSERT insert_path_pattern ( COMMA insert_path_pattern )*
+
+set_statement : SET set_item ( COMMA set_item )*
+
+set_item : REGULAR_IDENTIFIER ( set_property_item | set_all_properties_item | set_label_item)
+
+set_property_item : PERIOD IDENTIFIER EQUALS_OPERATOR value_expression
+
+set_all_properties_item : EQUALS_OPERATOR LEFT_BRACE [ property_key_value_pair_list ] RIGHT_BRACE
+
+set_label_item : (IS | COLON) IDENTIFIER
+
+remove_statement : REMOVE remove_item ( COMMA remove_item )*
+
+remove_item : REGULAR_IDENTIFIER (PERIOD | IS | COLON) IDENTIFIER
+
+delete_statement : [ DETACH | NODETACH ] DELETE value_expression ( COMMA value_expression )*
+
+insert_path_pattern : insert_node_pattern ( insert_edge_pattern insert_node_pattern )*
+
+insert_node_pattern : LEFT_PAREN [ insert_element_pattern ] RIGHT_PAREN
+
+insert_edge_pattern : insert_edge_pointing_left | insert_edge_pointing_right | insert_edge_undirected
+
+insert_edge_pointing_left : LEFT_ARROW_BRACKET [ insert_element_pattern ] RIGHT_BRACKET_MINUS
+
+insert_edge_pointing_right : MINUS_LEFT_BRACKET [ insert_element_pattern ] BRACKET_RIGHT_ARROW
+
+insert_edge_undirected : TILDE_LEFT_BRACKET [ insert_element_pattern ] RIGHT_BRACKET_TILDE
+
+insert_element_pattern : [ TEMP ] REGULAR_IDENTIFIER [ label_and_property_set_specification ] | label_and_property_set_specification
+
+label_and_property_set_specification : (IS | COLON) label_set_specification [ element_property_specification ] | [ (IS | COLON) label_set_specification ] element_property_specification
+
+path_pattern_prefix : path_mode_prefix | path_search_prefix
+
+path_mode_prefix : path_mode [ PATH | PATHS ]
+
+path_mode : WALK | TRAIL | SIMPLE | ACYCLIC
+
+path_search_prefix : all_path_search | any_path_search | shortest_path_search
+
+all_path_search : ALL [ path_mode ] [ PATH | PATHS ]
+
+any_path_search : ANY [ non_negative_integer_specification ] [ path_mode ] [ PATH | PATHS ]
+
+shortest_path_search : all_shortest_path_search | any_shortest_path_search | counted_shortest_path_search | counted_shortest_group_search
+
+all_shortest_path_search : ALL SHORTEST [ path_mode ] [ PATH | PATHS ]
+
+any_shortest_path_search : ANY SHORTEST [ path_mode ] [ PATH | PATHS ]
+
+counted_shortest_path_search : SHORTEST non_negative_integer_specification [ path_mode ] [ PATH | PATHS ]
+
+counted_shortest_group_search : SHORTEST [ non_negative_integer_specification ] [ path_mode ] [ PATH | PATHS ] ( GROUP | GROUPS )
+
+path_pattern_expression : path_term | path_multiset_alternation | path_pattern_union
+
+path_multiset_alternation : path_term MULTISET_ALTERNATION_OPERATOR path_term [ ( MULTISET_ALTERNATION_OPERATOR path_term )+ ]
+
+path_pattern_union : path_term VERTICAL_BAR path_term [ ( VERTICAL_BAR path_term )+ ]
+
+path_term : (path_primary [ graph_pattern_quantifier | QUESTION_MARK ] )+
+
+path_primary : node_pattern | edge_pattern | parenthesized_path_pattern_expression | simplified_path_pattern_expression
+
+node_pattern : LEFT_PAREN element_pattern RIGHT_PAREN
+
+element_pattern : [ [ TEMP ] REGULAR_IDENTIFIER ] [ (IS | COLON) label_expression ] [ WHERE boolean_value_expression | element_property_specification ]
+
+element_property_specification : LEFT_BRACE property_key_value_pair_list RIGHT_BRACE
+
+property_key_value_pair_list : property_key_value_pair ( COMMA property_key_value_pair )*
+
+property_key_value_pair : IDENTIFIER COLON value_expression
+
+edge_pattern : full_edge_pattern | abbreviated_edge_pattern
+
+full_edge_pattern : full_edge_pointing_left | full_edge_undirected | full_edge_pointing_right | full_edge_left_or_undirected | full_edge_undirected_or_right | full_edge_left_or_right | full_edge_any_direction
+
+full_edge_pointing_left : LEFT_ARROW_BRACKET element_pattern RIGHT_BRACKET_MINUS
+
+full_edge_undirected : TILDE_LEFT_BRACKET element_pattern RIGHT_BRACKET_TILDE
+
+full_edge_pointing_right : MINUS_LEFT_BRACKET element_pattern BRACKET_RIGHT_ARROW
+
+full_edge_left_or_undirected : LEFT_ARROW_TILDE_BRACKET element_pattern RIGHT_BRACKET_TILDE
+
+full_edge_undirected_or_right : TILDE_LEFT_BRACKET element_pattern BRACKET_TILDE_RIGHT_ARROW
+
+full_edge_left_or_right : LEFT_ARROW_BRACKET element_pattern BRACKET_RIGHT_ARROW
+
+full_edge_any_direction : MINUS_LEFT_BRACKET element_pattern RIGHT_BRACKET_MINUS
+
+abbreviated_edge_pattern : LEFT_ARROW | TILDE | RIGHT_ARROW | LEFT_ARROW_TILDE | TILDE_RIGHT_ARROW | LEFT_MINUS_RIGHT | MINUS_SIGN
+
+parenthesized_path_pattern_expression : LEFT_PAREN [ REGULAR_IDENTIFIER EQUALS_OPERATOR ] [ path_mode_prefix ] path_pattern_expression [ WHERE boolean_value_expression ] RIGHT_PAREN
+
+label_expression : label_term (VERTICAL_BAR label_term)*
+
+label_term : label_factor (AMPERSAND label_factor)*
+
+label_factor : label_primary | EXCLAMATION_MARK label_primary
+
+label_primary : IDENTIFIER | PERCENT | LEFT_PAREN label_expression RIGHT_PAREN
+
+graph_pattern_quantifier : ASTERISK | PLUS_SIGN | fixed_quantifier | general_quantifier
+
+fixed_quantifier : LEFT_BRACE UNSIGNED_INTEGER RIGHT_BRACE
+
+general_quantifier : LEFT_BRACE [ UNSIGNED_INTEGER ] COMMA [ UNSIGNED_INTEGER ] RIGHT_BRACE
+
+simplified_path_pattern_expression : simplified_defaulting_left 
+   | simplified_defaulting_undirected
+   | simplified_defaulting_right
+   | simplified_defaulting_left_or_undirected
+   | simplified_defaulting_undirected_or_right
+   | simplified_defaulting_left_or_right
+   | simplified_defaulting_any_direction
+
+simplified_defaulting_left : LEFT_MINUS_SLASH simplified_contents SLASH_MINUS
+
+simplified_defaulting_undirected : TILDE_SLASH simplified_contents SLASH_TILDE
+
+simplified_defaulting_right : MINUS_SLASH simplified_contents SLASH_MINUS_RIGHT
+
+simplified_defaulting_left_or_undirected : LEFT_TILDE_SLASH simplified_contents SLASH_TILDE
+
+simplified_defaulting_undirected_or_right : TILDE_SLASH simplified_contents SLASH_TILDE_RIGHT
+
+simplified_defaulting_left_or_right : LEFT_MINUS_SLASH simplified_contents SLASH_MINUS_RIGHT
+
+simplified_defaulting_any_direction : MINUS_SLASH simplified_contents SLASH_MINUS
+
+simplified_contents : simplified_term | simplified_path_union | simplified_multiset_alternation
+
+simplified_path_union : simplified_term VERTICAL_BAR simplified_term [ ( VERTICAL_BAR simplified_term )+ ]
+
+simplified_multiset_alternation : simplified_term MULTISET_ALTERNATION_OPERATOR simplified_term [ ( MULTISET_ALTERNATION_OPERATOR simplified_term )+ ]
+
+simplified_term : (simplified_factor (AMPERSAND simplified_factor)* )+
+
+simplified_factor : (simplified_direction_override | simplified_secondary) [ graph_pattern_quantifier | QUESTION_MARK ]
+
+simplified_direction_override : simplified_override_left
+   | simplified_override_undirected
+   | simplified_override_right
+   | simplified_override_left_or_undirected
+   | simplified_override_undirected_or_right
+   | simplified_override_left_or_right
+   | simplified_override_any_direction
+
+simplified_override_left : LEFT_ANGLE_BRACKET simplified_secondary
+
+simplified_override_undirected : TILDE simplified_secondary
+
+simplified_override_right : simplified_secondary RIGHT_ANGLE_BRACKET
+
+simplified_override_left_or_undirected : LEFT_ARROW_TILDE simplified_secondary
+
+simplified_override_undirected_or_right : TILDE simplified_secondary RIGHT_ANGLE_BRACKET
+
+simplified_override_left_or_right : LEFT_ANGLE_BRACKET simplified_secondary RIGHT_ANGLE_BRACKET
+
+simplified_override_any_direction : MINUS_SIGN simplified_secondary
+
+simplified_secondary : [ EXCLAMATION_MARK ] (IDENTIFIER | LEFT_PAREN simplified_contents RIGHT_PAREN)
+
+where_clause : WHERE boolean_value_expression
+
+yield_clause : YIELD yield_item ( COMMA yield_item )*
+
+yield_item : IDENTIFIER [ AS REGULAR_IDENTIFIER ]
+
+group_by_clause : GROUP BY (REGULAR_IDENTIFIER ( COMMA REGULAR_IDENTIFIER )* | LEFT_PAREN RIGHT_PAREN)
+
+order_by_clause : ORDER BY sort_specification ( COMMA sort_specification )*
+
+sort_specification : aggregating_value_expression [ ordering_specification ] [ NULLS FIRST | NULLS LAST ]
+
+ordering_specification : ASC | ASCENDING | DESC | DESCENDING
+
+limit_clause : LIMIT non_negative_integer_specification
+
+offset_clause : (OFFSET | SKIP) non_negative_integer_specification
+
+graph_type_reference : [ catalog_object_parent_reference ] IDENTIFIER | SUBSTITUTED_PARAMETER_REFERENCE
+
+procedure_reference : [ catalog_object_parent_reference ] IDENTIFIER | SUBSTITUTED_PARAMETER_REFERENCE
+
+#
+# Expressions
+# ==================================================
+
+graph_expression : VARIABLE value_expression_primary
+   | LEFT_PAREN value_expression RIGHT_PAREN
+   | non_parenthesized_value_expression
+   | graph_reference
+   | REGULAR_IDENTIFIER
+   | CURRENT_PROPERTY_GRAPH
+   | CURRENT_GRAPH
+
+binding_table_expression : LEFT_BRACE query_specification RIGHT_BRACE
+   | VARIABLE value_expression_primary
+   | LEFT_PAREN value_expression RIGHT_PAREN
+   | non_parenthesized_value_expression
+   | catalog_object_parent_reference IDENTIFIER
+   | DELIMITED_IDENTIFIER
+   | SUBSTITUTED_PARAMETER_REFERENCE
+   | REGULAR_IDENTIFIER
+
+value_variable_definition : VALUE REGULAR_IDENTIFIER value_initializer
+
+value_initializer : [ [ DOUBLE_COLON | TYPED ] value_type ] EQUALS_OPERATOR value_expression
+
+element_type_list : element_type_specification ( COMMA element_type_specification )*
+
+element_type_specification : node_type_specification | edge_type_specification
+
+node_type_specification : node_type_pattern | node_type_phrase
+
+node_type_pattern : [ node_synonym [ TYPE ] IDENTIFIER ] LEFT_PAREN [ REGULAR_IDENTIFIER ] [ node_type_filler ] RIGHT_PAREN
+
+node_type_phrase : node_synonym [ TYPE ] node_type_phrase_filler [ AS REGULAR_IDENTIFIER ]
+
+node_type_phrase_filler : IDENTIFIER [ node_type_filler ] | node_type_filler
+
+node_type_filler : [ label_set_phrase ] (RIGHT_DOUBLE_ARROW | IMPLIES) [ node_type_implied_content ] | node_type_implied_content
+
+node_type_implied_content : label_set_phrase | property_types_specification | label_set_phrase property_types_specification
+
+field_types_specification : LEFT_BRACE [ field_type ( COMMA field_type )* ] RIGHT_BRACE
+
+graph_reference : catalog_object_parent_reference IDENTIFIER
+   | DELIMITED_IDENTIFIER
+   | HOME_PROPERTY_GRAPH 
+   | HOME_GRAPH
+   | SUBSTITUTED_PARAMETER_REFERENCE
+
+value_expression : common_value_expression
+   | boolean_value_expression
+
+# Note: many things are simply value_expression_primary
+common_value_expression : numeric_value_expression
+   | string_value_expression
+   | datetime_value_expression
+   | duration_value_expression
+   | list_value_expression
+   | graph_reference_value_expression
+   | binding_table_reference_value_expression
+   | path_value_expression
+# Note: these are subsets of list_value_expression
+#   | record_expression
+
+#reference_value_expression : graph_reference_value_expression
+#   | binding_table_reference_value_expression
+#   | value_expression_primary
+
+graph_reference_value_expression : [ PROPERTY ] GRAPH graph_expression | value_expression_primary
+
+binding_table_reference_value_expression : [ BINDING ] TABLE binding_table_expression
+
+# Note used as it is subset of list_value_expression
+#record_expression : value_expression_primary
+
+aggregating_value_expression : value_expression
+
+value_expression_primary :  REGULAR_IDENTIFIER 
+   | LEFT_PAREN value_expression RIGHT_PAREN 
+   | non_parenthesized_value_expression
+
+non_parenthesized_value_expression : aggregate_function
+   | literal 
+   | general_value_specification
+   | path_value_constructor
+   | property_reference
+   | value_query_expression
+   | case_expression
+   | cast_specification
+   | element_id_function
+   | let_value_expression
+
+boolean_value_expression : boolean_term ( (OR | XOR) boolean_term )*
+
+boolean_term : [ NOT ] boolean_test (AND [ NOT ] boolean_test)*
+
+boolean_test : boolean_primary [ IS [ NOT ] boolean_literal ]
+
+boolean_primary : predicate | LEFT_PAREN boolean_value_expression RIGHT_PAREN | non_parenthesized_value_expression | REGULAR_IDENTIFIER
+
+numeric_value_expression : term ( (PLUS_SIGN | MINUS_SIGN) term )*
+
+term : factor ( (ASTERISK | SOLIDUS) factor)*
+
+factor : [ (MINUS_SIGN | PLUS_SIGN) ] (value_expression_primary | numeric_value_function )
+
+numeric_value_function : length_expression
+   | cardinality_expression
+   | absolute_value_expression
+   | modulus_expression
+   | trigonometric_function
+   | general_logarithm_function
+   | common_logarithm
+   | natural_logarithm
+   | exponential_function
+   | power_function
+   | square_root
+   | floor_function
+   | ceiling_function
+
+length_expression : char_length_expression | byte_length_expression | path_length_expression
+
+cardinality_expression : CARDINALITY LEFT_PAREN cardinality_expression_argument RIGHT_PAREN | SIZE LEFT_PAREN list_value_expression RIGHT_PAREN
+
+# Note: path_value_expression and record_expression are a subset of list_value_expression 
+# cardinality_expression_argument :  binding_table_reference_value_expression | path_value_expression | list_value_expression | record_expression
+cardinality_expression_argument :  binding_table_reference_value_expression | list_value_expression | path_value_expression
+
+
+char_length_expression : ( CHAR_LENGTH | CHARACTER_LENGTH ) LEFT_PAREN character_string_value_expression RIGHT_PAREN
+
+byte_length_expression : ( BYTE_LENGTH | OCTET_LENGTH ) LEFT_PAREN byte_string_value_expression RIGHT_PAREN
+
+path_length_expression : PATH_LENGTH LEFT_PAREN path_value_expression RIGHT_PAREN
+
+absolute_value_expression : ABS LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+modulus_expression : MOD LEFT_PAREN numeric_value_expression COMMA numeric_value_expression RIGHT_PAREN
+
+trigonometric_function : trigonometric_function_name LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+trigonometric_function_name : SIN | COS | TAN | COT | SINH | COSH | TANH | ASIN | ACOS | ATAN | DEGREES | RADIANS
+
+general_logarithm_function : LOG LEFT_PAREN numeric_value_expression COMMA numeric_value_expression RIGHT_PAREN
+
+common_logarithm : LOG10 LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+natural_logarithm : LN LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+exponential_function : EXP LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+power_function : POWER LEFT_PAREN numeric_value_expression COMMA numeric_value_expression RIGHT_PAREN
+
+square_root : SQRT LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+floor_function : FLOOR LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+ceiling_function : ( CEIL | CEILING ) LEFT_PAREN numeric_value_expression RIGHT_PAREN
+
+character_string_value_expression : character_string_primary (CONCATENATION_OPERATOR character_string_primary)*
+
+character_string_primary : value_expression_primary | character_string_function
+
+byte_string_value_expression : byte_string_primary (CONCATENATION_OPERATOR byte_string_primary)*
+
+byte_string_primary : value_expression_primary | byte_string_function
+
+character_string_function : substring_function | fold | trim_function | normalize_function
+
+substring_function : ( LEFT | RIGHT ) LEFT_PAREN character_string_value_expression COMMA numeric_value_expression RIGHT_PAREN
+
+fold : ( UPPER | LOWER ) LEFT_PAREN character_string_value_expression RIGHT_PAREN
+
+trim_function : single_character_trim_function | multi_character_trim_function
+
+single_character_trim_function : TRIM LEFT_PAREN trim_operands RIGHT_PAREN
+
+multi_character_trim_function : ( BTRIM | LTRIM | RTRIM ) LEFT_PAREN character_string_value_expression [ COMMA character_string_value_expression ] RIGHT_PAREN
+
+trim_operands : [ [ trim_specification ] [ character_string_value_expression ] FROM ] character_string_value_expression
+
+trim_specification : LEADING | TRAILING | BOTH
+
+normalize_function : NORMALIZE LEFT_PAREN character_string_value_expression [ COMMA normal_form ] RIGHT_PAREN
+
+normal_form : NFC | NFD | NFKC | NFKD
+
+byte_string_function : byte_string_substring_function | byte_string_trim_function
+
+byte_string_substring_function : ( LEFT | RIGHT ) LEFT_PAREN byte_string_value_expression COMMA numeric_value_expression RIGHT_PAREN
+
+byte_string_trim_function : TRIM LEFT_PAREN byte_string_trim_operands RIGHT_PAREN
+
+byte_string_trim_operands : [ [ trim_specification ] [ byte_string_value_expression ] FROM ] byte_string_value_expression
+
+datetime_value_expression : datetime_primary 
+   | duration_value_expression PLUS_SIGN datetime_primary
+   | datetime_value_expression PLUS_SIGN duration_term
+   | datetime_value_expression MINUS_SIGN duration_term
+
+datetime_primary : value_expression_primary | datetime_value_function
+
+datetime_value_function : date_function
+   | time_function
+   | datetime_function
+   | localtime_function
+   | localdatetime_function
+
+date_function : CURRENT_DATE | DATE LEFT_PAREN [ date_function_parameters ] RIGHT_PAREN
+
+time_function : CURRENT_TIME | ZONED_TIME LEFT_PAREN [ time_function_parameters ] RIGHT_PAREN
+
+localtime_function : LOCAL_TIME [ LEFT_PAREN [ time_function_parameters ] RIGHT_PAREN ]
+
+datetime_function : CURRENT_TIMESTAMP | ZONED_DATETIME LEFT_PAREN [ datetime_function_parameters ] RIGHT_PAREN
+
+localdatetime_function : LOCAL_TIMESTAMP | LOCAL_DATETIME LEFT_PAREN [ datetime_function_parameters ] RIGHT_PAREN
+
+date_function_parameters : DATE_STRING | record_literal
+
+time_function_parameters : TIME_STRING | record_literal
+
+datetime_function_parameters : DATETIME_STRING | record_literal
+
+duration_value_expression : (duration_term | datetime_subtraction) ((PLUS_SIGN|MINUS_SIGN) (duration_term | datetime_subtraction) )*
+
+datetime_subtraction : DURATION_BETWEEN LEFT_PAREN datetime_value_expression COMMA datetime_value_expression RIGHT_PAREN [ temporal_duration_qualifier ]
+
+duration_term : ( factor | duration_factor ) (( ASTERISK | SOLIDUS ) factor )*
+   | term ASTERISK ( factor | duration_factor )
+
+duration_factor : [ (MINUS_SIGN | PLUS_SIGN) ] duration_value_function
+
+duration_value_function : duration_function | duration_absolute_value_function
+
+duration_function : DURATION LEFT_PAREN (DURATION_STRING | record_literal) RIGHT_PAREN
+
+duration_absolute_value_function : ABS LEFT_PAREN duration_value_expression RIGHT_PAREN
+
+path_value_expression : value_expression_primary (CONCATENATION_OPERATOR value_expression_primary)*
+
+path_value_constructor : PATH LEFT_BRACKET path_element_list RIGHT_BRACKET
+
+path_element_list : value_expression_primary (COMMA value_expression_primary COMMA value_expression_primary)*
+
+list_value_expression : list_primary (CONCATENATION_OPERATOR list_primary)*
+
+list_primary : trim_list_function | elements_function | value_expression_primary
+
+trim_list_function : TRIM LEFT_PAREN list_value_expression COMMA numeric_value_expression RIGHT_PAREN
+
+elements_function : ELEMENTS LEFT_PAREN path_value_expression RIGHT_PAREN
+
+list_literal : [ list_value_type_name ] LEFT_BRACKET [ value_expression ( COMMA value_expression )* ] RIGHT_BRACKET
+
+non_negative_integer_specification : UNSIGNED_INTEGER | GENERAL_PARAMETER_REFERENCE
+
+general_value_specification : GENERAL_PARAMETER_REFERENCE | SESSION_USER
+
+let_value_expression : LET let_variable_definition ( COMMA let_variable_definition )* IN value_expression END
+
+let_variable_definition : value_variable_definition | REGULAR_IDENTIFIER EQUALS_OPERATOR value_expression
+
+value_query_expression : VALUE LEFT_BRACE query_specification RIGHT_BRACE
+
+case_expression : case_abbreviation | case_specification
+
+case_abbreviation : NULLIF LEFT_PAREN value_expression COMMA value_expression RIGHT_PAREN
+   | COALESCE LEFT_PAREN value_expression ( COMMA value_expression )+ RIGHT_PAREN
+
+case_specification : simple_case | searched_case
+
+simple_case : CASE (non_parenthesized_value_expression | REGULAR_IDENTIFIER) (WHEN when_operand ( COMMA when_operand )* THEN result)+ [ ELSE result ] END
+
+searched_case : CASE (WHEN boolean_value_expression THEN result)+ [ ELSE result ] END
+
+when_operand : non_parenthesized_value_expression 
+   | REGULAR_IDENTIFIER
+   | comp_op comparison_predicand
+   | IS [ NOT ] ( NULL | (DOUBLE_COLON | TYPED) value_type | [ normal_form ] NORMALIZED | DIRECTED | LABELED label_expression | SOURCE OF edge_reference | DESTINATION OF edge_reference )
+   | COLON label_expression
+
+result : result_expression | NULL
+
+result_expression : value_expression
+
+cast_specification : CAST LEFT_PAREN cast_operand AS cast_target RIGHT_PAREN
+
+cast_operand : value_expression
+
+cast_target : value_type
+
+aggregate_function : COUNT LEFT_PAREN ASTERISK RIGHT_PAREN | general_set_function | binary_set_function
+
+general_set_function : general_set_function_type LEFT_PAREN [ set_quantifier ] value_expression RIGHT_PAREN
+
+binary_set_function : binary_set_function_type LEFT_PAREN dependent_value_expression COMMA independent_value_expression RIGHT_PAREN
+
+general_set_function_type : AVG | COUNT | MAX | MIN | SUM | COLLECT_LIST | STDDEV_SAMP | STDDEV_POP
+
+set_quantifier : DISTINCT | ALL
+
+binary_set_function_type : PERCENTILE_CONT | PERCENTILE_DISC
+
+dependent_value_expression : [ set_quantifier ] numeric_value_expression
+
+independent_value_expression : numeric_value_expression
+
+element_id_function : ELEMENT_ID LEFT_PAREN REGULAR_IDENTIFIER RIGHT_PAREN
+
+property_reference : property_source PERIOD IDENTIFIER
+
+property_source : value_expression_primary
+
+record_literal : [ RECORD ] LEFT_BRACE [ field ( COMMA field )* ] RIGHT_BRACE
+
+field : IDENTIFIER COLON value_expression
+
+predicate : comparison_predicate
+   | exists_predicate
+   | REGULAR_IDENTIFIER ( directed_or_labeled_predicate | source_destination_predicate)
+   | all_different_predicate
+   | same_predicate
+   | property_exists_predicate
+   | value_expression_primary IS [ NOT ] ( null_predicate | value_type_predicate | normalized_predicate)
+   | string_value_expression IS [ NOT ] normalized_predicate
+
+source_destination_predicate : IS [ NOT ] ( SOURCE OF edge_reference | DESTINATION OF edge_reference)
+
+directed_or_labeled_predicate :  ( IS [ NOT ] (DIRECTED | labeled) | colon_labeled )
+colon_labeled : COLON label_expression
+labeled : LABELED label_expression
+
+string_value_expression : character_string_function (CONCATENATION_OPERATOR character_string_primary)* | byte_string_function (CONCATENATION_OPERATOR byte_string_primary)*
+
+null_predicate : NULL
+value_type_predicate : (DOUBLE_COLON | TYPED) value_type
+normalized_predicate : [ normal_form ] NORMALIZED
+
+
+#   | null_predicate
+#   | value_type_predicate
+# null_predicate : value_expression_primary IS [ NOT ] NULL
+# value_type_predicate : value_expression_primary IS [ NOT ] (DOUBLE_COLON | TYPED) value_type
+
+comparison_predicate : comparison_predicand comp_op comparison_predicand
+
+comp_op : EQUALS_OPERATOR
+   | NOT_EQUALS_OPERATOR
+   | LEFT_ANGLE_BRACKET # less_than_operator
+   | RIGHT_ANGLE_BRACKET # greater_than_operator
+   | LESS_THAN_OR_EQUALS_OPERATOR
+   | GREATER_THAN_OR_EQUALS_OPERATOR
+
+comparison_predicand : common_value_expression 
+   | LEFT_PAREN boolean_value_expression RIGHT_PAREN 
+   | non_parenthesized_value_expression 
+   | REGULAR_IDENTIFIER
+
+exists_predicate : EXISTS ( LEFT_BRACE graph_pattern RIGHT_BRACE | LEFT_PAREN graph_pattern RIGHT_PAREN | LEFT_BRACE match_statement+ RIGHT_BRACE | LEFT_PAREN match_statement+ RIGHT_PAREN | LEFT_BRACE query_specification RIGHT_BRACE )
+
+edge_reference : REGULAR_IDENTIFIER
+
+all_different_predicate : ALL_DIFFERENT LEFT_PAREN REGULAR_IDENTIFIER COMMA REGULAR_IDENTIFIER [ ( COMMA REGULAR_IDENTIFIER )+ ] RIGHT_PAREN
+
+same_predicate : SAME LEFT_PAREN REGULAR_IDENTIFIER COMMA REGULAR_IDENTIFIER [ ( COMMA REGULAR_IDENTIFIER )+ ] RIGHT_PAREN
+
+property_exists_predicate : PROPERTY_EXISTS LEFT_PAREN REGULAR_IDENTIFIER COMMA IDENTIFIER RIGHT_PAREN
+
+literal : SIGNED_NUMERIC_LITERAL 
+   | boolean_literal
+   | CHARACTER_STRING_LITERAL
+   | BYTE_STRING_LITERAL
+   | temporal_literal
+   | duration_literal
+   | list_literal
+   | record_literal
+   | NULL
+
+boolean_literal : TRUE | FALSE | UNKNOWN
+
+CHARACTER_STRING_LITERAL : SINGLE_QUOTED_CHARACTER_SEQUENCE | DOUBLE_QUOTED_CHARACTER_SEQUENCE
+
+SIGNED_NUMERIC_LITERAL: (PLUS_SIGN | MINUS_SIGN)? NUMERIC_LITERAL
+
+UNSIGNED_DECIMAL_LITERAL: NUMERIC_LITERAL
+
+temporal_literal : date_literal | time_literal | datetime_literal | SQL_DATETIME_LITERAL
+
+date_literal : DATE DATE_STRING
+
+time_literal : TIME TIME_STRING
+
+datetime_literal : ( DATETIME | TIMESTAMP ) DATETIME_STRING
+
+DATE_STRING : CHARACTER_STRING_LITERAL
+
+TIME_STRING : CHARACTER_STRING_LITERAL
+
+DATETIME_STRING : CHARACTER_STRING_LITERAL
+
+TIME_ZONE_STRING : CHARACTER_STRING_LITERAL
+
+SQL_DATETIME_LITERAL: CHARACTER_STRING_LITERAL # HACK
+
+duration_literal : DURATION DURATION_STRING | SQL_INTERVAL_LITERAL
+
+DURATION_STRING : CHARACTER_STRING_LITERAL
+
+SQL_INTERVAL_LITERAL: CHARACTER_STRING_LITERAL
+
+graph_pattern : [ match_mode ] path_pattern_list [ KEEP path_pattern_prefix ] [ WHERE boolean_value_expression ]
+
+match_mode : repeatable_elements_match_mode | different_edges_match_mode
+
+repeatable_elements_match_mode : REPEATABLE element_bindings_or_elements
+
+different_edges_match_mode : DIFFERENT edge_bindings_or_edges
+
+element_bindings_or_elements : ELEMENT [ BINDINGS ] | ELEMENTS
+
+edge_bindings_or_edges : edge_synonym [ BINDINGS ] | edges_synonym
+
+path_pattern_list : path_pattern ( COMMA path_pattern )*
+
+path_pattern : [ path_variable_declaration ] [ path_pattern_prefix ] path_pattern_expression
+
+path_variable_declaration : REGULAR_IDENTIFIER EQUALS_OPERATOR
+
+#
+# Types
+# ==================================================
+
+property_type : IDENTIFIER [ DOUBLE_COLON | TYPED ] value_type
+
+value_type : value_type_primary ( VERTICAL_BAR value_type_primary )*
+
+value_type_primary : predefined_type | constructed_value_type | dynamic_union_type
+
+predefined_type : boolean_type
+   | character_string_type
+   | byte_string_type
+   | numeric_type
+   | temporal_type
+   | reference_value_type
+   | immaterial_value_type
+
+boolean_type :  ( BOOL | BOOLEAN ) [ NOT NULL ]
+
+character_string_type : STRING [ LEFT_PAREN [ UNSIGNED_INTEGER COMMA ] UNSIGNED_INTEGER RIGHT_PAREN ] [ NOT NULL ]
+   | CHAR [ LEFT_PAREN UNSIGNED_INTEGER RIGHT_PAREN ] [ NOT NULL ]
+   | VARCHAR [ LEFT_PAREN UNSIGNED_INTEGER RIGHT_PAREN ] [ NOT NULL ]
+
+byte_string_type : BYTES [ LEFT_PAREN [ UNSIGNED_INTEGER COMMA ] UNSIGNED_INTEGER RIGHT_PAREN ] [ NOT NULL ]
+   | BINARY [ LEFT_PAREN UNSIGNED_INTEGER RIGHT_PAREN ] [ NOT NULL ]
+   | VARBINARY [ LEFT_PAREN UNSIGNED_INTEGER RIGHT_PAREN ] [ NOT NULL ]
+
+numeric_type : exact_numeric_type | approximate_numeric_type
+
+exact_numeric_type : binary_exact_numeric_type | decimal_exact_numeric_type
+
+binary_exact_numeric_type : signed_binary_exact_numeric_type | unsigned_binary_exact_numeric_type
+
+signed_binary_exact_numeric_type : INT8 [ NOT NULL ]
+   | INT16 [ NOT NULL ]
+   | INT32 [ NOT NULL ]
+   | INT64 [ NOT NULL ]
+   | INT128 [ NOT NULL ]
+   | INT256 [ NOT NULL ]
+   | SMALLINT [ NOT NULL ]
+   | INT [ LEFT_PAREN UNSIGNED_DECIMAL_LITERAL RIGHT_PAREN ] [ NOT NULL ]
+   | BIGINT [ NOT NULL ]
+   | [ SIGNED ] verbose_binary_exact_numeric_type
+
+unsigned_binary_exact_numeric_type : UINT8 [ NOT NULL ]
+   | UINT16 [ NOT NULL ]
+   | UINT32 [ NOT NULL ]
+   | UINT64 [ NOT NULL ]
+   | UINT128 [ NOT NULL ]
+   | UINT256 [ NOT NULL ]
+   | USMALLINT [ NOT NULL ]
+   | UINT [ LEFT_PAREN UNSIGNED_DECIMAL_LITERAL RIGHT_PAREN ] [ NOT NULL ]
+   | UBIGINT [ NOT NULL ]
+   | UNSIGNED verbose_binary_exact_numeric_type
+
+verbose_binary_exact_numeric_type : INTEGER8 [ NOT NULL ]
+   | INTEGER16 [ NOT NULL ]
+   | INTEGER32 [ NOT NULL ]
+   | INTEGER64 [ NOT NULL ]
+   | INTEGER128 [ NOT NULL ]
+   | INTEGER256 [ NOT NULL ]
+   | SMALL INTEGER [ NOT NULL ]
+   | INTEGER [ LEFT_PAREN UNSIGNED_DECIMAL_LITERAL RIGHT_PAREN ] [ NOT NULL ]
+   | BIG INTEGER [ NOT NULL ]
+
+decimal_exact_numeric_type : ( DECIMAL | DEC ) [ LEFT_PAREN UNSIGNED_DECIMAL_LITERAL [ COMMA UNSIGNED_DECIMAL_LITERAL ] RIGHT_PAREN [ NOT NULL ] ]
+
+approximate_numeric_type : FLOAT16 [ NOT NULL ]
+   | FLOAT32 [ NOT NULL ]
+   | FLOAT64 [ NOT NULL ]
+   | FLOAT128 [ NOT NULL ]
+   | FLOAT256 [ NOT NULL ]
+   | FLOAT [ LEFT_PAREN UNSIGNED_DECIMAL_LITERAL [ COMMA UNSIGNED_DECIMAL_LITERAL ] RIGHT_PAREN ] [ NOT NULL ]
+   | REAL [ NOT NULL ]
+   | DOUBLE [ PRECISION ] [ NOT NULL ]
+
+temporal_type : temporal_instant_type | temporal_duration_type
+
+temporal_instant_type : datetime_type
+   | localdatetime_type
+   | date_type
+   | time_type
+   | localtime_type
+
+datetime_type : ZONED DATETIME [ NOT NULL ] | TIMESTAMP WITH TIME ZONE [ NOT NULL ]
+
+localdatetime_type : LOCAL DATETIME [ NOT NULL ] | TIMESTAMP [ WITHOUT TIME ZONE ] [ NOT NULL ]
+
+date_type : DATE [ NOT NULL ]
+
+time_type : ZONED TIME [ NOT NULL ] | TIME WITH TIME ZONE [ NOT NULL ]
+
+localtime_type : LOCAL TIME [ NOT NULL ] | TIME WITHOUT TIME ZONE [ NOT NULL ]
+
+temporal_duration_type : DURATION LEFT_PAREN temporal_duration_qualifier RIGHT_PAREN [ NOT NULL ]
+
+temporal_duration_qualifier : YEAR TO MONTH | DAY TO SECOND
+
+reference_value_type : graph_reference_value_type
+   | binding_table_reference_value_type
+   | node_reference_value_type
+   | edge_reference_value_type
+
+immaterial_value_type : NULL | NULL NOT NULL | NOTHING
+
+node_reference_value_type : (open_node_reference_value_type | closed_node_reference_value_type) [ NOT NULL ]
+
+open_node_reference_value_type : [ ANY ] node_synonym
+
+closed_node_reference_value_type : node_type_specification 
+
+edge_reference_value_type : open_edge_reference_value_type | closed_edge_reference_value_type
+
+closed_edge_reference_value_type : edge_type_specification [ NOT NULL ]
+
+open_edge_reference_value_type : [ ANY ] edge_synonym [ NOT NULL ]
+
+constructed_value_type : path_value_type | list_value_type | record_type
+
+path_value_type : PATH [ NOT NULL ]
+
+list_value_type : ( list_value_type_name LEFT_ANGLE_BRACKET value_type RIGHT_ANGLE_BRACKET | [ value_type ] list_value_type_name ) [ LEFT_BRACKET UNSIGNED_INTEGER RIGHT_BRACKET ] [ NOT NULL ]
+
+list_value_type_name : [ GROUP ] (LIST | ARRAY)
+
+record_type : [ ANY ] RECORD [ NOT NULL ]
+   | [ RECORD ] field_types_specification [ NOT NULL ]
+
+dynamic_union_type : open_dynamic_union_type
+   | dynamic_property_value_type
+   | closed_dynamic_union_type
+
+open_dynamic_union_type : ANY [ VALUE ] [ NOT NULL ]
+
+dynamic_property_value_type : [ ANY ] PROPERTY VALUE [ NOT NULL ]
+
+closed_dynamic_union_type : ANY [ VALUE ] LEFT_ANGLE_BRACKET value_type RIGHT_ANGLE_BRACKET
+
+field_type : IDENTIFIER [ DOUBLE_COLON | TYPED ] value_type
+
+edge_type_specification : edge_type_pattern | edge_type_phrase
+
+edge_type_pattern : [ [ DIRECTED | UNDIRECTED ] edge_synonym [ TYPE ] IDENTIFIER ] ( edge_type_pattern_directed | edge_type_pattern_undirected )
+
+edge_type_phrase : (DIRECTED | UNDIRECTED) edge_synonym [ TYPE ] (IDENTIFIER [ edge_type_filler ] | edge_type_filler) CONNECTING endpoint_pair
+
+edge_type_filler : [ label_set_phrase ] (RIGHT_DOUBLE_ARROW | IMPLIES) [ edge_type_implied_content ]
+   | edge_type_implied_content
+
+edge_type_implied_content : label_set_phrase
+   | property_types_specification
+   | label_set_phrase property_types_specification
+
+edge_type_pattern_directed : edge_type_pattern_pointing_right | edge_type_pattern_pointing_left
+
+edge_type_pattern_pointing_right : source_node_type_reference arc_type_pointing_right destination_node_type_reference
+
+edge_type_pattern_pointing_left : destination_node_type_reference arc_type_pointing_left source_node_type_reference
+
+edge_type_pattern_undirected : source_node_type_reference arc_type_undirected destination_node_type_reference
+
+arc_type_pointing_right : MINUS_LEFT_BRACKET edge_type_filler BRACKET_RIGHT_ARROW
+
+arc_type_pointing_left : LEFT_ARROW_BRACKET edge_type_filler RIGHT_BRACKET_MINUS
+
+arc_type_undirected : TILDE_LEFT_BRACKET edge_type_filler RIGHT_BRACKET_TILDE
+
+source_node_type_reference : LEFT_PAREN REGULAR_IDENTIFIER RIGHT_PAREN
+   | LEFT_PAREN [ node_type_filler ] RIGHT_PAREN
+
+destination_node_type_reference : LEFT_PAREN REGULAR_IDENTIFIER RIGHT_PAREN
+   | LEFT_PAREN [ node_type_filler ] RIGHT_PAREN
+
+endpoint_pair : LEFT_PAREN REGULAR_IDENTIFIER (TO | RIGHT_ARROW | LEFT_ARROW | TILDE) REGULAR_IDENTIFIER RIGHT_PAREN
+#endpoint_pair_directed | endpoint_pair_undirected
+#
+#endpoint_pair_directed : endpoint_pair_pointing_right | endpoint_pair_pointing_left
+#
+#endpoint_pair_pointing_right : LEFT_PAREN REGULAR_IDENTIFIER (TO | RIGHT_ARROW) REGULAR_IDENTIFIER RIGHT_PAREN
+#
+#endpoint_pair_pointing_left : LEFT_PAREN REGULAR_IDENTIFIER LEFT_ARROW REGULAR_IDENTIFIER RIGHT_PAREN
+#
+#endpoint_pair_undirected : LEFT_PAREN REGULAR_IDENTIFIER (TO | TILDE) REGULAR_IDENTIFIER RIGHT_PAREN
+
+label_set_phrase : LABEL IDENTIFIER
+   | LABELS label_set_specification
+   | (IS | COLON) label_set_specification
+
+label_set_specification : IDENTIFIER ( AMPERSAND IDENTIFIER )*
+
+property_types_specification : LEFT_BRACE [ property_type_list ] RIGHT_BRACE
+
+property_type_list : property_type ( COMMA property_type )*
+
+#
+# Common
+# ==================================================
+
+schema_reference : absolute_catalog_schema_reference
+   | relative_catalog_schema_reference
+   | SUBSTITUTED_PARAMETER_REFERENCE
+
+absolute_catalog_schema_reference: SOLIDUS | absolute_directory_path IDENTIFIER
+
+relative_catalog_schema_reference : HOME_SCHEMA | CURRENT_SCHEMA | PERIOD | relative_directory_path IDENTIFIER
+
+absolute_directory_path : SOLIDUS ( IDENTIFIER SOLIDUS )*
+
+relative_directory_path : DOUBLE_PERIOD [ ( SOLIDUS DOUBLE_PERIOD )* SOLIDUS ( IDENTIFIER SOLIDUS )* ]
+
+catalog_object_parent_reference : schema_reference [ SOLIDUS ] ( IDENTIFIER PERIOD )* | ( IDENTIFIER PERIOD )+
+
+#
+# Lexical
+# ==================================================
+
+edge_synonym: EDGE | RELATIONSHIP
+edges_synonym: EDGES | RELATIONSHIPS
+node_synonym: NODE | VERTEX
+
+# words.lark
+
+ABS.1: "ABS"i
+ABSTRACT.1: "ABSTRACT"i
+ACOS.1: "ACOS"i
+ACYCLIC.1: "ACYCLIC"i
+AGGREGATE.1: "AGGREGATE"i
+AGGREGATES.1: "AGGREGATES"i
+ALL.1: "ALL"i
+ALL_DIFFERENT.1: "ALL_DIFFERENT"i
+ALTER.1: "ALTER"i
+AND.1: "AND"i
+ANY.1: "ANY"i
+ARRAY.1: "ARRAY"i
+AS.1: "AS"i
+ASC.1: "ASC"i
+ASCENDING.1: "ASCENDING"i
+ASIN.1: "ASIN"i
+AT.1: "AT"i
+ATAN.1: "ATAN"i
+AVG.1: "AVG"i
+BIG.1: "BIG"i
+BIGINT.1: "BIGINT"i
+BINARY.1: "BINARY"i
+BINDING.1: "BINDING"i
+BINDINGS.1: "BINDINGS"i
+BOOL.1: "BOOL"i
+BOOLEAN.1: "BOOLEAN"i
+BOTH.1: "BOTH"i
+BTRIM.1: "BTRIM"i
+BY.1: "BY"i
+BYTES.1: "BYTES"i
+BYTE_LENGTH.1: "BYTE_LENGTH"i
+CALL.1: "CALL"i
+CARDINALITY.1: "CARDINALITY"i
+CASE.1: "CASE"i
+CAST.1: "CAST"i
+CATALOG.1: "CATALOG"i
+CEIL.1: "CEIL"i
+CEILING.1: "CEILING"i
+CHAR.1: "CHAR"i
+CHARACTERISTICS.1: "CHARACTERISTICS"i
+CHARACTER_LENGTH.1: "CHARACTER_LENGTH"i
+CHAR_LENGTH.1: "CHAR_LENGTH"i
+CLEAR.1: "CLEAR"i
+CLONE.1: "CLONE"i
+CLOSE.1: "CLOSE"i
+COALESCE.1: "COALESCE"i
+COLLECT_LIST.1: "COLLECT_LIST"i
+COMMIT.1: "COMMIT"i
+CONNECTING.1: "CONNECTING"i
+CONSTRAINT.1: "CONSTRAINT"i
+COPY.1: "COPY"i
+COS.1: "COS"i
+COSH.1: "COSH"i
+COT.1: "COT"i
+COUNT.1: "COUNT"i
+CREATE.1: "CREATE"i
+CURRENT_DATE.1: "CURRENT_DATE"i
+CURRENT_GRAPH.1: "CURRENT_GRAPH"i
+CURRENT_PROPERTY_GRAPH.1: "CURRENT_PROPERTY_GRAPH"i
+CURRENT_ROLE.1: "CURRENT_ROLE"i
+CURRENT_SCHEMA.1: "CURRENT_SCHEMA"i
+CURRENT_TIME.1: "CURRENT_TIME"i
+CURRENT_TIMESTAMP.1: "CURRENT_TIMESTAMP"i
+CURRENT_USER.1: "CURRENT_USER"i
+DATA.1: "DATA"i
+DATE.1: "DATE"i
+DATETIME.1: "DATETIME"i
+DAY.1: "DAY"i
+DEC.1: "DEC"i
+DECIMAL.1: "DECIMAL"i
+DEGREES.1: "DEGREES"i
+DELETE.1: "DELETE"i
+DESC.1: "DESC"i
+DESCENDING.1: "DESCENDING"i
+DESTINATION.1: "DESTINATION"i
+DETACH.1: "DETACH"i
+DIFFERENT.1: "DIFFERENT"i
+DIRECTED.1: "DIRECTED"i
+DIRECTORY.1: "DIRECTORY"i
+DISTINCT.1: "DISTINCT"i
+DOUBLE.1: "DOUBLE"i
+DROP.1: "DROP"i
+DRYRUN.1: "DRYRUN"i
+DURATION.1: "DURATION"i
+DURATION_BETWEEN.1: "DURATION_BETWEEN"i
+EDGE.1: "EDGE"i
+EDGES.1: "EDGES"i
+ELEMENT.1: "ELEMENT"i
+ELEMENTS.1: "ELEMENTS"i
+ELEMENT_ID.1: "ELEMENT_ID"i
+ELSE.1: "ELSE"i
+END.1: "END"i
+EXACT.1: "EXACT"i
+EXCEPT.1: "EXCEPT"i
+EXISTING.1: "EXISTING"i
+EXISTS.1: "EXISTS"i
+EXP.1: "EXP"i
+FALSE.1: "FALSE"i
+FILTER.1: "FILTER"i
+FINISH.1: "FINISH"i
+FIRST.1: "FIRST"i
+FLOAT.1: "FLOAT"i
+FLOAT128.1: "FLOAT128"i
+FLOAT16.1: "FLOAT16"i
+FLOAT256.1: "FLOAT256"i
+FLOAT32.1: "FLOAT32"i
+FLOAT64.1: "FLOAT64"i
+FLOOR.1: "FLOOR"i
+FOR.1: "FOR"i
+FROM.1: "FROM"i
+FUNCTION.1: "FUNCTION"i
+GQLSTATUS.1: "GQLSTATUS"i
+GRANT.1: "GRANT"i
+GRAPH.1: "GRAPH"i
+GROUP.1: "GROUP"i
+GROUPS.1: "GROUPS"i
+HAVING.1: "HAVING"i
+HOME_GRAPH.1: "HOME_GRAPH"i
+HOME_PROPERTY_GRAPH.1: "HOME_PROPERTY_GRAPH"i
+HOME_SCHEMA.1: "HOME_SCHEMA"i
+HOUR.1: "HOUR"i
+IF.1: "IF"i
+IMPLIES.1: "IMPLIES"i
+IN.1: "IN"i
+INFINITY.1: "INFINITY"i
+INSERT.1: "INSERT"i
+INSTANT.1: "INSTANT"i
+INT.1: "INT"i
+INT128.1: "INT128"i
+INT16.1: "INT16"i
+INT256.1: "INT256"i
+INT32.1: "INT32"i
+INT64.1: "INT64"i
+INT8.1: "INT8"i
+INTEGER.1: "INTEGER"i
+INTEGER128.1: "INTEGER128"i
+INTEGER16.1: "INTEGER16"i
+INTEGER256.1: "INTEGER256"i
+INTEGER32.1: "INTEGER32"i
+INTEGER64.1: "INTEGER64"i
+INTEGER8.1: "INTEGER8"i
+INTERSECT.1: "INTERSECT"i
+INTERVAL.1: "INTERVAL"i
+IS.1: "IS"i
+KEEP.1: "KEEP"i
+LABEL.1: "LABEL"i
+LABELED.1: "LABELED"i
+LABELS.1: "LABELS"i
+LAST.1: "LAST"i
+LEADING.1: "LEADING"i
+LEFT.1: "LEFT"i
+LET.1: "LET"i
+LIKE.1: "LIKE"i
+LIMIT.1: "LIMIT"i
+LIST.1: "LIST"i
+LN.1: "LN"i
+LOCAL.1: "LOCAL"i
+LOCAL_DATETIME.1: "LOCAL_DATETIME"i
+LOCAL_TIME.1: "LOCAL_TIME"i
+LOCAL_TIMESTAMP.1: "LOCAL_TIMESTAMP"i
+LOG.1: "LOG"i
+LOG10.1: "LOG10"i
+LOWER.1: "LOWER"i
+LTRIM.1: "LTRIM"i
+MATCH.1: "MATCH"i
+MAX.1: "MAX"i
+MIN.1: "MIN"i
+MINUTE.1: "MINUTE"i
+MOD.1: "MOD"i
+MONTH.1: "MONTH"i
+NEXT.1: "NEXT"i
+NFC.1: "NFC"i
+NFD.1: "NFD"i
+NFKC.1: "NFKC"i
+NFKD.1: "NFKD"i
+NO.1: "NO"i
+NODE.1: "NODE"i
+NODETACH.1: "NODETACH"i
+NORMALIZE.1: "NORMALIZE"i
+NORMALIZED.1: "NORMALIZED"i
+NOT.1: "NOT"i
+NOTHING.1: "NOTHING"i
+NULL.1: "NULL"i
+NULLIF.1: "NULLIF"i
+NULLS.1: "NULLS"i
+NUMBER.1: "NUMBER"i
+NUMERIC.1: "NUMERIC"i
+OCTET_LENGTH.1: "OCTET_LENGTH"i
+OF.1: "OF"i
+OFFSET.1: "OFFSET"i
+ON.1: "ON"i
+ONLY.1: "ONLY"i
+OPEN.1: "OPEN"i
+OPTIONAL.1: "OPTIONAL"i
+OR.1: "OR"i
+ORDER.1: "ORDER"i
+ORDINALITY.1: "ORDINALITY"i
+OTHERWISE.1: "OTHERWISE"i
+PARAMETER.1: "PARAMETER"i
+PARAMETERS.1: "PARAMETERS"i
+PARTITION.1: "PARTITION"i
+PATH.1: "PATH"i
+PATHS.1: "PATHS"i
+PATH_LENGTH.1: "PATH_LENGTH"i
+PERCENTILE_CONT.1: "PERCENTILE_CONT"i
+PERCENTILE_DISC.1: "PERCENTILE_DISC"i
+POWER.1: "POWER"i
+PRECISION.1: "PRECISION"i
+PROCEDURE.1: "PROCEDURE"i
+PRODUCT.1: "PRODUCT"i
+PROJECT.1: "PROJECT"i
+PROPERTY.1: "PROPERTY"i
+PROPERTY_EXISTS.1: "PROPERTY_EXISTS"i
+QUERY.1: "QUERY"i
+RADIANS.1: "RADIANS"i
+READ.1: "READ"i
+REAL.1: "REAL"i
+RECORD.1: "RECORD"i
+RECORDS.1: "RECORDS"i
+REFERENCE.1: "REFERENCE"i
+RELATIONSHIP.1: "RELATIONSHIP"i
+RELATIONSHIPS.1: "RELATIONSHIPS"i
+REMOVE.1: "REMOVE"i
+RENAME.1: "RENAME"i
+REPEATABLE.1: "REPEATABLE"i
+REPLACE.1: "REPLACE"i
+RESET.1: "RESET"i
+RETURN.1: "RETURN"i
+REVOKE.1: "REVOKE"i
+RIGHT.1: "RIGHT"i
+ROLLBACK.1: "ROLLBACK"i
+RTRIM.1: "RTRIM"i
+SAME.1: "SAME"i
+SCHEMA.1: "SCHEMA"i
+SECOND.1: "SECOND"i
+SELECT.1: "SELECT"i
+SESSION.1: "SESSION"i
+SESSION_USER.1: "SESSION_USER"i
+SET.1: "SET"i
+SHORTEST.1: "SHORTEST"i
+SIGNED.1: "SIGNED"i
+SIMPLE.1: "SIMPLE"i
+SIN.1: "SIN"i
+SINH.1: "SINH"i
+SIZE.1: "SIZE"i
+SKIP.1: "SKIP"i
+SMALL.1: "SMALL"i
+SMALLINT.1: "SMALLINT"i
+SOURCE.1: "SOURCE"i
+SQRT.1: "SQRT"i
+START.1: "START"i
+STDDEV_POP.1: "STDDEV_POP"i
+STDDEV_SAMP.1: "STDDEV_SAMP"i
+STRING.1: "STRING"i
+SUBSTRING.1: "SUBSTRING"i
+SUM.1: "SUM"i
+SYSTEM_USER.1: "SYSTEM_USER"i
+TABLE.1: "TABLE"i
+TAN.1: "TAN"i
+TANH.1: "TANH"i
+TEMP.1: "TEMP"i
+TEMPORAL.1: "TEMPORAL"i
+THEN.1: "THEN"i
+TIME.1: "TIME"i
+TIMESTAMP.1: "TIMESTAMP"i
+TO.1: "TO"i
+TRAIL.1: "TRAIL"i
+TRAILING.1: "TRAILING"i
+TRANSACTION.1: "TRANSACTION"i
+TRIM.1: "TRIM"i
+TRUE.1: "TRUE"i
+TYPE.1: "TYPE"i
+TYPED.1: "TYPED"i
+UBIGINT.1: "UBIGINT"i
+UINT.1: "UINT"i
+UINT128.1: "UINT128"i
+UINT16.1: "UINT16"i
+UINT256.1: "UINT256"i
+UINT32.1: "UINT32"i
+UINT64.1: "UINT64"i
+UINT8.1: "UINT8"i
+UNDIRECTED.1: "UNDIRECTED"i
+UNION.1: "UNION"i
+UNIQUE.1: "UNIQUE"i
+UNIT.1: "UNIT"i
+UNKNOWN.1: "UNKNOWN"i
+UNSIGNED.1: "UNSIGNED"i
+UPPER.1: "UPPER"i
+USE.1: "USE"i
+USMALLINT.1: "USMALLINT"i
+VALUE.1: "VALUE"i
+VALUES.1: "VALUES"i
+VARBINARY.1: "VARBINARY"i
+VARCHAR.1: "VARCHAR"i
+VARIABLE.1: "VARIABLE"i
+VERTEX.1: "VERTEX"i
+WALK.1: "WALK"i
+WHEN.1: "WHEN"i
+WHERE.1: "WHERE"i
+WHITESPACE.1: "WHITESPACE"i
+WITH.1: "WITH"i
+WITHOUT.1: "WITHOUT"i
+WRITE.1: "WRITE"i
+XOR.1: "XOR"i
+YEAR.1: "YEAR"i
+YIELD.1: "YIELD"i
+ZONE.1: "ZONE"i
+ZONED.1: "ZONED"i
+ZONED_DATETIME.1: "ZONED_DATETIME"i
+ZONED_TIME.1: "ZONED_TIME"i
+
+# end words.lark
+
+IDENTIFIER : REGULAR_IDENTIFIER | DELIMITED_IDENTIFIER
+
+PARAMETER_NAME: EXTENDED_IDENTIFIER | DELIMITED_IDENTIFIER
+
+DELIMITED_IDENTIFIER : DOUBLE_QUOTED_CHARACTER_SEQUENCE | ACCENT_QUOTED_CHARACTER_SEQUENCE
+
+SINGLE_QUOTED_CHARACTER_SEQUENCE: COMMERCIAL_AT? /@?'[^']*'/
+
+DOUBLE_QUOTED_CHARACTER_SEQUENCE: COMMERCIAL_AT? /@?"[^"]*"/
+
+ACCENT_QUOTED_CHARACTER_SEQUENCE: COMMERCIAL_AT? /@?`[^`]*`/
+
+SUBSTITUTED_PARAMETER_REFERENCE : DOUBLE_DOLLAR_SIGN? PARAMETER_NAME
+
+GENERAL_PARAMETER_REFERENCE : DOLLAR_SIGN? PARAMETER_NAME
+
+REGULAR_IDENTIFIER: /\w+/
+EXTENDED_IDENTIFIER: /\w+/ # TODO: Need [\w--_]+ (exclude underbar)
+UNSIGNED_INTEGER: /[0-9]+/
+URI: /[a-zA-Z][a-zA-Z0-9]*:\/\/[a-zA-Z0-9\.\/%]+/ # TODO: need correct regex
+BYTE_STRING_LITERAL: /X[01]+/ # TODO: need correct regex
+NUMERIC_LITERAL: /\.[0-9]+|[0-9]+(\.[0-9]*)?/ # TODO: need correct regex
+
+BRACKET_RIGHT_ARROW: "]->"
+BRACKET_TILDE_RIGHT_ARROW: "]~>"
+CONCATENATION_OPERATOR: "||"
+DOUBLE_COLON: "::"
+DOUBLE_DOLLAR_SIGN: "$$"
+DOUBLE_MINUS_SIGN: "--"
+DOUBLE_PERIOD: ".."
+MULTISET_ALTERNATION_OPERATOR: "|+|"
+GREATER_THAN_OR_EQUALS_OPERATOR: ">="
+LEFT_ARROW: "<-"
+LEFT_ARROW_TILDE: "<~"
+LEFT_ARROW_BRACKET: "<-["
+LEFT_ARROW_TILDE_BRACKET: "<~["
+LEFT_MINUS_RIGHT: "<->"
+LEFT_MINUS_SLASH: "<-/"
+LEFT_TILDE_SLASH: "<~/"
+LESS_THAN_OR_EQUALS_OPERATOR: "<="
+MINUS_LEFT_BRACKET: "-["
+MINUS_SLASH: "-/"
+NOT_EQUALS_OPERATOR: "<>"
+RIGHT_ARROW: "->"
+RIGHT_BRACKET_MINUS: "]-"
+RIGHT_BRACKET_TILDE: "]~"
+RIGHT_DOUBLE_ARROW: "=>"
+SLASH_MINUS: "/-"
+SLASH_MINUS_RIGHT: "/->"
+SLASH_TILDE: "/~"
+SLASH_TILDE_RIGHT: "/~>"
+TILDE_LEFT_BRACKET: "~["
+TILDE_RIGHT_ARROW: "~>"
+TILDE_SLASH: "~/"
+DOUBLE_SOLIDUS: "//"
+
+AMPERSAND: "&"
+ASTERISK: "*"
+COLON: ":"
+COMMA: ","
+COMMERCIAL_AT: "@"
+DOLLAR_SIGN: "$"
+DOUBLE_QUOTE: "\""
+EQUALS_OPERATOR: "="
+EXCLAMATION_MARK: "!"
+GRAVE_ACCENT: "`"
+LEFT_BRACE: "{"
+LEFT_BRACKET: "["
+LEFT_PAREN: "("
+LEFT_ANGLE_BRACKET: "<"
+MINUS_SIGN: "-"
+PERCENT: "%"
+PERIOD: "."
+PLUS_SIGN: "+"
+QUESTION_MARK: "?"
+QUOTE: "'"
+REVERSE_SOLIDUS: "\\"
+RIGHT_ANGLE_BRACKET: ">"
+RIGHT_BRACE: "}"
+RIGHT_BRACKET: "]"
+RIGHT_PAREN: ")"
+SOLIDUS: "/"
+TILDE: "~"
+UNDERSCORE: "_"
+VERTICAL_BAR: "|"
+
+%import common.WS
+%import common.NEWLINE
+
+COMMENT : DOUBLE_SOLIDUS /[^\n]*/
+        | DOUBLE_MINUS_SIGN /[^\n]*/
+        | "/*" /.*?/s "*/"
+
+%ignore WS
+%ignore COMMENT
