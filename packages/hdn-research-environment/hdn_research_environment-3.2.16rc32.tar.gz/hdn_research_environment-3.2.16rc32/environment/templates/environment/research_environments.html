@@ -1,0 +1,81 @@
+{% extends 'environment/base_environment_home.html' %}
+
+{% block local_js_top %}
+  {{ block.super }}
+
+  <script>
+    let isModalOpen = false;
+    let cardToRefresh = "";
+
+    function fetchNewCards(executionId) {
+      const baseUrl = "{% url 'research_environments_partial' %}";
+      const fetchUrl = executionId ? `${baseUrl}?execution_resource_name=${executionId}` : baseUrl;
+      return fetch(fetchUrl).then(response => {
+        if (response.ok){
+          return response.text();
+        } else {
+          return null;
+        };
+      });
+    }
+  </script>
+{% endblock%}
+
+{% block main_view %}
+  {% include "environment/_environment_tabs.html" %}
+{% endblock %}
+
+{% block local_js_bottom %}
+<script>
+  const sendRequest = (function() {
+    const csrfToken = getCookie("csrftoken");
+
+    return function(request_data, http_method, url, button_type) {
+        $(".inside-modal-button").prop("disabled", true);
+
+        let data = request_data;
+        if (button_type === "update") {
+            data = JSON.parse(data);
+            let instance_name = data["instance_name"]
+            const instance = $(`#form-select-${instance_name} option:selected`).val();
+            if (instance === "") return;
+
+            data["machine_type"] = instance;
+            data = JSON.stringify(data);
+        }
+        fetch(url, {
+            method: http_method,
+            body: data,
+            credentials: "same-origin",
+            headers: {
+                "X-CSRFToken": csrfToken,
+                "Content-Type": "application/json",
+            },
+        }).then(response =>
+       {
+       if (response.ok)
+       {
+        return response.json();
+       } else {
+        throw response.json();
+       }
+       })
+          .then(json => fetchNewCards())
+          .then(html => {
+            $(".modal").on("hidden.bs.modal", (e) => {
+              if (html){
+                $("#environment-tabs").html(html);
+              };
+            });
+            $(".modal").modal("hide");
+          }).catch(errorResponseJson => {
+            $(".modal").modal("hide");
+            errorResponseJson.then(message => {
+            $("#environment-tabs").prepend(`<div class='alert alert-danger' role='alert'>${message.error}</div>`);
+            $(".inside-modal-button").prop("disabled", false);
+            });
+          })
+      }
+  })();
+</script>
+{% endblock %}
