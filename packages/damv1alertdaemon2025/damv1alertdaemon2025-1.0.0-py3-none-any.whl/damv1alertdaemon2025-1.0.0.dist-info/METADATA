@@ -1,0 +1,255 @@
+Metadata-Version: 2.1
+Name: damv1alertdaemon2025
+Version: 1.0.0
+Summary: development damv1alertdaemon2025 package
+Home-page: UNKNOWN
+Author: dhonyabumuhammad (Bekasi)
+Author-email: <baba-rtw24133@tutamail.com>
+License: UNKNOWN
+Keywords: alertdaemon2025,discord_cleanup_daemon,discord_sender,polling-logs,grafana_url_generator
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: Unix
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Topic :: Software Development :: Debuggers
+Classifier: License :: OSI Approved :: MIT License
+Requires-Python: >=3.0
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests==2.32.4
+Requires-Dist: python-dotenv==1.1.1
+Requires-Dist: pytz==2025.2
+Requires-Dist: Flask==3.1.1
+Requires-Dist: discord.py==2.5.2
+Requires-Dist: pyfiglet==1.0.4
+
+## Pkg 🔹 damv1alertdaemon2025
+<b>[ Monitoring Loki Grafana Alert System – Eco Mode Enhanced ]</b> <br />
+
+Ringkasan: <br />
+Package ini adalah sistem polling dan pengiriman alert dari Loki ke Discord, dengan dukungan Eco Mode yang mengatur perilaku bundle dan single alert agar lebih efisien pada waktu tertentu. Seluruh komponen sudah divalidasi untuk memastikan presisi logika, kompatibilitas antar modul, dan kesesuaian format output.
+
+<br />
+Installation
+<pre>
+❯ pip install damv1alertdaemon2025
+</pre>
+
+<br />
+Logic Features → +Eco Mode
+<pre>
+  Mode             Format / Template      Panjang Maks   Isi Log Maks    Tujuan                              
+  ---------------- ---------------------- -------------- --------------- -----------------------------------
+  Bundle (Normal)  Detail + sectioned     2000 chars     800 chars/log   Penuh, sesuai header + log konteks  
+  Single (Normal)  Per alert, detail      2000 chars     800 chars/log   Penuh, hanya 1 alert per pesan        
+  Bundle (Eco)     Ringkasan (compact)    2000 chars          -          Efisien, rekap singkat per alert    
+  Single (Eco)     Ringkasan (compact)    2000 chars          -          Efisien, rekap singkat per alert 
+</pre>
+
+<br />
+Prinsip kerja:
+
+- Non-Eco Mode: Bundle & single bekerja seperti normal.
+- Eco Mode: Semua alert (bundle maupun single) otomatis mengikuti format Eco Mode yang lebih ringkas.
+
+<br />
+
+<b>Validasi Struktural & Fungsi Global.</b>
+
+1.  `build_section()`
+    - Sudah direfaktor menjadi fungsi global reusable di `discord_sender.py`.
+    - Digunakan oleh `send_discord_bundle_messages()` dan `send_discord_bundle_messages_eco()`.
+
+    <br />
+
+2.  `polling_state_eco`
+    - Terintegrasi di:
+      - polling_state_manager.py
+      - enqueue_alerts()
+      - process_alerts()
+      - send_discord_bundle_messages_eco() (menandai label direktori eco-mode di log).
+
+    <br />
+
+3.  Struktur direktori terpisah
+    - Normal mode → temp/polling_state/
+    - Eco mode → temp/polling_state_eco/
+
+<br />
+
+---
+
+<b>Validasi Kompatibilitas & Konsistensi.</b>
+<pre>
+Komponen                        Status                     Catatan Tambahan                                                                  
+------------------------------  -------------------------  ----------------------------------------------------------------------------------
+discord_sender.py               ✅ Refactor lengkap         Fungsi build_section, send_discord_bundle_messages, send_discord_bundle_messages_eco selaras
+alert_daemon.py                 ✅ Kompatibel penuh         Sudah adaptif terhadap polling_state_path dan eco_mode
+polling_state_manager.py        ✅ Refactor modular         Mendukung path ganda untuk polling state
+enqueue_alerts()                ✅ Kompatibel               Path polling state sudah berdasarkan eco_mode
+process_alerts()                ✅ Presisi logika bundle    ECO dan NON-ECO mode sudah dipisah logika polling state-nya
+Validasi ISO time & timezone    ✅ Presisi                  Semua konversi datetime sudah menggunakan Asia/Jakarta
+Pola aman known_safe_patterns   ✅ Berfungsi                Rotasi dan validasi sudah lengkap
+Output log/debug Discord        ✅ Konsisten                Label ECO dan direktori bundle dicetak di log
+discord_delete_filters          ✅ Sesuai                   Aturan cleanup pesan Discord mengikuti filter author, is_bot, channel, usia (created_at_older_than)
+config_loader.py                ✅ Konsisten                ENV_FILE dan alert-config/*.json sudah ter-parse dengan fallback default
+cleanup_daemon.py               ✅ Selaras                  Usia pesan Discord diverifikasi dengan CLEANUP_OLD_ENTRIES_SECONDS & created_at_older_than
+eco_mode (alert-config)         ✅ Valid                    Interval, start_hour, end_hour, timezone sudah teruji
+patterns_messages_discord       ✅ Akurat                   Regex validasi pesan Discord (bundle/single/eco) sudah cocok dengan output
+polling_state_ttl_seconds       ✅ Efektif                  TTL file polling_state kedaluwarsa otomatis sesuai konfigurasi
+restart_info_handler            ✅ Lengkap                  Informasi restart tersimpan di temp/last_restart_info.json dan terbaca saat startup
+timestamp_store                 ✅ Konsisten                Penyimpanan timestamp query di last_timestamps.json sesuai alur polling                     
+</pre>
+
+<br />
+
+---
+
+<b>Konfigurasi .env & Variabel config:</b> <br />
+Berikut adalah daftar environment variable dan variabel config yang digunakan pada project_x/main.py dan dapat di-customize oleh pengguna di proyek lain:
+<pre>
+Komponen                          Status                     Catatan Tambahan                                                                  
+-------------------------------   -------------------------  ----------------------------------------------------------------------------------
+ALERT_CONFIG_PATH                 str                        Path file konfigurasi alert (default: ./alert-config/alerts.json)
+CHANNEL_ID                        int                        ID channel Discord (cleanup) (default: None)
+CLEANUP_MODE                      str                        Mode cleanup: simulate atau execute (default: simulate)
+CLEANUP_OLD_ENTRIES_SECONDS       int                        TTL untuk entri lama di last_timestamps.json, default 86400 detik (24 jam). Digunakan untuk housekeeping log lama, bukan untuk pesan Discord
+DEFAULT_BUNDLE_MODE               str                        Mode bundle default untuk pengiriman alert. Nilai: bundle atau split (default: bundle)
+DEFAULT_END_OFFSET                int                        Offset akhir default (detik) (default: 3)
+DEFAULT_OFFSET                    dict                       Offset gabungan {start_offset, end_offset} yang dipakai saat query Loki jika tidak override (default: {'start_offset': 3, 'end_offset': 3})
+DEFAULT_OFFSET_ECO                int                        Offset default (detik) khusus eco-mode (default: 3)
+DEFAULT_OFFSET_END                int                        Offset akhir default (detik) (default: 3)
+DEFAULT_OFFSET_START              int                        Offset awal default (detik) (default: 3)
+DEFAULT_POLLING_STATE_DIR         str                        Direktori default untuk menyimpan polling state (default: temp/polling_state)
+DEFAULT_POLLING_STATE_ECO_DIR     str                        Direktori default untuk polling state saat eco-mode aktif (default: temp/polling_state_eco)
+DEFAULT_START_OFFSET              int                        Offset awal default (detik) (default: 3)
+DELAY_BUFFER_SECONDS              int                        Buffer delay (detik) sebelum mengambil data log dari Loki (default: 2)
+DISCORD_LOG_CHAR_LIMIT            int                        Batas karakter per log yang di-embed di pesan Discord (default: 800)
+DISCORD_MAX_LENGTH                int                        Batas total karakter untuk satu payload pesan Discord (default: 2000)
+DISCORD_TOKEN                     str                        Token bot Discord (mode cleanup) (default: None)
+DISCORD_WEBHOOK_URL               str                        Webhook Discord untuk alert (default: None)
+ECO_CONFIG                        dict                       Konfigurasi eco-mode (enabled, jam start/end, polling interval, timezone, include_single_mode). Default: {'enabled': True, 'start_hour': 14, 'end_hour': 16, 'polling_interval': 60, 'timezone': 'Asia/Jakarta', 'include_single_mode': True}
+ECO_POLL_INTERVAL                 int                        Interval polling eco-mode (detik) (default: 60)
+GRAFANA_BASE_URL                  str                        Base URL Grafana (default: None)
+GRAFANA_DATASOURCE_UID            str                        UID datasource Grafana (default: None)
+KNOWN_SAFE_PATTERNS_META_PATH     str                        Path file metadata rotasi pola aman (default: ./temp/known_safe_patterns_meta.json)
+KNOWN_SAFE_PATTERNS_PATH          str                        Path file JSON berisi pola aman yang sudah disimpan (default: ./temp/known_safe_patterns.json)
+KNOWN_SAFE_PATTERNS_ROTATE_HOURS  int                        Jam rotasi pola aman (default: 24)
+LIMIT                             int                        Batas jumlah log per query (default: 100)
+LOKI_URL                          str                        URL endpoint Loki (default: None)
+POLL_INTERVAL                     int                        Interval polling (detik) (default: 30)
+POLLING_STATE_TTL_SECONDS         int                        TTL untuk file polling state di temp/polling_state/, default 3600 detik (1 jam). Setelah lewat TTL, file polling state akan dihapus otomatis
+PROCESSED_IDS_WINDOW_SECONDS      int                        Window waktu (detik) untuk menyaring ID log yang sudah diproses agar tidak duplikat (default: 10)
+RESTART_INFO_PATH                 str                        Path file untuk menyimpan informasi restart terakhir (default: ./temp/last_restart_info.json)
+SCAN_LIMIT                        int                        Batas scan pesan Discord (cleanup) (default: 50)
+THREAD_MONITOR_INTERVAL           int                        Interval monitor thread (detik) (default: 60)
+TIMESTAMP_STORE                   str                        Nama file penyimpanan timestamp hasil polling (default: last_timestamps.json)
+
+</pre>
+
+<br />
+
+<b>ECO MODE CONFIGURATION (eco_mode)</b> <br />
+
+Fitur ECO Mode digunakan untuk mengurangi frekuensi polling dan notifikasi selama periode waktu tertentu, 
+misalnya di luar jam kerja, dengan tetap mengumpulkan data untuk diproses nanti.
+
+<pre>
+Struktur Konfigurasi:
+  "eco_mode": {
+    "enabled": true,
+    "start_hour": 23,
+    "end_hour": 4,
+    "polling_interval": 60,
+    "timezone": "Asia/Jakarta",
+    "include_single_mode": true
+  }
+</pre>
+
+Penjelasan Parameter:
+- enabled: (boolean) Aktifkan atau nonaktifkan ECO Mode.
+- start_hour: (integer) Jam mulai ECO Mode (0-23, dalam zona waktu yang ditentukan).
+- end_hour: (integer) Jam berakhir ECO Mode (0-23). 
+  Jika end_hour < start_hour (contoh: 23 → 4), rentang melewati tengah malam dan tetap didukung.
+- polling_interval: (detik) Interval polling saat ECO Mode aktif. Nilai harus lebih besar dari POLL_INTERVAL normal.
+- timezone: Zona waktu acuan. Harus valid sesuai database IANA (contoh: "Asia/Jakarta").
+- include_single_mode: (boolean) Jika true, alert dengan mode "single" tetap diproses meskipun dalam ECO Mode.
+
+<br />
+
+Catatan:
+- Semua nilai dapat di-override melalui ENV atau file `.env`.
+- `ECO_POLL_INTERVAL` memiliki prioritas: ENV > `ECO_CONFIG` > default.
+- ECO Mode dievaluasi setiap siklus polling berdasarkan waktu sistem saat ini.
+- Konfigurasi bersifat harian (tidak bisa dijadwalkan per tanggal spesifik).
+- Saat ECO Mode aktif, bundle alert dikirim dalam format ringkasan (eco) dan polling berjalan lebih lambat.
+
+&nbsp;
+
+---
+
+<b>Struktur File Konfigurasi: alert-config/*.json:</b> <br />
+File konfigurasi yang berisi aturan pemantauan log Loki, pengiriman alert ke Discord, pola validasi pesan, dan aturan cleanup pesan.
+<pre>
+
+Komponen                         Status        Catatan Tambahan
+-------------------------------  ------------  ------------------------------------------------------------------------
+default_offset                   dict          Offset default untuk query ke Loki.
+                                                - start_offset (int): offset awal (detik) (default: 3)
+                                                - end_offset (int): offset akhir (detik) (default: 3)
+
+default_bundle_mode              str           Mode bundle default untuk alert.
+                                                - "bundle": alert digabungkan
+                                                - "single": alert dikirim satu per satu
+                                                (default: bundle)
+
+eco_mode                         dict          Konfigurasi eco-mode polling.
+                                                - enabled (bool): aktif/tidak eco-mode
+                                                - start_hour (int): jam mulai eco (0-23)
+                                                - end_hour (int): jam selesai eco (0-23)
+                                                - polling_interval (int): interval polling (detik)
+                                                - timezone (str): zona waktu (contoh: Asia/Jakarta)
+                                                - include_single_mode (bool): apakah alert mode "single" ikut di eco-mode
+
+alerts                           list          Daftar alert yang akan dipantau.
+  ├─ title                       str           Judul alert (deskripsi singkat).
+  ├─ category                    str           Kategori alert (misal: Database, JavaException, Monitoring).
+  ├─ query                       str           Query Loki untuk mendeteksi alert.
+  ├─ start_offset                int           (opsional) offset awal khusus alert ini (override default_offset.start).
+  ├─ end_offset                  int           (opsional) offset akhir khusus alert ini (override default_offset.end).
+  ├─ mode                        str           (opsional) mode alert: "bundle" atau "single".
+  ├─ include_bundle_header       bool          (opsional) apakah header bundle disertakan dalam pesan Discord.
+  ├─ polling_delay               int           (opsional) delay tambahan polling (detik).
+  └─ mentions                    list[str]     (opsional) daftar mention Discord, contoh: ["@here", "<@1234567890>"]
+
+patterns_messages_discord        dict          Definisi pola regex untuk mengenali pesan Discord yang dihasilkan alert.
+  ├─ KNOWN_PATTERNS_CONTENT      list[dict]    Pola regex untuk isi pesan alert Discord (mode bundle/single).
+      ├─ name                    str           Nama pola (deskripsi pola regex).
+      └─ regex                   str           Regex pattern untuk validasi isi pesan.
+  └─ KNOWN_PATTERNS_EMBED        list[dict]    Pola regex untuk pesan dalam bentuk embed.
+      ├─ name                    str           Nama pola (deskripsi pola regex).
+      └─ regex                   str           Regex pattern untuk validasi embed alert.
+
+discord_delete_filters           dict          Filter untuk proses cleanup pesan di Discord.
+  ├─ author                      str           Nama author pesan (misal: "damv1 alert#0000").
+  ├─ is_bot                      bool          Apakah pesan berasal dari bot (default: true).
+  ├─ channel_name                str           Nama channel Discord target (contoh: "#alarm-alert").
+  ├─ guild_name                  str           Nama guild/server Discord.
+  ├─ status_content              str           Status konten yang dikenali (misal: "recognized").
+  ├─ pattern_source              str           Sumber pola untuk validasi pesan (misal: "KNOWN_PATTERNS_CONTENT").
+  └─ created_at_older_than       str           Batas usia pesan yang akan dihapus. Format waktu:
+                                                - "20m" = 20 menit
+                                                - "1h"  = 1 jam
+                                                - "1d"  = 1 hari
+</pre>
+
+&nbsp;
+
+
