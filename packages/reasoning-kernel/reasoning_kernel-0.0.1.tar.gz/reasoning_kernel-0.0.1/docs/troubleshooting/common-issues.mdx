@@ -1,0 +1,766 @@
+---
+title: "Troubleshooting Guide"
+description: "Comprehensive troubleshooting guide for common issues and solutions"
+---
+
+# Troubleshooting Guide
+
+## 🚨 Quick Diagnosis
+
+### **Health Check Commands**
+
+```bash
+# Check overall system health
+curl -H "X-API-Key: your-api-key" https://api.reasoning-kernel.com/health
+
+# Detailed health with component status
+curl -H "X-API-Key: your-api-key" https://api.reasoning-kernel.com/health/detailed
+
+# Security system status
+curl -H "X-API-Key: your-api-key" https://api.reasoning-kernel.com/security/status
+
+# Circuit breaker status
+curl -H "X-API-Key: your-api-key" https://api.reasoning-kernel.com/circuit-breakers
+```
+
+### **Log Inspection Commands**
+
+```bash
+# Application logs
+docker logs reasoning-kernel --tail=100 -f
+
+# Kubernetes pods
+kubectl logs -f deployment/reasoning-kernel -n reasoning-kernel
+
+# Filter error logs
+docker logs reasoning-kernel 2>&1 | grep -i error
+
+# Search for specific patterns
+kubectl logs deployment/reasoning-kernel -n reasoning-kernel | grep "reasoning_request"
+```
+
+## 🔧 Common Issues & Solutions
+
+### **1. API Key Issues**
+
+#### **Error: "Invalid API Key"**
+
+**Symptoms:**
+```json
+{
+  "error": {
+    "code": "INVALID_API_KEY",
+    "message": "API key is invalid or expired"
+  }
+}
+```
+
+**Diagnosis Steps:**
+
+1. **Verify API Key Format**
+   ```bash
+   # Check key format (should start with 'rk_' and be 35 characters total)
+   echo "rk_7f8a9b2c1d3e4f5a6b7c8d9e0f1a2b3c" | wc -c  # Should be 36 (including newline)
+   ```
+
+2. **Check Key Status**
+   ```bash
+   # Get key information
+   curl -H "X-API-Key: admin-key" \
+        https://api.reasoning-kernel.com/api/v1/admin/api-keys/me/info
+   ```
+
+3. **Verify Key Permissions**
+   ```bash
+   # Check if key has required permissions for endpoint
+   curl -H "X-API-Key: your-key" \
+        https://api.reasoning-kernel.com/api/v1/admin/api-keys/me/info
+   ```
+
+**Solutions:**
+
+- **Create New Key:** Use admin key to create new API key
+- **Check Expiration:** Verify key hasn't expired
+- **Verify Permissions:** Ensure key has required role/permissions
+- **Check IP Whitelist:** Verify client IP is whitelisted
+
+**Prevention:**
+```python
+# API key validation script
+import requests
+
+def validate_api_key(api_key):
+    response = requests.get(
+        "https://api.reasoning-kernel.com/api/v1/admin/api-keys/me/info",
+        headers={"X-API-Key": api_key}
+    )
+    
+    if response.status_code == 200:
+        key_info = response.json()
+        print(f"✅ Key valid: {key_info['name']}")
+        print(f"Role: {key_info['role']}")
+        print(f"Expires: {key_info['expires_at']}")
+    else:
+        print(f"❌ Key invalid: {response.json()}")
+```
+
+#### **Error: "Insufficient Permissions"**
+
+**Solutions:**
+
+1. **Check Required Role:**
+   ```bash
+   # Admin endpoints require ADMIN role
+   # Reasoning endpoints require USER or higher
+   # Read-only endpoints accept READONLY role
+   ```
+
+2. **Upgrade Key Permissions:**
+   ```bash
+   curl -X POST "https://api.reasoning-kernel.com/api/v1/admin/api-keys" \
+     -H "X-API-Key: admin-key" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "Updated Key",
+       "role": "USER",
+       "permissions": ["reasoning_access", "health_read"]
+     }'
+   ```
+
+### **2. Rate Limiting Issues**
+
+#### **Error: "Rate Limit Exceeded"**
+
+**Symptoms:**
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Rate limit exceeded. Try again in 60 seconds.",
+    "details": {
+      "limit": 30,
+      "window": 60,
+      "reset_time": "2024-01-27T10:31:00Z"
+    }
+  }
+}
+```
+
+**Diagnosis:**
+
+1. **Check Current Usage:**
+   ```bash
+   # Get rate limit status from headers
+   curl -I -H "X-API-Key: your-key" https://api.reasoning-kernel.com/health
+   # Look for X-RateLimit-* headers
+   ```
+
+2. **Monitor Rate Limit Metrics:**
+   ```bash
+   # Check rate limit violations
+   curl -H "X-API-Key: admin-key" \
+        https://api.reasoning-kernel.com/security/audit/events?event_type=rate_limit_exceeded
+   ```
+
+**Solutions:**
+
+1. **Implement Exponential Backoff:**
+   ```python
+   import time
+   import random
+   
+   def api_call_with_backoff(api_func, max_retries=5):
+       for attempt in range(max_retries):
+           try:
+               return api_func()
+           except RateLimitError as e:
+               if attempt == max_retries - 1:
+                   raise
+               
+               # Exponential backoff with jitter
+               wait_time = (2 ** attempt) + random.uniform(0, 1)
+               time.sleep(wait_time)
+   ```
+
+2. **Request Rate Limit Increase:**
+   ```bash
+   # Contact admin to increase rate limits
+   curl -X PATCH "https://api.reasoning-kernel.com/api/v1/admin/api-keys/your-key-id" \
+     -H "X-API-Key: admin-key" \
+     -H "Content-Type: application/json" \
+     -d '{"rate_limit": 100}'
+   ```
+
+3. **Use Caching:**
+   ```python
+   import functools
+   
+   @functools.lru_cache(maxsize=128)
+   def cached_reasoning_call(vignette_hash):
+       # Cache reasoning results to avoid repeated API calls
+       return reasoning_client.reason(vignette)
+   ```
+
+### **3. Redis Connection Issues**
+
+#### **Error: "Redis Connection Failed"**
+
+**Symptoms:**
+```
+ERROR: Redis connection failed: Connection refused
+```
+
+**Diagnosis:**
+
+1. **Check Redis Service:**
+   ```bash
+   # Docker
+   docker ps | grep redis
+   
+   # Kubernetes
+   kubectl get pods -n reasoning-kernel | grep redis
+   
+   # Direct connection test
+   redis-cli -h redis-host -p 6379 ping
+   ```
+
+2. **Verify Network Connectivity:**
+   ```bash
+   # Test network connectivity
+   telnet redis-host 6379
+   
+   # Check DNS resolution
+   nslookup redis-host
+   ```
+
+3. **Check Redis Logs:**
+   ```bash
+   # Docker
+   docker logs redis-container
+   
+   # Kubernetes
+   kubectl logs deployment/redis -n reasoning-kernel
+   ```
+
+**Solutions:**
+
+1. **Restart Redis Service:**
+   ```bash
+   # Docker
+   docker restart redis-container
+   
+   # Kubernetes
+   kubectl rollout restart deployment/redis -n reasoning-kernel
+   ```
+
+2. **Verify Configuration:**
+   ```python
+   # Check Redis URL format
+   REDIS_URL = "redis://username:password@host:port/db"
+   
+   # Test connection
+   import redis
+   r = redis.from_url(REDIS_URL)
+   r.ping()  # Should return True
+   ```
+
+3. **Check Resource Limits:**
+   ```bash
+   # Check Redis memory usage
+   redis-cli info memory
+   
+   # Check if Redis is OOM killed
+   dmesg | grep redis
+   ```
+
+#### **Performance Issues: Slow Redis Operations**
+
+**Diagnosis:**
+
+1. **Monitor Redis Performance:**
+   ```bash
+   # Real-time Redis commands
+   redis-cli monitor
+   
+   # Redis slow queries
+   redis-cli slowlog get 10
+   
+   # Redis stats
+   redis-cli info stats
+   ```
+
+2. **Check Memory Usage:**
+   ```bash
+   redis-cli info memory | grep used_memory_human
+   ```
+
+**Solutions:**
+
+1. **Optimize Redis Configuration:**
+   ```bash
+   # redis.conf optimizations
+   maxmemory 4gb
+   maxmemory-policy allkeys-lru
+   tcp-keepalive 300
+   timeout 300
+   ```
+
+2. **Implement Connection Pooling:**
+   ```python
+   import redis
+   from redis.connection import ConnectionPool
+   
+   # Create connection pool
+   pool = ConnectionPool(
+       host='redis-host',
+       port=6379,
+       max_connections=20,
+       retry_on_timeout=True
+   )
+   
+   redis_client = redis.Redis(connection_pool=pool)
+   ```
+
+### **4. Model Integration Issues**
+
+#### **Error: "Azure OpenAI Service Unavailable"**
+
+**Symptoms:**
+```
+ERROR: Azure OpenAI request failed with status 503
+```
+
+**Diagnosis:**
+
+1. **Check API Key and Endpoint:**
+   ```bash
+   # Test direct API call
+   curl -H "Authorization: Bearer $AZURE_OPENAI_API_KEY" \
+        -H "Content-Type: application/json" \
+        "$AZURE_OPENAI_ENDPOINT/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview" \
+        -d '{"messages":[{"role":"user","content":"test"}],"max_tokens":10}'
+   ```
+
+2. **Verify Quota and Limits:**
+   ```bash
+   # Check Azure OpenAI quota usage
+   az cognitiveservices account show \
+     --name your-openai-resource \
+     --resource-group your-rg
+   ```
+
+**Solutions:**
+
+1. **Check Circuit Breaker Status:**
+   ```bash
+   curl -H "X-API-Key: your-key" \
+        https://api.reasoning-kernel.com/circuit-breakers
+   ```
+
+2. **Manually Reset Circuit Breaker:**
+   ```bash
+   curl -X POST -H "X-API-Key: admin-key" \
+        https://api.reasoning-kernel.com/circuit-breakers/azure_openai/close
+   ```
+
+3. **Configure Retry Logic:**
+   ```python
+   from reasoning_kernel.core.circuit_breaker import CircuitBreaker
+   
+   # Configure circuit breaker for Azure OpenAI
+   azure_breaker = CircuitBreaker(
+       failure_threshold=5,
+       recovery_timeout=60,
+       expected_exception=ServiceUnavailableError
+   )
+   ```
+
+#### **Error: "Model Response Timeout"**
+
+**Solutions:**
+
+1. **Increase Timeout Settings:**
+   ```python
+   # Environment configuration
+   AZURE_OPENAI_TIMEOUT=120  # seconds
+   MAX_REASONING_TIME=300    # seconds
+   ```
+
+2. **Implement Streaming for Long Requests:**
+   ```python
+   # Use streaming for long reasoning tasks
+   result = await reasoning_kernel.reason(
+       vignette=long_problem,
+       streaming=True,
+       timeout=300
+   )
+   ```
+
+### **5. Performance Issues**
+
+#### **Slow Response Times**
+
+**Diagnosis:**
+
+1. **Monitor Response Times:**
+   ```bash
+   # Check Prometheus metrics
+   curl http://localhost:9090/api/v1/query?query=http_request_duration_seconds
+   ```
+
+2. **Profile Application:**
+   ```python
+   import cProfile
+   import pstats
+   
+   profiler = cProfile.Profile()
+   profiler.enable()
+   
+   # Your reasoning call
+   result = reasoning_kernel.reason(vignette)
+   
+   profiler.disable()
+   stats = pstats.Stats(profiler)
+   stats.sort_stats('tottime').print_stats(10)
+   ```
+
+**Solutions:**
+
+1. **Enable Caching:**
+   ```python
+   # Verify caching is enabled
+   cache_stats = await reasoning_cache.get_detailed_metrics()
+   print(f"Cache hit rate: {cache_stats['hit_rate']}")
+   ```
+
+2. **Scale Horizontally:**
+   ```bash
+   # Kubernetes scaling
+   kubectl scale deployment reasoning-kernel --replicas=5 -n reasoning-kernel
+   ```
+
+3. **Optimize Database Queries:**
+   ```python
+   # Use connection pooling
+   redis_pool = redis.ConnectionPool(
+       host='redis',
+       port=6379,
+       max_connections=20
+   )
+   ```
+
+#### **High Memory Usage**
+
+**Diagnosis:**
+
+1. **Monitor Memory Usage:**
+   ```bash
+   # Check container memory
+   docker stats reasoning-kernel
+   
+   # Kubernetes memory usage
+   kubectl top pods -n reasoning-kernel
+   ```
+
+2. **Python Memory Profiling:**
+   ```python
+   import tracemalloc
+   
+   tracemalloc.start()
+   
+   # Your application code
+   result = reasoning_kernel.reason(vignette)
+   
+   current, peak = tracemalloc.get_traced_memory()
+   print(f"Current memory usage: {current / 1024 / 1024:.1f} MB")
+   print(f"Peak memory usage: {peak / 1024 / 1024:.1f} MB")
+   tracemalloc.stop()
+   ```
+
+**Solutions:**
+
+1. **Implement Memory Limits:**
+   ```yaml
+   # Kubernetes resource limits
+   resources:
+     limits:
+       memory: "4Gi"
+     requests:
+       memory: "2Gi"
+   ```
+
+2. **Optimize Cache Settings:**
+   ```python
+   # Reduce cache size if memory constrained
+   CACHE_MAX_SIZE = 1000  # Reduce from default
+   CACHE_TTL_HOURS = 1    # Reduce TTL
+   ```
+
+3. **Enable Garbage Collection:**
+   ```python
+   import gc
+   
+   # Force garbage collection after processing
+   gc.collect()
+   ```
+
+### **6. Security Issues**
+
+#### **Security Validation Errors**
+
+**Symptoms:**
+```json
+{
+  "error": {
+    "code": "SECURITY_VIOLATION",
+    "message": "Request contains security threats",
+    "threats": ["sql_injection", "xss"]
+  }
+}
+```
+
+**Solutions:**
+
+1. **Sanitize Input:**
+   ```python
+   import html
+   import re
+   
+   def sanitize_input(text):
+       # HTML escape
+       text = html.escape(text)
+       
+       # Remove script tags
+       text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.IGNORECASE)
+       
+       return text
+   ```
+
+2. **Adjust Validation Level:**
+   ```bash
+   # Reduce validation strictness for development
+   VALIDATION_LEVEL=relaxed
+   ```
+
+3. **Whitelist Patterns:**
+   ```python
+   # Add custom validation rules
+   ALLOWED_PATTERNS = [
+       r"SELECT \* FROM knowledge_base",  # Allow specific SQL for knowledge queries
+   ]
+   ```
+
+#### **Audit Log Issues**
+
+**Diagnosis:**
+
+1. **Check Audit Log Status:**
+   ```bash
+   curl -H "X-API-Key: admin-key" \
+        https://api.reasoning-kernel.com/security/audit/events
+   ```
+
+2. **Verify Log Storage:**
+   ```bash
+   # Check Redis audit storage
+   redis-cli keys "audit:*" | wc -l
+   
+   # Check file storage
+   ls -la /app/logs/audit.log
+   ```
+
+**Solutions:**
+
+1. **Increase Log Retention:**
+   ```python
+   AUDIT_RETENTION_DAYS = 90
+   AUDIT_MAX_EVENTS = 10000
+   ```
+
+2. **Configure Log Rotation:**
+   ```bash
+   # logrotate configuration
+   /app/logs/audit.log {
+       daily
+       missingok
+       rotate 90
+       compress
+       create 644 reasoning reasoning
+   }
+   ```
+
+### **7. Integration Issues**
+
+#### **Daytona Sandbox Connection Failed**
+
+**Diagnosis:**
+
+1. **Test Daytona Connection:**
+   ```bash
+   curl -H "Authorization: Bearer $DAYTONA_API_KEY" \
+        https://api.daytona.io/workspaces
+   ```
+
+2. **Check Circuit Breaker:**
+   ```bash
+   curl -H "X-API-Key: your-key" \
+        https://api.reasoning-kernel.com/circuit-breakers | jq '.daytona_service'
+   ```
+
+**Solutions:**
+
+1. **Verify API Credentials:**
+   ```python
+   DAYTONA_API_KEY = "your-daytona-key"
+   DAYTONA_API_URL = "https://api.daytona.io"
+   ```
+
+2. **Reset Circuit Breaker:**
+   ```bash
+   curl -X POST -H "X-API-Key: admin-key" \
+        https://api.reasoning-kernel.com/circuit-breakers/daytona_service/close
+   ```
+
+## 📊 Monitoring & Alerting
+
+### **Key Metrics to Monitor**
+
+1. **Application Metrics:**
+   - Response time (95th percentile < 2s)
+   - Error rate (< 1%)
+   - Request rate
+   - Active reasoning sessions
+
+2. **System Metrics:**
+   - CPU usage (< 80%)
+   - Memory usage (< 85%)
+   - Disk usage (< 80%)
+   - Network I/O
+
+3. **Security Metrics:**
+   - Failed authentication attempts
+   - Rate limit violations
+   - Security threats detected
+   - API key usage patterns
+
+### **Alert Thresholds**
+
+```yaml
+# Prometheus alerting rules
+groups:
+  - name: reasoning-kernel
+    rules:
+    - alert: HighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.01
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate detected"
+        
+    - alert: HighResponseTime
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High response time detected"
+        
+    - alert: ServiceDown
+      expr: up{job="reasoning-kernel"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Reasoning Kernel service is down"
+```
+
+## 🔍 Debug Mode
+
+### **Enable Debug Logging**
+
+```python
+# Enable debug mode
+LOG_LEVEL=DEBUG
+PYTHONUNBUFFERED=1
+
+# Enable detailed tracing
+OPENTELEMETRY_DEBUG=true
+JAEGER_SAMPLING_RATE=1.0
+```
+
+### **Debug Tools**
+
+1. **Interactive Debugging:**
+   ```python
+   import pdb; pdb.set_trace()  # Breakpoint for debugging
+   ```
+
+2. **Async Debugging:**
+   ```python
+   import asyncio
+   import aiotools
+   
+   async def debug_reasoning():
+       async with aiotools.ContextStack() as stack:
+           # Debug async operations
+           result = await reasoning_kernel.reason(vignette)
+   ```
+
+3. **Network Debugging:**
+   ```bash
+   # Capture network traffic
+   tcpdump -i eth0 -w reasoning-kernel.pcap host api.openai.com
+   ```
+
+## 📋 Support Resources
+
+### **Log Files Locations**
+
+```bash
+# Application logs
+/app/logs/application.log
+
+# Audit logs  
+/app/logs/audit.log
+
+# Security logs
+/app/logs/security.log
+
+# Performance logs
+/app/logs/performance.log
+```
+
+### **Configuration Files**
+
+```bash
+# Main configuration
+/app/.env
+
+# Redis configuration
+/app/redis.conf
+
+# Nginx configuration (if used)
+/etc/nginx/sites-available/reasoning-kernel
+```
+
+### **Diagnostic Commands**
+
+```bash
+# System information
+uname -a
+df -h
+free -h
+ps aux | grep reasoning
+
+# Docker diagnostics
+docker system df
+docker system prune
+docker logs --details reasoning-kernel
+
+# Kubernetes diagnostics
+kubectl describe pod <pod-name> -n reasoning-kernel
+kubectl get events -n reasoning-kernel --sort-by='.lastTimestamp'
+```
+
+This troubleshooting guide provides comprehensive solutions for the most common issues encountered when running the Reasoning Kernel in production environments.

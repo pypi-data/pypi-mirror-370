@@ -1,0 +1,459 @@
+---
+title: "API Overview"
+description: "Complete API reference for the Reasoning Kernel REST API, Python SDK, and agent interfaces."
+---
+
+## Introduction
+
+The Reasoning Kernel provides multiple interfaces for building sophisticated reasoning applications:
+
+- **REST API**: HTTP endpoints for language-agnostic integration
+- **Python SDK**: Rich Python library with async support
+- **Agent Interface**: Direct access to Semantic Kernel agents
+- **CLI Tool**: Command-line interface for development and testing
+
+<CardGroup cols={2}>
+  <Card title="REST API" icon="globe" href="/api/rest">
+    HTTP/JSON API for web applications and microservices
+  </Card>
+  <Card title="Python SDK" icon="code" href="/sdk/quickstart">
+    Native Python library with full feature access
+  </Card>
+  <Card title="Agent Interface" icon="robot" href="/agents/overview">
+    Direct agent programming with Semantic Kernel
+  </Card>
+  <Card title="CLI Tool" icon="terminal" href="/api/cli">
+    Command-line interface for automation and testing
+  </Card>
+</CardGroup>
+
+## Authentication
+
+All API endpoints require authentication using Bearer tokens:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.reasoning-kernel.com/v1/reasoning" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenario": "Your reasoning scenario here"
+  }'
+```
+
+```python Python SDK
+from reasoning_kernel import ReasoningKernel
+
+# SDK handles authentication automatically
+kernel = ReasoningKernel(api_key="YOUR_API_KEY")
+result = await kernel.reason("Your reasoning scenario")
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.reasoning-kernel.com/v1/reasoning', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    scenario: 'Your reasoning scenario here'
+  })
+});
+```
+</CodeGroup>
+
+<Warning>
+Keep your API keys secure and never expose them in client-side code. Use environment variables or secure credential management.
+</Warning>
+
+## Base URLs
+
+Different environments use different base URLs:
+
+| Environment | Base URL | Description |
+|-------------|----------|-------------|
+| Production | `https://api.reasoning-kernel.com` | Stable production API |
+| Staging | `https://staging-api.reasoning-kernel.com` | Testing environment |
+| Development | `http://localhost:8000` | Local development server |
+
+## Core Endpoints
+
+### Reasoning Endpoints
+
+<Card title="POST /v1/reasoning" icon="brain">
+  **Execute MSA Reasoning Pipeline**
+  
+  Execute the complete Model Synthesis Architecture pipeline for complex reasoning scenarios.
+  
+  ```json Request
+  {
+    "scenario": "string (required)",
+    "mode": "full | knowledge | inference",
+    "config": {
+      "enable_thinking_exploration": true,
+      "confidence_threshold": 0.8,
+      "timeout": 300
+    }
+  }
+  ```
+  
+  ```json Response
+  {
+    "success": true,
+    "reasoning_result": "string",
+    "confidence": 0.87,
+    "reasoning_trace": [...],
+    "execution_time": 12.34
+  }
+  ```
+</Card>
+
+<Card title="POST /v1/reasoning/stream" icon="arrow-trending-up">
+  **Streaming Reasoning**
+  
+  Get real-time updates as the reasoning process progresses through MSA stages.
+  
+  ```json Request
+  {
+    "scenario": "string (required)",
+    "stream": true
+  }
+  ```
+  
+  ```json Response (Server-Sent Events)
+  data: {"stage": "parsing", "progress": 0.2, "status": "processing"}
+  data: {"stage": "knowledge_retrieval", "progress": 0.4, "status": "processing"}
+  data: {"stage": "inference", "progress": 1.0, "result": "...", "status": "complete"}
+  ```
+</Card>
+
+### Agent Endpoints
+
+<Card title="POST /v1/agents/synthesis" icon="robot">
+  **Model Synthesis Agent**
+  
+  Direct access to the model synthesis capabilities for custom workflows.
+  
+  ```json Request
+  {
+    "problem": "string (required)",
+    "context": "string",
+    "generate_graph": true,
+    "output_format": "ppl | json | both"
+  }
+  ```
+</Card>
+
+<Card title="POST /v1/agents/knowledge" icon="database">
+  **Knowledge Retrieval Agent**
+  
+  Semantic search and knowledge retrieval from memory stores.
+  
+  ```json Request
+  {
+    "query": "string (required)",
+    "collections": ["reasoning_patterns", "world_models"],
+    "limit": 10,
+    "min_relevance": 0.75
+  }
+  ```
+</Card>
+
+### Memory Endpoints
+
+<Card title="GET /v1/memory/patterns" icon="brain">
+  **List Reasoning Patterns**
+  
+  Retrieve stored reasoning patterns and successful solution approaches.
+</Card>
+
+<Card title="POST /v1/memory/patterns" icon="plus">
+  **Store Reasoning Pattern**
+  
+  Save successful reasoning patterns for future retrieval and learning.
+</Card>
+
+<Card title="POST /v1/memory/search" icon="magnifying-glass">
+  **Semantic Memory Search**
+  
+  Perform semantic search across all memory collections using embeddings.
+</Card>
+
+### Sandbox Endpoints
+
+<Card title="POST /v1/sandbox/execute" icon="play">
+  **Execute Code in Sandbox**
+  
+  Run probabilistic programs and analysis code in secure Daytona sandbox.
+  
+  ```json Request
+  {
+    "code": "string (required)",
+    "language": "python | r | julia",
+    "timeout": 300,
+    "resource_limits": {
+      "memory": "2GB",
+      "cpu": "1"
+    }
+  }
+  ```
+</Card>
+
+## Python SDK Reference
+
+The Python SDK provides a more convenient interface with full typing support:
+
+<Tabs>
+  <Tab title="Basic Usage">
+    ```python
+    from reasoning_kernel import ReasoningKernel, MSAConfig
+    
+    # Initialize with configuration
+    kernel = ReasoningKernel(
+        api_key="your-api-key",
+        config=MSAConfig(
+            enable_thinking_exploration=True,
+            confidence_threshold=0.8
+        )
+    )
+    
+    # Execute reasoning
+    result = await kernel.reason(
+        scenario="Your reasoning scenario",
+        timeout=300
+    )
+    
+    print(f"Result: {result.reasoning_result}")
+    print(f"Confidence: {result.confidence}")
+    ```
+  </Tab>
+  
+  <Tab title="Agent Access">
+    ```python
+    from reasoning_kernel.agents import (
+        ModelSynthesisAgent,
+        KnowledgeRetrievalAgent,
+        ProbabilisticReasoningAgent
+    )
+    
+    # Direct agent access
+    synthesis_agent = ModelSynthesisAgent(kernel)
+    
+    # Parse problem
+    parsed = await synthesis_agent.parse_problem(
+        "Manufacturing efficiency optimization problem"
+    )
+    
+    # Generate dependency graph
+    graph = await synthesis_agent.generate_dependency_graph(
+        parsed_problem=parsed
+    )
+    
+    # Synthesize probabilistic program
+    ppl_program = await synthesis_agent.synthesize_ppl_program(
+        dependency_graph=graph
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Memory Operations">
+    ```python
+    from reasoning_kernel.memory import RedisMemoryService
+    
+    # Memory operations
+    memory = kernel.memory
+    
+    # Store reasoning pattern
+    pattern_id = await memory.store_reasoning_pattern(
+        pattern_type="optimization",
+        problem_context="manufacturing",
+        solution_approach="multi_objective_optimization",
+        confidence=0.89
+    )
+    
+    # Search similar patterns
+    similar = await memory.search_patterns(
+        query="supply chain optimization",
+        limit=5,
+        min_relevance=0.7
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Streaming">
+    ```python
+    # Streaming reasoning
+    async for update in kernel.reason_stream(scenario):
+        print(f"Stage: {update.stage}")
+        print(f"Progress: {update.progress:.1%}")
+        
+        if update.stage == "complete":
+            print(f"Result: {update.result}")
+            break
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+The API uses standard HTTP status codes and provides detailed error information:
+
+<Tabs>
+  <Tab title="HTTP Status Codes">
+    | Code | Description |
+    |------|-------------|
+    | 200 | Success |
+    | 400 | Bad Request - Invalid parameters |
+    | 401 | Unauthorized - Invalid API key |
+    | 429 | Too Many Requests - Rate limit exceeded |
+    | 500 | Internal Server Error |
+    | 503 | Service Unavailable - Temporary overload |
+  </Tab>
+  
+  <Tab title="Error Response Format">
+    ```json
+    {
+      "error": {
+        "code": "INVALID_SCENARIO",
+        "message": "The provided scenario is too short or unclear",
+        "details": {
+          "min_length": 50,
+          "current_length": 23
+        },
+        "request_id": "req_abc123"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Python SDK Exceptions">
+    ```python
+    from reasoning_kernel.exceptions import (
+        ReasoningKernelError,
+        AuthenticationError,
+        RateLimitError,
+        TimeoutError
+    )
+    
+    try:
+        result = await kernel.reason(scenario)
+    except AuthenticationError:
+        print("Invalid API key")
+    except RateLimitError as e:
+        print(f"Rate limited, retry after {e.retry_after} seconds")
+    except TimeoutError:
+        print("Reasoning timed out")
+    except ReasoningKernelError as e:
+        print(f"General error: {e.message}")
+    ```
+  </Tab>
+</Tabs>
+
+## Rate Limits
+
+API requests are subject to rate limiting:
+
+| Tier | Requests/Minute | Concurrent | Burst |
+|------|-----------------|------------|-------|
+| Free | 10 | 2 | 20 |
+| Pro | 100 | 10 | 200 |
+| Enterprise | 1000 | 50 | 2000 |
+
+<Info>
+Rate limits are per API key. Use the `X-RateLimit-*` response headers to monitor your usage.
+</Info>
+
+## Response Headers
+
+Standard response headers provide useful metadata:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 87
+X-RateLimit-Reset: 1640995200
+X-Request-ID: req_abc123
+X-Response-Time: 1234ms
+X-Version: 1.0.0
+```
+
+## Webhooks
+
+Configure webhooks to receive notifications about reasoning completion:
+
+<CodeGroup>
+```json Webhook Registration
+POST /v1/webhooks
+{
+  "url": "https://your-app.com/webhooks/reasoning",
+  "events": ["reasoning.completed", "reasoning.failed"],
+  "secret": "your-webhook-secret"
+}
+```
+
+```json Webhook Payload
+{
+  "event": "reasoning.completed",
+  "data": {
+    "id": "reasoning_abc123",
+    "scenario": "Original scenario",
+    "result": "Reasoning result",
+    "confidence": 0.87,
+    "created_at": "2024-01-15T10:30:00Z"
+  },
+  "timestamp": "2024-01-15T10:30:05Z"
+}
+```
+</CodeGroup>
+
+## SDKs and Libraries
+
+Official SDKs are available in multiple languages:
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" icon="python">
+    ```bash
+    pip install reasoning-kernel
+    ```
+    Full-featured SDK with async support
+  </Card>
+  <Card title="JavaScript SDK" icon="js">
+    ```bash
+    npm install @reasoning-kernel/sdk
+    ```
+    TypeScript support included
+  </Card>
+  <Card title="Go SDK" icon="golang">
+    ```bash
+    go get github.com/reasoning-kernel/go-sdk
+    ```
+    Native Go implementation
+  </Card>
+</CardGroup>
+
+## OpenAPI Specification
+
+Download the complete OpenAPI specification:
+
+- **OpenAPI 3.0**: [Download JSON](https://api.reasoning-kernel.com/openapi.json)
+- **Postman Collection**: [Download](https://api.reasoning-kernel.com/postman.json)
+- **Interactive Docs**: [API Explorer](https://api.reasoning-kernel.com/docs)
+
+## Support and Resources
+
+<CardGroup cols={2}>
+  <Card title="API Status" icon="chart-line" href="https://status.reasoning-kernel.com">
+    Real-time API status and uptime monitoring
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/reasoning-kernel">
+    Get help from the community and development team
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/qredence/reasoning-kernel/issues">
+    Report bugs and request features
+  </Card>
+  <Card title="Enterprise Support" icon="envelope" href="mailto:enterprise@qredence.com">
+    Dedicated support for enterprise customers
+  </Card>
+</CardGroup>

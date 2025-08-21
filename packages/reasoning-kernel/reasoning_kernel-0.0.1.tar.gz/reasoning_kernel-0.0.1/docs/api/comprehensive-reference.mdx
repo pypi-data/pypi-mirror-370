@@ -1,0 +1,644 @@
+---
+title: "API Reference"
+description: "Complete API documentation for the Reasoning Kernel REST API"
+---
+
+# API Reference
+
+## 🚀 API Overview
+
+The Reasoning Kernel provides a comprehensive REST API for advanced AI reasoning capabilities. The API is built on **FastAPI** with automatic OpenAPI documentation, security hardening, and production-ready features.
+
+### **Base URL**
+```
+Production: https://api.reasoning-kernel.com
+Development: http://localhost:8000
+```
+
+### **API Versioning**
+```
+Current Version: v1
+API Prefix: /api/v1
+```
+
+## 🔐 Authentication
+
+### **API Key Authentication**
+
+All API endpoints require authentication using API keys in the request header:
+
+```http
+X-API-Key: rk_your_api_key_here
+```
+
+#### **API Key Format**
+```
+Format: rk_<32-character-random-string>
+Example: rk_7f8a9b2c1d3e4f5a6b7c8d9e0f1a2b3c
+```
+
+#### **Role-Based Access Control**
+
+| Role | Description | Rate Limit | Endpoint Access |
+|------|-------------|------------|-----------------|
+| **ADMIN** | Full system access | 100/min | All endpoints |
+| **USER** | Standard operations | 30/min | Reasoning + Health (read) |
+| **READONLY** | Read-only access | 60/min | GET endpoints only |
+| **SERVICE** | Inter-service communication | 200/min | Reasoning + Health |
+
+### **Getting an API Key**
+
+Contact your system administrator or use the admin endpoints to create API keys:
+
+```bash
+curl -X POST "https://api.reasoning-kernel.com/api/v1/admin/api-keys" \
+  -H "X-API-Key: admin_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Application Key",
+    "role": "USER",
+    "expires_in_days": 90
+  }'
+```
+
+## 🧠 Reasoning API
+
+### **POST /api/v1/reasoning/reason**
+
+Execute the complete MSA reasoning pipeline for a given problem.
+
+#### **Request**
+```json
+{
+  "vignette": "A company needs to optimize their supply chain...",
+  "context": {
+    "domain": "business",
+    "priority": "high"
+  },
+  "session_id": "session_123",
+  "streaming": false
+}
+```
+
+#### **Parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `vignette` | string | Yes | Problem description in natural language |
+| `context` | object | No | Additional context and domain information |
+| `session_id` | string | No | Session ID for conversation continuity |
+| `streaming` | boolean | No | Enable real-time streaming responses |
+
+#### **Response**
+```json
+{
+  "reasoning_id": "reasoning_456",
+  "session_id": "session_123", 
+  "status": "completed",
+  "result": {
+    "parsed_vignette": {
+      "problem_type": "optimization",
+      "domain": "supply_chain",
+      "entities": ["company", "supply_chain", "optimization"],
+      "intent": "optimize_process"
+    },
+    "retrieval_context": {
+      "knowledge_sources": ["supply_chain_knowledge", "optimization_methods"],
+      "relevant_facts": ["...", "..."],
+      "confidence": 0.85
+    },
+    "dependency_graph": {
+      "nodes": ["suppliers", "inventory", "demand", "costs"],
+      "edges": [["suppliers", "inventory"], ["demand", "costs"]],
+      "relationships": {"suppliers": {"affects": ["inventory", "costs"]}}
+    },
+    "probabilistic_program": {
+      "model_type": "bayesian_network",
+      "variables": {"demand": "normal", "supply": "poisson"},
+      "constraints": ["supply >= demand", "cost < budget"]
+    },
+    "inference_result": {
+      "recommendations": ["Increase supplier diversity", "Implement predictive analytics"],
+      "confidence": 0.92,
+      "expected_outcomes": {"cost_reduction": "15-25%", "efficiency_gain": "20-30%"}
+    }
+  },
+  "performance": {
+    "total_time": 2.34,
+    "stage_timings": {
+      "parse": 0.45,
+      "retrieve": 0.67,
+      "graph": 0.52,
+      "synthesize": 0.38,
+      "infer": 0.32
+    }
+  },
+  "metadata": {
+    "model_used": "gemini-1.5-pro",
+    "created_at": "2024-01-27T10:30:00Z",
+    "reasoning_depth": "deep"
+  }
+}
+```
+
+### **POST /api/v1/reasoning/analyze**
+
+Perform focused reasoning analysis on specific aspects of a problem.
+
+#### **Request**
+```json
+{
+  "input": "Analyze the risk factors in this business scenario...",
+  "analysis_type": "risk_assessment",
+  "parameters": {
+    "depth": "comprehensive",
+    "include_mitigation": true
+  }
+}
+```
+
+### **GET /api/v1/reasoning/status/{session_id}**
+
+Get the current status and results of a reasoning session.
+
+#### **Response**
+```json
+{
+  "session_id": "session_123",
+  "status": "processing",
+  "current_stage": "synthesize",
+  "progress": 0.75,
+  "partial_results": {
+    "parsed_vignette": "...",
+    "retrieval_context": "..."
+  },
+  "estimated_completion": "2024-01-27T10:32:15Z"
+}
+```
+
+### **GET /api/v1/reasoning/history**
+
+Retrieve reasoning session history with filtering options.
+
+#### **Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | integer | Number of sessions to return (default: 10) |
+| `offset` | integer | Pagination offset (default: 0) |
+| `status` | string | Filter by status: `completed`, `failed`, `processing` |
+| `date_from` | string | Filter sessions from date (ISO format) |
+| `date_to` | string | Filter sessions to date (ISO format) |
+
+## 🏗️ MSA Pipeline API
+
+### **POST /api/v1/extract-knowledge**
+
+Extract and structure knowledge from text using the MSA retrieval stage.
+
+#### **Request**
+```json
+{
+  "text": "The supply chain optimization involves multiple stakeholders...",
+  "extraction_type": "entities_relationships",
+  "context": "business_analysis"
+}
+```
+
+### **POST /api/v1/synthesize-model**
+
+Generate a probabilistic model for a specific reasoning problem.
+
+#### **Request**
+```json
+{
+  "problem_description": "Optimize inventory levels with uncertain demand",
+  "model_type": "bayesian_network",
+  "constraints": ["budget_limit", "storage_capacity"],
+  "variables": {
+    "demand": {"type": "continuous", "distribution": "normal"},
+    "supply": {"type": "discrete", "distribution": "poisson"}
+  }
+}
+```
+
+## 🔧 Admin API
+
+### **POST /api/v1/admin/api-keys**
+
+Create a new API key with specified permissions.
+
+#### **Request**
+```json
+{
+  "name": "Production Application Key",
+  "role": "USER",
+  "permissions": ["reasoning_access", "health_read"],
+  "expires_in_days": 90,
+  "ip_whitelist": ["203.0.113.0/24"],
+  "rate_limit": 50
+}
+```
+
+#### **Response**
+```json
+{
+  "key_id": "key_789",
+  "api_key": "rk_7f8a9b2c1d3e4f5a6b7c8d9e0f1a2b3c",
+  "name": "Production Application Key",
+  "role": "USER",
+  "created_at": "2024-01-27T10:30:00Z",
+  "expires_at": "2024-04-27T10:30:00Z",
+  "permissions": ["reasoning_access", "health_read"]
+}
+```
+
+### **GET /api/v1/admin/api-keys**
+
+List all API keys with filtering and search options.
+
+#### **Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `role` | string | Filter by role: `ADMIN`, `USER`, `READONLY`, `SERVICE` |
+| `active` | boolean | Filter active/inactive keys |
+| `search` | string | Search by key name or description |
+| `limit` | integer | Number of keys to return |
+| `offset` | integer | Pagination offset |
+
+### **DELETE /api/v1/admin/api-keys/{key_id}**
+
+Revoke an API key permanently.
+
+### **GET /api/v1/admin/api-keys/{key_id}/usage**
+
+Get detailed usage statistics for an API key.
+
+#### **Response**
+```json
+{
+  "key_id": "key_789",
+  "total_requests": 1543,
+  "successful_requests": 1501,
+  "failed_requests": 42,
+  "last_used": "2024-01-27T09:45:00Z",
+  "usage_by_endpoint": {
+    "/api/v1/reasoning/reason": 1245,
+    "/api/v1/reasoning/analyze": 256,
+    "/health": 42
+  },
+  "usage_by_day": {
+    "2024-01-27": 123,
+    "2024-01-26": 89,
+    "2024-01-25": 156
+  },
+  "rate_limit_violations": 3,
+  "average_response_time": 1.23
+}
+```
+
+## 🏥 Health & Monitoring API
+
+### **GET /health**
+
+Basic health check endpoint for load balancers and monitoring systems.
+
+#### **Response**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-27T10:30:00Z",
+  "version": "1.0.0",
+  "uptime": 86400
+}
+```
+
+### **GET /health/detailed**
+
+Comprehensive health check with component status and performance metrics.
+
+#### **Response**
+```json
+{
+  "status": "healthy",
+  "components": {
+    "redis": {
+      "status": "healthy",
+      "response_time": 0.02,
+      "connection_pool": "8/10 active"
+    },
+    "semantic_kernel": {
+      "status": "healthy", 
+      "model_status": "available",
+      "last_inference": "2024-01-27T10:29:45Z"
+    },
+    "security_system": {
+      "status": "healthy",
+      "active_keys": 45,
+      "rate_limit_status": "normal"
+    }
+  },
+  "performance": {
+    "avg_response_time": 1.23,
+    "requests_per_minute": 67,
+    "cache_hit_rate": 0.84,
+    "memory_usage": "67%"
+  },
+  "circuit_breakers": {
+    "daytona_service": "closed",
+    "redis_service": "closed", 
+    "websearch_service": "closed"
+  }
+}
+```
+
+### **GET /circuit-breakers**
+
+Get circuit breaker status for all external services.
+
+#### **Response**
+```json
+{
+  "circuit_breakers": {
+    "daytona_service": {
+      "state": "closed",
+      "failure_count": 0,
+      "success_rate": 0.98,
+      "last_failure": null,
+      "next_attempt": null
+    },
+    "redis_service": {
+      "state": "closed",
+      "failure_count": 0,
+      "success_rate": 0.99,
+      "last_failure": null,
+      "next_attempt": null
+    }
+  }
+}
+```
+
+### **POST /circuit-breakers/{service}/open**
+
+Manually open a circuit breaker for testing or maintenance.
+
+### **POST /circuit-breakers/{service}/close**
+
+Manually close a circuit breaker after resolving issues.
+
+## 🔒 Security API
+
+### **GET /security/status**
+
+Get comprehensive security system status and configuration.
+
+#### **Response**
+```json
+{
+  "security_score": "A-",
+  "systems": {
+    "rate_limiting": {
+      "enabled": true,
+      "blocked_requests_today": 23,
+      "top_limited_ips": ["203.0.113.1", "203.0.113.2"]
+    },
+    "api_key_management": {
+      "total_keys": 45,
+      "active_keys": 42,
+      "expired_keys": 3,
+      "revoked_keys": 0
+    },
+    "input_validation": {
+      "threats_detected_today": 7,
+      "blocked_attacks": ["sql_injection", "xss"],
+      "validation_success_rate": 0.993
+    },
+    "audit_logging": {
+      "events_logged_today": 1543,
+      "storage_backends": ["redis", "file"],
+      "retention_days": 90
+    }
+  }
+}
+```
+
+### **GET /security/audit/events**
+
+Query security audit events with filtering options.
+
+#### **Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `event_type` | string | Filter by event type |
+| `severity` | string | Filter by severity: `low`, `medium`, `high`, `critical` |
+| `start_time` | string | Start time filter (ISO format) |
+| `end_time` | string | End time filter (ISO format) |
+| `limit` | integer | Number of events to return |
+
+## 💾 Memory API
+
+### **GET /api/v1/memory/stats**
+
+Get memory system statistics and performance metrics.
+
+#### **Response**
+```json
+{
+  "total_memories": 1543,
+  "memory_collections": ["reasoning_sessions", "knowledge_base"],
+  "storage_stats": {
+    "redis_memory_usage": "245MB",
+    "total_vectors": 12543,
+    "average_similarity_score": 0.76
+  },
+  "performance": {
+    "avg_retrieval_time": 0.023,
+    "cache_hit_rate": 0.89,
+    "indexing_status": "up_to_date"
+  }
+}
+```
+
+### **POST /api/v1/memory/search/similar**
+
+Search for similar content in the memory store.
+
+#### **Request**
+```json
+{
+  "query": "supply chain optimization strategies",
+  "collection": "knowledge_base",
+  "limit": 10,
+  "similarity_threshold": 0.7
+}
+```
+
+## 🏖️ Sandbox API (Daytona Integration)
+
+### **GET /api/v1/daytona/status**
+
+Get Daytona sandbox service status and configuration.
+
+### **POST /api/v1/daytona/sandbox/create**
+
+Create a new secure execution sandbox.
+
+### **POST /api/v1/daytona/execute**
+
+Execute code in a secure sandbox environment.
+
+#### **Request**
+```json
+{
+  "code": "import numpy as np\nresult = np.mean([1, 2, 3, 4, 5])\nprint(f'Mean: {result}')",
+  "language": "python",
+  "timeout": 30
+}
+```
+
+## 📊 Response Codes & Error Handling
+
+### **HTTP Status Codes**
+
+| Code | Description |
+|------|-------------|
+| `200` | Success |
+| `201` | Created (for resource creation) |
+| `400` | Bad Request (invalid input) |
+| `401` | Unauthorized (invalid/missing API key) |
+| `403` | Forbidden (insufficient permissions) |
+| `404` | Not Found |
+| `429` | Too Many Requests (rate limit exceeded) |
+| `500` | Internal Server Error |
+| `503` | Service Unavailable |
+
+### **Error Response Format**
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Rate limit exceeded. Try again in 60 seconds.",
+    "details": {
+      "limit": 30,
+      "window": 60,
+      "reset_time": "2024-01-27T10:31:00Z"
+    },
+    "request_id": "req_789",
+    "timestamp": "2024-01-27T10:30:00Z"
+  }
+}
+```
+
+### **Common Error Codes**
+
+| Code | Description | Resolution |
+|------|-------------|------------|
+| `INVALID_API_KEY` | API key is invalid or expired | Verify API key format and expiration |
+| `RATE_LIMIT_EXCEEDED` | Too many requests within time window | Wait for rate limit reset or upgrade plan |
+| `INSUFFICIENT_PERMISSIONS` | API key lacks required permissions | Contact admin for permission upgrade |
+| `VALIDATION_ERROR` | Input data validation failed | Check input format and required fields |
+| `REASONING_TIMEOUT` | Reasoning process exceeded timeout | Simplify problem or increase timeout |
+| `SERVICE_UNAVAILABLE` | External service is temporarily unavailable | Retry after circuit breaker reset |
+
+## 🔧 Rate Limits & Quotas
+
+### **Default Rate Limits**
+
+| Endpoint Category | USER Role | ADMIN Role | READONLY Role | SERVICE Role |
+|-------------------|-----------|------------|---------------|--------------|
+| **Reasoning** | 30/min | 100/min | 10/min | 200/min |
+| **Admin** | No access | 100/min | No access | No access |
+| **Health** | 60/min | 120/min | 60/min | 120/min |
+| **Memory** | 60/min | 100/min | 60/min | 100/min |
+
+### **Rate Limit Headers**
+
+All responses include rate limit information:
+
+```http
+X-RateLimit-Limit: 30
+X-RateLimit-Remaining: 25
+X-RateLimit-Reset: 1640995200
+X-RateLimit-Window: 60
+```
+
+## 📡 WebSocket Streaming
+
+For real-time reasoning updates, use WebSocket connections:
+
+```javascript
+const ws = new WebSocket('wss://api.reasoning-kernel.com/ws/reasoning');
+
+ws.onmessage = function(event) {
+  const data = JSON.parse(event.data);
+  
+  switch(data.type) {
+    case 'stage_start':
+      console.log(`Starting stage: ${data.stage}`);
+      break;
+    case 'stage_complete':
+      console.log(`Completed stage: ${data.stage}`, data.result);
+      break;
+    case 'thinking_sentence':
+      console.log(`Thinking: ${data.sentence}`);
+      break;
+    case 'final_result':
+      console.log('Final result:', data.result);
+      break;
+  }
+};
+```
+
+## 🛠️ SDK & Client Libraries
+
+### **Python SDK**
+```bash
+pip install reasoning-kernel-python
+```
+
+```python
+from reasoning_kernel import ReasoningKernel
+
+client = ReasoningKernel(api_key="rk_your_api_key")
+
+result = await client.reason(
+    vignette="Optimize our marketing budget allocation",
+    context={"domain": "marketing", "budget": 100000}
+)
+
+print(result.inference_result.recommendations)
+```
+
+### **JavaScript/TypeScript SDK**
+```bash
+npm install @reasoning-kernel/client
+```
+
+```typescript
+import { ReasoningKernel } from '@reasoning-kernel/client';
+
+const client = new ReasoningKernel({
+  apiKey: 'rk_your_api_key',
+  baseUrl: 'https://api.reasoning-kernel.com'
+});
+
+const result = await client.reason({
+  vignette: 'Analyze customer churn risk factors',
+  context: { domain: 'analytics' }
+});
+```
+
+## 📋 OpenAPI Specification
+
+The complete OpenAPI specification is available at:
+
+```
+GET /openapi.json
+GET /docs (Swagger UI)
+GET /redoc (ReDoc UI)
+```
+
+This provides detailed schema information for all endpoints, request/response models, and can be used to generate client libraries in multiple programming languages.

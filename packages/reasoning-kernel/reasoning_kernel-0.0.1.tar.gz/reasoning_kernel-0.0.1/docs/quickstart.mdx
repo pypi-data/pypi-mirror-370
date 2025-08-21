@@ -1,0 +1,373 @@
+---
+title: "Quickstart Guide"
+description: "Get up and running with the Reasoning Kernel in under 10 minutes. Build your first reasoning application with Model Synthesis Architecture."
+---
+
+## Prerequisites
+
+Before getting started, ensure you have:
+
+- **Python 3.12+** installed on your system
+- **API Keys** for the services you plan to use:
+  - [Google AI Studio](https://aistudio.google.com) for Gemini API key
+  - [Redis Cloud](https://redis.com/cloud) for memory storage (optional but recommended)
+  - [Daytona](https://daytona.io) for sandbox execution (optional for basic usage)
+
+<Warning>
+The Reasoning Kernel requires modern Python features. Make sure you're using Python 3.12 or later for the best experience.
+</Warning>
+
+## Installation
+
+Choose your preferred installation method:
+
+<Tabs>
+  <Tab title="pip">
+    ```bash
+    pip install reasoning-kernel
+    ```
+  </Tab>
+  <Tab title="uv (Recommended)">
+    ```bash
+    # Install uv if you haven't already
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    
+    # Create a new project
+    uv init my-reasoning-app
+    cd my-reasoning-app
+    
+    # Add reasoning-kernel
+    uv add reasoning-kernel
+    ```
+  </Tab>
+  <Tab title="From Source">
+    ```bash
+    git clone https://github.com/qredence/reasoning-kernel.git
+    cd reasoning-kernel
+    uv sync --dev
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration
+
+Set up your environment variables:
+
+<CodeGroup>
+```bash .env
+# Required: Gemini API for reasoning and embeddings
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional: Redis for enhanced memory capabilities
+REDIS_URL=redis://localhost:6379
+
+# Optional: Daytona for secure code execution
+DAYTONA_WORKSPACE_ID=your_workspace_id
+DAYTONA_API_KEY=your_daytona_api_key
+
+# Optional: Azure OpenAI as fallback
+AZURE_OPENAI_API_KEY=your_azure_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+```
+
+```python config.py
+from reasoning_kernel import ReasoningKernelConfig
+
+config = ReasoningKernelConfig(
+    gemini_api_key="your_gemini_api_key",
+    redis_url="redis://localhost:6379",  # Optional
+    enable_thinking_modes=True,
+    enable_sandbox=False,  # Set to True if using Daytona
+)
+```
+</CodeGroup>
+
+## Your First Reasoning Session
+
+Let's start with a simple example to see the Reasoning Kernel in action:
+
+<Steps>
+  <Step title="Basic Setup">
+    Create a new Python file and initialize the kernel:
+    ```python basic_example.py
+    import asyncio
+    from reasoning_kernel import ReasoningKernel
+    
+    async def main():
+        # Initialize the kernel
+        kernel = ReasoningKernel()
+        
+        # Your reasoning query
+        scenario = """
+        A coffee shop notices that sales drop 30% every Tuesday, 
+        but only during rainy weather. The shop is located near 
+        a university campus. Analyze this pattern and suggest solutions.
+        """
+        
+        # Execute reasoning
+        result = await kernel.reason(scenario)
+        
+        # Display results
+        print("=== Reasoning Analysis ===")
+        print(f"Confidence: {result.confidence:.2f}")
+        print(f"Analysis: {result.reasoning_result}")
+        
+        if result.suggested_actions:
+            print("\n=== Suggested Actions ===")
+            for action in result.suggested_actions:
+                print(f"• {action}")
+    
+    if __name__ == "__main__":
+        asyncio.run(main())
+    ```
+  </Step>
+  
+  <Step title="Run the Example">
+    Execute your first reasoning session:
+    ```bash
+    python basic_example.py
+    ```
+    
+    You should see output similar to:
+    ```
+    === Reasoning Analysis ===
+    Confidence: 0.87
+    Analysis: The pattern suggests a correlation between rainy Tuesdays 
+    and reduced foot traffic from university students who typically walk 
+    to campus. The 30% drop indicates a significant behavioral shift...
+    
+    === Suggested Actions ===
+    • Implement delivery service for rainy days
+    • Create indoor study spaces to attract students
+    • Offer umbrella lending program
+    • Develop weather-based promotional campaigns
+    ```
+  </Step>
+</Steps>
+
+## Advanced Example: MSA Pipeline
+
+Now let's explore the full Model Synthesis Architecture with a more complex scenario:
+
+```python msa_example.py
+import asyncio
+from reasoning_kernel import ReasoningKernel, MSAConfig
+
+async def advanced_reasoning():
+    # Configure for full MSA pipeline
+    kernel = ReasoningKernel(
+        config=MSAConfig(
+            enable_thinking_exploration=True,
+            use_hierarchical_memory=True,
+            confidence_threshold=0.8
+        )
+    )
+    
+    scenario = """
+    A biotech startup developing personalized medicine has seen 
+    promising results in 60% of their Phase I trials, but faces 
+    regulatory challenges due to novel AI-driven drug discovery methods. 
+    Meanwhile, a competitor just received FDA breakthrough designation 
+    for a similar approach. The startup has 18 months of funding left 
+    and must decide between pivoting to a safer regulatory path or 
+    pursuing their innovative approach. Analyze the strategic options.
+    """
+    
+    # Execute full MSA reasoning with exploration
+    result = await kernel.reason_with_exploration(
+        scenario=scenario,
+        exploration_mode="adaptive",  # Trigger thinking exploration
+        require_causal_graph=True,    # Generate dependency graphs
+        include_uncertainty=True      # Quantify uncertainties
+    )
+    
+    print("=== MSA Reasoning Results ===")
+    print(f"Overall Confidence: {result.overall_confidence:.2f}")
+    print(f"Exploration Triggered: {result.exploration_triggered}")
+    
+    if result.causal_graph:
+        print(f"\n=== Causal Dependencies ===")
+        for node, dependencies in result.causal_graph.items():
+            print(f"{node}: {', '.join(dependencies)}")
+    
+    print(f"\n=== Strategic Analysis ===")
+    print(result.reasoning_trace)
+    
+    if result.uncertainty_breakdown:
+        print(f"\n=== Uncertainty Analysis ===")
+        for factor, uncertainty in result.uncertainty_breakdown.items():
+            print(f"{factor}: {uncertainty:.2f}")
+
+if __name__ == "__main__":
+    asyncio.run(advanced_reasoning())
+```
+
+## Agent-Based Reasoning
+
+The Reasoning Kernel uses specialized agents for different reasoning tasks. Here's how to work with them directly:
+
+```python agent_example.py
+from reasoning_kernel.agents import (
+    ModelSynthesisAgent,
+    KnowledgeRetrievalAgent,
+    ProbabilisticReasoningAgent
+)
+from reasoning_kernel.core import KernelManager
+
+async def agent_based_reasoning():
+    # Initialize kernel and agents
+    kernel_manager = KernelManager()
+    kernel = await kernel_manager.create_reasoning_kernel()
+    
+    # Create specialized agents
+    synthesis_agent = ModelSynthesisAgent(kernel)
+    knowledge_agent = KnowledgeRetrievalAgent(kernel)
+    reasoning_agent = ProbabilisticReasoningAgent(kernel)
+    
+    problem = "Optimize supply chain for 40% demand increase"
+    
+    # Step 1: Parse and structure the problem
+    parsed_problem = await synthesis_agent.parse_problem(problem)
+    
+    # Step 2: Retrieve relevant knowledge
+    relevant_context = await knowledge_agent.retrieve_context(
+        query=parsed_problem.query,
+        domains=["supply_chain", "operations", "logistics"]
+    )
+    
+    # Step 3: Generate reasoning model
+    reasoning_model = await synthesis_agent.generate_reasoning_model(
+        problem=parsed_problem,
+        context=relevant_context
+    )
+    
+    # Step 4: Execute probabilistic inference
+    inference_result = await reasoning_agent.execute_inference(
+        model=reasoning_model,
+        evidence=parsed_problem.constraints
+    )
+    
+    print(f"Confidence: {inference_result.confidence}")
+    print(f"Recommendations: {inference_result.recommendations}")
+
+asyncio.run(agent_based_reasoning())
+```
+
+## Memory and Learning
+
+Enable persistent memory to improve reasoning over time:
+
+<Tabs>
+  <Tab title="Redis Memory">
+    ```python memory_example.py
+    from reasoning_kernel import ReasoningKernel
+    from reasoning_kernel.memory import RedisMemoryConfig
+    
+    # Configure with Redis memory
+    kernel = ReasoningKernel(
+        memory_config=RedisMemoryConfig(
+            redis_url="redis://localhost:6379",
+            short_term_ttl=3600,      # 1 hour
+            long_term_ttl=None,       # Persistent
+            enable_semantic_search=True
+        )
+    )
+    
+    # Store reasoning patterns
+    await kernel.memory.store_reasoning_pattern(
+        pattern_type="supply_chain_optimization",
+        problem_context="demand_increase",
+        solution_approach="multi_stage_buffer_analysis",
+        confidence=0.89
+    )
+    
+    # Retrieve similar patterns
+    similar_patterns = await kernel.memory.search_patterns(
+        query="supply chain challenges",
+        limit=5
+    )
+    ```
+  </Tab>
+  <Tab title="Local Memory">
+    ```python local_memory.py
+    from reasoning_kernel import ReasoningKernel
+    from reasoning_kernel.memory import LocalMemoryConfig
+    
+    # Use local memory for development
+    kernel = ReasoningKernel(
+        memory_config=LocalMemoryConfig(
+            cache_size=1000,
+            persistence_file="./reasoning_cache.json"
+        )
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Production Deployment
+
+For production use, enable all enterprise features:
+
+```python production_config.py
+from reasoning_kernel import ReasoningKernel, ProductionConfig
+
+kernel = ReasoningKernel(
+    config=ProductionConfig(
+        # AI Services
+        gemini_api_key=os.getenv("GEMINI_API_KEY"),
+        azure_openai_config={
+            "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
+            "endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
+            "deployment": "gpt-4"
+        },
+        
+        # Memory & Storage
+        redis_config={
+            "url": os.getenv("REDIS_URL"),
+            "ssl": True,
+            "password": os.getenv("REDIS_PASSWORD")
+        },
+        
+        # Security & Monitoring
+        enable_sandbox=True,
+        daytona_config={
+            "workspace_id": os.getenv("DAYTONA_WORKSPACE_ID"),
+            "api_key": os.getenv("DAYTONA_API_KEY")
+        },
+        
+        # Performance
+        enable_caching=True,
+        max_concurrent_sessions=10,
+        timeout_seconds=300,
+        
+        # Observability
+        enable_telemetry=True,
+        log_level="INFO"
+    )
+)
+```
+
+## What's Next?
+
+Now that you have the Reasoning Kernel running, explore these next steps:
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="brain" href="/concepts/msa-framework">
+    Deep dive into the Model Synthesis Architecture and thinking exploration
+  </Card>
+  <Card title="Advanced Guides" icon="book-open" href="/guides/advanced-reasoning">
+    Learn advanced reasoning patterns and optimization techniques
+  </Card>
+  <Card title="Plugin Development" icon="plug" href="/guides/plugin-development">
+    Build custom plugins and extend the reasoning capabilities
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Complete reference for all APIs, agents, and configuration options
+  </Card>
+</CardGroup>
+
+<Tip>
+**Pro Tip**: Start with simple scenarios and gradually increase complexity. The Reasoning Kernel learns from your usage patterns and improves over time with memory enabled.
+</Tip>
+
+Need help? Join our [Discord community](https://discord.gg/reasoning-kernel) or check out the [troubleshooting guide](/guides/troubleshooting).

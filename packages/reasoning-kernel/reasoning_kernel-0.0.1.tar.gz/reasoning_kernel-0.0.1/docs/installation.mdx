@@ -1,0 +1,563 @@
+---
+title: "Installation Guide"
+description: "Complete installation guide for the Reasoning Kernel with multiple deployment options and environment configurations."
+---
+
+## System Requirements
+
+Before installing the Reasoning Kernel, ensure your system meets these requirements:
+
+<Tabs>
+  <Tab title="Minimum Requirements">
+    - **Python**: 3.12 or later
+    - **Memory**: 4GB RAM minimum
+    - **Storage**: 2GB free space
+    - **Network**: Internet connection for API services
+    - **OS**: Linux, macOS, or Windows with WSL2
+  </Tab>
+  <Tab title="Recommended Requirements">
+    - **Python**: 3.12+ with async support
+    - **Memory**: 8GB RAM or more
+    - **Storage**: 10GB free space
+    - **CPU**: Multi-core processor for parallel reasoning
+    - **GPU**: Optional, for local model inference
+  </Tab>
+  <Tab title="Production Requirements">
+    - **Python**: 3.12+ with production optimizations
+    - **Memory**: 16GB+ RAM
+    - **Storage**: 50GB+ with SSD
+    - **CPU**: 8+ cores for concurrent processing
+    - **Network**: Low-latency connection to cloud services
+    - **Container**: Docker and Kubernetes support
+  </Tab>
+</Tabs>
+
+## Installation Methods
+
+### Method 1: pip Installation (Recommended)
+
+The simplest way to install the Reasoning Kernel:
+
+```bash
+# Install the latest stable version
+pip install reasoning-kernel
+
+# Install with all optional dependencies
+pip install reasoning-kernel[all]
+
+# Install specific features
+pip install reasoning-kernel[redis,sandbox,monitoring]
+```
+
+<Tip>
+Use `pip install reasoning-kernel[all]` to get all optional dependencies including Redis support, sandbox execution, and monitoring capabilities.
+</Tip>
+
+### Method 2: uv Installation (Fastest)
+
+For the fastest installation and dependency management:
+
+```bash
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create a new project
+uv init my-reasoning-project
+cd my-reasoning-project
+
+# Add reasoning-kernel
+uv add reasoning-kernel
+
+# Add optional dependencies
+uv add reasoning-kernel --extra redis,sandbox
+```
+
+### Method 3: Development Installation
+
+For contributors and advanced users:
+
+```bash
+# Clone the repository
+git clone https://github.com/qredence/reasoning-kernel.git
+cd reasoning-kernel
+
+# Install with uv (recommended)
+uv sync --dev
+
+# Or with pip
+pip install -e ".[dev,test,docs]"
+```
+
+### Method 4: Docker Installation
+
+Run the Reasoning Kernel in a containerized environment:
+
+<CodeGroup>
+```dockerfile Dockerfile
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies
+RUN uv sync --frozen
+
+# Copy application code
+COPY . .
+
+# Install reasoning-kernel
+RUN uv pip install -e .
+
+# Expose port
+EXPOSE 8000
+
+# Run application
+CMD ["uv", "run", "reasoning-kernel", "serve"]
+```
+
+```yaml docker-compose.yml
+version: '3.8'
+services:
+  reasoning-kernel:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    volumes:
+      - ./data:/app/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:
+```
+
+```bash Commands
+# Build and run with Docker Compose
+docker-compose up -d
+
+# Or run with Docker directly
+docker build -t reasoning-kernel .
+docker run -p 8000:8000 -e GEMINI_API_KEY=$GEMINI_API_KEY reasoning-kernel
+```
+</CodeGroup>
+
+## Dependency Management
+
+The Reasoning Kernel uses modern Python packaging with optional dependencies:
+
+<Tabs>
+  <Tab title="Core Dependencies">
+    ```toml pyproject.toml
+    [project]
+    dependencies = [
+        "semantic-kernel>=1.35.3",
+        "pydantic>=2.0",
+        "httpx>=0.25",
+        "jax>=0.4.20",
+        "numpyro>=0.13",
+        "networkx>=3.0",
+    ]
+    ```
+  </Tab>
+  <Tab title="Optional Dependencies">
+    ```toml Optional Features
+    [project.optional-dependencies]
+    redis = [
+        "redis>=5.0",
+        "redis-om>=0.2"
+    ]
+    sandbox = [
+        "daytona-sdk>=1.0"
+    ]
+    monitoring = [
+        "prometheus-client>=0.17",
+        "opentelemetry-api>=1.20"
+    ]
+    visualization = [
+        "matplotlib>=3.7",
+        "plotly>=5.15"
+    ]
+    all = [
+        "reasoning-kernel[redis,sandbox,monitoring,visualization]"
+    ]
+    ```
+  </Tab>
+  <Tab title="Development Dependencies">
+    ```toml Development
+    [project.optional-dependencies]
+    dev = [
+        "pytest>=7.4",
+        "pytest-asyncio>=0.21",
+        "black>=23.0",
+        "isort>=5.12",
+        "mypy>=1.5",
+        "pre-commit>=3.4"
+    ]
+    test = [
+        "pytest-cov>=4.1",
+        "pytest-mock>=3.11",
+        "hypothesis>=6.82"
+    ]
+    docs = [
+        "mkdocs>=1.5",
+        "mkdocs-material>=9.2"
+    ]
+    ```
+  </Tab>
+</Tabs>
+
+## Environment Configuration
+
+### Environment Variables
+
+Set up your environment variables for the services you'll use:
+
+<CodeGroup>
+```bash .env.example
+# Required: Gemini AI for reasoning and embeddings
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional: Redis for enhanced memory
+REDIS_URL=redis://localhost:6379
+REDIS_PASSWORD=your_redis_password
+
+# Optional: Azure OpenAI as fallback
+AZURE_OPENAI_API_KEY=your_azure_api_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=gpt-4
+
+# Optional: Daytona sandbox for secure execution
+DAYTONA_API_KEY=your_daytona_api_key
+DAYTONA_WORKSPACE_ID=your_workspace_id
+
+# Optional: Monitoring and telemetry
+ENABLE_TELEMETRY=true
+LOG_LEVEL=INFO
+PROMETHEUS_PORT=9090
+```
+
+```python config.py
+import os
+from reasoning_kernel import ReasoningKernelConfig
+
+# Load configuration from environment
+config = ReasoningKernelConfig(
+    # AI Services
+    gemini_api_key=os.getenv("GEMINI_API_KEY"),
+    azure_openai_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    azure_openai_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    
+    # Memory
+    redis_url=os.getenv("REDIS_URL"),
+    redis_password=os.getenv("REDIS_PASSWORD"),
+    
+    # Sandbox
+    daytona_api_key=os.getenv("DAYTONA_API_KEY"),
+    daytona_workspace_id=os.getenv("DAYTONA_WORKSPACE_ID"),
+    
+    # Monitoring
+    enable_telemetry=os.getenv("ENABLE_TELEMETRY", "false").lower() == "true",
+    log_level=os.getenv("LOG_LEVEL", "INFO"),
+)
+```
+</CodeGroup>
+
+### Configuration Files
+
+Create configuration files for different environments:
+
+<CodeGroup>
+```yaml config/development.yaml
+reasoning_kernel:
+  ai_services:
+    gemini:
+      model: "gemini-2.5-pro"
+      enable_thinking: true
+      temperature: 0.7
+    
+  memory:
+    type: "local"
+    cache_size: 1000
+    persistence_file: "./dev_cache.json"
+  
+  sandbox:
+    enabled: false
+  
+  logging:
+    level: "DEBUG"
+    format: "detailed"
+```
+
+```yaml config/production.yaml
+reasoning_kernel:
+  ai_services:
+    gemini:
+      model: "gemini-2.5-pro"
+      enable_thinking: true
+      temperature: 0.3
+      rate_limit: 100
+    azure_openai:
+      deployment: "gpt-4"
+      fallback_enabled: true
+  
+  memory:
+    type: "redis"
+    redis_url: "${REDIS_URL}"
+    short_term_ttl: 3600
+    long_term_ttl: null
+    enable_clustering: true
+  
+  sandbox:
+    enabled: true
+    provider: "daytona"
+    timeout: 300
+    resource_limits:
+      memory: "2GB"
+      cpu: "1"
+  
+  monitoring:
+    enabled: true
+    prometheus_port: 9090
+    tracing_enabled: true
+  
+  logging:
+    level: "INFO"
+    format: "json"
+```
+</CodeGroup>
+
+## Verification
+
+Verify your installation is working correctly:
+
+<Steps>
+  <Step title="Basic Import Test">
+    ```python test_import.py
+    try:
+        from reasoning_kernel import ReasoningKernel
+        print("✅ Reasoning Kernel imported successfully")
+    except ImportError as e:
+        print(f"❌ Import failed: {e}")
+    ```
+  </Step>
+  
+  <Step title="Dependencies Check">
+    ```python test_dependencies.py
+    import importlib
+    
+    dependencies = [
+        "semantic_kernel",
+        "pydantic", 
+        "jax",
+        "numpyro",
+        "networkx"
+    ]
+    
+    for dep in dependencies:
+        try:
+            importlib.import_module(dep)
+            print(f"✅ {dep}")
+        except ImportError:
+            print(f"❌ {dep} not found")
+    ```
+  </Step>
+  
+  <Step title="Configuration Test">
+    ```python test_config.py
+    from reasoning_kernel import ReasoningKernel
+    import asyncio
+    
+    async def test_config():
+        try:
+            kernel = ReasoningKernel()
+            health = await kernel.health_check()
+            
+            print("✅ Kernel initialized successfully")
+            print(f"Status: {health.status}")
+            print(f"Services: {', '.join(health.services)}")
+            
+        except Exception as e:
+            print(f"❌ Configuration test failed: {e}")
+    
+    asyncio.run(test_config())
+    ```
+  </Step>
+  
+  <Step title="Integration Test">
+    ```python test_integration.py
+    from reasoning_kernel import ReasoningKernel
+    import asyncio
+    
+    async def test_reasoning():
+        kernel = ReasoningKernel()
+        
+        try:
+            result = await kernel.reason(
+                "Test reasoning: What is 2+2?",
+                timeout=30
+            )
+            
+            print("✅ Basic reasoning test passed")
+            print(f"Result: {result.reasoning_result}")
+            print(f"Confidence: {result.confidence}")
+            
+        except Exception as e:
+            print(f"❌ Reasoning test failed: {e}")
+    
+    asyncio.run(test_reasoning())
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+Common installation issues and solutions:
+
+<AccordionGroup>
+  <Accordion title="Python Version Issues" icon="python">
+    ```bash
+    # Check Python version
+    python --version
+    
+    # Install Python 3.12 with pyenv
+    pyenv install 3.12.0
+    pyenv global 3.12.0
+    
+    # Or use conda
+    conda create -n reasoning python=3.12
+    conda activate reasoning
+    ```
+  </Accordion>
+  
+  <Accordion title="Dependency Conflicts" icon="exclamation-triangle">
+    ```bash
+    # Clear pip cache
+    pip cache purge
+    
+    # Use virtual environment
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    
+    # Install with uv for better dependency resolution
+    pip install uv
+    uv pip install reasoning-kernel
+    ```
+  </Accordion>
+  
+  <Accordion title="JAX/NumPyro Issues" icon="calculator">
+    ```bash
+    # Install JAX for your platform
+    # CPU only
+    pip install jax[cpu]
+    
+    # GPU (CUDA)
+    pip install jax[cuda12]
+    
+    # Apple Silicon Mac
+    pip install jax[metal]
+    ```
+  </Accordion>
+  
+  <Accordion title="Redis Connection Issues" icon="database">
+    ```bash
+    # Test Redis connection
+    redis-cli ping
+    
+    # Install Redis locally
+    # macOS
+    brew install redis
+    brew services start redis
+    
+    # Ubuntu/Debian
+    sudo apt install redis-server
+    sudo systemctl start redis
+    
+    # Or use Docker
+    docker run -p 6379:6379 redis:7-alpine
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Platform-Specific Notes
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    # Install with Homebrew (recommended)
+    brew install python@3.12
+    pip3.12 install reasoning-kernel
+    
+    # For Apple Silicon Macs
+    pip install jax[metal]  # GPU acceleration
+    ```
+  </Tab>
+  <Tab title="Linux">
+    ```bash
+    # Ubuntu/Debian
+    sudo apt update
+    sudo apt install python3.12 python3.12-pip python3.12-dev
+    pip3.12 install reasoning-kernel
+    
+    # CentOS/RHEL
+    sudo dnf install python3.12 python3.12-pip python3.12-devel
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Install with Microsoft Store or python.org
+    # Then use pip in PowerShell or Command Prompt
+    pip install reasoning-kernel
+    
+    # Or use WSL2 (recommended for development)
+    wsl --install Ubuntu
+    # Then follow Linux instructions
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+After successful installation:
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="cog" href="/configuration">
+    Configure API keys, memory stores, and other services
+  </Card>
+  <Card title="Quickstart" icon="rocket-launch" href="/quickstart">
+    Build your first reasoning application in minutes
+  </Card>
+  <Card title="Core Concepts" icon="brain" href="/concepts/msa-framework">
+    Understand the Model Synthesis Architecture
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/basic-usage">
+    Explore real-world usage examples and patterns
+  </Card>
+</CardGroup>
+
+<Warning>
+Keep your API keys secure and never commit them to version control. Use environment variables or secure credential management systems in production.
+</Warning>

@@ -1,0 +1,80 @@
+name: Update and auto-merge open PRs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
+  push:
+    branches: ['**']
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: process-open-prs
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    # Only act on scheduled/manual runs, or pushes to the default branch
+    if: ${{ github.event_name != 'push' || github.ref_name == github.event.repository.default_branch }}
+    steps:
+      - name: Process open PRs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const core = require('@actions/core');
+            const { owner, repo } = context.repo;
+            const { data: repoData } = await github.rest.repos.get({ owner, repo });
+            const defaultBranch = repoData.default_branch;
+
+            core.info(`Default branch: ${defaultBranch}`);
+
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'open',
+              base: defaultBranch,
+              per_page: 100,
+            });
+
+            core.info(`Found ${prs.length} open PR(s) targeting '${defaultBranch}'.`);
+
+            for (const pr of prs) {
+              core.startGroup(`PR #${pr.number}: ${pr.title}`);
+              // Try to update the PR branch with the latest default branch
+              try {
+                await github.rest.pulls.updateBranch({
+                  owner,
+                  repo,
+                  pull_number: pr.number,
+                  expected_head_sha: pr.head.sha,
+                });
+                core.info(`Requested branch update for PR #${pr.number}`);
+              } catch (error) {
+                // Common cases: already up-to-date, forked repo, or update not allowed
+                core.info(`Skipping update for PR #${pr.number}: ${error.message}`);
+              }
+
+              // Try to enable auto-merge (squash) on the PR
+              try {
+                await github.graphql(
+                  `mutation EnableAutoMerge($pullRequestId: ID!) {
+                    enablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId, mergeMethod: SQUASH }) {
+                      pullRequest { number }
+                    }
+                  }`,
+                  { pullRequestId: pr.node_id }
+                );
+                core.info(`Enabled auto-merge for PR #${pr.number}`);
+              } catch (error) {
+                core.info(`Could not enable auto-merge for PR #${pr.number}: ${error.message}`);
+              }
+
+              core.endGroup();
+            }
+
+

@@ -1,0 +1,883 @@
+---
+title: "Configuration Guide"
+description: "Complete configuration reference for the Reasoning Kernel including API keys, memory stores, sandbox environments, and production settings."
+---
+
+## Overview
+
+The Reasoning Kernel provides flexible configuration options to adapt to different environments and use cases. Configuration can be managed through:
+
+- **Environment Variables**: Simple key-value configuration
+- **Configuration Files**: YAML/JSON for complex settings
+- **Python API**: Programmatic configuration with validation
+- **Runtime Configuration**: Dynamic adjustments during execution
+
+<CardGroup cols={2}>
+  <Card title="Quick Setup" icon="rocket-launch" href="#quick-setup">
+    Get started with minimal configuration for development
+  </Card>
+  <Card title="Production Setup" icon="server" href="#production-configuration">
+    Enterprise-grade configuration for production deployments
+  </Card>
+  <Card title="Security" icon="shield-check" href="#security-configuration">
+    API key management and security best practices
+  </Card>
+  <Card title="Performance" icon="bolt" href="#performance-tuning">
+    Optimize performance for your specific workload
+  </Card>
+</CardGroup>
+
+## Quick Setup
+
+For development and testing, minimal configuration is required:
+
+<Tabs>
+  <Tab title="Environment Variables">
+    ```bash .env
+    # Required: Gemini API for reasoning
+    GEMINI_API_KEY=your_gemini_api_key_here
+    
+    # Optional: Enable memory (recommended)
+    REDIS_URL=redis://localhost:6379
+    
+    # Optional: Enable sandbox (for advanced features)
+    DAYTONA_WORKSPACE_ID=your_workspace_id
+    ```
+  </Tab>
+  
+  <Tab title="Python Configuration">
+    ```python quick_config.py
+    from reasoning_kernel import ReasoningKernel, Config
+    
+    # Minimal configuration
+    config = Config(
+        gemini_api_key="your_api_key",
+        enable_memory=True,
+        log_level="INFO"
+    )
+    
+    kernel = ReasoningKernel(config=config)
+    ```
+  </Tab>
+  
+  <Tab title="YAML Configuration">
+    ```yaml config/development.yaml
+    reasoning_kernel:
+      ai_services:
+        gemini:
+          api_key: "${GEMINI_API_KEY}"
+          model: "gemini-2.5-pro"
+          enable_thinking: true
+      
+      memory:
+        type: "local"
+        cache_size: 1000
+      
+      logging:
+        level: "DEBUG"
+    ```
+  </Tab>
+</Tabs>
+
+## AI Services Configuration
+
+Configure the AI models and services used by the Reasoning Kernel:
+
+### Gemini Configuration
+
+<ParamField path="gemini.api_key" type="string" required>
+  Your Google AI Studio API key for Gemini access
+</ParamField>
+
+<ParamField path="gemini.model" type="string" default="gemini-2.5-pro">
+  Gemini model version. Options: `gemini-2.5-pro`, `gemini-2.0-flash`
+</ParamField>
+
+<ParamField path="gemini.enable_thinking" type="boolean" default="true">
+  Enable thinking modes for enhanced reasoning capabilities
+</ParamField>
+
+<ParamField path="gemini.temperature" type="float" default="0.7">
+  Sampling temperature for response generation (0.0-1.0)
+</ParamField>
+
+<ParamField path="gemini.max_tokens" type="integer" default="8192">
+  Maximum tokens in generated responses
+</ParamField>
+
+<CodeGroup>
+```python Python API
+from reasoning_kernel.config import GeminiConfig
+
+gemini_config = GeminiConfig(
+    api_key="your_api_key",
+    model="gemini-2.5-pro",
+    enable_thinking=True,
+    temperature=0.7,
+    max_tokens=8192,
+    safety_settings="high_precision",
+    rate_limit=100  # requests per minute
+)
+```
+
+```yaml YAML Configuration
+ai_services:
+  gemini:
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-2.5-pro"
+    enable_thinking: true
+    temperature: 0.7
+    max_tokens: 8192
+    safety_settings: "high_precision"
+    rate_limit: 100
+    retry_config:
+      max_retries: 3
+      backoff_factor: 2
+```
+
+```json Environment Variables
+{
+  "GEMINI_API_KEY": "your_api_key",
+  "GEMINI_MODEL": "gemini-2.5-pro",
+  "GEMINI_ENABLE_THINKING": "true",
+  "GEMINI_TEMPERATURE": "0.7",
+  "GEMINI_MAX_TOKENS": "8192"
+}
+```
+</CodeGroup>
+
+### Azure OpenAI Configuration (Optional)
+
+Configure Azure OpenAI as a fallback service:
+
+<ParamField path="azure_openai.api_key" type="string">
+  Azure OpenAI API key
+</ParamField>
+
+<ParamField path="azure_openai.endpoint" type="string">
+  Azure OpenAI endpoint URL (e.g., `https://your-resource.openai.azure.com/`)
+</ParamField>
+
+<ParamField path="azure_openai.deployment" type="string" default="gpt-4">
+  Deployment name for the model
+</ParamField>
+
+<ParamField path="azure_openai.api_version" type="string" default="2024-02-15-preview">
+  Azure OpenAI API version
+</ParamField>
+
+```python
+from reasoning_kernel.config import AzureOpenAIConfig
+
+azure_config = AzureOpenAIConfig(
+    api_key="your_azure_key",
+    endpoint="https://your-resource.openai.azure.com/",
+    deployment="gpt-4",
+    api_version="2024-02-15-preview",
+    enable_fallback=True  # Use as fallback for Gemini
+)
+```
+
+### Embedding Configuration
+
+Configure embedding models for semantic search:
+
+<ParamField path="embeddings.model" type="string" default="gemini-embedding-001">
+  Embedding model for semantic search. Options: `gemini-embedding-001`, `text-embedding-3-large`
+</ParamField>
+
+<ParamField path="embeddings.dimensions" type="integer" default="768">
+  Embedding vector dimensions (model-dependent)
+</ParamField>
+
+```python
+from reasoning_kernel.config import EmbeddingConfig
+
+embedding_config = EmbeddingConfig(
+    model="gemini-embedding-001",
+    dimensions=768,
+    batch_size=100,
+    cache_embeddings=True
+)
+```
+
+## Memory Configuration
+
+Configure memory stores for knowledge persistence and retrieval:
+
+### Redis Configuration
+
+<ParamField path="redis.url" type="string">
+  Redis connection URL (e.g., `redis://localhost:6379`)
+</ParamField>
+
+<ParamField path="redis.password" type="string">
+  Redis password for authenticated connections
+</ParamField>
+
+<ParamField path="redis.ssl" type="boolean" default="false">
+  Enable SSL/TLS for Redis connections
+</ParamField>
+
+<ParamField path="redis.short_term_ttl" type="integer" default="3600">
+  TTL for short-term memory in seconds (1 hour default)
+</ParamField>
+
+<ParamField path="redis.long_term_ttl" type="integer">
+  TTL for long-term memory in seconds (null = persistent)
+</ParamField>
+
+<CodeGroup>
+```python Redis Configuration
+from reasoning_kernel.config import RedisConfig
+
+redis_config = RedisConfig(
+    url="redis://localhost:6379",
+    password="your_redis_password",
+    ssl=True,
+    max_connections=20,
+    socket_keepalive=True,
+    socket_keepalive_options={},
+    
+    # Memory management
+    short_term_ttl=3600,      # 1 hour
+    long_term_ttl=None,       # Persistent
+    max_memory_usage="2GB",
+    
+    # Collections
+    collections={
+        "reasoning_patterns": {"ttl": 86400},     # 24 hours
+        "world_models": {"ttl": None},            # Persistent
+        "exploration_results": {"ttl": 7200}      # 2 hours
+    }
+)
+```
+
+```yaml Redis YAML
+memory:
+  type: "redis"
+  redis:
+    url: "${REDIS_URL}"
+    password: "${REDIS_PASSWORD}"
+    ssl: true
+    max_connections: 20
+    
+    # TTL settings
+    short_term_ttl: 3600
+    long_term_ttl: null
+    
+    # Collections with custom TTL
+    collections:
+      reasoning_patterns:
+        ttl: 86400
+      world_models:
+        ttl: null
+      exploration_results:
+        ttl: 7200
+```
+</CodeGroup>
+
+### Local Memory Configuration
+
+For development without Redis:
+
+```python
+from reasoning_kernel.config import LocalMemoryConfig
+
+local_memory_config = LocalMemoryConfig(
+    cache_size=1000,                    # Maximum items in memory
+    persistence_file="./memory.json",   # Persistent storage file
+    sync_interval=300,                  # Sync to disk every 5 minutes
+    enable_compression=True             # Compress stored data
+)
+```
+
+## Sandbox Configuration
+
+Configure secure code execution environment:
+
+### Daytona Configuration
+
+<ParamField path="daytona.api_key" type="string">
+  Daytona API key for sandbox access
+</ParamField>
+
+<ParamField path="daytona.workspace_id" type="string">
+  Daytona workspace identifier
+</ParamField>
+
+<ParamField path="daytona.base_url" type="string" default="https://api.daytona.io">
+  Daytona API base URL
+</ParamField>
+
+<ParamField path="daytona.timeout" type="integer" default="300">
+  Execution timeout in seconds
+</ParamField>
+
+<CodeGroup>
+```python Daytona Configuration
+from reasoning_kernel.config import DaytonaConfig
+
+daytona_config = DaytonaConfig(
+    api_key="your_daytona_key",
+    workspace_id="your_workspace_id",
+    base_url="https://api.daytona.io",
+    
+    # Resource limits
+    timeout=300,
+    memory_limit="4GB",
+    cpu_limit="2",
+    
+    # Environment
+    python_version="3.12",
+    packages=["numpyro", "jax", "networkx"],
+    
+    # Security
+    network_access="restricted",
+    file_system_access="sandbox_only"
+)
+```
+
+```yaml Sandbox YAML
+sandbox:
+  enabled: true
+  provider: "daytona"
+  config:
+    api_key: "${DAYTONA_API_KEY}"
+    workspace_id: "${DAYTONA_WORKSPACE_ID}"
+    timeout: 300
+    memory_limit: "4GB"
+    cpu_limit: "2"
+    python_version: "3.12"
+    network_access: "restricted"
+```
+</CodeGroup>
+
+### Local Sandbox Configuration
+
+For development without external sandbox:
+
+```python
+from reasoning_kernel.config import LocalSandboxConfig
+
+local_sandbox_config = LocalSandboxConfig(
+    enabled=True,
+    timeout=60,                         # Shorter timeout for local
+    allowed_imports=[                   # Restricted import list
+        "numpy", "pandas", "jax", "numpyro", "networkx"
+    ],
+    memory_limit="1GB",
+    temp_directory="/tmp/reasoning_sandbox"
+)
+```
+
+## Performance Configuration
+
+Optimize performance for your specific workload:
+
+### Concurrency Settings
+
+<ParamField path="performance.max_concurrent_sessions" type="integer" default="10">
+  Maximum concurrent reasoning sessions
+</ParamField>
+
+<ParamField path="performance.worker_threads" type="integer" default="4">
+  Number of worker threads for parallel processing
+</ParamField>
+
+<ParamField path="performance.batch_size" type="integer" default="32">
+  Batch size for vector operations
+</ParamField>
+
+```python
+from reasoning_kernel.config import PerformanceConfig
+
+performance_config = PerformanceConfig(
+    max_concurrent_sessions=10,
+    worker_threads=4,
+    batch_size=32,
+    
+    # Caching
+    enable_result_caching=True,
+    cache_ttl=1800,                     # 30 minutes
+    cache_size="1GB",
+    
+    # Optimization
+    enable_jit_compilation=True,
+    memory_pool_size="2GB",
+    gc_threshold=1000
+)
+```
+
+### Caching Configuration
+
+<ParamField path="cache.enabled" type="boolean" default="true">
+  Enable result caching for improved performance
+</ParamField>
+
+<ParamField path="cache.ttl" type="integer" default="1800">
+  Cache entry time-to-live in seconds
+</ParamField>
+
+<ParamField path="cache.size" type="string" default="1GB">
+  Maximum cache size
+</ParamField>
+
+```python
+from reasoning_kernel.config import CacheConfig
+
+cache_config = CacheConfig(
+    enabled=True,
+    ttl=1800,
+    size="1GB",
+    
+    # Cache strategies
+    strategies={
+        "reasoning_results": "lru",
+        "embeddings": "lfu",
+        "model_outputs": "ttl"
+    },
+    
+    # Cache warming
+    enable_warming=True,
+    warming_queries=["common reasoning patterns"]
+)
+```
+
+## Security Configuration
+
+### API Security
+
+<ParamField path="security.api_key_validation" type="boolean" default="true">
+  Enable API key validation
+</ParamField>
+
+<ParamField path="security.rate_limiting" type="boolean" default="true">
+  Enable rate limiting
+</ParamField>
+
+<ParamField path="security.encrypt_memory" type="boolean" default="false">
+  Encrypt data in memory stores
+</ParamField>
+
+```python
+from reasoning_kernel.config import SecurityConfig
+
+security_config = SecurityConfig(
+    api_key_validation=True,
+    rate_limiting=True,
+    encrypt_memory=True,
+    
+    # Rate limits
+    rate_limits={
+        "default": {"requests": 100, "window": 60},
+        "reasoning": {"requests": 10, "window": 60},
+        "memory": {"requests": 1000, "window": 60}
+    },
+    
+    # Encryption
+    encryption_key="${ENCRYPTION_KEY}",
+    hash_algorithm="SHA256",
+    
+    # Access control
+    allowed_origins=["https://your-app.com"],
+    cors_enabled=True
+)
+```
+
+### Code Security
+
+For sandbox execution security:
+
+```python
+from reasoning_kernel.config import CodeSecurityConfig
+
+code_security_config = CodeSecurityConfig(
+    # Allowed operations
+    allowed_imports=[
+        "numpy", "pandas", "jax", "numpyro", 
+        "networkx", "matplotlib", "scipy"
+    ],
+    
+    # Blocked operations
+    blocked_functions=[
+        "open", "exec", "eval", "__import__",
+        "input", "raw_input", "file"
+    ],
+    
+    # Resource limits
+    execution_timeout=300,
+    memory_limit="2GB",
+    file_access="none",
+    network_access="none",
+    
+    # Static analysis
+    enable_ast_validation=True,
+    max_code_complexity=100
+)
+```
+
+## Monitoring Configuration
+
+Configure observability and monitoring:
+
+### Logging Configuration
+
+<ParamField path="logging.level" type="string" default="INFO">
+  Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+</ParamField>
+
+<ParamField path="logging.format" type="string" default="structured">
+  Log format: `structured`, `json`, `text`
+</ParamField>
+
+<ParamField path="logging.output" type="string" default="console">
+  Log output: `console`, `file`, `both`
+</ParamField>
+
+```python
+from reasoning_kernel.config import LoggingConfig
+
+logging_config = LoggingConfig(
+    level="INFO",
+    format="json",
+    output="both",
+    
+    # File logging
+    file_path="./logs/reasoning_kernel.log",
+    max_file_size="100MB",
+    backup_count=5,
+    
+    # Structured logging
+    include_request_id=True,
+    include_timestamp=True,
+    include_user_context=False,
+    
+    # Log filtering
+    exclude_patterns=["health_check", "metrics"]
+)
+```
+
+### Metrics Configuration
+
+```python
+from reasoning_kernel.config import MetricsConfig
+
+metrics_config = MetricsConfig(
+    enabled=True,
+    prometheus_port=9090,
+    
+    # Custom metrics
+    track_reasoning_latency=True,
+    track_memory_usage=True,
+    track_error_rates=True,
+    
+    # Alerting
+    alert_thresholds={
+        "error_rate": 0.05,      # 5% error rate
+        "latency_p99": 30000,    # 30 second P99 latency
+        "memory_usage": 0.8      # 80% memory usage
+    }
+)
+```
+
+## Production Configuration
+
+Complete production configuration example:
+
+<CodeGroup>
+```python Production Python
+from reasoning_kernel import ReasoningKernel
+from reasoning_kernel.config import (
+    ProductionConfig, GeminiConfig, RedisConfig, 
+    DaytonaConfig, SecurityConfig, MonitoringConfig
+)
+
+# Production configuration
+config = ProductionConfig(
+    # AI Services
+    gemini=GeminiConfig(
+        api_key=os.getenv("GEMINI_API_KEY"),
+        model="gemini-2.5-pro",
+        enable_thinking=True,
+        temperature=0.3,  # Lower for production consistency
+        rate_limit=1000
+    ),
+    
+    # Memory
+    redis=RedisConfig(
+        url=os.getenv("REDIS_URL"),
+        password=os.getenv("REDIS_PASSWORD"),
+        ssl=True,
+        max_connections=50,
+        short_term_ttl=3600,
+        long_term_ttl=None
+    ),
+    
+    # Sandbox
+    daytona=DaytonaConfig(
+        api_key=os.getenv("DAYTONA_API_KEY"),
+        workspace_id=os.getenv("DAYTONA_WORKSPACE_ID"),
+        timeout=300,
+        memory_limit="4GB",
+        cpu_limit="2"
+    ),
+    
+    # Security
+    security=SecurityConfig(
+        api_key_validation=True,
+        rate_limiting=True,
+        encrypt_memory=True,
+        allowed_origins=["https://your-production-app.com"]
+    ),
+    
+    # Monitoring
+    monitoring=MonitoringConfig(
+        enabled=True,
+        prometheus_port=9090,
+        log_level="INFO",
+        enable_tracing=True
+    ),
+    
+    # Performance
+    max_concurrent_sessions=50,
+    enable_caching=True,
+    cache_size="10GB"
+)
+
+# Initialize kernel
+kernel = ReasoningKernel(config=config)
+```
+
+```yaml Production YAML
+reasoning_kernel:
+  environment: "production"
+  
+  ai_services:
+    gemini:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-2.5-pro"
+      enable_thinking: true
+      temperature: 0.3
+      rate_limit: 1000
+    
+    azure_openai:
+      api_key: "${AZURE_OPENAI_API_KEY}"
+      endpoint: "${AZURE_OPENAI_ENDPOINT}"
+      deployment: "gpt-4"
+      enable_fallback: true
+  
+  memory:
+    type: "redis"
+    redis:
+      url: "${REDIS_URL}"
+      password: "${REDIS_PASSWORD}"
+      ssl: true
+      max_connections: 50
+      short_term_ttl: 3600
+      long_term_ttl: null
+  
+  sandbox:
+    enabled: true
+    provider: "daytona"
+    config:
+      api_key: "${DAYTONA_API_KEY}"
+      workspace_id: "${DAYTONA_WORKSPACE_ID}"
+      timeout: 300
+      memory_limit: "4GB"
+      cpu_limit: "2"
+  
+  security:
+    api_key_validation: true
+    rate_limiting: true
+    encrypt_memory: true
+    allowed_origins:
+      - "https://your-production-app.com"
+  
+  monitoring:
+    enabled: true
+    prometheus_port: 9090
+    log_level: "INFO"
+    enable_tracing: true
+  
+  performance:
+    max_concurrent_sessions: 50
+    enable_caching: true
+    cache_size: "10GB"
+```
+</CodeGroup>
+
+## Environment-Specific Configurations
+
+<Tabs>
+  <Tab title="Development">
+    ```yaml config/development.yaml
+    reasoning_kernel:
+      ai_services:
+        gemini:
+          temperature: 0.8    # Higher creativity for testing
+      memory:
+        type: "local"         # No Redis dependency
+      sandbox:
+        enabled: false        # Local execution only
+      logging:
+        level: "DEBUG"        # Verbose logging
+      performance:
+        max_concurrent_sessions: 2
+    ```
+  </Tab>
+  
+  <Tab title="Staging">
+    ```yaml config/staging.yaml
+    reasoning_kernel:
+      ai_services:
+        gemini:
+          temperature: 0.5    # Balanced
+      memory:
+        type: "redis"         # Production-like setup
+      sandbox:
+        enabled: true         # Test sandbox integration
+      logging:
+        level: "INFO"
+      performance:
+        max_concurrent_sessions: 10
+    ```
+  </Tab>
+  
+  <Tab title="Production">
+    ```yaml config/production.yaml
+    reasoning_kernel:
+      ai_services:
+        gemini:
+          temperature: 0.3    # Consistent results
+      memory:
+        type: "redis"
+        redis:
+          ssl: true
+          encrypt: true
+      sandbox:
+        enabled: true
+      security:
+        api_key_validation: true
+        rate_limiting: true
+      monitoring:
+        enabled: true
+      logging:
+        level: "WARNING"      # Reduce noise
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration Validation
+
+The Reasoning Kernel validates configuration at startup:
+
+```python
+from reasoning_kernel.config import validate_config
+from reasoning_kernel.exceptions import ConfigurationError
+
+try:
+    # Validate configuration before initializing kernel
+    validate_config(config)
+    kernel = ReasoningKernel(config=config)
+except ConfigurationError as e:
+    print(f"Configuration error: {e.message}")
+    print(f"Field: {e.field}")
+    print(f"Suggestion: {e.suggestion}")
+```
+
+<Warning>
+Always validate your configuration in production environments. Invalid configurations can lead to runtime errors or security vulnerabilities.
+</Warning>
+
+## Configuration Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="key">
+    **Use environment variables for secrets**
+    - API keys should never be hardcoded
+    - Use `.env` files for local development
+    - Use secret management in production
+  </Card>
+  <Card title="Configuration Files" icon="file-text">
+    **Use YAML/JSON for complex settings**
+    - Structure complex configurations clearly
+    - Use environment-specific files
+    - Version control configuration templates
+  </Card>
+  <Card title="Security" icon="shield-check">
+    **Secure your configuration**
+    - Encrypt sensitive configuration values
+    - Use least-privilege access patterns
+    - Regularly rotate API keys
+  </Card>
+  <Card title="Monitoring" icon="chart-line">
+    **Monitor configuration changes**
+    - Log configuration updates
+    - Track configuration drift
+    - Alert on invalid configurations
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+Common configuration issues and solutions:
+
+<AccordionGroup>
+  <Accordion title="API Key Issues" icon="key">
+    **Symptoms**: Authentication errors, 401 responses
+    
+    **Solutions**:
+    - Verify API key is correct and not expired
+    - Check environment variable names
+    - Ensure API key has required permissions
+    - Test API key with simple requests
+  </Accordion>
+  
+  <Accordion title="Redis Connection Issues" icon="database">
+    **Symptoms**: Memory operations fail, connection timeouts
+    
+    **Solutions**:
+    - Verify Redis URL and credentials
+    - Check network connectivity
+    - Confirm Redis server is running
+    - Test connection with Redis CLI
+  </Accordion>
+  
+  <Accordion title="Sandbox Issues" icon="cube">
+    **Symptoms**: Code execution failures, timeout errors
+    
+    **Solutions**:
+    - Check Daytona workspace status
+    - Verify API credentials
+    - Review resource limits
+    - Test with simple code examples
+  </Accordion>
+  
+  <Accordion title="Performance Issues" icon="bolt">
+    **Symptoms**: Slow responses, high memory usage
+    
+    **Solutions**:
+    - Adjust concurrency limits
+    - Enable caching
+    - Optimize memory settings
+    - Monitor resource usage
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket-launch" href="/quickstart">
+    Get started with your configured Reasoning Kernel
+  </Card>
+  <Card title="Production Deployment" icon="server" href="/deployment/production">
+    Deploy to production with best practices
+  </Card>
+  <Card title="Monitoring Setup" icon="chart-line" href="/monitoring/overview">
+    Set up comprehensive monitoring and alerting
+  </Card>
+  <Card title="Security Guide" icon="shield-check" href="/security/best-practices">
+    Implement security best practices
+  </Card>
+</CardGroup>
