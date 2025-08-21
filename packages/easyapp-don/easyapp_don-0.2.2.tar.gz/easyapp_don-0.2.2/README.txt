@@ -1,0 +1,185 @@
+Easyapp_don 0.2.2
+Welcome to the easyapp_don Library!
+-------------------- Part 1: Introduction to Easyapp_don --------------------
+1. What is Easyapp_don?
+[1] Easyapp_don is a simple library designed for Python beginners. Its basic dependent libraries are Kivy and KivyMD.
+[2] Currently, the version of easyapp_don is 0.2.2, which is relatively stable. This is the first version I released, but it is the third version I created.
+[3] The previous two versions were extremely unstable with few features. This version, however, is feature-rich and stable, suitable for most needs. It simplifies 99% of the code and is now available for free!
+[4] The developer of easyapp_don is LvYanHua, with a development date of August 12, 2025. It has a patent and is protected by intellectual property rights.
+[5] Easyapp was developed primarily to solve the problem of overly complex code in Kivy and KivyMD. It can be fully used in combination with Kivy and KivyMD.
+[6] Easyapp is developed entirely based on Kivy and KivyMD with no other dependencies. It relies on Python standard libraries such as typing, sys, os, queue, etc.
+2. What is the development purpose of Easyapp_don?
+[1] To simplify code for beginners, reduce code workload, make coding easier for users, and significantly reduce the time spent.
+[2] To create simple apps and save all costs.
+3. What are the dependent libraries and other dependencies of Easyapp_don?
+[1] The dependent libraries are Kivy and KivyMD, with minimum versions: Kivy: 2.3.0, KivyMD: 1.2.0
+[2] It depends on the Python language, with a minimum requirement of Python 3.7.9.
+4. How to install easyapp_don?
+First, ensure you have installed Python with a version ≥ 3.7.9. If not, download Python from the following website.
+https://www.python.org/
+(1) On Windows computers:
+[1] Press Win+R on the keyboard to open the prompt box, enter the command "cmd" to open the Command Prompt;
+[2] In the Command Prompt, enter the command "pip install easyapp_don" to install the easyapp_don library;
+[3] If your download speed is extremely slow or the download fails, enter the command:
+pip install easyapp_don -i https://mirrors.tuna.tsinghua.edu.cn/
+(2) On mobile phones:
+[1] If you have a Python IDE or other compiler, open it;
+[2] Click {Mine}, then click {Install Module}, enter the library name: easyapp_don to install. Alternatively, open its Python console and enter the following:
+pip install easyapp_don
+[3] If your download speed is extremely slow or the download fails, enter the following:
+pip install easyapp_don -i https://mirrors.tuna.tsinghua.edu.cn/
+5. What features does Easyapp_don have?
+[1] It can be used for app creation, similar to the easygui library, enabling simple app and GUI interface development.
+[2] It supports image uploads. As long as images are in the same directory as the code file, they can be displayed in the app.
+[3] It can create tools such as questionnaires or answer sheets, reducing code volume by 99%.
+6. What is the basic information of Easyapp_don?
+[1] Version number: 0.2.2
+[2] Author: LvYanHua
+[3] Publisher: Individual
+[4] Website: Easyapp_don.html
+-------------------- Part 2: How to Use Easyapp_don --------------------
+7. What app-related functions does Easyapp_don have?
+[1] The msg() function: Displays a configuration with text, title, OK, and Cancel buttons. It automatically pops up a prompt box when closed;
+[2] The esmsg() function: Displays multiple texts and inherits functions from msg();
+[3] The fillmsg() function: Inherits from esmsg() and adds checkboxes on this basis, enabling answer sheet and questionnaire functions;
+[4] The btn() function: Inherits from msg() and replaces the original OK and Cancel buttons with a button list for more flexible buttons;
+[5] The esbtn() function: Inherits from esmsg() and replaces the original OK and Cancel buttons with a button list, with multiple texts;
+[6] The fillbtn() function: Inherits from fillmsg() and replaces OK and Cancel with a button list on this basis, with texts and fill buttons;
+[7] The ent() function: Inherits from msg() and adds an input box to obtain user input;
+[8] The esent() function: Inherits from esmsg() and ent(), combining their advantages with multiple texts and multiple input boxes;
+[9] The fillent() function: Inherits from fillmsg() and esent(), adding a fill button list on the basis of multiple texts and input boxes, suitable for all answer sheets (though unable to upload images);
+[10] The img() function: Inherits from msg() and adds images on this basis, which can be set as background images;
+[11] The fill_img() function: Inherits from img() and fillmsg(), adding fill buttons on the basis of images, fully realizing answer sheet functions with return values;
+[12] The btn_img() function: Inherits from img() and btn(), adding image buttons on the basis of images for customizable button styles;
+[13] The fill_btn_img() function: Inherits from fill_img() and btn_img(), combining their components with both image buttons and image fill buttons (i.e., clicking an image switches it, clicking again switches back), with return values;
+[14] The page() function: Integrates all previous functions but can only display a single page;
+[15] The pages() function: Note that it is different from page() in function. It can create multiple pages but cannot upload images, convenient for users without image materials;
+[16] The img_pages() function: Adds image materials on the basis of pages(). It is the most powerful function in the easyapp_don library with relatively complex syntax but can still reduce code by 80%.
+8. What parameters do these functions of Easyapp_don have?
+[1] msg():
+(1) t: Abbreviation for text. This is the text information in the app page, in list type. The structure is: [page text content (need not be a string; we will automatically convert it to a string), text center position]. The text center position is a tuple or list consisting of 2 numbers between 0 and 1, representing the proportion in the parent container. The position can be omitted, defaulting to the page center (0.5, 0.5);
+(2) tie: Abbreviation for title. It displays as the window title on Windows computers but not on mobile phones, so it can sometimes be omitted. It supports any type and will be automatically converted to a string;
+(3) color: Abbreviation for background_color. It is the background color, a RGBA tuple with 4 elements. You need to import easyapp_don, i.e., enter "import easyapp_don" in the Python file to use easyapp_don's color tools. They are uppercase letters of color words, e.g., RED8 for red, BLUE1 for blue. The number after indicates shade; a larger number means a darker shade. Available colors include: RED, GREEN, BLUE, YELLOW, ORANGE, INDIGO, PURPLE, BLACK, WHITE, GREY, PINK, BROWN, CYAN, SILVER, GOLD, etc;
+(4) theme: It is the page theme, with two options: light and dark. You need to import the easyapp_don library, i.e., enter "import easyapp_don" in the Python file to use easyapp_don's theme tools. The light theme is the variable LIGHT, and the dark theme is DARK. They do not change the screen brightness but only the text color: black text for light mode and white text for dark mode;
+(5) ok: It is the OK button of the page, in list type. The structure is: [button text, button color (using the color module), button size, button position, whether to close the current page after clicking the button]. Whether to close the page after clicking is a boolean value, defaulting to True. It is recommended to set it to True, as setting it to False will result in no effect after clicking. You can simply write ["Button Text"] when specifying this parameter to save time. Write [] if you do not want an OK button;
+(6) cal: Abbreviation for cancel. Same as ok, so no detailed explanation here;
+(7) tip: It is a parameter dictionary for the prompt box popped up after closing. Set it to {} if you do not want a prompt box. Its secondary parameters have default values and can be modified simply. Secondary parameters are as follows:
+((1)). "txt": Abbreviation for text. It is the text of the prompt box, supporting any type, and the program will automatically convert it to a string;
+((2)). "tie": Abbreviation for title. It is the title of the prompt box, supporting any type, and the program will automatically convert it to a string;
+((3)). "ok": OK button, in list type: [button text, button color]. It can be simply written as [button text], with the default text "Yes";
+((4)). "cal": Abbreviation for cancel. Same as ok, with the default text "No";
+(8) Return value: Returns True when OK is clicked, False when Cancel is clicked, and None when closed with tip={}.
+[2] esmsg():
+(1) ts: Abbreviation for texts. It is a 2D list of multiple texts, with the format: [["Text 1", text position tuple], ["Text 2", text position tuple], ..., ["Text n", text position tuple]]. The text position tuple defaults to (0.5, 0.5), but it is recommended not to abbreviate this parameter to avoid text overlap;
+(2) Others (including return value): Same as msg().
+[3] fillmsg():
+(1) fs: Abbreviation for fill_buttons. It is a 2D list with answer sheet functions, in the format: [["Fill button text", fill button color, fill button color after clicking, size, position], [...], ...]. It can collect information, suitable for questionnaires, answer sheets, etc. For example, when options A, B, C, D are checked, clicking OK or Cancel after selection will return results. They have default values and can be abbreviated, but it is not recommended to avoid button overlap;
+(2) Others (excluding return value): Same as msg().
+(3) Return value: A list in the format: [boolean or None (refer to the return value of msg()), [list of indices of fill buttons clicked by the user]]. For example, if you set options A, B, C and the user selects B and clicks OK, it returns [True, [1]], where 1 is the index of option B in the fs list. This allows repeated setting of A, B, C and is more accurate than obtaining text;
+[4] btn():
+(1) bs: Abbreviation for buttons. It is a 2D list storing buttons. Clicking a button closes the current page and returns the index of the clicked button, in the format: [["Button text", button color, button size, button position], ..., [...]]. It can be abbreviated but is not recommended to avoid button overlap;
+(2) Others (excluding return value): Same as mentioned above;
+(3) Return value: The index of the clicked button.
+[5] esbtn():
+Parameters are the same as mentioned above, and the return value is the same as btn().
+[6] fillbtn():
+Parameters are the same as mentioned above. The return value is a list in the format: [index of the clicked button, [list of indices of clicked fill buttons]].
+[7] ent():
+(1) e: Abbreviation for enter, i.e., an input box. There is only one input box, in list type, with the format: [input box prompt, input box size, input box position]. Suitable for inputting content, essay answers, etc;
+(2) Other parameters are the same as mentioned above.
+(3) Return value: A list in the format: [boolean or None, string of user input content]. The boolean is True when the user clicks OK, False when Cancel is clicked, and None when closed with tip={}.
+[8] esent():
+Parameters are the same as mentioned above. The return value is similar to that of ent(), in the format: [boolean or None, [list of user input content]].
+Special parameter: es: An extended form of e, a 2D list based on the original e, in the format: [[input box prompt, input box size, input box position], ..., [...]]
+[9] fillent():
+(1) Parameters are the same as mentioned above;
+(2) Return value: A list in the format: [boolean or None, [list of user input content], [list of indices of clicked fill buttons by the user]].
+[10] img():
+(1) i: Abbreviation for images. Used to create multiple images, located at the bottom of the page, which can be used as background images. The format is: [[image path (relative path recommended), image size, image position, image transparency], ..., [...]]. Images cannot be used as buttons;
+(2) Other parameters: Same as mentioned above;
+(3) Return value: Same as msg().
+[11] fill_img():
+(1) Parameters: Same as mentioned above;
+(2) Return value: Same as fillmsg().
+[12] btn_msg():
+(1) bi: Abbreviation for button_images. Used to create image buttons, i.e., clicking an image exits the current page and returns its index, in the format: [["Image path", image size tuple, image position tuple, image transparency], ..., [...]]. Local paths and relative paths are recommended for image paths;
+(2) Other parameters are the same as mentioned above;
+(3) Return value: Returns True when OK is clicked, False when Cancel is clicked, returns the index when a bi image is clicked, and returns None when closed with tip={}.
+[13] fill_btn_img():
+(1) fi: Abbreviation for fill_images_buttons. Based on fs, it converts color changes to image changes. The format is: [[image path, image path after clicking, image size, image position]], making fs more flexible for user needs;
+(2) Other parameters are the same as mentioned above;
+(3) Return value: A list in the format: [boolean or None, [list of indices of buttons selected by the user in fs], [list of indices of buttons selected by the user in fi]].
+[14] page():
+(1) Parameters are the same as mentioned above;
+(2) Return value: [index of the clicked button list, [list of user input content], [list of indices of fs fill buttons clicked by the user], [list of indices of fi fill buttons clicked by the user]];
+(3) Special note: Parameters include indices of bs and bi. The program places bi indices after bs indices. The index of the clicked button in the return value is either from bs or bi. For example, if there are 3 bs with indices 0, 1, 2, the first index of bi becomes 3.
+[15] pages():
+(1) ps: Abbreviation for pages. It is a dictionary storing multiple pages without images, suitable for users without image materials. For examples, refer to the dictionary p_mode in easyapp_don.supermarket.tools.Checker. For details, refer to pages().
+[16] img_pages():
+(1) ps: Abbreviation for images_pages. It is a dictionary storing multi-page with images, suitable for users with image materials. Users without image materials need not worry: copy the easyapp_don.images folder to the same directory as your code to use the image materials inside. For examples, refer to the dictionary i_mode in easyapp_don.supermarket.tools.Checker. For details, refer to img_pages()
+-------------------- Part 3: Notes on Easyapp_don --------------------
+9. What are the common problems and solutions for Easyapp_don?
+[1] UserWarning: This is the most common warning in easyapp_don, possibly caused by the following issues:
+(1) You entered the wrong parameter type when filling in parameters, e.g., a string instead of a list. A warning will be displayed but no error, with system default values. It needs correction;
+(2) The size and position you specified are not tuples with 2 data points, or you used colors not from our color library;
+(3) When filling in 2D list parameters such as buttons, the parameters in the list are incomplete. For example, the correct format should be ["Button1", RED8, (0.1, 0.1), (0.5, 0.5)], but you wrote ["Button1"] or other incorrect formats;
+[2] Components in the app page are not displayed, or buttons/images abnormally fill the entire screen: This is due to incorrect size and position. Explanation as follows:
+Kivy's position and size are based on the proportion of the parent container, i.e., the center is (0.5, 0.5), and the maximum is 1. Exceeding 1 will cause elements to go out of the view, resulting in the above situation. Change the size and position to decimals between 0 and 1.
+[3] Images are uploaded but not displayed in the app:
+There should be a prompt on the Windows terminal: [ERROR] Not found "image path". This is because the image path you provided is inaccurate or the image is missing. Check for spelling errors. This error comes from Kivy, not easyapp_don. You need to follow Kivy's image upload rules.
+[4] Others:
+My email address is at034000@qq.com. Email me for consultation, but do not ask me during the school term, as I may not reply for 2 weeks. It is best to ask during holidays.
+-------------------- Part 4: About Us, Easyapp_don 0.2.2 --------------------
+10. What is the background of the Easyapp_don library?
+On August 15, 2025, developer LvYanHua developed this library during summer vacation. Feeling that the syntax of Kivy and KivyMD was too difficult and cumbersome, LvYanHua simplified the code to make the library more versatile and practical, providing it free to the public. LvYanHua developed this library, firstly, for this reason, and secondly, to expand the application scope of easygui. Easygui is a third-party library but is limited to computers, cannot be well used on mobile phones, and lacks functions such as returning to the previous page. Thus, the developer (me) created it. Of course, images are generated by AI to provide users with image materials.
+11. What is the original intention of Easyapp_don?
+To enable app developers to avoid frequent code handling, save time, speed up development, reduce development costs, solve the problem of excessive code in Kivy and KivyMD, make development more convenient for developers, significantly reduce the difficulty and threshold of app development, and allow developers to get rid of tedious work to create personalized web pages!
+12. What improvements does Easyapp_don 0.2.2 have over 0.2.1?
+[1] Fixed naming issues. Since the original library name was "easyapp", which conflicted with other libraries, it needed to be changed. Some places were not renamed, and some images were not displayed. All these issues have been fixed in this library.
+[2] Created a license, multiple email addresses, etc.
+13. What are the improvement directions of Easyapp_don?
+[1] Currently, the latest version of our easyapp_don is 0.2.2. Subsequent versions such as 0.2.3, 0.2.4, 0.2.5, 0.2.6, 0.2.7, 0.2.8, 0.2.9, 0.3.0, 0.3.1 will be released. Within version 0.2, different versions have different mobile compatibility. The initial 0.2.1 has good computer compatibility, while this version has better mobile compatibility. Future versions will enhance mobile compatibility. Version 0.2.2 also has good mobile compatibility, suitable for mobile users, but its drawback is that prompts and warnings cannot be seen;
+[2] Version 0.2.2 has no scrollbar settings, i.e., scrollbars cannot be set when text exceeds the window. This function will be added in version 0.3 and later;
+[3] Version 0.2.2 cannot be compatible with videos and music because the ffmpeg version for audio parsing is too old. Images and music will be supported in future updates, and network images cannot be uploaded yet, which will be improved later;
+[4] For other improvement directions, feel free to contact me via email at at034000@outlook.com, but do not contact me during the school term or winter vacation, as I am busy. Contact me during summer vacation!
+14. What are the advantages of Easyapp_don?
+[1] Reduces code volume and saves time on repetitive work;
+[2] Lowers the threshold of app development, suitable for beginners, and transforms app components into familiar forms such as lists and dictionaries;
+[3] High flexibility, suitable for 99% of needs, such as writing an e-novel with the pages() function to save code, creating electronic answer sheets which it can perfectly handle, and making personalized images;
+[4] Easy to use with no other dependencies, requiring only Kivy and KivyMD, which are automatically installed during installation.
+15. What is the core philosophy of Easyapp_don?
+Reduce code volume, lower the threshold of app development, and improve efficiency while reducing costs.
+16. What is the developer information of Easyapp_don?
+[1] Nationality: Mainland China;
+[2] Species: Human;
+[3] Occupation: Middle school student;
+[4] Location: Observable Universe - Milky Way - Solar System - Earth-Moon System - Earth - Biosphere
+[5] Programming field: Hobby;
+[6] Other information: Find me next summer vacation via email at at034000@outlook.com!
+17. Acknowledgments
+Thanks to my users, my parents, my teachers, and every friend who uses easyapp_don. Remember to give a good review and follow!
+-------------------- Part 5: Easyapp_don Privacy Policy --------------------
+I. Declaration and Scope of Application
+18. This agreement aims to explain the usage, operation, and processing rules of the easyapp_don library (hereinafter referred to as "the Library") and protect the right to know of developers and end-users using the Library.
+19. This agreement applies to all developers who integrate and use the Library, as well as end-users who use related functions through applications integrated with the Library (hereinafter referred to as "Sub-applications").
+20. The Library only provides technical support as a functional component and does not independently collect, store, or transmit any user data. Related data processing behaviors are executed by Sub-applications in accordance with their own privacy policies.
+II. Data Processing and Usage Rules
+21. No Active Data Collection: The Library itself does not actively collect, store, upload data or any personal information of users (including but not limited to name, phone number, device identifier, location information, etc.), nor does it require Sub-applications to provide such information. If data theft is discovered, it is caused by the Sub-application and has no relation to the Library.
+22. Data Processing: To realize image data processing functions, the Library places image materials in a directory named "images" under easyapp_don. This folder does not involve any user personal information and mostly contains image materials. Do not use these images for profit-making purposes.
+23. No Data Sharing: The Library will not share any processed data with third parties nor transmit data to any server.
+III. Data Security Assurance
+24. The Library runs only locally on the user's device. All data processing is performed on the device side, and images can only be uploaded locally, with no network transmission involved, reducing the risk of data leakage.
+25. It is recommended that developers integrating the Library strengthen data security protection for Sub-applications, comply with relevant laws and regulations, and properly handle user data.
+IV. Description of Third-Party Services
+The Library has not integrated any third-party SDKs, statistical tools, or services, and there are no third-party data processing behaviors.
+V. User Rights and Developer Responsibilities
+26. User Rights: If end-users have questions about data processing, they can refer to the privacy policy of the Sub-application or contact the Sub-application developer directly.
+27. Developer Responsibilities: Developers integrating the Library shall clearly state the use of the Library in their privacy policies and clearly inform end-users of data processing rules to ensure compliance with relevant laws and regulations.
+VI. Agreement Update and Effectiveness
+28. This agreement shall take effect from the date of release. If subsequent adjustments to the Library's functions result in changes to data processing rules, such changes will be announced through official update channels of the Library (e.g., official website, version update logs). The updated agreement shall take effect from the date of update.
+29. Continued use of the Library shall be deemed as consent to this agreement and subsequent updates.
+VII. Contact Us
+If you have questions about this agreement, contact us via:
+at034000@qq.com
+VIII. Others
+The final interpretation right of the Library belongs to LvYanHua.
