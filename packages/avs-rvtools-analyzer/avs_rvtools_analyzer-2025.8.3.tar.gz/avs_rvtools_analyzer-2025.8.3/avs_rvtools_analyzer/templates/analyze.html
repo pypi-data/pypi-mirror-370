@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+
+{% block title %}AVS Migration Risks Analysis{% endblock %}
+
+{% block content %}
+<div class="container">
+<h1 class="text-center">AVS Migration Risks Analysis</h1>
+<p class="text-center lead">This page will display potential migration risks for the uploaded file: <code>{{ filename }}</code></p>
+
+{% if risk_results and risk_results.risks %}
+<!-- Summary Cards Section -->
+<div class="d-flex flex-wrap justify-content-start" id="summary-cards">
+    {% for risk_name, risk_data in risk_results.risks.items() %}
+        {% if risk_data.count > 0 %}
+            <a href="#{{ risk_name }}-card" class="card m-2 text-decoration-none" style="width: 18rem;" title="Click to view more details about {{ risk_data.function_name }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ risk_name.replace('detect_', '').replace('_', ' ').title() }}</h5>
+                    <p class="card-text">Count: {{ risk_data.count }}</p>
+                </div>
+                <div class="card-footer">
+                    <span class="badge rounded-pill {{ get_risk_badge_class(risk_data.risk_level) }}">
+                        Sev: {{ get_risk_display_name(risk_data.risk_level) }}
+                    </span>
+                </div>
+            </a>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<!-- Filter Buttons -->
+<div class="d-flex justify-content-end mb-3">
+    <div class="btn-group" role="group" aria-label="Filter Severity">
+        <button type="button" class="btn btn-outline-primary" onclick="filterCards('all')">All</button>
+        <button type="button" class="btn btn-outline-danger" onclick="filterCards('blocking')">Blocking</button>
+        <button type="button" class="btn btn-outline-warning" onclick="filterCards('warning')">Warning</button>
+        <button type="button" class="btn btn-outline-info" onclick="filterCards('info')">Info</button>
+    </div>
+</div>
+
+<!-- Risk Detail Cards -->
+{% for risk_name, risk_data in risk_results.risks.items() %}
+    {% if risk_data.count > 0 %}
+        <div class="card mb-4" id="{{ risk_name }}-card" data-risk-level="{{ risk_data.risk_level }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2>{{ risk_name.replace('detect_', '').replace('_', ' ').title() }}</h2>
+                <button class="btn btn-primary" data-id="{{ risk_name }}-table" onclick="downloadTableAsCSV(this)">
+                    Download CSV
+                </button>
+            </div>
+            <div class="card-body">
+                {% if risk_data.risk_info %}
+                    <p>{{ risk_data.risk_info.description }}</p>
+
+                    {% if risk_data.risk_info.alert_message %}
+                    <div class="alert alert-primary" role="alert">
+                        <i class="fa-solid fa-circle-info"></i>
+                        {{ risk_data.risk_info.alert_message | safe }}
+                    </div>
+                    {% endif %}
+                {% endif %}                <!-- Generic table for all risk types -->
+                {% if risk_data.data %}
+                    <table class="table table-striped" id="{{ risk_name }}-table">
+                        <thead>
+                            <tr>
+                                {% if risk_data.data is mapping %}
+                                    <!-- Handle dictionary data (like ESX versions) -->
+                                    <th>Item</th>
+                                    <th>Count</th>
+                                    {% if risk_name == 'detect_esx_versions' and risk_data.details and risk_data.details.version_risks %}
+                                        <th>Risk Level</th>
+                                    {% endif %}
+                                {% else %}
+                                    <!-- Handle list of dictionaries -->
+                                    {% for key in risk_data.data[0].keys() %}
+                                        <th>{{ key }}</th>
+                                    {% endfor %}
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if risk_data.data is mapping %}
+                                <!-- Render dictionary as key-value pairs -->
+                                {% for key, value in risk_data.data.items() %}
+                                    <tr>
+                                        <td>{{ key }}</td>
+                                        <td>{{ value }}</td>
+                                        {% if risk_name == 'detect_esx_versions' and risk_data.details and risk_data.details.version_risks %}
+                                            <td>
+                                                {% set version_risk = risk_data.details.version_risks.get(key, 'info') %}
+                                                <span class="badge rounded-pill {{ get_risk_badge_class(version_risk) }}">
+                                                    {{ get_risk_display_name(version_risk) }}
+                                                </span>
+                                            </td>
+                                        {% endif %}
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <!-- Render list of dictionaries -->
+                                {% for item in risk_data.data %}
+                                    <tr>
+                                        {% for key, value in item.items() %}
+                                            <td>
+                                                {% if value is sameas true %}
+                                                    <span class="text-success"><strong>✓</strong></span>
+                                                {% elif value is sameas false %}
+                                                    <span class="text-danger">✘</span>
+                                                {% elif 'MiB' in key and value|string|length > 0 %}
+                                                    {{ value | convert_mib_to_human_readable }}
+                                                {% else %}
+                                                    {{ value }}
+                                                {% endif %}
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            {% endif %}
+                        </tbody>
+                    </table>
+                {% endif %}
+            </div>
+            <div class="card-footer">
+                <span class="badge rounded-pill {{ get_risk_badge_class(risk_data.risk_level) }}">
+                    Sev: {{ get_risk_display_name(risk_data.risk_level) }}
+                </span>
+            </div>
+        </div>
+    {% endif %}
+{% endfor %}
+
+{% else %}
+<div class="alert alert-info" role="alert">
+    <i class="fa-solid fa-circle-info"></i>
+    No risks detected in the uploaded file, or the file could not be processed.
+</div>
+{% endif %}
+</div>
+
+<!-- JavaScript for filtering and CSV download -->
+<script>
+    function downloadTableAsCSV(button) {
+        const tableId = button.getAttribute('data-id');
+        const table = document.getElementById(tableId);
+        if (!table) {
+            alert('Table not found.');
+            return;
+        }
+
+        const rows = Array.from(table.querySelectorAll('tr'));
+        const csvContent = rows.map(row => {
+            const cells = Array.from(row.querySelectorAll('th, td'));
+            return cells.map(cell => `"${cell.textContent.trim()}"`).join(',');
+        }).join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${tableId}.csv`;
+        link.click();
+    }
+
+    function filterCards(severity) {
+        const cards = document.querySelectorAll('.card[data-risk-level]');
+        const summaryCards = document.querySelectorAll('#summary-cards .card');
+
+        cards.forEach(card => {
+            const riskLevel = card.getAttribute('data-risk-level');
+            if (severity === 'all' || riskLevel === severity ||
+                (severity === 'blocking' && (riskLevel === 'danger' || riskLevel === 'blocking'))) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        summaryCards.forEach(card => {
+            const badge = card.querySelector('.badge');
+            const badgeText = badge ? badge.textContent.toLowerCase() : '';
+            if (severity === 'all' || badgeText.includes(severity) ||
+                (severity === 'blocking' && badgeText.includes('blocking'))) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+</script>
+
+{% endblock %}
