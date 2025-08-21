@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebQuiz Admin Panel</title>
+    <style>
+        :root {
+            --bg-color: #f5f5f5;
+            --container-bg: white;
+            --text-color: #333;
+            --border-color: #ddd;
+            --button-bg: #007bff;
+            --button-hover: #0056b3;
+            --success-bg: #d4edda;
+            --success-border: #c3e6cb;
+            --success-color: #155724;
+            --error-bg: #f8d7da;
+            --error-border: #f5c6cb;
+            --error-color: #721c24;
+            --warning-bg: #fff3cd;
+            --warning-border: #ffeaa7;
+            --warning-color: #856404;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            background: var(--container-bg);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="password"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: var(--button-bg);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: var(--button-hover);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .success {
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-color);
+        }
+
+        .error {
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-color);
+        }
+
+        .warning {
+            background: var(--warning-bg);
+            border: 1px solid var(--warning-border);
+            color: var(--warning-color);
+        }
+
+        .current-quiz {
+            padding: 15px;
+            background: var(--warning-bg);
+            border: 1px solid var(--warning-border);
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+
+        .quiz-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 10px;
+            background: #fafafa;
+        }
+
+        .quiz-item {
+            padding: 8px;
+            margin: 2px 0;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .quiz-item:hover {
+            border-color: var(--button-bg);
+        }
+
+        .quiz-item.selected {
+            background: var(--button-bg);
+            color: white;
+        }
+
+        .quiz-item.current {
+            background: var(--warning-bg);
+            border-color: var(--warning-border);
+            font-weight: bold;
+        }
+
+        .actions {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link a {
+            color: var(--button-bg);
+            text-decoration: none;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: var(--container-bg);
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+        }
+
+        .close:hover {
+            color: var(--text-color);
+        }
+
+        .mode-toggle {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .mode-toggle button {
+            margin: 0 5px;
+        }
+
+        .mode-toggle button.active {
+            background: var(--button-hover);
+        }
+
+        .editor-content {
+            margin-top: 20px;
+        }
+
+        .wizard-form {
+            display: none;
+        }
+
+        .text-editor {
+            display: none;
+        }
+
+        .wizard-form.active, .text-editor.active {
+            display: block;
+        }
+
+        .question-item {
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            background: #fafafa;
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .option-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+
+        .option-item input[type="text"] {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .option-item input[type="radio"] {
+            margin-right: 5px;
+        }
+
+        .text-editor textarea {
+            width: 100%;
+            height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 10px;
+            resize: vertical;
+        }
+
+        .validation-errors {
+            color: var(--error-color);
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .quiz-actions {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .quiz-actions button {
+            flex: 1;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 WebQuiz Admin Panel</h1>
+        
+        <!-- Authentication Section -->
+        <div id="auth-section">
+            <div class="form-group">
+                <label for="master-key">Master Key:</label>
+                <input type="password" id="master-key" placeholder="Enter master key">
+            </div>
+            <div class="actions">
+                <button onclick="authenticate()">Authenticate</button>
+            </div>
+        </div>
+
+        <!-- Admin Panel (hidden until authenticated) -->
+        <div id="admin-panel" class="hidden">
+
+            <div class="form-group">
+                <label>Available Quiz Files:</label>
+                <div id="quiz-list" class="quiz-list">
+                    Loading quiz files...
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="switch-btn" onclick="switchQuiz()" disabled>Switch to Selected Quiz</button>
+                <button onclick="refreshQuizzes()">🔄</button>
+                <button id="edit-btn" onclick="editSelectedQuiz()" disabled>✏️</button>
+                <button id="duplicate-btn" onclick="duplicateSelectedQuiz()" disabled>📋</button>
+            </div>
+
+            <div class="quiz-actions">
+                <button onclick="createNewQuiz()">📝 Create New Quiz</button>
+                <button id="delete-btn" onclick="deleteSelectedQuiz()" disabled class="btn-danger">🗑️ Delete Quiz</button>
+            </div>
+
+            <div class="back-link">
+                <a href="/">← Back to Quiz</a>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="message-area"></div>
+    </div>
+
+    <!-- Quiz Editor Modal -->
+    <div id="quiz-editor-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Create New Quiz</h2>
+                <span class="close" onclick="closeQuizEditor()">&times;</span>
+            </div>
+
+            <div class="form-group">
+                <label for="quiz-filename">Quiz Filename:</label>
+                <input type="text" id="quiz-filename" placeholder="Enter filename (without .yaml extension)">
+            </div>
+
+            <div class="mode-toggle">
+                <button id="wizard-mode-btn" class="active" onclick="switchEditorMode('wizard')">🧙‍♂️ Wizard Mode</button>
+                <button id="text-mode-btn" onclick="switchEditorMode('text')">📝 Text Mode</button>
+            </div>
+
+            <div class="editor-content">
+                <!-- Wizard Mode -->
+                <div id="wizard-form" class="wizard-form active">
+                    <div class="form-group">
+                        <div id="questions-container">
+                            <!-- Questions will be added dynamically -->
+                        </div>
+                        <button type="button" onclick="addQuestion()">➕ Add Question</button>
+                    </div>
+                </div>
+
+                <!-- Text Mode -->
+                <div id="text-form" class="text-editor">
+                    <div class="form-group">
+                        <label for="quiz-content">YAML Content:</label>
+                        <textarea id="quiz-content" placeholder="Enter quiz YAML content here..."></textarea>
+                    </div>
+                    <button type="button" onclick="validateQuizContent()">✅ Validate YAML</button>
+                    <div id="validation-results"></div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button onclick="saveQuiz()">💾 Save Quiz</button>
+                <button onclick="closeQuizEditor()">❌ Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMasterKey = '';
+        let selectedQuiz = '';
+        let currentQuiz = '';
+
+        async function authenticate() {
+            const masterKey = document.getElementById('master-key').value.trim();
+            if (!masterKey) {
+                showMessage('Please enter master key', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': masterKey
+                    },
+                    body: JSON.stringify({})
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentMasterKey = masterKey;
+                    document.getElementById('auth-section').style.display = 'none';
+                    document.getElementById('admin-panel').classList.remove('hidden');
+                    showMessage('Authentication successful!', 'success');
+                    await loadQuizzes();
+                } else {
+                    showMessage(data.error || 'Authentication failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Connection error: ' + error.message, 'error');
+            }
+        }
+
+        async function loadQuizzes() {
+            try {
+                const response = await fetch('/api/admin/list-quizzes', {
+                    headers: {
+                        'X-Master-Key': currentMasterKey
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentQuiz = data.current_quiz;
+                    displayQuizzes(data.quizzes);
+                } else {
+                    showMessage(data.error || 'Failed to load quizzes', 'error');
+                }
+            } catch (error) {
+                showMessage('Error loading quizzes: ' + error.message, 'error');
+            }
+        }
+
+        function displayQuizzes(quizzes) {
+            const quizList = document.getElementById('quiz-list');
+            
+            if (quizzes.length === 0) {
+                quizList.innerHTML = '<div style="text-align: center; color: #666;">No quiz files found</div>';
+                return;
+            }
+
+            let html = '';
+            quizzes.forEach(quiz => {
+                const isCurrent = quiz === currentQuiz;
+                const classes = isCurrent ? 'quiz-item current' : 'quiz-item';
+                html += `<div class="${classes}" onclick="selectQuiz('${quiz}')">${quiz}${isCurrent ? ' (current)' : ''}</div>`;
+            });
+
+            quizList.innerHTML = html;
+        }
+
+        function selectQuiz(quizName) {
+            selectedQuiz = quizName;
+            
+            // Update UI
+            document.querySelectorAll('.quiz-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            event.target.classList.add('selected');
+            
+            // Enable switch button if different from current
+            const switchBtn = document.getElementById('switch-btn');
+            const editBtn = document.getElementById('edit-btn');
+            const duplicateBtn = document.getElementById('duplicate-btn');
+            const deleteBtn = document.getElementById('delete-btn');
+            
+            if (selectedQuiz !== currentQuiz) {
+                switchBtn.disabled = false;
+                switchBtn.textContent = 'Switch to Selected Quiz';
+            } else {
+                switchBtn.disabled = false;
+                switchBtn.textContent = 'Restart Current Quiz';
+            }
+            
+            // Enable edit and duplicate buttons (current quiz can be edited now)
+            editBtn.disabled = false;
+            duplicateBtn.disabled = false;
+            deleteBtn.disabled = selectedQuiz === currentQuiz; // Can't delete current quiz
+        }
+
+        async function switchQuiz() {
+            if (!selectedQuiz) {
+                showMessage('Please select a quiz', 'warning');
+                return;
+            }
+
+            const isRestart = selectedQuiz === currentQuiz;
+
+            const switchBtn = document.getElementById('switch-btn');
+            switchBtn.disabled = true;
+            switchBtn.textContent = isRestart ? 'Restarting...' : 'Switching...';
+
+            try {
+                const response = await fetch('/api/admin/switch-quiz', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': currentMasterKey
+                    },
+                    body: JSON.stringify({
+                        quiz_filename: selectedQuiz
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const action = isRestart ? 'restarted' : 'switched to';
+                    showMessage(`Successfully ${action} "${selectedQuiz}". CSV file: ${data.csv_file}`, 'success');
+                    currentQuiz = selectedQuiz;
+                    
+                    // Refresh the quiz list to update current indicators
+                    await loadQuizzes();
+                    
+                    // Reset selection
+                    selectedQuiz = '';
+                    switchBtn.textContent = 'Switch to Selected Quiz';
+                } else {
+                    showMessage(data.error || `Failed to ${isRestart ? 'restart' : 'switch'} quiz`, 'error');
+                    switchBtn.disabled = false;
+                    switchBtn.textContent = isRestart ? 'Restart Current Quiz' : 'Switch to Selected Quiz';
+                }
+            } catch (error) {
+                showMessage(`Error ${isRestart ? 'restarting' : 'switching'} quiz: ` + error.message, 'error');
+                switchBtn.disabled = false;
+                switchBtn.textContent = isRestart ? 'Restart Current Quiz' : 'Switch to Selected Quiz';
+            }
+        }
+
+        async function refreshQuizzes() {
+            await loadQuizzes();
+            showMessage('Quiz list refreshed', 'success');
+        }
+
+        function showMessage(text, type) {
+            const messageArea = document.getElementById('message-area');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = text;
+            
+            messageArea.appendChild(messageDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 5000);
+        }
+
+        // Allow Enter key to authenticate
+        document.getElementById('master-key').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                authenticate();
+            }
+        });
+
+        // Quiz Editor Variables
+        let editorMode = 'wizard';
+        let isEditMode = false;
+        let editingQuizName = '';
+        let questionCounter = 1;
+
+        // Quiz Editor Functions
+        function createNewQuiz() {
+            isEditMode = false;
+            editingQuizName = '';
+            document.getElementById('modal-title').textContent = 'Create New Quiz';
+            document.getElementById('quiz-filename').value = '';
+            document.getElementById('quiz-filename').disabled = false;
+            resetQuizEditor();
+            document.getElementById('quiz-editor-modal').style.display = 'block';
+        }
+
+        async function editSelectedQuiz() {
+            if (!selectedQuiz) {
+                showMessage('Please select a quiz to edit', 'warning');
+                return;
+            }
+
+            isEditMode = true;
+            editingQuizName = selectedQuiz;
+            document.getElementById('modal-title').textContent = `Edit Quiz: ${selectedQuiz}`;
+            document.getElementById('quiz-filename').value = selectedQuiz.replace('.yaml', '');
+            document.getElementById('quiz-filename').disabled = true;
+
+            try {
+                const response = await fetch(`/api/admin/quiz/${selectedQuiz}`, {
+                    headers: {
+                        'X-Master-Key': currentMasterKey
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Load quiz data into editor
+                    document.getElementById('quiz-content').value = data.content;
+                    if (data.parsed) {
+                        loadQuizDataToWizard(data.parsed);
+                    }
+                    document.getElementById('quiz-editor-modal').style.display = 'block';
+                } else {
+                    showMessage(data.error || 'Failed to load quiz', 'error');
+                }
+            } catch (error) {
+                showMessage('Error loading quiz: ' + error.message, 'error');
+            }
+        }
+
+        async function duplicateSelectedQuiz() {
+            if (!selectedQuiz) {
+                showMessage('Please select a quiz to duplicate', 'warning');
+                return;
+            }
+
+            const newFilename = prompt(`Enter name for the duplicated quiz:`, selectedQuiz.replace('.yaml', '_copy'));
+            if (!newFilename) {
+                return;
+            }
+
+            try {
+                // First get the original quiz content
+                const getResponse = await fetch(`/api/admin/quiz/${selectedQuiz}`, {
+                    headers: {
+                        'X-Master-Key': currentMasterKey
+                    }
+                });
+
+                const getResult = await getResponse.json();
+
+                if (!getResponse.ok) {
+                    showMessage(getResult.error || 'Failed to load original quiz', 'error');
+                    return;
+                }
+
+                // Create new quiz with the same content
+                const createResponse = await fetch('/api/admin/create-quiz', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': currentMasterKey
+                    },
+                    body: JSON.stringify({
+                        filename: newFilename,
+                        mode: 'text',
+                        content: getResult.content
+                    })
+                });
+
+                const createResult = await createResponse.json();
+
+                if (createResponse.ok) {
+                    showMessage(`Quiz duplicated successfully as "${createResult.filename}"`, 'success');
+                    await loadQuizzes();
+                } else {
+                    showMessage(createResult.error || 'Failed to duplicate quiz', 'error');
+                }
+            } catch (error) {
+                showMessage('Error duplicating quiz: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteSelectedQuiz() {
+            if (!selectedQuiz) {
+                showMessage('Please select a quiz to delete', 'warning');
+                return;
+            }
+
+            if (selectedQuiz === currentQuiz) {
+                showMessage('Cannot delete the currently active quiz', 'error');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete "${selectedQuiz}"? This action cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/quiz/${selectedQuiz}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-Master-Key': currentMasterKey
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(data.message, 'success');
+                    selectedQuiz = '';
+                    await loadQuizzes();
+                } else {
+                    showMessage(data.error || 'Failed to delete quiz', 'error');
+                }
+            } catch (error) {
+                showMessage('Error deleting quiz: ' + error.message, 'error');
+            }
+        }
+
+        function closeQuizEditor() {
+            document.getElementById('quiz-editor-modal').style.display = 'none';
+            resetQuizEditor();
+        }
+
+        function switchEditorMode(mode) {
+            editorMode = mode;
+            
+            // Update buttons
+            document.getElementById('wizard-mode-btn').classList.toggle('active', mode === 'wizard');
+            document.getElementById('text-mode-btn').classList.toggle('active', mode === 'text');
+            
+            // Show/hide forms
+            document.getElementById('wizard-form').classList.toggle('active', mode === 'wizard');
+            document.getElementById('text-form').classList.toggle('active', mode === 'text');
+            
+            // Sync data between modes
+            if (mode === 'text') {
+                syncWizardToText();
+            } else {
+                syncTextToWizard();
+            }
+        }
+
+        function resetQuizEditor() {
+            editorMode = 'wizard';
+            questionCounter = 1;
+            
+            // Reset mode buttons
+            document.getElementById('wizard-mode-btn').classList.add('active');
+            document.getElementById('text-mode-btn').classList.remove('active');
+            
+            // Reset forms
+            document.getElementById('wizard-form').classList.add('active');
+            document.getElementById('text-form').classList.remove('active');
+            
+            // Clear content
+            document.getElementById('questions-container').innerHTML = '';
+            document.getElementById('quiz-content').value = '';
+            document.getElementById('validation-results').innerHTML = '';
+            
+            // Add initial question if in wizard mode
+            addQuestion();
+        }
+
+        function addQuestion() {
+            const container = document.getElementById('questions-container');
+            const questionDiv = document.createElement('div');
+            questionDiv.className = 'question-item';
+            questionDiv.dataset.questionId = questionCounter;
+            
+            questionDiv.innerHTML = `
+                <div class="question-header">
+                   
+                </div>
+                <div class="form-group">
+                    <label>Question Text (optional if image provided):</label>
+                    <input type="text" class="question-text" placeholder="Enter question text" style="width: 100%;">
+                </div>
+                <div class="form-group">
+                    <label>Question Image (optional if text provided):</label>
+                    <input type="text" class="question-image" placeholder="e.g., /static/diagram.png" style="width: 100%;">
+                    <small style="color: #666;">Enter a path starting with / for images on the same domain. Either question text OR image must be provided.</small>
+                </div>
+                <div class="form-group">
+                    <label>Answer Options:</label>
+                    <small style="color: #666; margin-bottom: 10px; display: block;">For image options, start with / (e.g., /static/option1.png)</small>
+                    <div class="options-container">
+                        <div class="option-item">
+                            <input type="radio" name="correct-${questionCounter}" value="0" checked>
+                            <input type="text" class="option-text" placeholder="Option 1">
+                            <button type="button" onclick="removeOption(this)">×</button>
+                        </div>
+                        <div class="option-item">
+                            <input type="radio" name="correct-${questionCounter}" value="1">
+                            <input type="text" class="option-text" placeholder="Option 2">
+                            <button type="button" onclick="removeOption(this)">×</button>
+                        </div>
+                    </div>
+                    <button type="button" onclick="addOption(${questionCounter})">+ Add Option</button>
+                    <button type="button" onclick="removeQuestion(${questionCounter})" class="btn-danger">Remove</button>
+                </div>
+            `;
+            
+            container.appendChild(questionDiv);
+            questionCounter++;
+        }
+
+        function removeQuestion(questionId) {
+            const questionDiv = document.querySelector(`[data-question-id="${questionId}"]`);
+            if (questionDiv) {
+                questionDiv.remove();
+            }
+        }
+
+        function addOption(questionId) {
+            const questionDiv = document.querySelector(`[data-question-id="${questionId}"]`);
+            const optionsContainer = questionDiv.querySelector('.options-container');
+            const optionIndex = optionsContainer.children.length;
+            
+            const optionDiv = document.createElement('div');
+            optionDiv.className = 'option-item';
+            optionDiv.innerHTML = `
+                <input type="radio" name="correct-${questionId}" value="${optionIndex}">
+                <input type="text" class="option-text" placeholder="Option ${optionIndex + 1}">
+                <button type="button" onclick="removeOption(this)">×</button>
+            `;
+            
+            optionsContainer.appendChild(optionDiv);
+        }
+
+        function removeOption(button) {
+            const optionDiv = button.parentElement;
+            const optionsContainer = optionDiv.parentElement;
+            
+            if (optionsContainer.children.length > 2) {
+                optionDiv.remove();
+                
+                // Re-index radio buttons and update values
+                Array.from(optionsContainer.children).forEach((option, index) => {
+                    const radio = option.querySelector('input[type="radio"]');
+                    radio.value = index;
+                });
+            } else {
+                showMessage('A question must have at least 2 options', 'warning');
+            }
+        }
+
+        function loadQuizDataToWizard(quizData) {
+            const container = document.getElementById('questions-container');
+            container.innerHTML = '';
+            questionCounter = 1;
+            
+            if (quizData.questions) {
+                quizData.questions.forEach(question => {
+                    const questionDiv = document.createElement('div');
+                    questionDiv.className = 'question-item';
+                    questionDiv.dataset.questionId = questionCounter;
+                    
+                    let optionsHtml = '';
+                    question.options.forEach((option, index) => {
+                        const isCorrect = index === question.correct_answer;
+                        optionsHtml += `
+                            <div class="option-item">
+                                <input type="radio" name="correct-${questionCounter}" value="${index}" ${isCorrect ? 'checked' : ''}>
+                                <input type="text" class="option-text" value="${option}" placeholder="Option ${index + 1}">
+                                <button type="button" onclick="removeOption(this)">×</button>
+                            </div>
+                        `;
+                    });
+                    
+                    questionDiv.innerHTML = `
+                        <div class="form-group">
+                            <label>Question Text (optional if image provided):</label>
+                            <input type="text" class="question-text" value="${question.question || ''}" placeholder="Enter question text" style="width: 100%;">
+                        </div>
+                        <div class="form-group">
+                            <label>Question Image (optional if text provided):</label>
+                            <input type="text" class="question-image" value="${question.image || ''}" placeholder="e.g., /static/diagram.png" style="width: 100%;">
+                            <small style="color: #666;">Enter a path starting with / for images on the same domain. Either question text OR image must be provided.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Answer Options:</label>
+                            <small style="color: #666; margin-bottom: 10px; display: block;">For image options, start with / (e.g., /static/option1.png)</small>
+                            <div class="options-container">
+                                ${optionsHtml}
+                            </div>
+                            <button type="button" onclick="addOption(${questionCounter})">+ Add Option</button>
+                            <button type="button" onclick="removeQuestion(${questionCounter})" class="btn-danger">Remove</button>
+                        </div>
+                    `;
+                    
+                    container.appendChild(questionDiv);
+                    questionCounter++;
+                });
+            }
+        }
+
+        function syncWizardToText() {
+            const quizData = getWizardData();
+            if (quizData) {
+                const yamlContent = `questions:\n${quizData.questions.map(q => 
+                    `- id: ${q.id}\n  question: "${q.question}"\n  options:\n${q.options.map(opt => `  - "${opt}"`).join('\n')}\n  correct_answer: ${q.correct_answer}`
+                ).join('\n')}`;
+                document.getElementById('quiz-content').value = yamlContent;
+            }
+        }
+
+        function syncTextToWizard() {
+            try {
+                const content = document.getElementById('quiz-content').value.trim();
+                if (content) {
+                    // Basic YAML parsing simulation - in production, you'd want proper YAML parsing
+                    const lines = content.split('\n');
+                    // This is a simplified sync - full implementation would need proper YAML parsing
+                    showMessage('Text to wizard sync - manual refresh may be needed', 'warning');
+                }
+            } catch (error) {
+                showMessage('Error syncing text to wizard: ' + error.message, 'error');
+            }
+        }
+
+        function getWizardData() {
+            const questions = [];
+            const questionDivs = document.querySelectorAll('.question-item');
+            
+            questionDivs.forEach((div, index) => {
+                const questionText = div.querySelector('.question-text').value.trim();
+                const questionImage = div.querySelector('.question-image').value.trim();
+                const options = Array.from(div.querySelectorAll('.option-text')).map(input => input.value.trim());
+                const correctRadio = div.querySelector('input[type="radio"]:checked');
+                
+                // Either question text OR image must be provided
+                const hasQuestionContent = questionText || questionImage;
+                
+                if (hasQuestionContent && options.every(opt => opt) && correctRadio) {
+                    const questionData = {
+                        options: options,
+                        correct_answer: parseInt(correctRadio.value)
+                    };
+                    
+                    // Include question text if provided
+                    if (questionText) {
+                        questionData.question = questionText;
+                    }
+                    
+                    // Include image if provided
+                    if (questionImage) {
+                        questionData.image = questionImage;
+                    }
+                    
+                    questions.push(questionData);
+                }
+            });
+            
+            return { questions };
+        }
+
+        async function validateQuizContent() {
+            const content = document.getElementById('quiz-content').value.trim();
+            const resultsDiv = document.getElementById('validation-results');
+            
+            if (!content) {
+                resultsDiv.innerHTML = '<div class="validation-errors">Content is empty</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/validate-quiz', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': currentMasterKey
+                    },
+                    body: JSON.stringify({ content })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.valid) {
+                        resultsDiv.innerHTML = `<div class="success">✅ Valid YAML! Found ${data.question_count} questions.</div>`;
+                    } else {
+                        resultsDiv.innerHTML = `<div class="validation-errors">❌ Validation errors:<ul>${data.errors.map(err => `<li>${err}</li>`).join('')}</ul></div>`;
+                    }
+                } else {
+                    resultsDiv.innerHTML = `<div class="validation-errors">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="validation-errors">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function saveQuiz() {
+            const filename = document.getElementById('quiz-filename').value.trim();
+            
+            if (!filename) {
+                showMessage('Please enter a filename', 'error');
+                return;
+            }
+            
+            let quizData, content;
+            
+            if (editorMode === 'wizard') {
+                quizData = getWizardData();
+                if (!quizData.questions || quizData.questions.length === 0) {
+                    showMessage('Please add at least one question', 'error');
+                    return;
+                }
+            } else {
+                content = document.getElementById('quiz-content').value.trim();
+                if (!content) {
+                    showMessage('Please enter quiz content', 'error');
+                    return;
+                }
+            }
+            
+            try {
+                const url = isEditMode ? `/api/admin/quiz/${editingQuizName}` : '/api/admin/create-quiz';
+                const method = isEditMode ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': currentMasterKey
+                    },
+                    body: JSON.stringify({
+                        filename,
+                        mode: editorMode,
+                        quiz_data: editorMode === 'wizard' ? quizData : undefined,
+                        content: editorMode === 'text' ? content : undefined
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(data.message, 'success');
+                    closeQuizEditor();
+                    await loadQuizzes();
+                } else {
+                    showMessage(data.error || 'Failed to save quiz', 'error');
+                }
+            } catch (error) {
+                showMessage('Error saving quiz: ' + error.message, 'error');
+            }
+        }
+
+    </script>
+</body>
+</html>
