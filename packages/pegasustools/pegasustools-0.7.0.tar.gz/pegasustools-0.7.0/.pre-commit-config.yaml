@@ -1,0 +1,108 @@
+ci:
+  autoupdate_commit_msg: "chore: update pre-commit hooks"
+  autofix_prs: false
+  autofix_commit_msg: "style: pre-commit fixes"
+  autoupdate_schedule: "monthly"
+
+exclude: ^.cruft.json|.copier-answers.yml$|old_scripts/.*|.vscode/.*
+
+repos:
+  # Format code in documentation files and comments
+  - repo: https://github.com/adamchainz/blacken-docs
+    rev: "1.19.1"
+    hooks:
+      - id: blacken-docs
+        additional_dependencies: [black==24.*]
+
+  # A variety of generic checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: "v6.0.0"
+    hooks:
+      - id: check-added-large-files # Check that no large files (>500kB) are being committed
+      - id: check-case-conflict # Check that filenames won't have issues with case sensitive file systems
+      - id: check-merge-conflict # Check for files that have merge conflict strings in them
+      - id: check-symlinks # Checks for symlinks which do not point to anything.
+      - id: check-yaml # Attempts to load all yaml files to verify syntax.
+      - id: debug-statements # Check for debugger imports and py37+ breakpoint() calls in python source.
+      - id: end-of-file-fixer # Makes sure files end in a newline and only a newline.
+      - id: mixed-line-ending # Replaces or checks mixed line ending. i.e. changes all to lf or crlf
+      - id: name-tests-test # Check that all pytest files are named correctly
+        args: ["--pytest-test-first"]
+      - id: requirements-txt-fixer # Sorts entries in requirements.txt and constraints.txt and removes incorrect entry for pkg-resources==0.0.
+      - id: trailing-whitespace # Trims trailing whitespace.
+
+  # Does some basic linting of RST files
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: "v1.10.0"
+    hooks:
+      - id: rst-backticks
+      - id: rst-directive-colons
+      - id: rst-inline-touching-normal
+
+  # Format the file types listed in `types_or` are formatted with Prettier
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: "v3.6.2"
+    hooks:
+      - id: prettier
+        types_or: [yaml, markdown, html, css, scss, javascript, json]
+        args: [--prose-wrap=always]
+
+  # Run Ruff linter and formatter on all python files, apply and show fixes
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: "v0.12.9"
+    hooks:
+      - id: ruff
+        args: ["--fix", "--show-fixes"]
+      - id: ruff-format
+
+  # Run Mypy for type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: "v1.17.1"
+    hooks:
+      - id: mypy
+        files: src|tests
+        args: [--strict, --ignore-missing-imports]
+        additional_dependencies:
+          - pytest
+
+  # Spellchecking
+  - repo: https://github.com/codespell-project/codespell
+    rev: "v2.4.1"
+    hooks:
+      - id: codespell
+
+  # Basic linting of shell files
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: "v0.11.0.1"
+    hooks:
+      - id: shellcheck
+
+  # Checks for capitalization spelling errors
+  - repo: local
+    hooks:
+      - id: disallow-caps
+        name: Disallow improper capitalization
+        language: pygrep
+        entry: PyBind|Numpy|Cmake|CCache|Github|PyTest
+        exclude: .pre-commit-config.yaml
+
+  # Validate pyproject.toml file
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: "v0.24.1"
+    hooks:
+      - id: validate-pyproject
+        additional_dependencies: ["validate-pyproject-schema-store[all]"]
+
+  # Validate other file types
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: "0.33.3"
+    hooks:
+      - id: check-dependabot # Validate dependabot file
+      - id: check-github-workflows # Validate GitHub Workflows files
+      - id: check-readthedocs # Validate Read The Docs files
+
+  # Strip output from notebooks
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
