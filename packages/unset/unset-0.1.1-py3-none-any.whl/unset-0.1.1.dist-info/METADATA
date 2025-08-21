@@ -1,0 +1,98 @@
+Metadata-Version: 2.4
+Name: unset
+Version: 0.1.1
+Summary: A singleton sentinel value Unset for distinguishing unset from None in Python.
+Author-email: Jimin <jimin@codetech.top>
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
+Requires-Dist: pydantic-core<3,>=2
+Description-Content-Type: text/markdown
+
+## unset
+
+一个用于区分“未设置/未提供”与“显式提供 None/False”的 Python 单例哨兵值：`Unset`。
+
+### 特性
+
+- 单例实现：全局仅一个实例 `Unset`
+- 语义清晰：`repr(Unset) -> "Unset"`，`bool(Unset) -> False`
+- 便捷检查：`Unset(value)` 等价于 `value is Unset`
+- 复制与深拷贝安全：`copy(Unset)` 与 `deepcopy(Unset)` 都返回自身
+- Pydantic v2 友好：内置 `pydantic-core` schema 支持（可与 `pydantic>=2` 协同）
+
+### 安装
+
+```shell
+python -m pip install --upgrade unset
+```
+
+依赖：`pydantic-core>=2,<3`。
+
+### 快速示例
+
+```python
+from unset import Unset
+
+def update_user(email=Unset):
+    if email is Unset:
+        return "no change"  # 调用方未传入 email
+    if email is None:
+        return "clear"      # 调用方显式传入 None
+    return f"set to {email}"
+
+assert bool(Unset) is False
+assert Unset(Unset) is True  # 等价于 `Unset is Unset`
+```
+
+#### 与 None 的区别
+
+- `Unset` 表示“未提供/未设置”。
+- `None` 表示“显式提供空值”。
+
+这在“部分更新接口”、“差异合并逻辑”、“默认参数”场景中非常有用。
+
+### 与 Pydantic v2 集成（可选）
+
+若安装了 `pydantic>=2`，可以直接在模型中使用 `Unset`：
+
+```python
+from pydantic import BaseModel
+from unset import Unset, UnsetType
+
+class PatchUser(BaseModel):
+    email: UnsetType | str | None = Unset
+
+payload = PatchUser()  # email == Unset
+print(payload.model_dump_json())  # {"email": null} （默认：Unset -> null）
+# 省略策略（根据你的语义选择其一）
+print(payload.model_dump_json(exclude_none=True))      # {}
+print(payload.model_dump_json(exclude_unset=True))     # {}
+print(payload.model_dump_json(exclude_defaults=True))  # {}
+```
+
+注意：本项目仅依赖 `pydantic-core`；如需使用 `BaseModel`，请额外安装 `pydantic>=2`。
+
+#### JSON 序列化行为与开关
+
+- 默认行为：`Unset` 在 JSON 中序列化为 `null`。
+  - 这样可配合 `exclude_none=True` 在序列化时省略该字段。
+  - 也可以使用 `exclude_unset=True` 或 `exclude_defaults=True` 实现字段省略（当默认值为 `Unset` 或未显式提供时）。
+- 可配置开关：通过环境变量 `UNSET_JSON_SERIALIZE_AS_NONE` 控制行为。
+  - 为真（默认：`1`/`true`）→ `Unset -> null`
+  - 为假（`0`/`false`）→ `Unset -> "<Unset>"`（字符串）
+
+```shell
+export UNSET_JSON_SERIALIZE_AS_NONE=1   # 或 true：Unset -> null（默认）
+export UNSET_JSON_SERIALIZE_AS_NONE=0   # 或 false：Unset -> "<Unset>"
+```
+
+### 许可
+
+MIT License
