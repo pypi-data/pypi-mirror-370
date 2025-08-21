@@ -1,0 +1,179 @@
+{% import 'macros.jinja' as macros %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+
+    <title>Bambu Lab setup | SimplyPrint</title>
+
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/layout.css') }}" rel="stylesheet">
+
+    <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/idiomorph-ext.min.js') }}"></script>
+
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+
+    <script src="{{ url_for('static', filename='js/load.js') }}" defer></script>
+
+    {% block head %}
+    {% endblock %}
+</head>
+
+<body data-bs-theme="dark" hx-boost="true">
+
+{% block body %}
+{% endblock %}
+
+<nav class="navbar navbar-expand-lg bg-body-tertiary">
+    <div class="container user-select-none">
+        <a class="navbar-brand"
+           href="/"
+           draggable="false">
+            <div class="d-flex justify-content-between align-items-center">
+                <img src="{{ url_for('static', filename='img/simplyprint-logo.svg') }}"
+                     class="me-3"
+                     alt="SimplyPrint"
+                     height="45"
+                     width="141"
+                     draggable="false">
+                <div class="align-items-start d-none d-sm-flex border-start">
+                    <h4 class="text-white mb-0 me-1 ms-3">Bambu Lab setup</h4>
+                    <div class="small">
+                        <span class="badge badge-sm bg-primary">BETA</span>
+                    </div>
+                </div>
+            </div>
+        </a>
+
+        <button class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#navbar"
+                aria-controls="navbarNavAltMarkup"
+                aria-expanded="false"
+                aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse"
+             id="navbar">
+
+            {% macro navEntry(name, endpoint) %}
+                <a class="nav-link{{ ' active' if request.endpoint == endpoint }}"
+                   href="{{ url_for(endpoint) }}"
+                   draggable="false">{{ name }}</a>
+            {% endmacro %}
+
+            <div class="navbar-nav ms-auto align-items-center">
+                {{ navEntry('Printers', 'printers.view') }}
+                {{ navEntry('Logs', 'logs.browse') }}
+                {{ navEntry('Settings', 'settings.view') }}
+
+
+                <a class="nav-link"
+                   href="{{ url_for('printers.add_printer_view') }}"
+                   draggable="false">
+                    <button class="btn btn-primary btn-sm"
+                            type="button">
+                        {{ macros.faPlus('text-white') }}
+                        Add printer
+                    </button>
+                </a>
+
+
+                <a class="nav-link"
+                   href="https://help.simplyprint.io/en/article/xqlhtd"
+                   draggable="false"
+                   target="_blank"
+                   data-bs-toggle="tooltip"
+                   title="Get help with the SimplyPrint Bambu Lab setup">
+                    {{ macros.faQuestionCircle('text-info') }}
+                    Help
+                </a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<main role="main" class="flex-shrink-0">
+    <div class="container mt-3">
+        <div id="general-response"></div>
+
+        {% block content %}
+        {% endblock %}
+    </div>
+</main>
+
+<footer class="footer mt-3 bg-dark-subtle text-center small p-3 d-flex align-items-center justify-content-between">
+    <div id="actiontab" class="d-flex align-items-center">
+        <a role="button" class="badge bg-danger m-1" hx-post="{{ url_for('api.shutdown') }}"
+           hx-target="#general-response"
+           hx-confirm="Are you sure you want to power off the client? You'll need to manually start it again.">
+            {{ macros.tooltipHelp('Click to power-off client', macros.faPoweroff('text-white')) }}
+        </a>
+
+        <a role="button" class="badge bg-success m-1" hx-post="{{ url_for('api.restart') }}"
+           hx-target="#general-response"
+           hx-confirm="Are you sure you want to restart the client?">
+            {{ macros.tooltipHelp('Click to restart client', macros.faRestart('text-white')) }}
+        </a>
+    </div>
+
+    <div class="container text-muted">
+        Copyright © {{ current_year() }} SimplyPrint ApS, VAT no. DK41306505. All rights reserved.
+        <br>
+        ® "SimplyPrint" is a registered trademark.
+
+        <div class="mt-2">
+            <a href="https://simplyprint.io/legal/tos" target="_blank">
+                Terms of trade and subscription
+            </a>
+            |
+            <a href="https://simplyprint.io/legal/privacy" target="_blank">
+                Privacy policy
+            </a>
+            |
+            <a href="https://simplyprint.io/legal/disclaimer" target="_blank">
+                Disclaimer
+            </a>
+            |
+            <a href="https://simplyprint.io/legal/trademark-rules" target="_blank">
+                Trademark rules
+            </a>
+        </div>
+
+    </div>
+
+    <div id="versiontab" class="d-flex align-items-center"
+         hx-ext="morph"
+         hx-get="{{ url_for('version_status') }}"
+         hx-on:click="makeVersionReload()"
+         hx-trigger="load, click, refresh"
+         hx-swap="morph:innerHTML">
+    </div>
+
+    <script>
+        function makeVersionReload() {
+            let interval = setInterval(function () {
+                htmx.trigger('#versiontab', 'refresh');
+
+                setTimeout(() => {
+                    if (document.getElementById('update-failed')) {
+                        clearInterval(interval);
+                    }
+                }, 250);
+
+            }, 500);
+        }
+    </script>
+
+    {% block scripts %}
+    {% endblock %}
+</footer>
+
+</body>
+</html>
