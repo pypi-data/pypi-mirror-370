@@ -1,0 +1,152 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astabench"
+version = "0.0.2"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "inspect_ai==0.3.114",
+    "agent-eval==0.1.36",
+    "openai>=1.78.0", # required by inspect
+    "pydantic>=2.11.4", # required by inspect
+    "litellm",
+    "datasets~=3.2.0",
+    "huggingface_hub",
+    "google-genai>=1.16.1",
+    "nltk",
+    "tabulate",
+    "click==8.1.8",
+    "nora_lib-impl~=1.1.0",
+    "mcp~=1.10",
+    "httpx~=0.28.1",
+    "h2~=4.2.0",
+    "pandas",
+    "scipy",
+    "anthropic>=0.52.0",
+    "platformdirs",
+    "numpy"
+]
+
+[project.optional-dependencies]
+dev = [
+    "black==24.2.0",
+    "isort",
+    "autoflake",
+    "pytest",
+    "pytest-asyncio",
+    "flake8==7.2.0",
+    "flake8-pyproject==1.2.3",
+    "mypy==1.15",
+    "pandas-stubs",
+]
+azure = [
+    "azure-ai-inference"
+]
+sqa = [
+    "ai2-scholar-qa==0.7.0",
+]
+smolagents = [
+    "smolagents==1.17.0",
+]
+datavoyager = [
+    "autogen-agentchat==0.6.4",
+    "autogen-ext[openai, diskcache, azure, anthropic]==0.6.4",
+    "ipython~=8.18",
+    "matplotlib==3.10.0",
+    "nest_asyncio==1.6.0",
+    "pyyaml==6.0.2",
+    "termcolor==2.5.0",
+]
+futurehouse = [
+    "futurehouse-client==0.3.19",
+]
+storm = [
+      # This will be added to agent-baselines
+      # "knowledge-storm @ git+https://github.com/gituser768/storm.git@dh-fix-youcom",
+]
+super = [
+      "websocket-client~=1.7.0",
+      "nbconvert~=7.16.1",
+      "ipython~=8.18.1",
+]
+
+[project.scripts]
+astabench = "astabench.cli:cli"
+inspect = "inspect_ai._cli.main:main"
+
+[project.entry-points.inspect_ai]
+astabench = "astabench.evals._registry"
+
+[tool.setuptools.packages.find]
+where = [".", "inspect_evals/src"]
+include = ["astabench*", "inspect_evals", "inspect_evals.core_bench"]
+
+[tool.uv]
+conflicts = [
+    [{extra = "sqa"}, {extra = "storm"}],
+    [{extra = "sqa"}, {extra = "futurehouse"}],
+    [{extra = "storm"}, {extra = "smolagents"}],
+]
+override-dependencies = [
+    # sqa pins openai to a lower version than inspect requires
+    "openai==1.78.0",
+
+    # STORM pretends to require a lower version, but doesn't actually need it:
+    # https://github.com/allenai/asta-bench/issues/31#issuecomment-3045978008
+    "datasets~=3.2.0",
+]
+
+[tool.flake8]
+select = [
+    # F category for logical errors
+    "F",
+
+    # Serious "E" errors
+    "E721", # `type(x) == <t>` instead of `isinstance(x, <t>)`
+    "E901", "E902", "E999" # syntax errors
+]
+
+ignore = [
+    "F401",  # module imported but unused
+    "F541",  # f-string is missing placeholders
+]
+
+[tool.pylint.messages_control]
+disable = [
+    "line-too-long",                 # C0301 - handled by black
+    "too-many-instance-attributes",  # R0902 - design choice
+    "too-many-arguments",            # R0913 - design choice
+    "too-many-locals",               # R0914 - design choice
+    "too-many-branches",             # R0912 - design choice
+    "too-many-statements",           # R0915 - design choice
+    "too-few-public-methods",        # R0903 - design choice
+    "no-else-return",                # R1705 - style preference
+    "no-else-raise",                 # R1720 - style preference
+]
+
+[tool.setuptools.package-data]
+"astabench" = ["config/*.yml", "evals/inspect_eval_wrappers/ds1000_splits.json", "util/sandbox/sandbox_compose.yaml", "util/sandbox/Dockerfile", "util/sandbox/*.txt", "solvers/datavoyager/dv_core/config/*.yaml", "solvers/code_agent/*.yaml", "evals/demo/code_execution/*.yaml"]
+"inspect_evals.core_bench" = [
+    "*.json",
+    "*.yaml",
+    "Dockerfile",
+    "*.md",
+]
+
+[tool.uv.sources]
+knowledge-storm = { git = "https://github.com/gituser768/storm", branch = "dh-fix-youcom" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# give each async test its own loop
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+# default to skipping expensive tests
+addopts = "-m \"not expensive\""
+markers = [
+  "expensive: mark test as expensive (skipped by default)",
+  "s2_api_request: mark test as requiring S2 API key (auto-skipped when S2_API_KEY not set)"
+]
