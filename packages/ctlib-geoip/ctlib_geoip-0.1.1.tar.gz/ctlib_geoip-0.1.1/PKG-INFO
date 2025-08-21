@@ -1,0 +1,322 @@
+Metadata-Version: 2.4
+Name: ctlib-geoip
+Version: 0.1.1
+Summary: A GeoIP SDK supporting both sync and async operations
+Author-email: jimin <jimin@codetech.top>
+License: MIT
+Keywords: codetech,ctlib
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
+Requires-Dist: cachetools>=5.0.0
+Requires-Dist: httpx>=0.24.0
+Requires-Dist: pydantic>=2.0.0
+Description-Content-Type: text/markdown
+
+# ctlib-geoip
+
+一个支持同步和异步操作的GeoIP SDK，基于httpx构建，提供高效的IP地理位置查询服务。
+
+## 特性
+
+- 🚀 支持同步和异步操作
+- 💾 内置LRU缓存
+- 🔄 智能重试机制，支持指数退避
+- 📊 支持多种数据源（ipinfo.io, ip-api.com, ip.sb, iplocate.io）
+- 🎯 类型安全，完整的类型提示和泛型支持
+- 📝 详细的日志记录
+- 🌐 灵活的URL模板系统，支持复杂API端点
+- 🔧 清晰的参数语义：Unset表示使用默认值，None表示不发送参数
+- 🌍 内置地理位置树管理，支持高效的地理位置匹配和访问控制
+
+## 安装
+
+```bash
+pip install ctlib-geoip
+```
+
+## 快速开始
+
+### 同步使用
+
+```python
+from ctlib_geoip import GeoIPClient
+
+# 创建客户端
+client = GeoIPClient(url="https://geoip.example.com/api/{ip}")
+
+# 查询IP地址
+result = client.lookup("8.8.8.8")
+if result:
+    print(f"IP: {result.ip}")
+    print(f"国家: {result.country}")
+    print(f"地区: {result.region}")
+    print(f"城市: {result.city}")
+    print(f"数据源: {result.source}")
+    print(f"更新时间: {result.updated_at}")
+```
+
+### 异步使用
+
+```python
+import asyncio
+from ctlib_geoip import AsyncGeoIPClient
+
+
+async def main():
+    # 创建异步客户端
+    client = AsyncGeoIPClient(url="https://geoip.example.com/api/{ip}")
+
+    # 异步查询IP地址
+    result = await client.lookup("1.1.1.1")
+    if result:
+        print(f"IP: {result.ip}")
+        print(f"国家: {result.country}")
+        print(f"地区: {result.region}")
+        print(f"城市: {result.city}")
+
+
+# 运行异步函数
+asyncio.run(main())
+```
+
+### 自定义参数
+
+```python
+from ctlib_geoip import GeoIPClient
+
+client = GeoIPClient(
+    url="https://geoip.example.com/api/{ip}",
+    source="ipinfo.io",
+    ttl=86400,  # 24小时
+    max_retries=5,
+    max_wait_time=15,
+    headers={"User-Agent": "MyApp/1.0"}
+)
+
+# 使用默认参数
+result1 = client.lookup("8.8.8.8")
+
+# 覆盖特定参数
+result2 = client.lookup("8.8.8.8", source="ip-api.com")
+result3 = client.lookup("8.8.8.8", ttl=3600)
+
+# 不携带source参数（后端不处理source）
+result4 = client.lookup("8.8.8.8", source=None)
+```
+
+## API参考
+
+### GeoIPClient
+
+同步客户端类。
+
+#### 参数
+
+- `url: str` - GeoIP服务URL模板，支持 `{ip}` 占位符，如 `https://geoip.example.com/api/{ip}`
+- `source: Union[DataSource, str, None] = None` - 数据源，None表示不指定数据源
+- `ttl: int = 2592000` - 数据有效期（秒，默认30天）
+- `cache_len: int = 256` - 缓存最大条数
+- `max_retries: int = 3` - 最大重试次数
+- `max_wait_time: int = 10` - 最长等待时间（秒）
+- `headers: Dict[str, str] = None` - HTTP请求头
+
+#### 方法
+
+- `lookup(ip: Union[str, IPv4Address], source: SourceType = Unset, ttl: TTLType = Unset, **extra) -> Optional[GeoIP]`
+
+### AsyncGeoIPClient
+
+异步客户端类，参数和方法与同步客户端相同，但所有操作都是异步的。
+
+### GeoIP
+
+数据模型类。
+
+#### 字段
+
+- `ip: str` - IP地址
+- `country: str` - 国家代码
+- `region: str` - 地区
+- `city: str` - 城市
+- `updated_at: datetime` - 数据更新时间
+- `source: str` - 数据来源
+
+### GeoInfo
+
+地理位置信息模型类。
+
+#### 字段
+
+- `name: Optional[str]` - 地理位置名称
+- `country: str` - 国家代码
+- `region: Optional[str]` - 地区名称
+- `city: Optional[str]` - 城市名称
+- `detail: Optional[str]` - 详细描述
+- `geo_id: Optional[int]` - 地理位置ID
+- `geo_code: Optional[str]` - 地理位置代码（格式：国家-地区-城市）
+
+#### 类方法
+
+- `from_geo_id(geo_id: int)` - 根据地理位置ID查找
+- `from_geo_code(geo_code: str)` - 根据地理位置代码查找
+- `from_name(name: str)` - 根据名称查找
+
+### GeoTree
+
+地理位置树管理类，用于高效的地理位置匹配和访问控制。
+
+#### 功能特性
+
+- **三层嵌套结构**: 国家(Country) → 地区(Region) → 城市(City)
+- **高效查询**: 使用字典结构，查询时间复杂度O(1)
+- **灵活匹配**: 支持不同级别的模糊匹配
+- **访问控制**: 适用于基于地理位置的权限控制
+
+#### 主要方法
+
+- `add(geo: GeoInfo)` - 添加地理位置信息到树中
+- `contains(geoip: GeoIP) -> bool` - 判断GeoIP是否在树中
+
+#### 使用示例
+
+```python
+from ctlib_geoip import GeoTree, GeoInfo
+
+# 创建地理位置树
+geo_tree = GeoTree([
+    GeoInfo(country="HK", region="Central and Western"),
+    GeoInfo(country="CN", region="Guangdong", city="Shenzhen")
+])
+
+# 检查GeoIP是否在允许的地理位置范围内
+geoip = GeoIP(ip="8.8.8.8", country="HK", region="Central and Western", city="Central")
+is_allowed = geo_tree.contains(geoip)  # True
+```
+
+### Unset
+
+特殊标记类，用于表示使用客户端创建时的默认参数。
+
+### 参数语义说明
+
+- **`Unset`**: 使用客户端创建时设置的默认值
+- **`None`**: 不向后端发送该参数
+- **具体值**: 使用指定的值覆盖默认值
+
+### URL模板系统
+
+支持灵活的URL模板，例如：
+
+```python
+# 基本模板
+url = "https://geoip.example.com/{ip}"
+
+# 带查询参数的模板
+url = "https://geoip.example.com/api/{ip}?key=value"
+
+# 复杂模板
+url = "https://geoip.example.com/v1/geoip/{ip}?format=json&lang=zh"
+```
+
+系统会自动处理 `{ip}` 占位符和查询参数的管理。
+
+## 数据源
+
+支持的数据源：
+
+- `ipinfo.io` - IPInfo服务
+- `ip-api.com` - IP-API服务
+- `ip.sb` - IP.SB服务
+- `iplocate.io` - IPLocate服务
+
+也支持自定义数据源。
+
+## 地理位置数据
+
+SDK内置了丰富的地理位置数据，支持以下地区：
+
+- **中国 (CN)**: 包含420个地理位置记录，涵盖所有省份和主要城市
+- **香港 (HK)**: 包含20个地区记录，涵盖所有行政区
+- **台湾 (TW)**: 包含32个地理位置记录
+- **澳门 (MO)**: 包含10个地理位置记录
+
+地理位置数据使用标准化的格式：
+- **geo_code格式**: `国家-地区-城市`，如 `HK-NCW---`（香港-中西区）
+- **支持查询方式**: 按ID、代码、名称等多种方式查找地理位置信息
+
+## 缓存策略
+
+- 使用LRU缓存
+- 缓存结构：`{ip: {source: GeoIP}}`，支持同一IP的多个数据源结果
+- TTL过期检查在业务层进行，缓存管理器专注于存储管理
+- 智能缓存策略：优先返回指定数据源的结果，其次返回最新结果
+
+## 重试机制
+
+- 支持指数退避重试
+- 从1秒开始等待，最大等待时间可配置
+- 重试次数可配置
+
+## 日志
+
+使用Python标准logging模块：
+
+- DEBUG级别：记录查询操作
+- ERROR级别：记录错误信息
+
+## 高级功能
+
+### 地理位置访问控制
+
+使用GeoTree实现基于地理位置的访问控制：
+
+```python
+from ctlib_geoip import GeoTree, GeoInfo, GeoIP
+
+# 定义禁止访问的地理位置
+blocked_regions = GeoTree([
+    GeoInfo(country="US", region="Texas"),  # 禁止美国德克萨斯州
+    GeoInfo(country="US", region="Florida"),  # 禁止美国佛罗里达州
+    GeoInfo(country="HK", region="Yau Tsim Mong"),  # 禁止香港油尖旺区
+])
+
+def check_access(geoip: GeoIP) -> bool:
+    """检查IP地址是否被禁止访问"""
+    return not blocked_regions.contains(geoip)
+
+# 使用示例
+geoip = GeoIP(ip="1.2.3.4", country="US", region="Texas", city="Houston")
+if check_access(geoip):
+    print("允许访问")
+else:
+    print("拒绝访问 - 该地区被禁止访问")
+```
+
+### 地理位置数据分析
+
+利用内置的地理位置数据进行区域分析：
+
+```python
+from ctlib_geoip import GeoInfo
+
+# 查找特定地理位置信息
+shenzhen = GeoInfo.from_name("Shenzhen")
+print(f"深圳: {shenzhen.detail}")
+
+# 根据地理位置代码查找
+hk_central = GeoInfo.from_geo_code("HK-HCW---")
+print(f"香港中西区: {hk_central.name}")
+```
+
+## 许可证
+
+MIT License
