@@ -1,0 +1,88 @@
+name: Build
+on:
+  pull_request:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  build-sdist:
+    name: Build Sdist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
+        with:
+          environments: build
+      - name: Set version
+        run: pixi run -e build set-version
+      - name: Build project
+        run: pixi run -e build build-sdist
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sdist
+          path: dist/*
+
+  build-wheel:
+    name: Build Wheel (${{ matrix.target-platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target-platform: linux-64
+            os: ubuntu-latest
+          - target-platform: linux-aarch64
+            os: ubuntu-24.04-arm
+          - target-platform: osx-64
+            os: macos-13
+          - target-platform: osx-arm64
+            os: macos-latest
+          - target-platform: win-64
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
+        with:
+          environments: build
+      - name: Set version
+        run: pixi run -e build set-version
+      - name: Build wheel
+        uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1.49.3
+        with:
+          command: build
+          args: --out dist -i python3.10
+          manylinux: auto
+      - name: Check package
+        run: pixi run -e build check-wheel
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheel-${{ matrix.target-platform }}
+          path: dist/*
+
+  release:
+    name: Publish package
+    if: github.event_name == 'release'
+    needs: build-wheel
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish package on PyPi
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
