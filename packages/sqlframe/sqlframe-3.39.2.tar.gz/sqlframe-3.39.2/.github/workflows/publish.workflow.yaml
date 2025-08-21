@@ -1,0 +1,30 @@
+name: Publish
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: publish
+      url: https://pypi.org/p/sqlframe
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    - name: Package
+      run: make package
+    - name: Publish
+      uses: pypa/gh-action-pypi-publish@release/v1
+    - name: Create release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ github.ref_name }}
+      run: |
+        gh release create "$tag" \
+            --repo="$GITHUB_REPOSITORY" \
+            --title="SQLFrame ${tag#v}" \
+            --generate-notes
