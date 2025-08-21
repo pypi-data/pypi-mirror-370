@@ -1,0 +1,92 @@
+# Taient SDK for Python
+
+```shell
+# 安装 Taient SDK 及其依赖, python 版本要求 >= 3.10
+pip install -U taientsdk requests dotenv
+```
+
+```shell
+# 创建 .env 文件，配置探也智能 API 服务器地址和端口
+cat > .env<<EOF
+TAIENT_HRP_SERVER=探也智能api服务器地址
+EOF
+```
+
+```shell
+# 创建 demo.py 文件，包含示例代码
+cat > demo.py<<EOF
+from dotenv import load_dotenv
+from taientsdk import TaientClient
+
+load_dotenv()
+
+if __name__ == "__main__":
+
+    # 1. 初始化客户端
+    # 参数 TAIENT_HRP_USERNAME 和 TAIENT_HRP_PASSWORD 必传
+    # 如果环境变量中不设置 TAIENT_HRP_SERVER，也可以在这里传递，但建议通过环境变量来配置。
+    conf = {
+        "TAIENT_HRP_USERNAME": "your_username",
+        "TAIENT_HRP_PASSWORD": "your_password"
+    }
+    client = TaientClient(config=conf)
+
+    # 2. 获取有联系方式的候选人列表
+    # 接口 POST /exploree/search
+    search_payload = {
+        "page": 1,
+        "rowsPerPage": 10,
+        "searchParamList": [
+            {
+                "typeValue": "contactTypes",
+                "name": "有电话",
+            },
+            {
+                "typeValue": "exploreePosition",
+                "name": "57cf284d-b4c3-476c-a698-8f8e06e19819", # [12663]AI产品经理
+            }
+        ]
+    }
+    hrp_response = client.hrp_post("/exploree/search", search_payload)
+    if hrp_response:
+        print("有电话的人选列表:", client.get_data(hrp_response, dict))
+
+    # 3. 获取特定候选人的联系方式信息
+    # 接口 GET /candidate/getCandidateContact?candidateId={exploreeId}
+    # 参数 candidateId 可以从 /exploree/search 的响应中的 exploreeList.exploreeId 获取
+    hrp_response = client.hrp_get("/candidate/getCandidateContact?candidateId=ea7d4851-48e9-4f40-9177-df9b41be2a36")
+    if hrp_response:
+        print("人选联系方式信息:", client.get_data(hrp_response, dict))
+
+    # 4. 写人选跟进
+    # 接口 POST /candidate/comment/{exploreeId}
+    # 参数 exploreeId 可以从 /exploree/search 的响应中的 exploreeList.exploreeId 获取
+    comment = {
+        "commentText": "api测试跟进"
+    }
+    hrp_response = client.hrp_post("/candidate/comment/ea7d4851-48e9-4f40-9177-df9b41be2a36", comment)
+    if hrp_response:
+        print("写人选跟进:", client.get_data(hrp_response, dict))
+
+    # 5. 获取候选人详情
+    # 接口 GET /candidate/getCandidateBasicInfo?candidateId={exploreeId}
+    # 参数 candidateId 可以从 /exploree/search 的响应中的 exploreeList.exploreeId 获取
+    hrp_response = client.hrp_get("/candidate/getCandidateBasicInfo?candidateId=ea7d4851-48e9-4f40-9177-df9b41be2a36")
+    if hrp_response:
+        print("候选人详细信息:", client.get_data(hrp_response, dict))
+
+    # 6. 获取候选人附件信息
+    # 接口 GET /candidate/getCandidateAttachments?candidateId={exploreeId}
+    # 参数 candidateId 可以从 /exploree/search 的响应中的 exploreeList.exploreeId 获取
+    hrp_response = client.hrp_get("/candidate/getCandidateAttachments?candidateId=ea7d4851-48e9-4f40-9177-df9b41be2a36")
+    if hrp_response:
+        print("候选人附件信息:", client.get_data(hrp_response, dict))
+
+    # 7. 下载候选人附件
+    # 接口 GET /resume/attach/{id}/{internalId}/download
+    # 参数 id (file_id) 和 internalId (internal_id) 可以从 /candidate/getCandidateAttachments 的响应中获取
+    save_path = client.download_file(492276, "2514f893-e4e2-40a2-a7fe-db3e4d066fc4", "./")
+    print("附件下载至:" + save_path)
+
+
+```
