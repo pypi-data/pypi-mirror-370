@@ -1,0 +1,24 @@
+from twyn.base.exceptions import TwynError
+
+
+class TOMLError(TwynError):
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class AllowlistError(TwynError):
+    def __init__(self, package_name: str = ""):
+        message = self.message.format(package_name) if package_name else self.message
+        super().__init__(message)
+
+
+class AllowlistPackageAlreadyExistsError(AllowlistError):
+    message = "Package '{}' is already present in the allowlist. Skipping."
+
+
+class AllowlistPackageDoesNotExistError(AllowlistError):
+    message = "Package '{}' is not present in the allowlist. Skipping."
+
+
+class InvalidSelectorMethodError(TwynError):
+    """Exception for when an invalid selector method has been specified."""
