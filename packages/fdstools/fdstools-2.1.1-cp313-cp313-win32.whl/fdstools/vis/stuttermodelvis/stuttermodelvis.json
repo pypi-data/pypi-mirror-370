@@ -1,0 +1,432 @@
+{
+  "fdstools_visversion": "2.0.4",
+  "width": 600,
+  "height": 10,
+  "signals": [
+    {
+      "name": "filter_unit",
+      "init": ""
+    },
+    {
+      "name": "unit_regex",
+      "init": {"expr": "regexp('(?:' + replace(replace(replace(filter_unit, /^ *(.*?) *$/, '$1'), /(^| )=(.*?)(?= |$)/g, '$1^$2$$'), / +/g, ')|(?:') + ')')"},
+      "expr": "regexp('(?:' + replace(replace(replace(filter_unit, /^ *(.*?) *$/, '$1'), /(^| )=(.*?)(?= |$)/g, '$1^$2$$'), / +/g, ')|(?:') + ')')"
+    },
+    {
+      "name": "filter_marker",
+      "init": ""
+    },
+    {
+      "name": "marker_regex",
+      "init": {"expr": "regexp('(?:' + replace(replace(replace(filter_marker, /^ *(.*?) *$/, '$1'), /(^| )=(.*?)(?= |$)/g, '$1^$2$$'), / +/g, ')|(?:') + ')')"},
+      "expr": "regexp('(?:' + replace(replace(replace(filter_marker, /^ *(.*?) *$/, '$1'), /(^| )=(.*?)(?= |$)/g, '$1^$2$$'), / +/g, ')|(?:') + ')')"
+    },
+    {
+      "name": "filter_r2",
+      "init": 0
+    },
+    {
+      "name": "filter_fold",
+      "init": ""
+    },
+    {
+      "name": "show_all_data",
+      "init": true
+    },
+    {
+      "name": "graphheight",
+      "init": 400
+    },
+    {
+      "name": "subgraphoffset",
+      "init": 70
+    },
+    {
+      "name": "jitter",
+      "init": 0.25
+    }
+  ],
+  "data": [
+    {
+      "name": "fitfunctions",
+      "values": "VALUES HERE",
+      "format": {
+        "type": "tsv",
+        "parse": {
+          "lbound": "number",
+          "stutter": "number",
+          "r2": "number",
+          "min": "number",
+          "max": "number",
+          "a": "number",
+          "b": "number",
+          "c": "number",
+          "d": "number",
+          "e": "number",
+          "f": "number",
+          "g": "number",
+          "h": "number",
+          "i": "number",
+          "j": "number"
+        }
+      },
+      "transform": [
+        {
+          "type": "filter",
+          "test": "((datum.marker != 'All data' && test(marker_regex, datum.marker)) || (datum.marker == 'All data' && show_all_data)) && test(unit_regex, datum.unit) && datum.r2 >= filter_r2 && (filter_fold == '' || datum.stutter == filter_fold)"
+        },
+        {
+          "type": "formula",
+          "field": "subgraph",
+          "expr": "(datum.stutter > 0? '+' : '') + datum.stutter + ' stutter in ' + datum.unit + ' repeats'"
+        }
+      ]
+    },
+    {
+      "name": "points",
+      "values": "",
+      "format": {
+        "type": "tsv",
+        "parse": {
+          "stutter": "number",
+          "length": "number",
+          "forward": "number",
+          "reverse": "number",
+          "total": "number"
+        }
+      },
+      "transform": [
+        {
+          "type": "filter",
+          "test": "((datum.marker != 'All data' && test(marker_regex, datum.marker)) || (datum.marker == 'All data' && show_all_data)) && test(unit_regex, datum.unit)"
+        },
+        {
+          "type": "formula",
+          "field": "length_jit",
+          "expr": "datum.length+random()*jitter-jitter/2"
+        },
+        {
+          "type": "formula",
+          "field": "subgraph",
+          "expr": "(datum.stutter > 0? '+' : '') + datum.stutter + ' stutter in ' + datum.unit + ' repeats'"
+        },
+        {
+          "type": "fold",
+          "fields": ["forward", "reverse", "total"],
+          "output": {"key": "direction", "value": "value"}
+        },
+        {
+          "type": "formula",
+          "field": "markerdirection",
+          "expr": "datum.marker + ' ' + datum.direction"
+        },
+        {
+          "type": "sort",
+          "by": ["markerdirection", "length"]
+        },
+        {
+          "type": "rank"
+        }
+      ]
+    },
+    {
+      "name": "yscale",
+      "source": "fitfunctions",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": ["subgraph", "unit", "stutter"],
+          "summarize": []
+        },
+        {
+          "type": "formula",
+          "field": "unitlen",
+          "expr": "length(datum.unit)"
+        },
+        {
+          "type": "sort",
+          "by": ["unitlen", "unit", "stutter"]
+        },
+        {
+          "type": "rank"
+        },
+        {
+          "type": "formula",
+          "field": "offset",
+          "expr": "(graphheight+subgraphoffset)*(datum.rank-1)"
+        },
+        {
+          "type": "formula",
+          "field": "end",
+          "expr": "datum.offset + graphheight"
+        }
+      ]
+    },
+    {
+      "name": "lengths",
+      "values": [
+        0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,
+        27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50
+      ]
+    },
+    {
+      "name": "table",
+      "source": "fitfunctions",
+      "transform": [
+        {
+          "type": "aggregate",
+          "summarize": {"max": "max"}
+        },
+        {
+          "type": "formula",
+          "field": "amount",
+          "expr": "ceil(sqrt(datum.max_max+1))"
+        },
+        {
+          "type": "cross",
+          "with": "lengths",
+          "filter": "datum.b.data < datum.a.amount"
+        },
+        {
+          "type": "cross",
+          "filter": "datum.a.a.amount * datum.a.b.data + datum.b.b.data <= datum.a.a.max_max"
+        },
+        {
+          "type": "formula",
+          "field": "length",
+          "expr": "datum.a.a.amount * datum.a.b.data + datum.b.b.data"
+        },
+        {
+          "type": "cross",
+          "with": "fitfunctions",
+          "output": {
+            "left": "len",
+            "right": "func"
+          }
+        },
+        {
+          "type": "formula",
+          "field": "length",
+          "expr": "datum.len.length"
+        },
+        {
+          "type": "filter",
+          "test": "datum.func.lbound <= datum.length && datum.func.max >= datum.length"
+        },
+        {
+          "type": "formula",
+          "field": "value",
+          "expr": "max(0, datum.func.a + datum.func.b*datum.length + datum.func.c*pow(datum.length, 2) + datum.func.d*pow(datum.length, 3) + datum.func.e*pow(datum.length, 4) + datum.func.f*pow(datum.length, 5) + datum.func.g*pow(datum.length, 6) + datum.func.h*pow(datum.length, 7) + datum.func.i*pow(datum.length, 8) + datum.func.j*pow(datum.length, 9))"
+        },
+        {
+          "type": "formula",
+          "field": "markerdirection",
+          "expr": "datum.func.marker + ' ' + datum.func.direction"
+        },
+        {
+          "type": "formula",
+          "field": "subgraph",
+          "expr": "datum.func.subgraph"
+        },
+        {
+          "type": "sort",
+          "by": ["markerdirection", "length"]
+        },
+        {
+          "type": "rank"
+        }
+      ]
+    },
+    {
+      "name": "points_aggr",
+      "source": "points",
+      "transform": [
+        {
+          "type": "aggregate",
+          "groupby": ["subgraph"],
+          "summarize": [
+            {"field": "length_jit", "ops": ["min", "max"], "as": ["min_length", "max_length"]},
+            {"field": "value", "ops": ["min", "max"]}
+          ]
+        }
+      ]
+    }
+  ],
+  "marks": [
+    {
+      "type": "text",
+      "from": {
+        "data": "yscale"
+      },
+      "properties": {
+        "update": {
+          "x": {"field": {"group": "width"}, "mult": 0.5},
+          "y": {"field": "offset"},
+          "fontWeight": {"value": "bold"},
+          "text": {"field": "subgraph"},
+          "align": {"value": "center"},
+          "baseline": {"value": "bottom"},
+          "fill": {"value": "black"}
+        }
+      }
+    },
+    {
+      "type": "group",
+      "from": {
+        "data": "table",
+        "transform": [
+          {
+            "type": "lookup",
+            "on": "points_aggr",
+            "onKey": "subgraph",
+            "keys": ["subgraph"],
+            "as": ["points"],
+            "default": {"min_length": 0, "max_length": 0, "min_value": 0, "max_value": 0}
+          },
+          {
+            "type": "facet",
+            "groupby": ["subgraph"]
+          },
+          {
+            "type": "lookup",
+            "on": "yscale",
+            "onKey": "subgraph",
+            "keys": ["subgraph"],
+            "as": ["subgraphscale"]
+          }
+        ]
+      },
+      "properties": {
+        "update": {
+          "x": {"value": 0},
+          "width": {"field": {"group": "width"}},
+          "y": {"field": "subgraphscale.offset"},
+          "y2": {"field": "subgraphscale.end"},
+          "stroke": {"value": "#dddddd"}
+        }
+      },
+      "scales": [
+        {
+          "name": "x",
+          "type": "linear",
+          "nice": true,
+          "range": "width",
+          "domain": {"field": ["length", "points.min_length", "points.max_length"]}
+        },
+        {
+          "name": "y",
+          "type": "linear",
+          "nice": true,
+          "range": "height",
+          "domain": {"field": ["value", "points.min_value", "points.max_value"]}
+        },
+        {
+          "name": "c",
+          "type": "ordinal",
+          "range": "category20",
+          "domain": {"field": "markerdirection", "sort": {"field": "rank", "op": "min"}}
+        }
+      ],
+      "axes": [
+        {
+          "type": "x",
+          "scale": "x",
+          "grid": true,
+          "layer": "back",
+          "tickSize": 0,
+          "properties": {
+            "labels": {
+              "fontSize": {"value": 0}
+            }
+          }
+        },
+        {
+          "type": "x",
+          "scale": "x",
+          "tickSizeEnd": 0,
+          "title": "Length of repeat (nt)"
+        },
+        {
+          "type": "y",
+          "scale": "y",
+          "grid": true,
+          "layer": "back",
+          "title": "Noise ratio (%)"
+        }
+      ],
+      "legends": [
+        {
+          "fill": "c",
+          "properties": {
+            "symbols": {
+              "size": {"value": 100},
+              "stroke": {"value": "transparent"},
+              "fillOpacity": {"value": 0.8}
+            }
+          }
+        }
+      ],
+      "marks": [
+        {
+          "type": "group",
+          "from": {
+            "transform": [
+              {"type": "facet", "groupby": ["markerdirection"]}
+            ]
+          },
+          "marks": [
+            {
+              "type": "line",
+              "properties": {
+                "update": {
+                  "interpolate": {"value": "linear"},
+                  "x": {"scale": "x", "field": "length"},
+                  "y": {"scale": "y", "field": "value"},
+                  "stroke": {"scale": "c", "field": "markerdirection"},
+                  "strokeWidth": {"value": 1.5},
+                  "strokeOpacity": {"value": 0.8}
+                },
+                "hover": {
+                  "strokeWidth": {"value": 4.5},
+                  "strokeOpacity": {"value": 1}
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "symbol",
+          "from": {
+            "transform": [
+              {
+                "type": "aggregate",
+                "groupby": ["subgraph", "markerdirection"],
+                "summarize": []
+              },
+              {
+                "type": "cross",
+                "with": "points",
+                "filter": "datum.a.subgraph == datum.b.subgraph && datum.a.markerdirection == datum.b.markerdirection"
+              }
+            ]
+          },
+          "properties": {
+            "update": {
+              "x": {"scale": "x", "field": "b.length_jit"},
+              "y": {"scale": "y", "field": "b.value"},
+              "fill": {"scale": "c", "field": "b.markerdirection"},
+              "size": {"value": 40},
+              "stroke": {"value": "transparent"},
+              "fillOpacity": {"value": 0.7}
+            },
+            "hover": {
+              "size": {"value": 125},
+              "stroke": {"value": "white"},
+              "fillOpacity": {"value": 1}
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

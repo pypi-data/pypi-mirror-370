@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!--
+    # Copyright (C) 2020 Jerry Hoogenboom
+    #
+    # This file is part of FDSTools, data analysis tools for Massively
+    # Parallel Sequencing of forensic DNA markers.
+    #
+    # FDSTools is free software: you can redistribute it and/or modify it
+    # under the terms of the GNU General Public License as published by the
+    # Free Software Foundation, either version 3 of the License, or (at
+    # your option) any later version.
+    #
+    # FDSTools is distributed in the hope that it will be useful, but
+    # WITHOUT ANY WARRANTY; without even the implied warranty of
+    # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    # General Public License for more details.
+    #
+    # You should have received a copy of the GNU General Public License
+    # along with FDSTools.  If not, see <http://www.gnu.org/licenses/>.
+    -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <title>Allele Visualisation - FDSTools</title>
+    <!-- VERSION 2.0.1 -->
+    <!-- BEGIN_LIBRARIES -->
+    <script src="https://vega.github.io/vega-editor/vendor/d3.min.js"></script>
+    <script src="https://vega.github.io/vega/vega.min.js"></script>
+    <!-- END_LIBRARIES -->
+    <style>
+    input {
+        font-family: inherit;
+        font-size: 1em;
+    }
+    .icon {
+        padding: 1em;
+        margin-right: .25em;
+        background-size: contain;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+    @media screen {
+        html, body {
+            /* First the UI fonts of WinVista+, OSX10.11, OSX10.10, OSX10.9-, WinXP-, Ubuntu. Then some fallbacks. */
+            font-family: Segoe UI, San Francisco, Helvetica Neue, Lucida Grande, Tahoma, Ubuntu, Helvetica, Arial, sans-serif;
+            font-size: 10pt;
+        }
+        body {
+            margin: 0rem;
+        }
+        a {
+            color: inherit;
+            text-decoration: inherit;
+            border-bottom: 1px dotted;
+        }
+        a:hover {
+            border-bottom: 1px solid;
+        }
+        a.disabled {
+            color: hsl(220, 20%, 53%);
+        }
+        a.disabled:hover {
+            color: hsl(220, 20%, 53%);
+            border-bottom: 1px dotted;
+            cursor: default;
+        }
+        #outer {
+            display: flex;
+            flex-flow: column nowrap;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #inner {
+            display: flex;
+            flex-flow: row nowrap;
+            flex: 1 1 auto;
+            overflow: hidden;
+        }
+        #optscrollbox {
+            display: flex;
+            flex-flow: column nowrap;
+            flex: 0 0 auto;
+            width: 22.5em;
+            order: -1;
+            overflow: auto;
+            background-color: hsl(220, 20%, 77%);
+            border-right: 1px solid hsl(220, 20%, 3%);
+            border-bottom: none;
+            cursor: default;
+        }
+        #visscrollbox {
+            flex: 1 1 auto;
+            overflow: auto;
+            background-color: hsl(220, 20%, 97%); /* eef8ff */
+            text-align: right;
+        }
+        .optiongroup {
+            flex: 0 0 auto;
+            padding: .2rem .2rem 1rem;
+        }
+        .optiongroup:last-child {
+            padding: .2rem;
+        }
+        .optiongroup > table {
+            margin: 0rem;
+            border-spacing: 0rem;
+            border: none;
+        }
+        .optiongroup > .optionheader {
+            text-align: left;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .optiongroup > .optionheader:first-letter {
+            font-size: 1.25em;
+        }
+        .optiongroup > table td {
+            white-space: nowrap;
+        }
+        .optiongroup > table td:not(:last-child) {
+            padding-right: .4rem;
+        }
+        .optiongroup > table tr.fileselectrow, .optiongroup > table tr.fileselect2row, .optiongroup > table tr.filenamedisplayrow {
+            display: none;
+        }
+        .optiongroup > table tr.filenamedisplayrow #filenamedisplay {
+            max-width: 20em;
+            width: auto;
+        }
+        .optiongroup > table td.footnote {
+            font-style: italic;
+            white-space: wrap;
+        }
+        .help {
+            cursor: help;
+            font-weight: bold;
+            border-bottom: 1px dotted hsl(220, 20%, 3%);
+        }
+        .description p {
+            text-align: justify;
+        }
+        .description p:first-child {
+            margin-top: 0px;
+        }
+        .description p:last-child {
+            margin-bottom: 0px;
+        }
+        #vis {
+            direction: rtl;
+            display: inline-block;
+        }
+        #vis div {
+            direction: ltr;
+        }
+        #vis div:nth-child(2n+3) {
+            border-top: 1px solid hsl(220, 20%, 3%);
+            padding-top: .8rem;
+            margin-top: .8rem;
+        }
+        #vis div:last-child {
+            padding-bottom: .8rem;
+        }
+        #vis-tooltip {
+            display: none;
+            position: fixed;
+            z-index: 999999;
+            background-color: hsla(220, 20%, 77%, 0.75);
+            border: 1px solid hsl(220, 20%, 3%);
+            border-radius: .5em;
+            padding: 0em .25em;
+        }
+        #vis-tooltip td {
+            vertical-align: top;
+        }
+        td.num {
+            text-align: right;
+        }
+        td.wrap {
+            white-space: normal !important;
+            width: 1em;
+        }
+    }
+    /*
+    portrait, height >= 55:
+
+      small collapsed   large collapsed   small top    large top
+    |-----------------|-----------------|------------|------------>  width
+    0                 45                60           68
+
+
+    portrait, height < 55:
+
+      small collapsed   large collapsed
+    |-----------------|------------------------------------------->  width
+    0                 45
+
+
+    landscape:
+
+      small collapsed   large collapsed   small left   large left
+    |-----------------|-----------------|------------|------------>  width
+    0                 45                60           68
+    */
+    @media only screen and (min-aspect-ratio: 40000/30000) and (min-width: 60em) and (max-width: 68em), /* Full menu is at the side, but viewport is not very wide */
+           only screen and (max-aspect-ratio: 40000/30000) and (min-height: 55em) and (min-width: 60em) and (max-width: 68em), /* Full menus at the top, but viewport not wide enough */
+           only screen and (max-width: 45em) { /* Very narrow; menu names don't fit anymore */
+        /* Limited width: make menu smaller */
+        #optscrollbox {
+            font-size: .85em;
+        }
+    }
+    @media only screen and (max-aspect-ratio: 40000/30000), only screen and (max-width: 60em) {
+        /* Portrait or near-portrait, or rather narrow: menu at the top */
+        #inner {
+            flex-direction: column;
+        }
+        #optscrollbox {
+            flex: 0 0 auto;
+            flex-flow: row nowrap;
+            width: 100%;
+            border-right: none;
+            border-bottom: 1px solid hsl(220, 20%, 3%);
+        }
+        #visscrollbox {
+            flex: 1 1 auto;
+        }
+        .optiongroup {
+            padding: .2rem 1rem .2rem .2rem;
+        }
+        .description {
+            flex: 1 0 0px;
+        }
+        .description .columntext {
+            display: flex;
+            flex-flow: row nowrap;
+        }
+        .description p:first-child {
+            margin-bottom: 0px;
+            margin-right: 1em;
+        }
+        .description p:last-child {
+            margin-top: 0px;
+        }
+    }
+    @media only screen and (max-aspect-ratio: 40000/30000) and (max-height: 55em), only screen and (max-width: 60em) {
+        /* Portrait or near-portrait combined with very limited height, or rather narrow: collapse menu */
+        #optscrollbox {
+            overflow: visible;
+            z-index: 100;
+            border-bottom: 1px solid hsl(220, 20%, 3%);
+        }
+        .optiongroup {
+            position: relative;
+        }
+        .optiongroup > table, .optiongroup .columntext {
+            display: none;
+            position: absolute;
+            top: 100%;
+            background-color: hsl(220, 20%, 77%);
+            border: 1px solid hsl(220, 20%, 3%);
+            border-top: none;
+        }
+        .optiongroup:last-child > table {
+            left: auto;
+            right: .2rem;
+        }
+        .optiongroup:hover > .optionheader {
+            color: hsl(220, 20%, 97%);
+        }
+        .optiongroup:hover > table {
+            display: table;
+        }
+        .optiongroup:hover .columntext {
+            display: flex;
+        }
+    }
+
+    @media print {
+        html, body {
+            font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
+            font-size: 10pt;
+        }
+        .noprint, .help {
+            display: none;
+        }
+        #optscrollbox {
+            display: flex;
+            box-sizing: border-box;
+            flex-flow: row wrap;
+            align-items: stretch;
+            width: 100%;
+            border-top: 1pt solid black;
+            border-right: 1pt solid black;
+            font-size: 7pt;
+        }
+        .optiongroup {
+            flex-grow: 1;
+            padding: 5pt;
+            border-left: 1pt solid black;
+            border-bottom: 1pt solid black;
+        }
+        .optiongroup > table {
+            padding: 0px;
+            margin: 0px;
+            border-spacing: 0px;
+            border: none;
+        }
+        .optiongroup > .optionheader {
+            text-align: left;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .optiongroup > .optionheader:first-letter {
+            font-size: 1.25em;
+        }
+        .optiongroup > table td {
+            white-space: nowrap;
+        }
+        .optiongroup > table td:not(:last-child) {
+            padding-right: 5pt;
+        }
+        .optiongroup > table td.footnote {
+            font-style: italic;
+            white-space: wrap;
+        }
+        .optiongroup > table input {
+            border: none;
+        }
+        .optiongroup > table input[type=checkbox] {
+            height: 1em;
+            width: 1em;
+        }
+        #vis {
+            width: 100%;
+        }
+        #vis > div {
+            width: 100%;
+            direction: rtl;
+            text-align: right;
+        }
+        #vis > div > * {
+            direction: ltr;
+        }
+        #vis-tooltip {
+            display: none;
+        }
+        .vega, canvas {
+            max-width: 100%;
+            height: auto;
+            overflow: visible;
+        }
+        svg {
+            /* Using slightly smaller width to prevent clipping in Chrome */
+            max-width: 98%;
+            height: auto;
+            overflow: visible;
+        }
+        canvas {
+            object-fit: scale-down;
+        }
+        .num {
+            text-align: right;
+        }
+        td.wrap {
+            white-space: normal !important;
+        }
+    }
+    </style>
+</head>
+<body>
+<div id="outer">
+<div id="inner">
+    <div id="optscrollbox">
+        <div class="optiongroup noprint">
+            <div class="optionheader">Input &amp; output</div>
+            <table>
+                <tr class="fileselectrow filenamedisplayrow">
+                    <td>Allele list file:</td>
+                </tr>
+                <tr class="fileselectrow">
+                    <td><input id="fileselect" type="file"></td>
+                </tr>
+                <tr class="fileselectrow">
+                    <td>(or drag a file onto this page)</td>
+                </tr>
+                <tr class="filenamedisplayrow">
+                    <td id="filenamedisplay" class="wrap"></td>
+                </tr>
+                <tr>
+                    <td>
+                        <a id="saveImageLink" href="javascript:void(saveImage())" class="disabled">Save image</a>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div class="optiongroup description">
+            <div class="optionheader">Description</div>
+            <div class="columntext">
+                <p>
+                    The graph depicts every allele among the reference
+                    samples as a circle. The size of the circle corresponds
+                    to the number of samples with that particular allele. A
+                    black inner circle depicts the number of homozygotes.
+                </p>
+                <p>
+                    The circles of two alleles are connected by a line
+                    whenever samples exist that have a combination of the
+                    two connected alleles. The thickness of the line
+                    corresponds to the number of heterozygotes with that
+                    particular combination of alleles.
+                </p>
+            </div>
+        </div>
+        <div class="optiongroup">
+            <div class="optionheader">Display options</div>
+            <table>
+                <tr>
+                    <td><label for="graphwidth">Graph width</label></td>
+                    <td colspan="2"><label><input type="text" value="600" id="graphwidth" size="3"> px</label></td>
+                </tr>
+                <tr>
+                    <td><label for="graphheight">Graph height</label></td>
+                    <td colspan="2"><label><input type="text" value="400" id="graphheight" size="3"> px</label></td>
+                </tr>
+                <tr>
+                    <td>Renderer</td>
+                    <td><label><input type="radio" name="renderer" value="svg" id="renderSVG" checked> SVG</label></td>
+                    <td><label><input type="radio" name="renderer" value="canvas" id="renderCanvas"> Canvas</label></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    <div id="visscrollbox">
+        <div id="vis"></div>
+    </div>
+</div>
+</div>
+<div id="vis-tooltip"></div>
+<script type="text/javascript">
+var PAT_SEQ_RAW = /^[ACGT]*$/;
+var PAT_ALLELENAME_SPLIT = /[\]\)_]/g;
+var graph = false;
+var fileName = "alleles";
+var stamp = 0;
+function parse(){
+    var this_stamp = ++stamp;
+    var visdiv = document.getElementById("vis");
+    var scrolldiv = document.getElementById("visscrollbox");
+    var rendererName = document.querySelector("input[name=renderer]:checked").value;
+    removeChildren(visdiv);
+    document.getElementById("saveImageLink").setAttribute("class", "disabled");
+    vg.parse.spec(graph_spec, function(chart){
+        //Cancel rendering if a new parse() call was made.
+        if(this_stamp != stamp)
+            return;
+
+        //Add new visualisation divs.
+        var newvis = document.createElement("div");
+        newvis.setAttribute("id", "vis0");
+        visdiv.appendChild(newvis);
+
+        graph = chart({el: newvis, renderer: rendererName});
+        graph.onSignal("hovered", function(s, datum){
+            var tt = document.getElementById("vis-tooltip");
+            if(!datum){
+                tt.style.display = "none";
+                return;
+            }
+            tt.style.display = "block";
+            removeChildren(tt);
+            if(datum.source || datum.target){
+                //Edge.
+                var re = /^CE\d+\.?\d*_/;
+                var a = [datum._source.allele, datum._target.allele];
+                if(re.test(a[0]) && re.test(a[1])){
+                    if(parseFloat(a[0].substring(2, a[0].indexOf('_'))) > parseFloat(a[1].substring(2, a[1].indexOf('_'))))
+                        a = [a[1], a[0]];
+                }
+                else if(a[0] > a[1])
+                    a = [a[1], a[0]];
+                var b = document.createElement("b");
+                b.appendChild(document.createTextNode(datum._source.marker));
+                tt.appendChild(b);
+                var table = document.createElement("table");
+                var row = table.insertRow();
+                row.insertCell().appendChild(document.createTextNode("Allele 1"));
+                appendChunkedAllelename(row.insertCell(), a[0]);
+                var row = table.insertRow();
+                row.insertCell().appendChild(document.createTextNode("Allele 2"));
+                appendChunkedAllelename(row.insertCell(), a[1]);
+                row = table.insertRow();
+                row.insertCell().appendChild(document.createTextNode("Samples"));
+                row.insertCell().appendChild(document.createTextNode(datum.count));
+                tt.appendChild(table);
+                return;
+            }
+
+            //Node.
+            var b = document.createElement("b");
+            b.appendChild(document.createTextNode(datum.marker + " "));
+            appendChunkedAllelename(b, datum.allele);
+            tt.appendChild(b);
+            var table = document.createElement("table");
+            var row = table.insertRow();
+            row.insertCell().appendChild(document.createTextNode("Samples"));
+            var cell = row.insertCell();
+            cell.setAttribute("class", "num");
+            cell.appendChild(document.createTextNode(datum.count));
+            row = table.insertRow();
+            row.insertCell().appendChild(document.createTextNode("Homozygotes"));
+            cell = row.insertCell();
+            cell.setAttribute("class", "num");
+            cell.appendChild(document.createTextNode(datum.homcount.count));
+            tt.appendChild(table);
+        });
+        graph.update();
+        if(rendererName == "svg")
+            updateViewBox(graph._el.childNodes[0]);
+        document.getElementById("saveImageLink").setAttribute("class", "");
+
+        //Scroll to the right; the graph is more interesting than the long labels.
+        scrolldiv.scrollLeft = scrolldiv.scrollWidth;
+    });
+}
+
+function appendChunkedAllelename(parent, allele){
+    var span;
+    if(PAT_SEQ_RAW.test(allele)){
+        span = document.createElement("span");
+        span.style.display = "inline-block";
+        span.style.wordBreak = "break-all";
+        span.appendChild(document.createTextNode(allele));
+        parent.appendChild(span);
+        return;
+    }
+    var match;
+    var pos = 0;
+    while((match = PAT_ALLELENAME_SPLIT.exec(allele)) !== null){
+        span = document.createElement("span");
+        span.style.display = "inline-block";
+        span.style.whiteSpace = "nowrap";
+        span.appendChild(document.createTextNode(allele.substring(pos, match.index+1)));
+        parent.appendChild(span);
+        pos = match.index+1;
+    }
+    if(pos < allele.length){
+        span = document.createElement("span");
+        span.style.display = "inline-block";
+        span.style.whiteSpace = "nowrap";
+        span.appendChild(document.createTextNode(allele.substring(pos)));
+        parent.appendChild(span);
+    }
+}
+
+function updateViewBox(svg){
+    //Setting the viewBox enables shrink-to-fit behaviour when printing.
+    svg.setAttribute("viewBox",
+        "0 0 " + svg.getAttribute("width") + " " + svg.getAttribute("height"));
+}
+
+function removeChildren(el){
+    while(el.lastChild){
+      el.removeChild(el.lastChild);
+    }
+}
+
+function setSignalValue(signalname, value){
+    if(!graph_spec)
+        return;
+    var scrolldiv = document.getElementById("visscrollbox");
+    var scrollRight = (scrolldiv.scrollLeft >= scrolldiv.scrollWidth - scrolldiv.clientWidth);
+    if(signalname == "width")
+        graph_spec.width = value;
+    if(signalname == "height")
+        graph_spec.height = value;
+    for(i in graph_spec.signals){
+        if(graph_spec.signals[i].name == signalname){
+            graph_spec.signals[i].init = value;
+            break;
+        }
+    }
+    if(graph){
+        graph.signal(signalname, value).padding("auto").update();
+        if(document.getElementById("renderSVG").checked)
+            updateViewBox(graph._el.childNodes[0]);
+    }
+    if(scrollRight)
+        scrolldiv.scrollLeft = scrolldiv.scrollWidth;
+    return;
+}
+
+function getSignalValue(signalname){
+    if(!graph_spec)
+        return false;
+    if(signalname == "width")
+        return graph_spec.width;
+    if(signalname == "height")
+        return graph_spec.height;
+    for(i in graph_spec.signals)
+        if(graph_spec.signals[i].name == signalname)
+            return graph_spec.signals[i].init;
+    return false;
+}
+
+function setRenderer(value){
+    if(graph){
+        graph.renderer(value).update();
+        if(value == "svg")
+            updateViewBox(graph._el.childNodes[0]);
+    }
+}
+
+function setFileName(value){
+    if(!value)
+        value = "alleles";
+    fileName = value;
+    if(value == "alleles")
+        document.title = "Allele Visualisation - FDSTools";
+    else
+        document.title = value + " - Allele Visualisation - FDSTools";
+}
+
+//Load the data (input is a fileList object; only the first file is loaded).
+var currentlyLoadedFile = "no/file/loaded";
+function loadDataset(fileList){
+    if(!graph_spec || !fileList || !fileList.length || fileList[0].name == currentlyLoadedFile)
+        return;
+    currentlyLoadedFile = fileList[0].name;
+    var reader = new FileReader();
+    reader.onload = function(e){
+        if(fileList && fileList.length && fileList[0].name)
+            setFileName(fileList[0].name.substr(0, fileList[0].name.lastIndexOf(".")));
+        else
+            setFileName(false);
+        graph_spec.data[0].values = reader.result;
+        parse();
+    };
+    reader.readAsText(fileList[0]);
+}
+
+//Save image function.
+function saveImage(){
+    var link = document.getElementById("saveImageLink");
+    if(link.getAttribute("class") == "disabled")
+        return false;
+    var imageType = document.getElementById("renderSVG").checked? "svg": "png";
+    if(window.navigator.msSaveOrOpenBlob){
+        //Internet Explorer has its own ways of doing things.
+        var b;
+        if(imageType == "svg")
+            b = new Blob([graph._el.innerHTML], {type: "image/svg+xml;charset=utf-8"});
+        else
+            b = graph._el.firstChild.msToBlob();
+        window.navigator.msSaveOrOpenBlob(b, fileName + "." + imageType);
+        if(b.msClose)
+            b.msClose();
+    }
+    else{
+        link.setAttribute("href", graph.toImageURL(imageType));
+        link.setAttribute("download", fileName + "." + imageType);
+        link.click();
+        link.setAttribute("href", "javascript:void(saveImage())");
+        link.removeAttribute("download");
+    }
+    return false;
+}
+
+function onLoadSpec(has_data){
+    if(!has_data){
+        //Handle files from the file input.
+        document.getElementById("fileselect").addEventListener('change', function(){
+            loadDataset(document.getElementById("fileselect").files);
+        }, false);
+        var rows = document.querySelectorAll(".fileselectrow");
+        for (var i = 0; i < rows.length; i++)
+            rows[i].style.display = "table-row";
+
+        //Allow files to be dragged onto the page.
+        document.addEventListener('dragover', function(evt){
+            evt.stopPropagation();
+            evt.preventDefault();
+        }, false);
+        document.addEventListener('drop', function(evt){
+            evt.stopPropagation();
+            evt.preventDefault();
+
+            //Try to clear the currently displayed file, then try to set
+            //the drag-'n-dropped file as the selected one on the file input.
+            //Both actions are not supported in all major browsers.
+            document.getElementById("fileselect").value = "";
+            document.getElementById("fileselect").files = evt.dataTransfer.files;
+            loadDataset(evt.dataTransfer.files);
+        }, false);
+    }
+    else if(graph_spec.data[0].fdstools_filename){
+        var rows = document.querySelectorAll(".filenamedisplayrow");
+        for (var i = 0; i < rows.length; i++)
+            rows[i].style.display = "table-row";
+        var cell = document.getElementById("filenamedisplay");
+        removeChildren(cell);
+        cell.appendChild(document.createTextNode(graph_spec.data[0].fdstools_filename));
+        setFileName(graph_spec.data[0].fdstools_filename);
+    }
+
+    //Update graph when rendering mode or axis scale is changed.
+    document.getElementById("renderCanvas").addEventListener('change', function(){
+        setRenderer(this.value);
+    }, false);
+    document.getElementById("renderSVG").addEventListener('change', function(){
+        setRenderer(this.value);
+    }, false);
+    document.getElementById("graphwidth").addEventListener('change', function(){
+        var value = parseFloat(this.value);
+        if(isNaN(value))
+            return;
+        setSignalValue("width", value);
+    }, false);
+    document.getElementById("graphheight").addEventListener('change', function(){
+        var value = parseFloat(this.value);
+        if(isNaN(value))
+            return;
+        setSignalValue("height", value);
+    }, false);
+
+    //Automatically move the tooltip with the mouse pointer.
+    var tt = document.getElementById("vis-tooltip");
+    document.addEventListener('mousemove', function(e){
+      if(e.clientX < document.documentElement.clientWidth / 2)
+        tt.style.left = Math.max(0, Math.min(document.documentElement.clientWidth - tt.offsetWidth, e.clientX + 10)) + "px";
+      else
+        tt.style.left = Math.max(0, e.clientX - tt.offsetWidth - 10) + "px";
+      if(e.clientY + 10 + tt.offsetHeight > document.documentElement.clientHeight)
+        tt.style.top = (document.documentElement.clientHeight - tt.offsetHeight) + "px";
+      else
+        tt.style.top = (e.clientY + 10) + "px";
+    }, false);
+
+    //Sync graph_spec and display.
+    document.getElementById("graphwidth").value = getSignalValue("width");
+    document.getElementById("graphheight").value = getSignalValue("height");
+    if(has_data)
+        parse();
+}
+</script>
+<!-- BEGIN_LOAD_SCRIPT -->
+<script type="text/javascript">
+var graph_spec = false;
+vg.util.load({url: "allelevis.json"}, function(err, result){
+    graph_spec = JSON.parse(result);
+    onLoadSpec(false);
+});
+</script>
+<!-- END_LOAD_SCRIPT -->
+</body>
+</html>
