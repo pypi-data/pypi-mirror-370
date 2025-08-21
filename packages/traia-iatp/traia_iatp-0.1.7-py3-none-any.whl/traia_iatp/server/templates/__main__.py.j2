@@ -1,0 +1,506 @@
+"""
+{{ agent_name }} - A2A Server Main Entry Point
+
+This module initializes and starts the A2A server for {{ agent_name }}.
+Auto-generated for the {{ agent_name }} utility agent.
+Supports HTTP/2 multiplexing and SSE streaming.
+"""
+
+import logging
+import os
+import json
+import ssl
+from pathlib import Path
+from typing import AsyncIterator, Dict, Any, Optional
+import asyncio
+import uuid
+from datetime import datetime
+import time
+import tempfile
+import subprocess
+
+from a2a.server.apps import A2AStarletteApplication
+from a2a.types import AgentCard, AgentSkill, AgentCapabilities
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.events.event_queue import EventQueue
+from hypercorn.asyncio import serve
+from hypercorn.config import Config
+from starlette.responses import StreamingResponse
+from starlette.requests import Request
+from starlette.routing import Route
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+# Import AgentOps for monitoring and observability
+try:
+    import agentops
+    AGENTOPS_AVAILABLE = True
+except ImportError:
+    AGENTOPS_AVAILABLE = False
+    agentops = None
+
+
+import sys
+from pathlib import Path
+# Add parent directory to path to import mcp_agent_template
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from traia_iatp.mcp import MCPServerConfig
+from .agent_executor import {{ class_name }}AgentExecutor
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Enable debug logging for HTTP/2 and connection events if requested
+if os.environ.get("DEBUG_PROTOCOL", "false").lower() == "true":
+    logging.getLogger("hypercorn.access").setLevel(logging.DEBUG)
+    logging.getLogger("hypercorn.error").setLevel(logging.DEBUG)
+    logging.getLogger("httpcore").setLevel(logging.DEBUG)
+    logging.getLogger("httpx").setLevel(logging.DEBUG)
+    logging.getLogger("h2").setLevel(logging.DEBUG)
+    logging.getLogger("a2a").setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    logger.info("Protocol-level debug logging enabled")
+
+
+class ProtocolLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to log HTTP protocol details for debugging."""
+    
+    def __init__(self, app):
+        super().__init__(app)
+        self.request_counter = 0
+    
+    async def dispatch(self, request: Request, call_next):
+        self.request_counter += 1
+        request_id = self.request_counter
+        
+        # Log request details
+        logger.info(f"[Request {request_id}] {request.method} {request.url.path}")
+        logger.info(f"[Request {request_id}] Client: {request.client}")
+        logger.info(f"[Request {request_id}] Headers: {dict(request.headers)}")
+        
+        # Check HTTP version
+        http_version = request.scope.get("http_version", "unknown")
+        logger.info(f"[Request {request_id}] HTTP Version: {http_version}")
+        
+        # Check if it's HTTP/2
+        if http_version == "2.0":
+            logger.info(f"[Request {request_id}] ✅ HTTP/2 connection detected")
+            stream_id = request.scope.get("stream_id", "unknown")
+            logger.info(f"[Request {request_id}] HTTP/2 Stream ID: {stream_id}")
+        else:
+            logger.info(f"[Request {request_id}] ⚠️  HTTP/1.1 connection (not HTTP/2)")
+        
+        # Time the request
+        start_time = time.time()
+        
+        # Process the request
+        response = await call_next(request)
+        
+        # Log response details
+        process_time = time.time() - start_time
+        logger.info(f"[Request {request_id}] Response Status: {response.status_code}")
+        logger.info(f"[Request {request_id}] Process Time: {process_time:.3f}s")
+        
+        return response
+
+
+class StreamingRequestHandler(DefaultRequestHandler):
+    """Extended request handler with SSE streaming support."""
+    
+    def __init__(self, agent_executor, task_store):
+        super().__init__(agent_executor, task_store)
+        self._active_streams: Dict[str, EventQueue] = {}
+    
+    async def handle_subscribe(self, request: Dict[str, Any]) -> StreamingResponse:
+        """Handle tasks/sendSubscribe requests for SSE streaming."""
+        params = request.get("params", {})
+        task_id = params.get("id")
+        history_length = params.get("historyLength", 0)
+        
+        if not task_id:
+            return {"error": {"code": -32602, "message": "Missing task ID"}}
+        
+        # Get or create event queue for this task
+        event_queue = self._active_streams.get(task_id)
+        if not event_queue:
+            event_queue = EventQueue()
+            self._active_streams[task_id] = event_queue
+        
+        async def event_generator():
+            """Generate SSE events."""
+            try:
+                # Send initial connection event
+                yield f"data: {json.dumps({'type': 'connection', 'status': 'connected', 'task_id': task_id})}\n\n"
+                
+                # Send history if requested
+                if history_length > 0:
+                    # TODO: Implement history retrieval from task store
+                    pass
+                
+                # Stream events
+                event_count = 0
+                while True:
+                    try:
+                        # Wait for events with timeout
+                        event = await asyncio.wait_for(
+                            event_queue.dequeue_event(),
+                            timeout=30.0  # 30 second timeout
+                        )
+                        
+                        if event:
+                            event_count += 1
+                            # Handle different event types
+                            if hasattr(event, 'type') and hasattr(event, 'data'):
+                                event_data = {
+                                    "type": event.type,
+                                    "sequence": event_count,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "data": event.data
+                                }
+                            else:
+                                # Fallback for simple message events
+                                event_data = {
+                                    "type": "message",
+                                    "sequence": event_count,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "data": str(event)
+                                }
+                            yield f"data: {json.dumps(event_data)}\n\n"
+                            
+                            # Check for completion
+                            if hasattr(event, 'type') and event.type == "status" and hasattr(event, 'data') and event.data.get("state") in ["COMPLETED", "FAILED"]:
+                                yield "data: [DONE]\n\n"
+                                break
+                    except asyncio.TimeoutError:
+                        # Send keepalive
+                        yield f"data: {json.dumps({'type': 'keepalive', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+                        
+            except Exception as e:
+                logger.error(f"Error in SSE stream: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            finally:
+                # Cleanup
+                if task_id in self._active_streams:
+                    del self._active_streams[task_id]
+        
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"  # Disable nginx buffering
+            }
+        )
+    
+    async def handle_resubscribe(self, request: Dict[str, Any]) -> StreamingResponse:
+        """Handle tasks/resubscribe requests to resume SSE streaming."""
+        # Resubscribe uses the same logic as subscribe
+        # but may start from a different history point
+        return await self.handle_subscribe(request)
+
+
+def create_app():
+    """Create and configure the A2A application with SSE support."""
+    
+    # Load agent configuration if it exists
+    config_path = "agent_config.json"
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config_data = json.load(f)
+        mcp_data = config_data.get("mcp_server", {})
+    else:
+        # Use template variables directly
+        mcp_data = {
+            "name": "{{ mcp_server_name }}",
+            "url": "{{ mcp_server_url }}",
+            "description": "{{ mcp_server_description }}",
+            "server_type": "{{ mcp_server_type }}",
+            "capabilities": {{ mcp_server_capabilities | tojson }},
+            "metadata": {{ mcp_server_metadata | tojson }}
+        }
+    
+    # Create MCP server configuration
+    mcp_config = MCPServerConfig(
+        name=mcp_data["name"],
+        url=mcp_data["url"],
+        description=mcp_data["description"],
+        server_type=mcp_data.get("server_type", "streamable-http"),
+        capabilities=mcp_data.get("capabilities", []),
+        metadata=mcp_data.get("metadata", {})
+    )
+    
+    # Check if MCP server supports streaming
+    supports_streaming = mcp_data.get("server_type") == "streamable-http" or \
+                        "stream" in mcp_data.get("capabilities", [])
+    
+    # Create agent skills based on MCP capabilities
+    skills = []
+    
+    # Add main processing skill
+    main_skill = AgentSkill(
+        id="process_request",
+        name=f"Process request using {{ agent_name }}",
+        description="{{ agent_description }}",
+        examples=[
+            {% for example in skill_examples %}
+            "{{ example }}",
+            {% endfor %}
+        ],
+        inputModes=["text", "text/plain"],
+        outputModes=["text", "text/plain", "text/event-stream"] if supports_streaming else ["text", "text/plain"],
+        tags=[
+            "mcp", "{{ mcp_server_name }}", "utility",
+            {% if mcp_server_metadata.tags %}
+            {% for tag in mcp_server_metadata.tags %}
+            "{{ tag }}",
+            {% endfor %}
+            {% endif %}
+            {% for capability in mcp_server_capabilities[:5] %}
+            "{{ capability }}",
+            {% endfor %}
+        ]
+    )
+    skills.append(main_skill)
+    
+    {% if expose_individual_tools %}
+    # Add individual MCP tool skills
+    {% for capability in mcp_server_capabilities %}
+    skill_{{ loop.index }} = AgentSkill(
+        id="mcp_{{ capability }}",
+        name="Execute {{ capability }}",
+        description="Execute {{ capability }} tool on MCP server",
+        examples=[f"Run {{ capability }} with these parameters"],
+        inputModes=["text", "text/plain"],
+        outputModes=["text", "text/plain", "text/event-stream"] if supports_streaming else ["text", "text/plain"],
+        tags=["mcp", "{{ mcp_server_name }}", "{{ capability }}"]
+    )
+    skills.append(skill_{{ loop.index }})
+    {% endfor %}
+    {% endif %}
+    
+    # Create capabilities with streaming support if available
+    capabilities = AgentCapabilities(
+        streaming=supports_streaming,  # Enable streaming if MCP server supports it
+        pushNotifications=False,  # Can be extended to support push notifications
+        stateTransitionHistory=True  # Enable for SSE history support
+    )
+    
+    # Authentication can be added here if needed in the future
+    # Currently the A2A protocol handles authentication at a different layer
+    
+    # Create agent card
+    agent_card = AgentCard(
+        name="{{ agent_id }}",
+        description="{{ agent_description }}",
+        url=f"http://0.0.0.0:{os.environ.get('PORT', 8000)}",
+        version="{{ agent_version }}",
+        capabilities=capabilities,
+        skills=skills,
+        defaultInputModes=["text", "text/plain"],
+        defaultOutputModes=["text", "text/plain", "text/event-stream"] if supports_streaming else ["text", "text/plain"]
+    )
+    
+    # Create executor with MCP config
+    executor = {{ class_name }}AgentExecutor(mcp_config, supports_streaming=supports_streaming)
+    
+    # Create task store and request handler with streaming support
+    task_store = InMemoryTaskStore()
+    request_handler = StreamingRequestHandler(
+        agent_executor=executor,
+        task_store=task_store
+    )
+    
+    # Create the A2A application
+    app = A2AStarletteApplication(
+        agent_card=agent_card,
+        http_handler=request_handler
+    )
+    
+    # Build the Starlette app - this should add all necessary routes including JSON-RPC endpoint
+    starlette_app = app.build()
+    
+    # Add protocol logging middleware if debug mode is enabled
+    if os.environ.get("DEBUG_PROTOCOL", "false").lower() == "true":
+        starlette_app.add_middleware(ProtocolLoggingMiddleware)
+        logger.info("Added protocol logging middleware")
+    
+    # Log all routes that were created
+    logger.info("Routes created by A2A application:")
+    for route in starlette_app.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            logger.info(f"  {route.methods} {route.path}")
+        else:
+            logger.info(f"  {route}")
+    
+    # The A2AStarletteApplication.build() should have already added the JSON-RPC endpoint
+    # We only need to add custom SSE endpoints if they're not already included
+    
+    # Add SSE endpoints using Starlette's routing
+    async def handle_subscribe_endpoint(request: Request):
+        """Handle SSE subscription requests."""
+        data = await request.json()
+        return await request_handler.handle_subscribe(data)
+    
+    async def handle_resubscribe_endpoint(request: Request):
+        """Handle SSE resubscription requests."""
+        data = await request.json()
+        return await request_handler.handle_resubscribe(data)
+    
+    # Add custom SSE routes (these might not be included by default)
+    starlette_app.routes.append(
+        Route("/a2a/tasks/subscribe", handle_subscribe_endpoint, methods=["POST"])
+    )
+    starlette_app.routes.append(
+        Route("/a2a/tasks/resubscribe", handle_resubscribe_endpoint, methods=["POST"])
+    )
+    
+    return starlette_app
+
+
+def generate_self_signed_cert(cert_path: str = "cert.pem", key_path: str = "key.pem") -> None:
+    """Generate self-signed certificate for local development."""
+    if Path(cert_path).exists() and Path(key_path).exists():
+        logger.info("TLS certificates already exist")
+        return
+    
+    logger.info("Generating self-signed certificates for local development...")
+    
+    try:
+        # Generate self-signed certificate using openssl
+        subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:4096",
+            "-keyout", key_path, "-out", cert_path,
+            "-days", "365", "-nodes",
+            "-subj", "/CN=localhost/O=A2A Development/C=US"
+        ], check=True, capture_output=True)
+        
+        logger.info(f"Generated self-signed certificates: {cert_path}, {key_path}")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to generate certificates: {e}")
+        logger.error(f"Stdout: {e.stdout}")
+        logger.error(f"Stderr: {e.stderr}")
+        raise
+    except FileNotFoundError:
+        logger.error("OpenSSL not found. Please install OpenSSL to generate certificates.")
+        raise
+
+
+async def main():
+    """Main function to start the A2A server with HTTP/2 support."""
+    
+    # Initialize AgentOps for monitoring and observability
+    agentops_session_id = None
+    if AGENTOPS_AVAILABLE:
+        agentops_api_key = os.environ.get("AGENTOPS_API_KEY")
+        if agentops_api_key:
+            try:
+                # Initialize AgentOps with CrewAI-friendly settings
+                agentops_session_id = agentops.init(
+                    api_key=agentops_api_key,
+                    skip_auto_end_session=True,  # Let CrewAI handle session lifecycle
+                    tags=["{{ agent_name }}", "{{ mcp_server_name }}", "IATP", "A2A"],
+                    auto_start_session=True
+                )
+                logger.info(f"✅ AgentOps initialized successfully - Session ID: {agentops_session_id}")
+                logger.info("📊 View session at: https://app.agentops.ai")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to initialize AgentOps: {e}")
+                logger.warning("   Continuing without AgentOps monitoring...")
+        else:
+            logger.info("ℹ️  AGENTOPS_API_KEY not set - AgentOps monitoring disabled")
+            logger.info("   Set AGENTOPS_API_KEY environment variable to enable monitoring")
+    else:
+        logger.info("ℹ️  AgentOps not installed - monitoring disabled")
+        logger.info("   Install with: pip install agentops")
+    
+    # Get configuration from environment
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 8000))
+    
+    # Create the application
+    app = create_app()
+    
+    # Configure Hypercorn for HTTP/2 support
+    config = Config()
+    config.bind = [f"{host}:{port}"]
+    config.alpn_protocols = ["h2", "http/1.1"]  # Support both HTTP/2 and HTTP/1.1
+    
+    # Enable access logging if debug mode is on
+    if os.environ.get("DEBUG_PROTOCOL", "false").lower() == "true":
+        config.accesslog = "-"  # Log to stdout
+        config.errorlog = "-"   # Log errors to stdout
+        config.loglevel = "DEBUG"
+        logger.info("Hypercorn access logging enabled")
+    
+    # Enable HTTP/2
+    config.h2_max_concurrent_streams = 100
+    config.h2_max_header_list_size = 8192
+    config.h2_max_inbound_frame_size = 16384
+    config.h2_initial_connection_window_size = 65536
+    
+    # Connection settings for high performance
+    config.keep_alive_timeout = 300  # 5 minutes
+    config.max_requests = 10000  # Max requests per connection
+    config.max_requests_jitter = 1000  # Add jitter to prevent thundering herd
+    
+    # SSL/TLS configuration for production (optional)
+    if os.environ.get("USE_TLS", "false").lower() == "true":
+        cert_path = os.environ.get("TLS_CERT_PATH", "cert.pem")
+        key_path = os.environ.get("TLS_KEY_PATH", "key.pem")
+        
+        # Generate self-signed certificates for local development if needed
+        if os.environ.get("GENERATE_CERTS", "true").lower() == "true":
+            generate_self_signed_cert(cert_path, key_path)
+        
+        if Path(cert_path).exists() and Path(key_path).exists():
+            config.certfile = cert_path
+            config.keyfile = key_path
+            config.alpn_protocols = ["h2", "http/1.1"]
+            logger.info("TLS enabled with HTTP/2 support")
+            logger.info("Using HTTPS - connect to https://localhost:8000")
+        else:
+            logger.warning("TLS requested but certificates not found")
+    
+    # Log startup information
+    logger.info(f"Starting {{ agent_name }} A2A Server with HTTP/2 support")
+    logger.info(f"MCP Server: {{ mcp_server_name }}")
+    logger.info(f"Listening on {host}:{port}")
+    logger.info(f"Agent Card available at: http://{host}:{port}/.well-known/agent.json")
+    logger.info(f"SSE endpoints available at: /a2a/tasks/subscribe and /a2a/tasks/resubscribe")
+    logger.info(f"HTTP/2 multiplexing enabled with max {config.h2_max_concurrent_streams} concurrent streams")
+    
+    if agentops_session_id:
+        logger.info(f"📊 AgentOps Session ID: {agentops_session_id}")
+        logger.info("📊 Monitor agent performance at: https://app.agentops.ai")
+    
+    try:
+        # Run the server with Hypercorn
+        await serve(app, config)
+    except KeyboardInterrupt:
+        logger.info("🛑 Server shutdown requested")
+        if AGENTOPS_AVAILABLE and agentops_session_id:
+            try:
+                agentops.end_session('Success')
+                logger.info("✅ AgentOps session ended successfully")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to end AgentOps session: {e}")
+    except Exception as e:
+        logger.error(f"❌ Server error: {e}")
+        if AGENTOPS_AVAILABLE and agentops_session_id:
+            try:
+                agentops.end_session('Fail', end_state_reason=str(e))
+                logger.info("📊 AgentOps session ended with failure status")
+            except Exception as ae:
+                logger.warning(f"⚠️  Failed to end AgentOps session: {ae}")
+        raise
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main()) 
