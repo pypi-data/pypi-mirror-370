@@ -1,0 +1,465 @@
+name: Build and Deploy to Kubernetes
+
+on:
+  # Single, unified trigger: merge commits and direct pushes
+  push:
+    branches:
+      - dv-main
+      - dv-stage
+
+concurrency:
+  # Deduplicate per branch; later pushes cancel earlier in-flight runs
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: desivocalprod01
+  REGION: asia-south1
+  REPOSITORY: ${{ github.ref_name == 'dv-main' && 'ringg-registry-prod' || 'ringg-registry-stage' }}
+  IMAGE_NAME: dv-pipecat
+  # Determine cluster and secrets by target branch
+  TARGET_BRANCH: ${{ github.ref_name }}
+  CLUSTER: ${{ github.ref_name == 'dv-main' && 'desivocal-prod-us-e1-cluster' || 'desivocal-staging-cluster' }}
+  CLUSTER_ZONE: ${{ github.ref_name == 'dv-main' && 'us-east1' || 'asia-south1-a' }}
+  GITHUB_SHA: ${{ github.sha }}
+  # Assuming secrets are named like PROD_SECRETS_JSON / STAGE_SECRETS_JSON etc.
+  # SECRETS_JSON should contain a JSON object like {"VAR1": "value1", "VAR2": "value2"}
+  SECRETS_JSON: ${{ github.ref_name == 'dv-main' && secrets.PROD_SECRETS_JSON || secrets.STAGE_SECRETS_JSON }}
+  # CREDS_JSON should contain the raw content of the creds.json file
+  CREDS_JSON: ${{ github.ref_name == 'dv-main' && secrets.PROD_CREDS_JSON || secrets.STAGE_CREDS_JSON }}
+  # Helm release name
+  HELM_RELEASE_NAME: dv-pipecat
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # Required for Workload Identity Federation
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref_name }}
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Python dependencies (build+publish & checks)
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine requests packaging
+
+    # ---------- SMART RELEASE (inline) ----------
+    - name: Detect src/pipecat changes
+      id: check_changes
+      run: |
+        BASE="${{ github.event.before }}"
+        HEAD="${{ github.sha }}"
+        echo "Base: $BASE"
+        echo "Head: $HEAD"
+        if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+          BASE=$(git rev-parse HEAD^ || echo "")
+          echo "Adjusted Base: $BASE"
+        fi
+        if [ -n "$BASE" ] && git diff --name-only "$BASE" "$HEAD" | grep -q '^src/pipecat'; then
+          echo "HAS_PIPECAT_CHANGES=true" >> $GITHUB_OUTPUT
+          echo "✅ Found changes in src/pipecat"
+        else
+          echo "HAS_PIPECAT_CHANGES=false" >> $GITHUB_OUTPUT
+          echo "ℹ️  No src/pipecat changes detected"
+        fi
+
+    # -- VERSION CHECKS (only when src/pipecat changed on dv-stage) --
+    - name: Get dv-pipecat-ai version from remote-requirements (BASE vs HEAD)
+      if: steps.check_changes.outputs.HAS_PIPECAT_CHANGES == 'true' && github.ref_name == 'dv-stage'
+      id: req_versions
+      run: |
+        set -euo pipefail
+        FILE="examples/ringg-chatbot/remote-requirements.txt"
+        BASE="${{ github.event.before }}"
+        HEAD="${{ github.sha }}"
+        if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+          BASE=$(git rev-parse HEAD^ || echo "")
+        fi
+
+        get_ver_from_blob () {
+          local rev="$1"
+          local file="$2"
+          git show "${rev}:${file}" 2>/dev/null | grep "dv-pipecat-ai" | sed -n 's/.*==\([^]]*\).*/\1/p' || true
+        }
+
+        BASE_VERSION=""
+        if [ -n "$BASE" ]; then
+          BASE_VERSION="$(get_ver_from_blob "$BASE" "$FILE")"
+        fi
+        HEAD_VERSION="$(get_ver_from_blob "$HEAD" "$FILE")"
+        # Fallback for HEAD when file was just added/changed in working tree
+        if [ -z "$HEAD_VERSION" ] && [ -f "$FILE" ]; then
+          HEAD_VERSION=$(grep "dv-pipecat-ai" "$FILE" | sed -n 's/.*==\([^]]*\).*/\1/p' || true)
+        fi
+
+        echo "BASE_VERSION=$BASE_VERSION"
+        echo "HEAD_VERSION=$HEAD_VERSION"
+        echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
+        echo "HEAD_VERSION=$HEAD_VERSION" >> $GITHUB_OUTPUT
+        if [ -z "$HEAD_VERSION" ]; then
+          echo "⚠️ HEAD requirements version not found; treating as unchanged."
+        fi
+
+    - name: Decide release action (compare BASE vs HEAD requirement versions)
+      if: steps.check_changes.outputs.HAS_PIPECAT_CHANGES == 'true' && github.ref_name == 'dv-stage'
+      id: decision
+      run: |
+        BASE_REQ="${{ steps.req_versions.outputs.BASE_VERSION }}"
+        HEAD_REQ="${{ steps.req_versions.outputs.HEAD_VERSION }}"
+        echo "🤔 Decision Logic (remote-requirements.txt):"
+        echo "   BASE dv-pipecat-ai: $BASE_REQ"
+        echo "   HEAD dv-pipecat-ai: $HEAD_REQ"
+        if [ "${HEAD_REQ:-}" = "${BASE_REQ:-}" ]; then
+          echo "SHOULD_RELEASE=true" >> $GITHUB_OUTPUT
+          echo "REASON=Requirement version unchanged; auto-bump needed" >> $GITHUB_OUTPUT
+          echo "✅ Decision: AUTO-RELEASE"
+        else
+          echo "SHOULD_RELEASE=false" >> $GITHUB_OUTPUT
+          echo "REASON=Developer already updated requirement version" >> $GITHUB_OUTPUT
+          echo "⏭️ Decision: SKIP release"
+        fi
+
+    - name: Build package (only when we decided to release)
+      if: steps.decision.outputs.SHOULD_RELEASE == 'true'
+      run: |
+        echo "🔨 Building package with setuptools_scm auto-versioning..."
+        python -m build
+        ls -la dist/
+
+    - name: Extract built version
+      if: steps.decision.outputs.SHOULD_RELEASE == 'true'
+      id: extract_version
+      run: |
+        echo "📦 Extracting version from built artifacts..."
+        WHEEL_FILE=$(ls dist/*.whl | head -1)
+        BUILT_VERSION=$(echo "$WHEEL_FILE" | sed -E 's/.*-([0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+)?)-.*/\1/')
+        echo "BUILT_VERSION=$BUILT_VERSION" >> $GITHUB_OUTPUT
+        echo "🔍 Built version: $BUILT_VERSION"
+
+    - name: Publish to PyPI
+      if: steps.decision.outputs.SHOULD_RELEASE == 'true'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        print-hash: true
+        verbose: true
+
+    - name: Update remote-requirements.txt and push ([skip ci])
+      if: steps.decision.outputs.SHOULD_RELEASE == 'true'
+      run: |
+        BUILT_VERSION="${{ steps.extract_version.outputs.BUILT_VERSION }}"
+        FILE="examples/ringg-chatbot/remote-requirements.txt"
+        echo "📝 Updating $FILE to dv-pipecat-ai==$BUILT_VERSION"
+        CURRENT_DEPS=$(grep "dv-pipecat-ai" "$FILE" | sed -n 's/.*\[\([^]]*\)\].*/\1/p')
+        sed -i.bak "s/dv-pipecat-ai\[.*\]==.*/dv-pipecat-ai[$CURRENT_DEPS]==$BUILT_VERSION/" "$FILE"
+        echo "📋 New line:"
+        grep "dv-pipecat-ai" "$FILE" || true
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add "$FILE"
+        git commit -m "🤖 Auto-bump dv-pipecat-ai to $BUILT_VERSION [skip ci]"
+        git push origin HEAD:${{ github.ref_name }}
+
+    - name: Set PIPECAT_VERSION for deploy path
+      id: set_version
+      run: |
+        # Prefer freshly built version when we released in this run
+        if [ "${{ steps.decision.outputs.SHOULD_RELEASE }}" = "true" ] && [ "${{ steps.extract_version.outputs.BUILT_VERSION }}" != "" ]; then
+          echo "PIPECAT_VERSION=${{ steps.extract_version.outputs.BUILT_VERSION }}" >> $GITHUB_ENV
+        else
+          # If no build occurred, use the HEAD requirements version we read earlier;
+          # if that was unavailable, fall back to reading from the working tree.
+          V="${{ steps.req_versions.outputs.HEAD_VERSION }}"
+          if [ -z "$V" ]; then
+            V=$(grep "dv-pipecat-ai" examples/ringg-chatbot/remote-requirements.txt | sed -n 's/.*==\([^]]*\).*/\1/p' || true)
+          fi
+          [ -n "$V" ] || { echo "❌ Could not determine PIPECAT_VERSION"; exit 1; }
+          echo "PIPECAT_VERSION=$V" >> $GITHUB_ENV
+        fi
+
+    - name: Verify PyPI package availability
+      run: |
+        echo "🔍 Verifying PyPI package availability..."
+        echo "📦 Required pipecat version: $PIPECAT_VERSION"
+        
+        # Show git commit info for debugging
+        echo "📋 Git status for version tracking:"
+        echo "   Current commit: $(git rev-parse HEAD)"
+        echo "   Current branch: $(git branch --show-current)"
+        echo "   Last commit message: $(git log -1 --pretty=format:'%s')"
+        echo "   Trigger: ${{ github.event_name }}"
+        echo "   Target branch: ${{ github.ref_name }}"
+        
+        # Verify package is available on PyPI with retry logic
+        MAX_ATTEMPTS=30
+        ATTEMPT=1
+        PACKAGE_AVAILABLE=false
+        
+        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+          echo "🔍 Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking PyPI for dv-pipecat-ai==$PIPECAT_VERSION"
+          
+          if python scripts/check-pypi-package.py dv-pipecat-ai "$PIPECAT_VERSION"; then
+            PACKAGE_AVAILABLE=true
+            echo "✅ PyPI package verification successful!"
+            break
+          else
+            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+              echo "❌ FAILED: Package dv-pipecat-ai==$PIPECAT_VERSION not available on PyPI after $MAX_ATTEMPTS attempts"
+              echo "🚨 This usually means:"
+              echo "   1. The auto-release workflow failed to publish"
+              echo "   2. PyPI is experiencing delays"
+              echo "   3. Version mismatch between requirements.txt and PyPI"
+              exit 1
+            else
+              WAIT_TIME=$((ATTEMPT * 10))
+              echo "⏳ Package not yet available, waiting ${WAIT_TIME}s before retry..."
+              sleep $WAIT_TIME
+            fi
+          fi
+          ATTEMPT=$((ATTEMPT + 1))
+        done
+        
+        echo "PIPECAT_VERSION=$PIPECAT_VERSION" >> $GITHUB_ENV
+
+    - name: Authenticate to GCP using Workload Identity Federation
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: projects/623676891410/locations/global/workloadIdentityPools/desivocal-staging-pool/providers/github # TODO: Update for production if needed
+        service_account: gke-githubactions-svc-stage@desivocalprod01.iam.gserviceaccount.com # TODO: Update for production if needed
+
+    - name: Configure gcloud
+      run: |
+        gcloud config set project $PROJECT_ID
+        gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+    
+    - name: Set up QEMU for cross-platform builds
+      uses: docker/setup-qemu-action@v3
+    
+    - name: Set up Docker Buildx with cache support
+      uses: docker/setup-buildx-action@v3
+      with:
+        version: latest
+        driver-opts: |
+          network=host
+          image=moby/buildkit:latest
+
+    - name: Build multi-arch Docker image with advanced caching
+      run: |
+        cd examples/ringg-chatbot
+        
+        # Set platform and cache references
+        PLATFORM="linux/${{ github.ref_name == 'dv-main' && 'arm64' || 'amd64' }}"
+        ARCH="${PLATFORM#linux/}"
+        CACHE_REF="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:cache-${{ github.ref_name }}-$ARCH"
+        
+        echo "🚀 Building Docker image with comprehensive caching strategy..."
+        echo "Platform: $PLATFORM"
+        echo "Cache Ref: $CACHE_REF"
+        echo "Image: $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA"
+        
+        docker buildx build \
+          --platform "$PLATFORM" \
+          --cache-from type=gha \
+          --cache-from type=registry,ref=$CACHE_REF \
+          --cache-from type=registry,ref=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:latest \
+          --cache-to type=gha,mode=max \
+          --cache-to type=registry,ref=$CACHE_REF,mode=max \
+          --cache-to type=inline \
+          -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA \
+          -f remote-Dockerfile \
+          --push .
+
+    # - name: Build Docker image
+    #   run: |
+    #     cd examples/ringg-chatbot
+    #     docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA -f remote-Dockerfile .
+
+    # - name: Push Docker image to Artifact Registry
+    #   run: |
+    #     docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA
+
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: v3.13.3 # Specify Helm version if needed
+
+    - name: Connect to GKE
+      uses: google-github-actions/get-gke-credentials@v2
+      with:
+        cluster_name: ${{ env.CLUSTER }}
+        location: ${{ env.CLUSTER_ZONE }}
+
+    - name: Install jq (for parsing JSON secrets)
+      run: sudo apt-get update && sudo apt-get install -y jq
+
+    - name: Create/Update GCP Credentials Secret
+      run: |
+        echo "Creating/Updating Kubernetes secret for GCP credentials..."
+        # Create secret with creds.json key from CREDS_JSON content
+        echo "$CREDS_JSON" | kubectl create secret generic ${{ env.HELM_RELEASE_NAME }}-gcp-creds --from-file=creds.json=/dev/stdin --dry-run=client -o yaml | kubectl apply -f - --overwrite
+      env:
+        CREDS_JSON: ${{ env.CREDS_JSON }}
+
+    - name: Create/Update Application Secrets
+      run: |
+        echo "Creating/Updating Kubernetes secret for application environment variables..."
+        # Build the --from-literal arguments dynamically from the JSON object stored in SECRETS_JSON
+        # This creates one key in the secret for each key in the JSON, matching the file structure expected by read_secret
+        LITERAL_ARGS=$(echo "$SECRETS_JSON" | jq -r 'to_entries | .[] | "--from-literal=\(.key)=\(.value)"' | tr '\n' ' ')
+        if [ -z "$LITERAL_ARGS" ]; then
+          echo "SECRETS_JSON is empty or not valid JSON. Skipping secret creation."
+          # Handle error or create empty secret if absolutely required by envFrom (though optional should be fine)
+          # kubectl create secret generic ${{ env.HELM_RELEASE_NAME }}-app-secrets --dry-run=client -o yaml | kubectl apply -f - --overwrite
+        else
+          kubectl create secret generic ${{ env.HELM_RELEASE_NAME }}-app-secrets $LITERAL_ARGS --dry-run=client -o yaml | kubectl apply -f - --overwrite
+        fi
+      env:
+        SECRETS_JSON: ${{ env.SECRETS_JSON }}
+
+    # Old code
+    # - name: Deploy to GKE using Helm
+    #   run: |
+    #     if [ "${{ github.ref }}" == "refs/heads/dv-main" ]; then
+    #       VALUES_FILE="values-prod.yaml"
+    #       echo "Using production values: $VALUES_FILE"
+    #     else
+    #       VALUES_FILE="values-stage.yaml"
+    #       echo "Using staging values: $VALUES_FILE"
+    #     fi
+
+    #     helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ./k8s/dv-pipecat \
+    #         --set image.repository=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME \
+    #         --set image.tag=$GITHUB_SHA \
+    #         --namespace default \
+    #         -f ./k8s/dv-pipecat/$VALUES_FILE
+    # ---------- DEPLOY ----------
+    # 1) Deploy stage
+    - name: Deploy stage service
+      if: github.ref_name == 'dv-stage'
+      run: |
+        helm upgrade --install $HELM_RELEASE_NAME ./k8s/dv-pipecat \
+          -f ./k8s/dv-pipecat/values-stage.yaml \
+          --set image.repository=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME \
+          --set image.tag=$GITHUB_SHA \
+          --namespace default
+
+    # 2) **ONLY** when branch is dv-main: deploy/update the CANARY release
+    - name: Deploy canary service
+      if: github.ref_name == 'dv-main'
+      run: |
+        echo "🚀 Deploying canary service..."
+        helm upgrade --install ${HELM_RELEASE_NAME}-canary ./k8s/dv-pipecat \
+          -f ./k8s/dv-pipecat/values-prod.yaml \
+          -f ./k8s/dv-pipecat/values-canary.yaml \
+          --set image.repository=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME \
+          --set image.tag=$GITHUB_SHA \
+          --namespace default
+
+    # - name: Deployment validation
+    #   run: |
+    #     echo "🔍 Validating deployment..."
+        
+    #     if [ "${{ github.ref }}" == "refs/heads/dv-stage" ]; then
+    #       DEPLOYMENT_NAME="$HELM_RELEASE_NAME"
+    #       ENVIRONMENT="staging"
+    #     else
+    #       DEPLOYMENT_NAME="${HELM_RELEASE_NAME}-canary"
+    #       ENVIRONMENT="production-canary"
+    #     fi
+        
+    #     echo "📊 Checking deployment: $DEPLOYMENT_NAME"
+        
+    #     # Wait for deployment to be ready
+    #     kubectl rollout status deployment/$DEPLOYMENT_NAME --namespace=default --timeout=300s
+        
+    #     # Check pod status
+    #     READY_PODS=$(kubectl get deployment $DEPLOYMENT_NAME --namespace=default -o jsonpath='{.status.readyReplicas}')
+    #     DESIRED_PODS=$(kubectl get deployment $DEPLOYMENT_NAME --namespace=default -o jsonpath='{.spec.replicas}')
+        
+    #     echo "📈 Pod Status: $READY_PODS/$DESIRED_PODS ready"
+        
+    #     if [ "$READY_PODS" = "$DESIRED_PODS" ] && [ "$READY_PODS" -gt "0" ]; then
+    #       echo "✅ Deployment validation successful for $ENVIRONMENT"
+    #       echo "🎉 All $READY_PODS pods are ready and running"
+          
+    #       # Show running pods
+    #       echo "🔍 Running pods:"
+    #       kubectl get pods -l app.kubernetes.io/name=dv-pipecat --namespace=default
+          
+    #     else
+    #       echo "❌ Deployment validation failed for $ENVIRONMENT"
+    #       echo "🚨 Expected $DESIRED_PODS pods, but only $READY_PODS are ready"
+          
+    #       # Show pod details for debugging
+    #       echo "🔍 Pod details:"
+    #       kubectl get pods -l app.kubernetes.io/name=dv-pipecat --namespace=default
+    #       kubectl describe deployment/$DEPLOYMENT_NAME --namespace=default
+          
+    #       exit 1
+    #     fi
+
+    # - name: Package version verification
+    #   run: |
+    #     echo "🔍 Verifying deployment readiness..."
+        
+    #     if [ "${{ github.ref }}" == "refs/heads/dv-stage" ]; then
+    #       DEPLOYMENT_NAME="$HELM_RELEASE_NAME"
+    #     else
+    #       DEPLOYMENT_NAME="${HELM_RELEASE_NAME}-canary"
+    #     fi
+        
+    #     # Get a pod name from the deployment
+    #     POD_NAME=$(kubectl get pods -l app.kubernetes.io/name=dv-pipecat,app.kubernetes.io/instance=$DEPLOYMENT_NAME --namespace=default -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        
+    #     if [ -n "$POD_NAME" ]; then
+    #       echo "📦 Found running pod: $POD_NAME"
+    #       echo "📊 Expected pipecat version: $PIPECAT_VERSION"
+    #       echo "✅ Deployment verification completed"
+    #     else
+    #       echo "⚠️  Could not find running pod for verification"
+    #     fi
+
+    # - name: Deployment success notification
+    #   run: |
+    #     if [ "${{ github.ref }}" == "refs/heads/dv-stage" ]; then
+    #       ENVIRONMENT="🔧 Staging"
+    #       NEXT_STEP="Ready for production deployment to dv-main"
+    #     else
+    #       ENVIRONMENT="🚀 Production Canary"
+    #       NEXT_STEP="Ready for promotion to stable production"
+    #     fi
+        
+    #     echo "🎉 DEPLOYMENT SUCCESS!"
+    #     echo "   Environment: $ENVIRONMENT" 
+    #     echo "   Pipecat Version: $PIPECAT_VERSION"
+    #     echo "   Image: $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA"
+    #     echo "   Next Step: $NEXT_STEP"
+
+    # - name: Deployment failure notification
+    #   if: failure()
+    #   run: |
+    #     echo "❌ DEPLOYMENT FAILED!"
+    #     echo "🚨 The deployment encountered an error. Check the logs above for details."
+        
+    #     # Show recent events for debugging
+    #     echo "🔍 Recent Kubernetes events:"
+    #     kubectl get events --namespace=default --sort-by='.metadata.creationTimestamp' --field-selector type!=Normal | tail -10
+        
+    #     # Show deployment status
+    #     if [ "${{ github.ref }}" == "refs/heads/dv-stage" ]; then
+    #       kubectl describe deployment/$HELM_RELEASE_NAME --namespace=default || true
+    #     else
+    #       kubectl describe deployment/${HELM_RELEASE_NAME}-canary --namespace=default || true
+    #     fi
