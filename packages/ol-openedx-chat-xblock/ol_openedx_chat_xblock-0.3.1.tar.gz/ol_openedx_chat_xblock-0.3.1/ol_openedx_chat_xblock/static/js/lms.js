@@ -1,0 +1,40 @@
+function OLChatBlock(runtime, element, init_args) {
+    import("https://cdn.jsdelivr.net/npm/@mitodl/smoot-design@6.15.0/dist/bundles/aiChat.es.js").then(aiChat => {
+        const requestOpts = {
+            apiUrl: runtime.handlerUrl(element, 'ol_chat'),
+            transformBody: (messages, { problem_set_title }) => {
+                return {
+                    message: messages[messages.length - 1].content,
+                    problem_set_title: problem_set_title,
+                }
+            },
+            csrfHeaderName: "X-CSRFToken",
+            csrfCookieName: "csrftoken",
+        }
+        aiChat.init(
+            {
+                requestOpts,
+                entryScreenEnabled: false,
+                askTimTitle: init_args.ask_tim_title,
+                problemSetListUrl: init_args.problem_list_url,
+                initialMessages: [
+                    {
+                        role: "assistant",
+                        content: init_args.bot_initial_message,
+                    },
+                ],
+                problemSetInitialMessages: [
+                    {
+                        role: "assistant",
+                        content: init_args.problem_set_initial_message,
+                    },
+                ],
+            },
+            {
+                container: document.getElementById(`ai-chat-container-${init_args.block_id}`),
+            },
+        )
+    }).catch(error => {
+        console.error("Failed to load module:", error);
+    });
+}
