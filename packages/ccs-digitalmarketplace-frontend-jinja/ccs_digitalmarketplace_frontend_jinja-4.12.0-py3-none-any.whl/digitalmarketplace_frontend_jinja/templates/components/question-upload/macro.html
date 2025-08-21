@@ -1,0 +1,69 @@
+{% macro digitalmarketplaceQuestionUpload(params) %}
+{%- from "govuk_frontend_jinja/components/file-upload/macro.html" import govukFileUpload -%}
+{%- from "digitalmarketplace_frontend_jinja/components/question-format-hint/macro.html" import digitalmarketplaceQuestionFormatHint -%}
+{% from "govuk_frontend_jinja/components/button/macro.html" import govukButton %}
+
+{% set name = params.question.id %}
+{% set questionText = params.question.question + " ({})".format(params.question.optional_text if params.question.optional_text else "optional") if params.question.optional else params.question.question %}
+{% set value = params.data[name] if params.data %}
+
+{% if params.question.hint or params.question.question_advice or value %}
+  {% set hintHtml %}
+    {{ digitalmarketplaceQuestionFormatHint(params.question) }}
+    {% if value %}
+      <input type="hidden" id="input-{{ name }}-upload" name="{{ name }}-upload" value="{{ value }}">
+      <ul class="dm-document-upload-list">
+        <li class="dm-document-list-item">
+          <div class="govuk-grid-row">
+            <div class="govuk-grid-column-{{ 'two-thirds' if params.question.optional else 'full' }}">
+              <div class="dm-document-upload-with-icon">
+                <span class="dm-document-icon"></span>
+                Document uploaded {{ value | parse_document_upload_time | datetimeformat }}
+              </div>
+            </div>
+            {% if params.question.optional %}
+              <div class="govuk-grid-column-one-third">
+                {{ govukButton({
+                  "text": "Remove upload",
+                  "name": "remove-upload",
+                  "value": name,
+                  "classes": "govuk-button--secondary",
+                  "preventDoubleClick": true
+                }) }}
+              </div>
+            {% endif %}
+          </div>
+        </li>
+      </ul>
+    {% endif %}
+  {% endset %}
+{% endif %}
+
+{% if params.errors and params.errors[name] %}
+  {% set errorMessage = { "text": params.errors[name]["message"] } %}
+{% elif params.frameworkReusedFrom and value %}
+  {% set errorMessage = {
+    "text": "This answer is from your " + params.frameworkReusedFrom + " declaration",
+    "visuallyHiddenText": "Notice"
+  } %}
+  {% set formGroupClasses = "dm-form-group--declaration-reuse" %}
+{% endif %}
+
+
+{{ govukFileUpload({
+  "name": name,
+  "id": "input-" + name,
+  "label": {
+    "html": questionText,
+    'classes': "govuk-label--m"
+  },
+  "formGroup": {
+    "classes": formGroupClasses
+  },
+  "hint": {
+    'html': hintHtml
+  } if hintHtml,
+  "errorMessage": errorMessage if errorMessage,
+  "javascript": true
+}) }}
+{% endmacro %}
