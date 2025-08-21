@@ -1,0 +1,1 @@
+# This should hold what was in _interact.py inside ipyslides, such as gloabl contextmanager, timer etc.
