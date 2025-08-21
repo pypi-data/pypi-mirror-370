@@ -1,0 +1,122 @@
+name: Test
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  test_linux:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    env:
+      OS: Linux
+    strategy:
+      matrix:
+        include:
+        - python-version: 3.8
+          python-release: v3.8
+          python-impl: CPython
+        - python-version: 3.9
+          python-release: v3.9
+          python-impl: CPython
+        - python-version: "3.10"
+          python-release: v3.10
+          python-impl: CPython
+        - python-version: "3.11"
+          python-release: v3.11
+          python-impl: CPython
+        - python-version: "3.12"
+          python-release: v3.12
+          python-impl: CPython
+        - python-version: "3.13"
+          python-release: v3.13
+          python-impl: CPython
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Update CI requirements
+      run: python -m pip install -U -r .github/workflows/requirements.txt
+    - name: Build extension
+      run: python -m pip install -v -e . --no-build-isolation
+    - name: Test extension without coverage
+      run: python -m unittest -vv pyskani.tests
+
+  test_macos:
+    name: Test (MacOS)
+    runs-on: macos-latest
+    env:
+      OS: MacOS
+    strategy:
+      matrix:
+        include:
+        - python-version: 3.8
+          python-release: v3.8
+          python-impl: CPython
+        - python-version: 3.9
+          python-release: v3.9
+          python-impl: CPython
+        - python-version: "3.10"
+          python-release: v3.10
+          python-impl: CPython
+        - python-version: "3.11"
+          python-release: v3.11
+          python-impl: CPython
+        - python-version: "3.12"
+          python-release: v3.12
+          python-impl: CPython
+        - python-version: "3.13"
+          python-release: v3.13
+          python-impl: CPython
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Update CI requirements
+      run: python -m pip install -U -r .github/workflows/requirements.txt
+    - name: Build extension
+      run: python -m pip install -v -e . --no-build-isolation
+    - name: Test extension without coverage
+      run: python -m unittest -vv pyskani.tests
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v1
+      with:
+        submodules: recursive
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.11"
+    - name: Setup Rust nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: nightly
+        override: true
+    - name: Download cargo-tarpaulin
+      run: |
+          mkdir -p "$HOME/.local/bin"
+          export PATH="$PATH:$HOME/.local/bin"
+          wget 'https://github.com/xd009642/tarpaulin/releases/download/0.32.8/cargo-tarpaulin-x86_64-unknown-linux-gnu.tar.gz' -O- | tar xz -C "$HOME/.local/bin"
+    - name: Measure code coverage
+      run: cargo tarpaulin -v --out Xml --ciserver github-actions
+    - name: Upload coverage statistics
+      uses: codecov/codecov-action@v1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
