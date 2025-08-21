@@ -1,0 +1,3 @@
+from zonevu.Zonevu import Zonevu as Zonevu
+
+def hello() -> None: ...

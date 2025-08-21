@@ -1,0 +1,16 @@
+import numpy as np
+from ..DataModel import DataModel as DataModel
+from ..geospatial.GridGeometry import GridGeometry as GridGeometry
+from _typeshed import Incomplete
+from abc import ABC
+from dataclasses import dataclass, field
+from dataclasses_json import config
+
+@dataclass
+class GriddedData(DataModel, ABC):
+    geometry: GridGeometry | None = ...
+    description: str | None = ...
+    average_value: float | None = ...
+    min_value: float | None = ...
+    max_value: float | None = ...
+    z_values: np.ndarray | None = field(default=None, metadata=config(encoder=Incomplete, decoder=Incomplete))

@@ -1,0 +1,16 @@
+from .Coordinate import Coordinate as Coordinate
+from dataclasses import dataclass, field
+from dataclasses_json import DataClassJsonMixin
+
+@dataclass
+class Polyline(DataClassJsonMixin):
+    dataclass_json_config = ...
+    points: list[Coordinate] = field(default_factory=list[Coordinate])
+    @property
+    def tuples(self) -> list[tuple[float, float]]: ...
+    @property
+    def x(self) -> list[float]: ...
+    @property
+    def y(self) -> list[float]: ...
+    @property
+    def bounds(self) -> tuple[float, float, float, float]: ...
