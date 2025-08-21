@@ -1,0 +1,183 @@
+{#- code_blocks.j2 - Enhanced code rendering with extension features -#}
+
+{#- Macro for rendering code blocks with copy button -#}
+{%- macro render_code_block(code, options={}) -%}
+{%- set language = options.get('language', 'python') -%}
+{%- set caption = options.get('caption', '') -%}
+{%- set emphasize = options.get('emphasize', []) -%}
+{%- set linenos = options.get('linenos', false) -%}
+{%- set copybutton = options.get('copybutton', has_copybutton) -%}
+
+.. code-block:: {{ language }}
+   {%- if caption %}
+   :caption: {{ caption }}
+   {%- endif %}
+   {%- if copybutton %}
+   :class: copybutton
+   {%- endif %}
+   {%- if linenos %}
+   :linenos:
+   {%- endif %}
+   {%- if emphasize %}
+   :emphasize-lines: {{ emphasize|join(',') }}
+   {%- endif %}
+   
+   {{ code|indent(3) }}
+{%- endmacro -%}
+
+{#- Macro for rendering executable code blocks -#}
+{%- macro render_executable_code(code, options={}) -%}
+{%- if has_exec %}
+.. exec_code::
+   :language: python
+   {%- if options.caption %}
+   :caption: {{ options.caption }}
+   {%- endif %}
+   {%- if options.hide_code %}
+   :hide_code:
+   {%- endif %}
+   {%- if options.hide_output %}
+   :hide_output:
+   {%- endif %}
+   
+   {{ code|indent(3) }}
+
+{%- else %}
+{{ render_code_block(code, options) }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering source code with viewcode links -#}
+{%- macro render_source_code(obj) -%}
+{%- if obj.source %}
+{%- if has_copybutton %}
+.. literalinclude:: {{ obj.file }}
+   :language: python
+   :pyobject: {{ obj.name }}
+   :class: copybutton
+   :linenos:
+   :lines: {{ obj.start_line }}-{{ obj.end_line }}
+   {%- if obj.important_lines %}
+   :emphasize-lines: {{ obj.important_lines|join(',') }}
+   {%- endif %}
+
+{%- else %}
+.. code-block:: python
+   :linenos:
+   
+   {{ obj.source|indent(3) }}
+{%- endif %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering code with automatic links -#}
+{%- macro render_autolinked_code(code, imports=[]) -%}
+{%- if has_autolinks %}
+.. code-autolink::
+   :language: python
+   {%- for imp in imports %}
+   :import: {{ imp }}
+   {%- endfor %}
+   
+   {{ code|indent(3) }}
+
+{%- else %}
+{{ render_code_block(code) }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering code diffs -#}
+{%- macro render_code_diff(old_code, new_code, options={}) -%}
+{%- if has_design %}
+.. tab-set::
+
+   .. tab-item:: Before
+      
+      {{ render_code_block(old_code, {'caption': 'Original Code'}) }}
+   
+   .. tab-item:: After
+      
+      {{ render_code_block(new_code, {'caption': 'Updated Code'}) }}
+   
+   .. tab-item:: Diff
+      
+      .. code-block:: diff
+         
+         {{ generate_diff(old_code, new_code)|indent(9) }}
+
+{%- else %}
+**Before:**
+{{ render_code_block(old_code) }}
+
+**After:**
+{{ render_code_block(new_code) }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering inline code -#}
+{%- macro inline_code(text) -%}
+``{{ text }}``
+{%- endmacro -%}
+
+{#- Macro for formatting type annotations -#}
+{%- macro format_type(annotation) -%}
+{%- if not annotation -%}
+Any
+{%- elif annotation is string -%}
+{%- set cleaned = annotation.replace('typing.', '').replace('collections.abc.', '') -%}
+{{ cleaned }}
+{%- else -%}
+{{ annotation }}
+{%- endif -%}
+{%- endmacro -%}
+
+{#- Macro for rendering console/terminal output -#}
+{%- macro render_console_output(output, options={}) -%}
+.. code-block:: console
+   {%- if options.caption %}
+   :caption: {{ options.caption }}
+   {%- endif %}
+   
+   {{ output|indent(3) }}
+{%- endmacro -%}
+
+{#- Macro for rendering JSON data -#}
+{%- macro render_json(data, options={}) -%}
+.. code-block:: json
+   {%- if has_copybutton %}
+   :class: copybutton
+   {%- endif %}
+   {%- if options.caption %}
+   :caption: {{ options.caption }}
+   {%- endif %}
+   
+   {{ data|tojson(indent=2)|indent(3) }}
+{%- endmacro -%}
+
+{#- Macro for rendering YAML data -#}
+{%- macro render_yaml(data, options={}) -%}
+.. code-block:: yaml
+   {%- if has_copybutton %}
+   :class: copybutton
+   {%- endif %}
+   {%- if options.caption %}
+   :caption: {{ options.caption }}
+   {%- endif %}
+   
+   {{ data|indent(3) }}
+{%- endmacro -%}
+
+{#- Helper to generate diff -#}
+{%- macro generate_diff(old, new) -%}
+{%- set old_lines = old.split('\n') -%}
+{%- set new_lines = new.split('\n') -%}
+--- Original
++++ Updated
+@@ -1,{{ old_lines|length }} +1,{{ new_lines|length }} @@
+{%- for line in old_lines %}
+-{{ line }}
+{%- endfor %}
+{%- for line in new_lines %}
++{{ line }}
+{%- endfor %}
+{%- endmacro -%}

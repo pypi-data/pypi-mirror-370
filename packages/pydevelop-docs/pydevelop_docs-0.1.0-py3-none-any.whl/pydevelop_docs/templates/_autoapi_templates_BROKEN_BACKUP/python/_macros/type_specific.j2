@@ -1,0 +1,429 @@
+{#- type_specific.j2 - Type-specific rendering macros for different object types -#}
+
+{#- Main entry point macros for different class types -#}
+{%- macro render_pydantic_model(obj) -%}
+{{ render_pydantic_fields(obj) }}
+{%- endmacro -%}
+
+{%- macro render_agent_class(obj) -%}
+{{ render_agent_details(obj) }}
+{%- endmacro -%}
+
+{%- macro render_tool_class(obj) -%}
+{{ render_tool_details(obj) }}
+{%- endmacro -%}
+
+{%- macro render_enum_class(obj) -%}
+{{ render_enum_values(obj) }}
+{%- endmacro -%}
+
+{%- macro render_exception_class(obj) -%}
+{#- Exception classes can use default rendering -#}
+{%- endmacro -%}
+
+{%- macro render_dataclass(obj) -%}
+{{ render_pydantic_fields(obj) }}
+{%- endmacro -%}
+
+{#- Macro for rendering Pydantic model fields -#}
+{%- macro render_pydantic_fields(obj) -%}
+{%- if obj.fields %}
+.. list-table:: Model Fields
+   :header-rows: 1
+   :widths: 20 20 15 45
+   
+   * - Field
+     - Type
+     - Required
+     - Description
+   {%- for field in obj.fields %}
+   * - ``{{ field.name }}``
+     - {{ format_field_type(field.type) }}
+     - {{ '✓' if field.required else '✗' }}
+     - {{ field.description|default('') }}
+       {%- if field.default %}
+       
+       **Default**: ``{{ field.default }}``
+       {%- endif %}
+       {%- if field.validators %}
+       
+       **Validators**: {{ field.validators|join(', ') }}
+       {%- endif %}
+   {%- endfor %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering Agent-specific information -#}
+{%- macro render_agent_details(obj) -%}
+{%- if obj.tools %}
+
+Available Tools
+~~~~~~~~~~~~~~~
+
+{%- if has_design %}
+.. grid:: 1 1 2 3
+   :gutter: 2
+
+   {%- for tool in obj.tools %}
+   .. grid-item-card:: {{ tool.name }}
+      :class-card: tool-card
+      
+      {{ tool.description }}
+      
+      {%- if tool.parameters %}
+      **Parameters**: {{ tool.parameters|join(', ') }}
+      {%- endif %}
+   {%- endfor %}
+{%- else %}
+{%- for tool in obj.tools %}
+* **{{ tool.name }}** - {{ tool.description }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+
+{%- if obj.config %}
+
+Configuration
+~~~~~~~~~~~~~
+
+.. code-block:: python
+   
+   {{ obj.config|pprint|indent(3) }}
+{%- endif %}
+
+{%- if obj.workflow %}
+
+Workflow
+~~~~~~~~
+
+{%- if has_mermaid %}
+.. mermaid::
+   
+   flowchart TD
+   {%- for step in obj.workflow.steps %}
+   {{ step.id }}[{{ step.label }}]
+   {%- if step.next %}
+   {{ step.id }} --> {{ step.next }}
+   {%- endif %}
+   {%- endfor %}
+{%- else %}
+{%- for step in obj.workflow.steps %}
+{{ loop.index }}. {{ step.label }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering Tool-specific information -#}
+{%- macro render_tool_details(obj) -%}
+{%- if obj.parameters %}
+
+Parameters
+~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   
+   * - Parameter
+     - Type
+     - Required
+     - Description
+   {%- for param in obj.parameters %}
+   * - ``{{ param.name }}``
+     - {{ param.type }}
+     - {{ '✓' if param.required else '✗' }}
+     - {{ param.description }}
+   {%- endfor %}
+{%- endif %}
+
+{%- if obj.returns %}
+
+Returns
+~~~~~~~
+
+:Type: {{ obj.returns.type }}
+:Description: {{ obj.returns.description }}
+{%- endif %}
+
+{%- if obj.tool_schema %}
+
+Tool Schema
+~~~~~~~~~~~
+
+.. code-block:: json
+   
+   {{ obj.tool_schema|tojson(indent=2)|indent(3) }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering Enum values -#}
+{%- macro render_enum_values(obj) -%}
+{%- if obj.members %}
+
+Enum Values
+~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   
+   * - Name
+     - Value
+     - Description
+   {%- for member in obj.members %}
+   * - ``{{ member.name }}``
+     - ``{{ member.value }}``
+     - {{ member.description|default('') }}
+   {%- endfor %}
+{%- endif %}
+
+{%- if has_copybutton %}
+.. admonition:: Usage Example
+   :class: tip
+
+   .. code-block:: python
+      :class: copybutton
+      
+      from {{ obj.module }} import {{ obj.name }}
+      
+      # Use enum values
+      {%- for member in obj.members[:3] %}
+      value = {{ obj.name }}.{{ member.name }}
+      {%- endfor %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering FastAPI route information -#}
+{%- macro render_route_info(obj) -%}
+{%- if obj.routes %}
+
+API Routes
+~~~~~~~~~~
+
+{%- for route in obj.routes %}
+.. card:: {{ route.method }} {{ route.path }}
+   :class-card: api-route
+   
+   {{ route.description }}
+   
+   {%- if route.parameters %}
+   **Parameters:**
+   {%- for param in route.parameters %}
+   * ``{{ param.name }}`` ({{ param.type }}) - {{ param.description }}
+   {%- endfor %}
+   {%- endif %}
+   
+   {%- if route.response_model %}
+   **Response Model:** :class:`{{ route.response_model }}`
+   {%- endif %}
+   
+   {%- if route.status_codes %}
+   **Status Codes:**
+   {%- for code, desc in route.status_codes.items() %}
+   * ``{{ code }}`` - {{ desc }}
+   {%- endfor %}
+   {%- endif %}
+{%- endfor %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering Protocol/ABC information -#}
+{%- macro render_protocol_info(obj) -%}
+{%- if obj.abstract_methods %}
+
+Abstract Methods
+~~~~~~~~~~~~~~~~
+
+The following methods must be implemented by subclasses:
+
+{%- for method in obj.abstract_methods %}
+* :meth:`{{ method.name }}` - {{ method.summary|default('Must be implemented') }}
+{%- endfor %}
+{%- endif %}
+
+{%- if obj.protocol_members %}
+
+Protocol Members
+~~~~~~~~~~~~~~~~
+
+Classes implementing this protocol must provide:
+
+{%- for member in obj.protocol_members %}
+* ``{{ member.name }}`` ({{ member.type }}) - {{ member.description }}
+{%- endfor %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering configuration class details -#}
+{%- macro render_config_class(obj) -%}
+{%- if obj.config_sections %}
+
+Configuration Sections
+~~~~~~~~~~~~~~~~~~~~~~
+
+{%- if has_tabs %}
+.. tab-set::
+
+   {%- for section in obj.config_sections %}
+   .. tab-item:: {{ section.name }}
+      
+      {{ section.description }}
+      
+      .. code-block:: {{ section.format|default('yaml') }}
+         
+         {{ section.example|indent(9) }}
+   {%- endfor %}
+{%- else %}
+{%- for section in obj.config_sections %}
+
+{{ section.name }}
+{{ '^' * section.name|length }}
+
+{{ section.description }}
+
+.. code-block:: {{ section.format|default('yaml') }}
+   
+   {{ section.example|indent(3) }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+
+{%- if obj.environment_variables %}
+
+Environment Variables
+~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   
+   * - Variable
+     - Default
+     - Description
+   {%- for var in obj.environment_variables %}
+   * - ``{{ var.name }}``
+     - ``{{ var.default|default('None') }}``
+     - {{ var.description }}
+   {%- endfor %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Helper macro to format field types -#}
+{%- macro format_field_type(type_str) -%}
+{%- if has_autolinks %}
+:class:`{{ type_str }}`
+{%- else %}
+``{{ type_str }}``
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering state machine classes -#}
+{%- macro render_state_machine(obj) -%}
+{%- if obj.states %}
+
+State Machine
+~~~~~~~~~~~~~
+
+{%- if has_mermaid %}
+.. mermaid::
+   
+   stateDiagram-v2
+   {%- for state in obj.states %}
+   {{ state.name }}{% if state.description %}: {{ state.description }}{% endif %}
+   {%- endfor %}
+   
+   {%- for transition in obj.transitions %}
+   {{ transition.from }} --> {{ transition.to }}: {{ transition.event }}
+   {%- endfor %}
+{%- else %}
+**States:**
+{%- for state in obj.states %}
+* {{ state.name }} - {{ state.description }}
+{%- endfor %}
+
+**Transitions:**
+{%- for transition in obj.transitions %}
+* {{ transition.from }} → {{ transition.to }} ({{ transition.event }})
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering database model information -#}
+{%- macro render_database_model(obj) -%}
+{%- if obj.table_name %}
+
+Database Table
+~~~~~~~~~~~~~~
+
+:Table Name: ``{{ obj.table_name }}``
+{%- if obj.indexes %}
+:Indexes: {{ obj.indexes|join(', ') }}
+{%- endif %}
+{%- if obj.constraints %}
+:Constraints: {{ obj.constraints|join(', ') }}
+{%- endif %}
+
+{%- if obj.columns %}
+
+Columns
+~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   
+   * - Column
+     - Type
+     - Nullable
+     - Key
+   {%- for col in obj.columns %}
+   * - ``{{ col.name }}``
+     - {{ col.type }}
+     - {{ '✓' if col.nullable else '✗' }}
+     - {{ col.key|default('') }}
+   {%- endfor %}
+{%- endif %}
+
+{%- if obj.relationships %}
+
+Relationships
+~~~~~~~~~~~~~
+
+{%- for rel in obj.relationships %}
+* **{{ rel.name }}** → :class:`{{ rel.target }}` ({{ rel.type }})
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering event emitter classes -#}
+{%- macro render_event_emitter(obj) -%}
+{%- if obj.events %}
+
+Events
+~~~~~~
+
+{%- if has_design %}
+.. grid:: 1 1 2 2
+   :gutter: 2
+
+   {%- for event in obj.events %}
+   .. grid-item-card:: {{ event.name }}
+      :class-card: event-card
+      
+      {{ event.description }}
+      
+      **Payload**: ``{{ event.payload_type }}``
+      
+      .. code-block:: python
+         
+         # Subscribe to event
+         obj.on('{{ event.name }}', handler)
+   {%- endfor %}
+{%- else %}
+{%- for event in obj.events %}
+* **{{ event.name }}** - {{ event.description }}
+  
+  Payload: ``{{ event.payload_type }}``
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- endmacro -%}
