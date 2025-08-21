@@ -1,0 +1,190 @@
+"""
+{{ agent_name }} - A2A Server Implementation
+
+Auto-generated utility agent that exposes {{ mcp_server_name }} via A2A protocol.
+This is a simplified all-in-one implementation.
+"""
+
+import asyncio
+import json
+import logging
+import os
+from typing import Dict, Any, Optional
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.events.event_queue import EventQueue
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.types import AgentCard, AgentSkill, AgentCapabilities
+from a2a.utils import new_agent_text_message
+import uvicorn
+from crewai import Task
+
+# Import the MCP agent builder and run function
+from traia_iatp.mcp import MCPServerConfig, MCPAgentBuilder, run_with_mcp_tools, MCPServerInfo
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load agent configuration
+with open("agent_config.json", "r") as f:
+    config = json.load(f)
+
+# Create MCP configuration
+mcp_config = MCPServerConfig(
+    name=config["mcp_server"]["name"],
+    url=config["mcp_server"]["url"],
+    description=config["mcp_server"]["description"],
+    server_type=config["mcp_server"].get("server_type", "streamable-http"),
+    capabilities=config["mcp_server"].get("capabilities", []),
+    metadata=config["mcp_server"].get("metadata", {})
+)
+
+# Create MCP server info for use with run_with_mcp_tools
+mcp_server_info = MCPServerInfo(
+    id="",  # Not needed for direct usage
+    name=mcp_config.name,
+    url=mcp_config.url,
+    description=mcp_config.description,
+    server_type=mcp_config.server_type,
+    capabilities=mcp_config.capabilities,
+    metadata=mcp_config.metadata,
+    tags=mcp_config.metadata.get("tags", [])
+)
+
+# Get MCP server API key if required
+{% if requires_api_key %}
+# Check for API keys required by the MCP server
+MCP_API_KEY = None
+{% for api_key_name in api_keys %}
+if not MCP_API_KEY and os.getenv("{{ api_key_name }}"):
+    MCP_API_KEY = os.getenv("{{ api_key_name }}")
+    logger.info(f"Using API key from {{ api_key_name }} environment variable")
+{% endfor %}
+
+if not MCP_API_KEY:
+    logger.warning("No API key found for MCP server authentication.")
+    logger.warning("The MCP server requires one of these environment variables to be set:")
+    {% for api_key_name in api_keys %}
+    logger.warning("  - {{ api_key_name }}")
+    {% endfor %}
+{% else %}
+MCP_API_KEY = None
+{% endif %}
+
+
+class {{ class_name }}AgentExecutor(AgentExecutor):
+    """Agent executor for {{ agency_name }}."""
+    
+    def __init__(self):
+        self.mcp_config = mcp_config
+        self.mcp_server_info = mcp_server_info
+    
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        """Process a request using the {{ agency_name }} capabilities."""
+        try:
+            # Get the user's request from context
+            request_text = context.get_user_input()
+            if not request_text:
+                await event_queue.enqueue_event(
+                    new_agent_text_message("No user message provided")
+                )
+                return
+            
+            # Get additional context if provided
+            task_context = {}
+            if hasattr(context, 'metadata'):
+                task_context = context.metadata or {}
+            
+            # Create an agent for this request
+            agent = MCPAgentBuilder.create_agent(
+                role=f"{config['name']} Specialist",
+                goal=f"Process the request using {self.mcp_config.name} capabilities",
+                backstory=f"You are an expert at using {self.mcp_config.name}. {self.mcp_config.description}"
+            )
+            
+            # Create a task
+            task = Task(
+                description=request_text,
+                expected_output="The processed result based on the request",
+                agent=agent
+            )
+            
+            # Run with MCP tools
+            result = run_with_mcp_tools(
+                tasks=[task],
+                mcp_server=self.mcp_server_info,
+                inputs=task_context,
+                skip_health_check=True,  # Skip for production usage
+                api_key=MCP_API_KEY  # Pass the API key if available
+            )
+            
+            # Send the result as agent message
+            await event_queue.enqueue_event(
+                new_agent_text_message(str(result))
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing request: {e}")
+            await event_queue.enqueue_event(
+                new_agent_text_message(f"Error processing request: {str(e)}")
+            )
+
+
+def create_app():
+    """Create the A2A application."""
+    # Create agent skill
+    skill = AgentSkill(
+        id="process_request",
+        name=f"Process request using {config['name']}",
+        description=config["description"],
+        examples=config.get("a2a_config", {}).get("skill_examples", [
+            "Help me with this request",
+            "Process this data"
+        ])
+    )
+    
+    # Create capabilities
+    capabilities = AgentCapabilities(
+        streaming=False,
+        pushNotifications=False,
+        stateTransitionHistory=False
+    )
+    
+    # Create agent card
+    agent_card = AgentCard(
+        name=config["agency_id"],
+        description=config["description"],
+        url=f"http://0.0.0.0:{os.environ.get('PORT', 8000)}",
+        version=config["version"],
+        capabilities=capabilities,
+        skills=[skill]
+    )
+    
+    # Create executor
+    executor = {{ class_name }}AgentExecutor()
+    
+    # Create task store and request handler
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandler(
+        agent_executor=executor,
+        task_store=task_store
+    )
+    
+    # Create the A2A application
+    app = A2AStarletteApplication(
+        agent_card=agent_card,
+        http_handler=request_handler
+    )
+    
+    return app
+
+
+if __name__ == "__main__":
+    # Get port from environment variable (for Cloud Run compatibility)
+    port = int(os.environ.get("PORT", 8000))
+    logger.info(f"Starting {config['name']} on port {port}")
+    
+    # Create and run the app
+    app = create_app()
+    uvicorn.run(app.build(), host="0.0.0.0", port=port) 
