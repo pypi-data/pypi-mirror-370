@@ -1,0 +1,75 @@
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2018-2024 CERN.
+#
+# invenio-app-ils is free software; you can redistribute it and/or modify it
+# under the terms of the MIT License; see LICENSE file for more details.
+
+services:
+  # Load balancer
+  lb:
+    extends:
+      file: docker-services.yml
+      service: lb
+    links:
+      - frontend
+  # UI React application
+  frontend:
+    extends:
+      file: docker-services.yml
+      service: frontend
+    volumes:
+      - static_data:/opt/invenio_app_ils/var/instance
+    links:
+      - backend
+  # Invenio backend application
+  backend:
+    extends:
+      file: docker-services.yml
+      service: backend
+    command: uwsgi --module invenio_app.wsgi:application --socket 0.0.0.0:5000 --master --processes 2 --threads 2 --stats /tmp/stats.socket
+    volumes:
+      - static_data:/opt/invenio_app_ils/var/instance
+    links:
+      - cache
+      - search
+      - mq
+      - db
+  # Worker
+  worker:
+    extends:
+      file: docker-services.yml
+      service: backend
+    command: "celery -A invenio_app.celery worker --loglevel=INFO"
+    image: invenio_app_ils-worker
+    links:
+      - cache
+      - search
+      - mq
+      - db
+  # Monitoring
+  flower:
+    extends:
+      file: docker-services.yml
+      service: flower
+    links:
+      - mq
+  # Base services
+  cache:
+    extends:
+      file: docker-services.yml
+      service: cache
+  db:
+    extends:
+      file: docker-services.yml
+      service: db
+  mq:
+    extends:
+      file: docker-services.yml
+      service: mq
+  search:
+    extends:
+      file: docker-services.yml
+      service: search
+volumes:
+  static_data:
