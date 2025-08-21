@@ -1,0 +1,2 @@
+class FrogmlResourceNotFound(Exception):
+    pass
