@@ -1,0 +1,166 @@
+Metadata-Version: 2.3
+Name: pyciv7
+Version: 1.0.1
+Summary: Python bindings for the Sid Meier's Civilization VII Software Development Kit (SDK)
+Keywords: civilization,civ7,sdk,python bindings
+Author: Dylan Manuel
+License: MIT License
+         
+         Copyright (c) 2025 Dylan Manuel
+         
+         Permission is hereby granted, free of charge, to any person obtaining a copy
+         of this software and associated documentation files (the "Software"), to deal
+         in the Software without restriction, including without limitation the rights
+         to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+         copies of the Software, and to permit persons to whom the Software is
+         furnished to do so, subject to the following conditions:
+         
+         The above copyright notice and this permission notice shall be included in all
+         copies or substantial portions of the Software.
+         
+         THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+         IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+         FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+         AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+         LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+         OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+         SOFTWARE.
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Games/Entertainment
+Requires-Dist: pydantic-settings>=2.0.3
+Requires-Dist: pydantic-xml>=2.17.3
+Requires-Dist: rich>=13.8.1
+Requires-Dist: sqlmodel>=0.0.24
+Requires-Dist: transcrypt>=3.9.4
+Requires-Python: >3.8, <3.14
+Project-URL: Bug Tracker, https://github.com/dmanuel64/pyciv7/issues
+Project-URL: Homepage, https://github.com/dmanuel64/pyciv7
+Project-URL: Repository, https://github.com/dmanuel64/pyciv7
+Description-Content-Type: text/markdown
+
+<!-- markdownlint-disable first-line-heading -->
+![Build Status](https://github.com/dmanuel64/pyciv7/actions/workflows/test.yml/badge.svg?branch=main)
+![PyPI](https://img.shields.io/pypi/v/pyciv7)
+![Python Version](https://img.shields.io/pypi/pyversions/pyciv7)
+![License](https://img.shields.io/github/license/dmanuel64/pyciv7)
+
+
+# `pyciv7`
+
+Python bindings for the **Sid Meier’s Civilization VII SDK**.
+
+Easily build, validate, and package Civilization 7 mods using Python instead of hand-writing `.modinfo` XML.
+
+## Features
+
+- **High-level mod definition**: Define your mods in Pydantic models and export `.modinfo` XML automatically.
+- **Validation & recommendations**: Get warnings when mod metadata is missing or incorrectly formatted.
+- **SQLAlchemy integration**: Embed SQLAlchemy queries directly into your mods instead of writing raw SQL files.
+- **Settings auto-detection**: Automatically detects Civ7 installation and settings directories across Windows, macOS, and Linux.
+
+## Quick Example
+
+```python
+import pyciv7
+from pyciv7.modinfo import *
+from sqlalchemy import text
+
+sql_statement = text(
+    "INSERT INTO Types"
+    "\n        (Type,                              Kind)"
+    "\nVALUES  ('TRADITION_FXS_CYLINDER_SEALS',    'KIND_TRADITION');"
+    "\n"
+    "\nINSERT INTO TraditionModifiers"
+    "\n  ("
+    "\n   TraditionType,"
+    "\n   ModifierId"
+    "\n  )"
+    "\nVALUES ("
+    "\n   'TRADITION_PANJI',"
+    "\n   'MOD_FXS_TRADITION_PANJI_QUARTER_CULTURE'"
+    "\n  ),"
+    "\n  ("
+    "\n   'TRADITION_PANJI',"
+    "\n   'MOD_FXS_TRADITION_PANJI_QUARTER_CULTURE_ISLAND'"
+    "\n  );"
+)
+
+mod = Mod(
+    id="fxs-new-policies",
+    version="1",
+    properties=Properties(
+        name="Antiquity Policies",
+        description="Adds new policies to the Antiquity Age",
+        authors="Firaxis",
+        affects_saved_games=True,
+    ),
+    action_criteria=[
+        Criteria(
+            id="antiquity-age-current",
+            conditions=[AgeInUse(age="AGE_ANTIQUITY")],
+        )
+    ],
+    action_groups=[
+        ActionGroup(
+            id="antiquity-game",
+            scope="game",
+            criteria="antiquity-age-current",
+            # Items can still be a relative path to a SQL/XML file
+            actions=[UpdateDatabase(items=[sql_statement])],
+        )
+    ],
+)
+
+# If you want to use a dictionary instead of importing all the models, you can also do
+# Mod.model_validate({"id": "fxs-new-policies", "properties": {"name": "Antiquity Policies"}, ... etc.})
+pyciv7.build(mod)
+```
+
+This Python snippet produces a `.modinfo` XML similar to the SDK's "Getting Started" example:
+
+```xml
+<Mod id="fxs-new-policies" version="1" xmlns="ModInfo">
+    <Properties>
+        <Name>Antiquity Policies</Name>
+        <Description>Adds new policies to the Antiquity Age</Description>
+        <Authors>Firaxis</Authors>
+        <AffectsSavedGames>1</AffectsSavedGames>
+    </Properties>
+    <ActionCriteria>
+        <Criteria id="antiquity-age-current">
+            <AgeInUse>AGE_ANTIQUITY</AgeInUse>
+        </Criteria>
+    </ActionCriteria>
+    <ActionGroups>
+        <ActionGroup id="antiquity-game" scope="game" criteria="antiquity-age-current">
+            <Actions>
+                <UpdateDatabase>
+                    <Item>sql_statements/65a41eff-c3b5-4982-92d1-ee02ea02e9b8.sql</Item>
+                </UpdateDatabase>
+            </Actions>
+        </ActionGroup>
+    </ActionGroups>
+</Mod>
+```
+
+## Installation
+
+With `uv` (preferred):
+
+```bash
+uv add pyciv7
+```
+
+Or with `pip`:
+
+```bash
+pip install pyciv7
+```
