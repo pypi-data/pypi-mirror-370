@@ -1,0 +1,1614 @@
+This is the input file for MAKESETUP which makes the standard
+   SCHED setup files.  Very incomplete history below.  To use
+   this file, simply go to $SCHED/setups and type makesetup (if
+   it is in the path).  makesetup is maintained in 
+   $SCHED/RELATED_CODE/MAKESETUP
+
+****  WARNING ABOUT DELETES **** 
+There are some setup files that are not built with
+this mechanism.  They are mer*.set, lba*.set.  Do not delete them if
+cleaning out the files produced by this protram.
+*********************************
+
+
+   29 Mar 1995.  Add some Effelsberg VLBA parameters.  Avoid 1:4 2bit 
+                 pol.  Get rid of LO offsets.  RCW
+   8 May 1995    Allow 1:4 2bit single pol. (Modes 64-2-2 and 128-4-2) 
+                 RCW.
+   26 Feb 1996   Put back 16 track barrel roll on unity speed up obs. 
+                 RCW
+   13 Apr 1996   Removed tape speed.  Allow default.
+   15 Nov 1996   Major changes reflecting new defaulting capabilities
+                 in SCHED.
+   26 Mar 1997   Add Mark IV and S2 stations.
+   12 Jun 1997   Add a lot of Mark IV stuff and utilize big 
+                 modifications to makesetup and some changes to SCHED.
+   14 Jul 1997   Add 512 Mbps modes.
+    8 Aug 1997   Roll off in vsop modes.
+   30 Sep 1997   Alter vsop18cmvla frequencies.
+   20 Apr 1998   Add EVN/MERLIN standard 18 cm modes.  Check some others 
+                 against current EVN codes.sch.  Didn't have the patience
+                 to check all the odd ones.
+   28 Aug 2007   Add 24 GHz to pointing.
+   18 Sep 2008   Remove (comment out) MarkII and MarkIII
+   13 Feb 2012   Add a 7mm dummy setup for the RDBE_PFB for reference pointing.
+   16 Jan 2013   Actually delete some commented setups (eg M3)
+                 Add EVLA pointing setups.  Start on RDBE setups.
+   10 Jan 2014   Copy this file to Master_setups_preDDC.
+                 Copy current setups to OLD_JAN2014.
+                 Then convert all appropriate files to use the DDC.
+                 In most cases, this doesn't actually mean much change.
+                 One required change is that the offset LO for pulse
+                 cal change from 0.99 or 0.49 to 0.75 because of the 
+                 combined DDC and legacy system tuning restrictions.
+                 Many files deleted.  Can be founs on the copy above if needed.
+                 Get rid of 1 bit cases.
+--------------------------------------------------------------------
+Lead comments from makesetup.f:
+
+C     Items in the master file:
+C
+C     Modes:  Specified between #mode <name> and #end.
+C             Inserted as new lines wherever @mode <name> appears 
+C             later in file. Modes are meant to be blocks of lines
+C     Files:  Specified between #file <name> and #end
+C             Causes an output file to be written.
+C     Variables: Specified with #<name>.  Everything else on that
+C             line up to a ";" or the end of the line is the value.  
+C             Other things can be earlier on the line or after the
+C             ";".  If the value ends with a comma, the whole next 
+C             line will also be included (limit - one extra line).
+C             The line or lines will be substituted wherever @<name> 
+C             appears.  Anything else on the line with the 
+C             $name will be preserved.
+C             The variable definition must be specified in the #file 
+C             or the modes included in the #file.  However its 
+C             position relative to its use does not matter.  Functions
+C             may be included in variables.  Of course, #mode and 
+C             #file are reserved for invoking modes and files.
+C     "if"    ?<name> to ?end is only included if the named variable   
+C             is not blank.  These can be anywhere on their lines.
+C             and many lines can be included.
+C
+C     Functions: name ends with (.  Argument list ends with ) and items
+C     are separated with blanks.
+C     There are a few built in:
+C
+C        bbc(    Requires a value for NCHAN have been set.
+C                5 arguments:  a, bbc(i),i=1,4
+C                gives:  bbc(i) = bbc(mod(i,4)+1) + int((i+1)/4)*a
+C                Anything beyond the *bbc spec in the line will be lost.
+C                Note that SCHED has good BBC defaulting so this is
+C                probably no longer needed.
+C        side(   Set the sidebands.  Takes 4 arguments such as 
+C                'L L U U'.
+C                Will repeat that pattern to the number of channels. 
+C        foff(   Set the frequency offsets.  3 or 4 arguments.  First 
+C                is number of times to repeat each one.  Second is 
+C                multiplier of bandwidth for the increment.  Third is
+C                the lowest offset.  The optional fourth is the offset
+C                of the nchan/2+1 channel (for s/x).
+C        freq(   Set the reference frequencies.  If there is one
+C                argument, it is all that is given (used for all
+C                channels.  If a second is given (eg s/x), it is
+C                used for the second half of the channels.
+C
+C     Lines not in a mode or file will be ignored.
+C     Substitution of modes happens whenever the mode request is
+C     found.
+C
+C     The #mode and #file sections can be in any order.  Everything
+C     will be read in before anything is written out so any #mode
+C     sections will be available for expansion by the time it is
+C     needed.  There can be only one instance of each mode or file.
+C     Variables can change at any time and the most recently seen
+C     one after expansion of the modes will be used.
+
+More mathematical descriptions of the functions:
+
+  function bbc( a bbc(1) bbc(2) bbc(3) bbc(4) )
+       bbc(i) = bbc(mod(i,4)+1) + a * int((i-1)/4)
+       for i = 5, nchan.
+  function side( side(1) side(2) side(3) side(4) )
+       side(i) = side( mod(i-1,4 +1 )   
+       for i = 5, nchan
+  function foff( nrep incr foff1 foff2 )
+       foff(i) = foff1 + bw*incr*((i-1)/nrep) for i = 1, nchan/2   
+       foff(i) = foff2 + bw*incr*((i-nchan/2-1)/nrep) for i = 2, nchan
+       foff2 can be omitted in which case the form for foff1 will 
+         apply for all channels.
+  function freq( freq1 freq2 ) 
+       freq(i) = freq1  for i = 1, nchan/2
+       freq(i) = freq2  for i = nchan/2+1, nchan
+       Only one value given if freq1=freq2
+
+-------------------------------------------------------------
+SCHED DEFAULTS:
+
+      logging  = standard
+      ifdist   = 0,0,0,0
+      noise    = low-s,low-s,low-s,low-s
+      period   = 1  
+      level    = -1 
+      pcal     = '1MHz'
+      bbc      = Appropriate choice with knowledge of MKIV constraints.
+      format   = Appropriate for DAR for station from station catalog.
+      dbe      = rdbe_ddc for VLBA.  dbbc_ddc for dbbc stations.  Others blank.
+      station  = Stations in schedule in scans that use this setup.
+      netside  = Depends on DAR and first LO.  For RDBE_DDC, U, U... 
+                 unless some station has too few BBCs.
+      track1, track2 ... will be set to appropriate values for the mode.
+      pcalxb1, pcalxb2, pcalfr1, and pcalfr2:
+        Detect the first 16 of the following:
+           1.  Lowest frequency pcal tone in each channel - sign bit only.
+           2.  Highest frequency pcal tone in each channel - sign bit only.
+           3.  State counts - both bits for 2 bit data.
+           4.  Pcal tone 1 MHz up from first - sign bit only.
+        The net sideband must be known to set pcalfr1 and pcalfr2.  Either
+        give it with netside or use FREQREF.  Otherwise only state counts
+        will be done.
+
+      if FORMAT=VLBA or MKIV, fan out is picked to give speedup 2.
+
+-------------------------------------------------------------
+   USEFUL SCHED CONVENTIONS:
+
+   firstlo, bbfilt, and bits are set all the same if only 1 is given.
+       Warning - if all channels were set for one station, they must all
+       be set for later stations.
+
+   station=VLBA  works for all VLBA stations.
+
+   FREQUENCY SETTING:  
+      The BBC frequencies can be set from:
+       1.  BBSYN(ICH) can be set directly.
+       2.  BBSYN(ICH) = ABS( FREQREF(ICH) + FREQOFF(ICH) - FIRSTLO(ICH) )
+      The BBC sideband can be set from:
+       1.  SIDEBAND(ICH) sets it directly.
+       2.  It will be deduced from NETSIDE(ICH) and FREQREF(ICH) if
+           those are given.
+      For nearly all of the standard setups, FREQREF+FREQOFF+NETSIDE 
+      will be used and the frequency catalog will be relied upon 
+      for FIRSTLO etc.
+
+   MARK III and S2
+      Mark III modes removed Sept. 18, 2008.  Mark III is long gone.  RCW.
+      S2 removed Jan 10, 2014, to the extent there was any.
+
+   MODES
+      Below are a series of "mode"s.  Each either defines a channelization
+      and recording mode, or defines the receiver setup and base frequency
+      for a band.  Most "file" specifications use one of each.
+
+   Keep lines less than 120 characters long in Master_setup.  Keep less than
+   80 characters in the setup files.
+
+-------------------------------------------------------------------------
+
+The following is the basic shell for all (nearly all) files.
+It positions information set with variables elsewhere.
+Note that the ?xstation sections are only included if there
+are stations of that type.  If they are not included, the format
+is all skipped as is best for SCHEDs defaulting.
+
+Makesetup will add a / at the end if there is none.
+
+#mode shell
+  freqref  = @freq
+  freqoff  = @foff
+  netside  = @side
+  pol      = @pol
+  ?vstation
+!
+!  VLBA recorders with VLBA control
+!
+  @vformat
+  station  = @vstation
+  / ?end
+  ?fstation
+!
+!  VLBA recorders with VEX control.
+!
+  @vformat
+  station  = @fstation
+  / ?end
+  ?4station
+!
+!  MkIV recorders with VEX control.
+!  Be careful about BBC asignments.
+!
+  @4format
+  station  = @4station
+  / ?end
+#end
+
+-------------------------------------------------------------
+Removed tape speed/duration information.  RIP tapes.
+--------------------------------------------------------------
+Basic information including reference frequency and 
+station lists for each band.  Also some top-of-file comments.
+Note, give two numbers in the definition of @freq.  It they
+are different, they are treated appropriately for sx with
+equal numbers of channels in each band.
+
+Most frequencies are the old Mark II network standards.
+
+If no stations are given of any type, SCHED will default to
+the stations in the schedule.  Also, this will cause FORMAT
+not to be specified.
+
+#mode 90cm
+!      For the 90 cm band.
+!        May want LO offset at PT when correlator can do it.
+!      Reference frequency is Mark II network standard
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 325.75 )
+#end
+
+
+#mode 50cm
+!      For the 50 cm band.
+!        Radio Astronomy allocation:  608-614
+!        VLBA narrow filter:  609-613
+!        EB: 595-626  GB: ?
+!        use lcp50cm=BROAD and rcp50cm=BROAD to switch out filter.
+!      Reference frequency is Mark II network standard
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 607.75 )
+#end
+
+
+#mode 18cm
+!      For the 18 cm band (near OH lines).
+!        Radio Astronomy allocation:  1660-1670
+!      Reference frequency is Mark II network standard
+!      MERLIN band is 1650 to 1666.
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 1662.75 )
+#end
+
+
+#mode 13cm
+!      For the 13 cm band.
+!        Space Research (eg DSN) allocation: 2290-2300
+!      Reference frequency is Mark II network standard
+!      NL and LA have 2200-2400 MHz filters.
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 2266.75)
+#end
+
+
+#mode 6cm
+!      For the 6 cm band.
+!        Radio Astronomy allocation: 4990-5000
+!        Radio Astnomomy footnote:   4950-4990
+!      Reference frequency is Mark II network standard
+!      Merlin 4986-5002
+!      There is a problem for the DDC with crossovers for the VLBA.
+!        Firstlo   BBC for 4990  crossover
+!         4100       890           896   6MHz below crossover in RF
+!         4400       590           640   Alias issue < 5050
+!         5600       610           640   30 MHz above crossover in RF
+!         5900       910           896   14 MHz below crossover in RF
+!      5600 is probably best, but need to keep frequency low, or
+!      span the crossover.  Put this in mode 6cmlo.
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 4990.75 )
+#end
+
+Use the following to set the VLBA first LO.
+
+#mode 6cmlo
+  /
+  firstlo = 5600.0
+  station = 'vlba'
+#end
+
+#mode 4cm
+!      For the 4 cm band.
+!        Space Research (eg DSN) allocation: 8400-8450
+!      Reference frequency is Mark II network standard
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 8416.75 )
+#end
+
+The following gives the stations that can do rcp x/s observations.
+The station indicators below were removed from mode sxrs.
+  #vstation  VLBA, EB_VLBA
+  #fstation  NOTO, YEBES
+  #4station  MEDICINA, ONSALA85, WSTRBORK
+
+#mode sxrs
+  #vstation 
+  #fstation 
+  #4station 
+#end
+
+#mode sxr
+!  For dual frequency, single polarization, 13cm/4cm observations.
+!        Space Research (eg DSN) allocation: 2290-2300
+!        Space Research (eg DSN) allocation: 8400-8450
+  @mode sxrs
+  #freq freq( 2266.75 8416.75 )
+#end
+
+#mode sxg
+!  For dual frequency, single polarization, 13cm/4cm observations.
+!  Changed to use RDV frequencies (but ending in .49) 27 Feb 2002  RCW.
+!  Changed again to follow RDV away from satellite radio  29Jul2004 RCW.
+!  Move to offset frequency of 0.75 to conform to the combination of
+!  frequency between the DDC and the legacy systems.  Jan. 10, 2014.  RCW.
+!  RDV32 uses: 2225.99, 2255.99, 2345.99, 2365.99
+!              8405.99, 8475.99, 8790.99, 8895.99
+!  RDV45 uses: 2232.99, 2262.99, 2352.99, 2272.99 and same X as above.
+! ***  Geodesy reference frequecies ***
+!        Space Research (eg DSN) allocation: 2290-2300
+!        Space Research (eg DSN) allocation: 8400-8450
+!        Satellite radio 2320-2345.
+  @mode sxrs
+  #freq freq( 2232.75 8405.75 )
+#end
+
+
+The following station indicators were removed from mode sxd:
+  #vstation  VLBA, EB_VLBA
+  #fstation  NOTO
+  #4station
+
+
+#mode sxd
+!  For dual frequency, dual polarization, 13cm/4cm observations.
+!  Mark IV cannot do this.
+!        Space Research (eg DSN) allocation: 2290-2300
+!        Space Research (eg DSN) allocation: 8400-8450
+  #vstation
+  #fstation
+  #4station
+  #freq freq( 2266.75 8416.75 )
+#end
+
+Following removed from the following setup:
+  @vformat
+
+This mode has temporarily been disabled by taking out the hashes.
+mode sxv
+!
+!  For X only stations in S/X experiments. 
+!  The recording setup and number of channels won't change,
+!  but the reference frequency for the second set of channels will
+!  be the X band frequency.
+!  This "mode" is intended to be attached to the end of the setup file.
+  station = VLA1, VLA27, GBT_VLBA
+  freqref = freq( 8416.49 8416.49 )   /
+end
+Here the null op so the invocation can be left in the setup specs.
+#mode sxv
+
+#end
+
+#mode 2cm
+!      For the the 2 cm band.
+!        Radio Astronomy allocation:  15350-15400
+!        Radio Astronomy footnote(?): 14470-14500
+!
+!        There are 4 filters in the VLBA IF converter.  They are
+!        11820-12980, 12820-13980, 13820-14980, and 14770-15630 GHz.
+!        The filter is chosen based on the frequency of the first channel 
+!        assuming an upper sideband first mix.  The splits are at 12.9, 
+!        13.9 and 14.9 Ghz.
+!
+!        Methanol has a rest frequency of 12178.595 MHz 
+!
+!        SCHED's standard 2cm band (BAND='2cm' in a setup) sets the 
+!        center frequency for 2cm to 15285.49.  This may have been 
+!        because of the old VLA band.
+!
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 15360.75 )
+#end
+
+
+#mode 1cm
+!      For the 1 cm band.
+!        Radio Astronomy allocation: 22210-22500 
+!      Reference frequency is Mark II network standard
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 22228.75 )
+#end
+
+
+#mode 7mm
+!      For the 7 mm band.
+!        Radio Astronomy allocation:  42400-43500
+!        Medicina band 43164-43278
+!        Old: freqref  = 43150.75  !  Reasonable Mark II setting.
+!        Frequency based on experiments in Feb 95 global session.
+  #vstation 
+  #fstation 
+  #4station 
+  #freq freq( 43212.75 )
+#end
+
+
+#mode 3mm
+!      For the 3 mm band.
+!      This freqref is near SiO[v=1,J=2-->1]
+  #vstation 
+  #fstation 
+  #4station 
+  #freqref freq( 86244.75 )
+#end
+
+
+
+-------------------------------------------------------------
+
+Set up the various options for polarization combinations.
+
+#mode lcp_u
+  #pol lcp
+  #foff foff( 1 1 @f1 )
+  #side side( U U U U )
+#end
+  
+#mode lcp_ul
+  #pol lcp
+  #foff foff( 2 2 @f1 )
+  #side side( L U L U )
+#end
+  
+#mode rcp_u
+  #pol rcp
+  #foff foff( 1 1 @f1 )
+  #side side( U U U U )
+#end
+  
+#mode rcp_ul
+  #pol rcp
+  #foff foff( 2 2 @f1 )
+  #side side( L U L U )
+#end
+  
+#mode dual_u
+  #pol dual  
+  #foff foff( 2 1 @f1 )
+  #side side( U U U U )
+#end
+
+#mode dual_ul
+  #pol dual
+  #foff foff( 4 2 @f1 )
+  #side side( L L U U )
+#end
+
+For geodesy - set freqoff later.
+
+#mode rcp_g
+  #pol rcp
+  #side side( U U U U )
+#end
+
+
+
+---------------------------------------------------------------------
+Finally the individual files.  All the build up above was to allow each
+file to be specified simply.  Note that the order of parameters is 
+important for the appearance of the output files, although not actually
+for their content (the order of lines is affected).
+
+
+
+
+
+#mode 32-8-2
+!      This is a mode for narrow band observations - lines, P band etc.
+!      32 Mbps - 2 passes per head position.
+!      format removed Jan 2014.
+  nchan    = 8 
+  bits     = 2  
+  bbfilter = 1.0 
+  #vformat
+  #4format
+  @mode shell
+#end
+
+#file v90cm-32-8-2.set   !   Frequencies set by VLA.
+    @mode 90cm  #f1 0.0; @mode dual_u @mode 32-8-2  #end
+#file v90cm-32-8-2-L.set !   Frequencies set by VLA -- Worry about filter at VLA!!!
+    @mode 90cm  #f1 0.0; @mode lcp_u @mode 32-8-2  #end
+#file v50cm-32-8-2.set   !   Stays within VLBA narrow filter.
+    @mode 50cm  #f1 1.0; @mode dual_u @mode 32-8-2  #end
+
+#file v9050cm-64-8-2.set
+!  For combined 50/90 cm observations on the VLBA.  This is for
+!  dual polarization, 2 MHz/BB channel, 8 channels.
+  nchan    = 8
+  bits     = 2
+  pol      = dual  
+  freqref  = 326.50, 326.50, 328.50, 328.50, 608.75, 608.75, 610.75, 610.75
+  netside  = u
+  bbfilter = 2.0
+  /
+#end
+
+#file v9050cm-128-8-2.set
+!  For combined 50/90 cm observations on the VLBA.  This is for
+!  dual polarization, 4 MHz/BB channel, 8 channels, with only 2
+!  channels at 50 cm (fit in the filter)
+  nchan    = 8
+  bits     = 2
+  pol      = dual  
+  freqref  = 320.49, 320.49, 324.49, 324.49, 328.49, 328.49, 608.75, 608.75
+  netside  = u
+  bbfilter = 4.0
+  /
+#end
+
+Eliminate the 32 and 64 Mbps modes.  That's getting to be pretty narrow by 2014.
+But reinstate one that might be used for pointing, namely v7mm-32-4-2.set
+
+#mode 32-4-2
+!      128 Mbps, 32 MHz
+  nchan    = 4
+  bits     = 2 
+  bbfilter = 2.0  
+  @mode shell
+#end
+#file v7mm-32-4-2.set   @mode 7mm   #f1 -3.0;  @mode dual_u  @mode 32-4-2  #end
+
+
+Removed from the mode below.
+  #vformat format = VLBA1:4
+  #4format format = MKIV1:4
+
+
+#mode 128-4-2
+!      128 Mbps, 32 MHz
+  nchan    = 4 
+  bits     = 2 
+  bbfilter = 8.0  
+  @mode shell
+#end
+
+#file v18cm-128-4-2-L.set  @mode 18cm  #f1 -11.0;  @mode lcp_u   @mode 128-4-2  #end
+#file v18cm-128-4-2.set    @mode 18cm  #f1 -3.0;   @mode dual_u  @mode 128-4-2  #end
+#file v13cm-128-4-2-R.set  @mode 13cm  #f1 -11.0;  @mode rcp_u   @mode 128-4-2  #end
+#file v13cm-128-4-2.set    @mode 13cm  #f1 -3.0;   @mode dual_u  @mode 128-4-2  #end
+#file v6cm-128-4-2-L.set   @mode 6cm   #f1 -19.0;  @mode lcp_u   @mode 128-4-2  @mode 6cmlo #end
+#file v6cm-128-4-2.set     @mode 6cm   #f1 -3.0;   @mode dual_u  @mode 128-4-2  @mode 6cmlo #end
+#file v4cm-128-4-2-R.set   @mode 4cm   #f1 -11.0;  @mode rcp_u   @mode 128-4-2  #end
+#file v4cm-128-4-2.set     @mode 4cm   #f1 -3.0;   @mode dual_u  @mode 128-4-2  #end
+#file v2cm-128-4-2-L.set   @mode 2cm   #f1 -11.0;  @mode lcp_u   @mode 128-4-2  #end
+#file v2cm-128-4-2.set     @mode 2cm   #f1 -3.0;   @mode dual_u  @mode 128-4-2  #end
+#file v1cm-128-4-2-L.set   @mode 1cm   #f1 -11.0;  @mode lcp_u   @mode 128-4-2  #end
+#file v1cm-128-4-2.set     @mode 1cm   #f1 -3.0;   @mode dual_u  @mode 128-4-2  #end
+#file v7mm-128-4-2-L.set   @mode 7mm   #f1 -11.0;  @mode lcp_u   @mode 128-4-2  #end
+#file v7mm-128-4-2.set     @mode 7mm   #f1 -3.0;   @mode dual_u  @mode 128-4-2  #end
+#file vsx-128-4-2-R.set  @mode sxr #f1 -4.0 -4.0; @mode rcp_u @mode 128-4-2  @mode sxv #end
+#file vsx-128-4-2.set    @mode sxd #f1 -0.0 -0.0; @mode dual_u @mode 128-4-2  @mode sxv #end
+
+
+Removed from the mode below:
+  #vformat format = VLBA1:2
+  #4format format = MKIV1:2
+
+#mode 256-8-2
+!      256 Mbps  64 MHz
+  nchan    = 8  
+  bits     = 2  
+  bbfilter = 8.0    
+  @mode shell
+#end
+
+#file v18cm-256-8-2-L.set  @mode 18cm  #f1 -30.0;    @mode lcp_u    @mode 256-8-2  #end
+#file v18cm-256-8-2.set    @mode 18cm  #f1 -11.0;    @mode dual_u   @mode 256-8-2  #end
+#file v13cm-256-8-2-R.set  @mode 13cm  #f1 -27.0;    @mode rcp_u    @mode 256-8-2  #end
+#file v13cm-256-8-2.set    @mode 13cm  #f1 -11.0;    @mode dual_u   @mode 256-8-2  #end
+#file v6cm-256-8-2-L.set   @mode 6cm   #f1 -30.0;    @mode lcp_u    @mode 256-8-2  @mode 6cmlo #end
+#file v6cm-256-8-2.set     @mode 6cm   #f1 -19.0;    @mode dual_u   @mode 256-8-2  @mode 6cmlo #end
+#file v4cm-256-8-2-R.set   @mode 4cm   #f1 -29.0;    @mode rcp_u    @mode 256-8-2  #end
+#file v4cm-256-8-2.set     @mode 4cm   #f1 -11.0;    @mode dual_u   @mode 256-8-2  #end
+#file v2cm-256-8-2-L.set   @mode 2cm   #f1 -29.0;    @mode lcp_u    @mode 256-8-2  #end
+#file v2cm-256-8-2.set     @mode 2cm   #f1 -11.0;    @mode dual_u   @mode 256-8-2  #end
+#file v1cm-256-8-2-L.set   @mode 1cm   #f1 -26.0;    @mode lcp_u    @mode 256-8-2  #end
+#file v1cm-256-8-2.set     @mode 1cm   #f1 -11.0;    @mode dual_u   @mode 256-8-2  #end
+#file v7mm-256-8-2-L.set   @mode 7mm   #f1 -27.0;    @mode lcp_u    @mode 256-8-2  #end
+#file v7mm-256-8-2.set     @mode 7mm   #f1 -11.0;    @mode dual_u   @mode 256-8-2  #end
+#file vsx-256-8-2-R.set  @mode sxr #f1 -12.0 -12.0;  @mode rcp_u    @mode 256-8-2  @mode sxv  #end
+#file vsx-256-8-2.set    @mode sxd #f1  -4.0  -4.0;  @mode dual_u   @mode 256-8-2  @mode sxv  #end
+
+V  256-8-2-UL for cases like Eb with only 4 bbcs.  Same mode as 256-8-2.  Different f1's.
+
+#file v18cm-256-8-2-L-UL.set  @mode 18cm  #f1 -22.0;  @mode lcp_ul    @mode 256-8-2  #end
+#file v18cm-256-8-2-UL.set    @mode 18cm  #f1 -3.0;   @mode dual_ul   @mode 256-8-2  #end
+#file v13cm-256-8-2-R-UL.set  @mode 13cm  #f1 -19.0;  @mode rcp_ul    @mode 256-8-2  #end
+#file v13cm-256-8-2-UL.set    @mode 13cm  #f1 -3.0;   @mode dual_ul   @mode 256-8-2  #end
+#file v6cm-256-8-2-L-UL.set   @mode 6cm   #f1 -22.0;  @mode lcp_ul    @mode 256-8-2  @mode 6cmlo #end
+#file v6cm-256-8-2-UL.set     @mode 6cm   #f1 -11.0;  @mode dual_ul   @mode 256-8-2  @mode 6cmlo #end
+#file v4cm-256-8-2-R-UL.set   @mode 4cm   #f1 -21.0;  @mode rcp_ul    @mode 256-8-2  #end
+#file v4cm-256-8-2-UL.set     @mode 4cm   #f1 -3.0;   @mode dual_ul   @mode 256-8-2  #end
+#file v2cm-256-8-2-L-UL.set   @mode 2cm   #f1 -21.0;  @mode lcp_ul    @mode 256-8-2  #end
+#file v2cm-256-8-2-UL.set     @mode 2cm   #f1 -3.0;   @mode dual_ul   @mode 256-8-2  #end
+#file v1cm-256-8-2-L-UL.set   @mode 1cm   #f1 -18.0;  @mode lcp_ul    @mode 256-8-2  #end
+#file v1cm-256-8-2-UL.set     @mode 1cm   #f1 -3.0;   @mode dual_ul   @mode 256-8-2  #end
+#file v7mm-256-8-2-L-UL.set   @mode 7mm   #f1 -19.0;  @mode lcp_ul    @mode 256-8-2  #end
+#file v7mm-256-8-2-UL.set     @mode 7mm   #f1 -3.0;   @mode dual_ul   @mode 256-8-2  #end
+#file vsx-256-8-2-R-UL.set  @mode sxr #f1 -4.0 -4.0;  @mode rcp_ul    @mode 256-8-2  @mode sxv  #end
+#file vsx-256-8-2-UL.set    @mode sxd #f1 -4.0 -4.0;  @mode dual_ul   @mode 256-8-2  @mode sxv  #end
+
+The following removed from the mode below
+  #vformat format = VLBA1:4
+  #4format format = MKIV1:4
+
+
+#mode 512-8-2
+!      512 Mbps  128 MHz
+  nchan    = 8  
+  bits     = 2  
+  bbfilter = 16.0
+  @mode shell
+#end
+
+This one is more useful if you need to dodge crossovers.
+
+#mode 512-8-2-1P-CO
+!      512 Mbps  128 MHz
+  nchan    = 8  
+  bits     = 2  
+  bbfilter = 16.0
+  freqref  = @freq
+  netside  = @side
+  pol      = @pol
+  /
+#end
+#file v18cm-512-8-2-L.set  @mode 18cm  #f1 -120.0;   @mode lcp_u    @mode 512-8-2  #end
+#file v18cm-512-8-2.set    @mode 18cm  #f1 -54.0;    @mode dual_u   @mode 512-8-2  #end
+
+#file v13cm-512-8-2-R.set  @mode 13cm  @mode rcp_u    
+  freqoff =  -56, -40, -24, -08,  8,  24,  84,  100  
+! Work around crossover at 2204 (LO 3100) MHz and satellite radio 2320 and 2345 MHz
+  @mode 512-8-2-1P-CO  #end
+
+#file v13cm-512-8-2.set    @mode 13cm  #f1 -32.0;    @mode dual_u   @mode 512-8-2  #end
+
+#file v6cm-512-8-2-L.set   @mode 6cm  @mode lcp_u    
+  freqoff =  -66, -50, -26, -10,  6,  32,  48,  64  
+! Crossover between channels 2 and 3 so added a gap of 8 MHz.
+  @mode 512-8-2-1P-CO   @mode 6cmlo #end
+
+#file v6cm-512-8-2.set     @mode 6cm   #f1 -26.0;    @mode dual_u   @mode 512-8-2  @mode 6cmlo #end
+#file v4cm-512-8-2-R.set   @mode 4cm   #f1 -64.0;    @mode rcp_u    @mode 512-8-2  #end
+#file v4cm-512-8-2.set     @mode 4cm   #f1 -32.0;    @mode dual_u   @mode 512-8-2  #end
+#file v2cm-512-8-2-L.set   @mode 2cm   #f1 -64.0;    @mode lcp_u    @mode 512-8-2  #end
+#file v2cm-512-8-2.set     @mode 2cm   #f1 -32.0;    @mode dual_u   @mode 512-8-2  #end
+#file v1cm-512-8-2-L.set   @mode 1cm   #f1 -64.0;    @mode lcp_u    @mode 512-8-2  #end
+#file v1cm-512-8-2.set     @mode 1cm   #f1 -32.0;    @mode dual_u   @mode 512-8-2  #end
+#file v7mm-512-8-2-L.set   @mode 7mm   #f1 -64.0;    @mode lcp_u    @mode 512-8-2  #end
+#file v7mm-512-8-2.set     @mode 7mm   #f1 -32.0;    @mode dual_u   @mode 512-8-2  #end
+#file vsx-512-8-2-R.set  @mode sxr #f1 -32.0 -32.0;  @mode rcp_u    @mode 512-8-2  @mode sxv  #end
+#file vsx-512-8-2.set    @mode sxd #f1 -16.0 -16.0;  @mode dual_u   @mode 512-8-2  @mode sxv  #end
+
+
+The following removed from the mode below
+  #vformat format = VLBA1:2
+  #4format format = MKIV1:2
+
+#mode 512-16-2
+!   512 Mbpsf
+!   This mode has too many channels for the RDBE_DDC.
+!   SCHED will default to the PFB, but then the frequencies 
+!   and bandwidths will be wrong.
+!   It might be useful for other systems.
+
+  nchan    = 16  
+  bits     = 2  
+  bbfilter = 8.0
+  @mode shell
+#end
+#file v18cm-512-16-2-L.set  @mode 18cm  #f1 -120.0;   @mode lcp_ul    @mode 512-16-2  #end
+#file v18cm-512-16-2.set    @mode 18cm  #f1 -54.0;    @mode dual_ul   @mode 512-16-2  #end
+#file v13cm-512-16-2-R.set  @mode 13cm  #f1 -64.0;    @mode rcp_ul    @mode 512-16-2  #end
+#file v13cm-512-16-2.set    @mode 13cm  #f1 -32.0;    @mode dual_ul   @mode 512-16-2  #end
+#file v6cm-512-16-2-L.set   @mode 6cm   #f1 -64.0;    @mode lcp_ul    @mode 512-16-2  @mode 6cmlo #end
+#file v6cm-512-16-2.set     @mode 6cm   #f1 -32.0;    @mode dual_ul   @mode 512-16-2  @mode 6cmlo #end
+#file v4cm-512-16-2-R.set   @mode 4cm   #f1 -64.0;    @mode rcp_ul    @mode 512-16-2  #end
+#file v4cm-512-16-2.set     @mode 4cm   #f1 -32.0;    @mode dual_ul   @mode 512-16-2  #end
+#file v2cm-512-16-2-L.set   @mode 2cm   #f1 -64.0;    @mode lcp_ul    @mode 512-16-2  #end
+#file v2cm-512-16-2.set     @mode 2cm   #f1 -32.0;    @mode dual_ul   @mode 512-16-2  #end
+#file v1cm-512-16-2-L.set   @mode 1cm   #f1 -64.0;    @mode lcp_ul    @mode 512-16-2  #end
+#file v1cm-512-16-2.set     @mode 1cm   #f1 -32.0;    @mode dual_ul   @mode 512-16-2  #end
+#file v7mm-512-16-2-L.set   @mode 7mm   #f1 -64.0;    @mode lcp_ul    @mode 512-16-2  #end
+#file v7mm-512-16-2.set     @mode 7mm   #f1 -32.0;    @mode dual_ul   @mode 512-16-2  #end
+#file vsx-512-16-2-R.set  @mode sxr #f1 -32.0 -32.0;  @mode rcp_ul    @mode 512-16-2  @mode sxv  #end
+#file vsx-512-16-2.set    @mode sxd #f1 -16.0 -16.0;  @mode dual_ul   @mode 512-16-2  @mode sxv  #end
+
+
+
+SOME GEODESY MODES.  Convert to 2 bit and remove explicit formats.
+
+#mode 128-8-2
+!      Useful for low tape consumption geodesy.
+!      64 Mbps - 2 pass/headpos
+  nchan    = 8 
+  bits     = 2
+  bbfilter = 4.0  
+  #vformat format = VLBA1:2
+  #4format format = MKIV1:2
+  @mode shell
+#end
+
+
+#file vgeo-128-8-2.set    @mode sxg  @mode rcp_g  @mode 128-8-2
+  #foff  0.0, 30.0, 120.0, 140.0, 0.0, 70.0, 385.0, 490.0 
+#end  
+
+#file vgeo-256-8-2.set   @mode sxg  @mode rcp_g  @mode 256-8-2  
+  #foff  0.0, 30.0, 120.0, 140.0, 0.0, 70.0, 385.0, 490.0 
+#end  
+
+#file vgeo-512-8-2.set   @mode sxg  @mode rcp_g  @mode 512-8-2  
+!       Come up with a better frequency sequence.  Note Ch 1&2 overlap!
+!       Try for a 3 S, 5 X sequence that spans more bandwidth.
+  #foff  0.0, 30.0, 120.0, 140.0, 0.0, 70.0, 385.0, 490.0 
+#end  
+
+m3geosx.set deleted Jan. 2014.  Was Mark 3
+
+m3geord.set deleted Jan. 2014.  Was Mark3 and frequency switched.
+
+VSOP Setups eliminated.  Jan 2014
+
+PULSE CAL TEST FILES  Deleted Jan 2014. I don't think these are used any more.
+1 MHz BW is rather narrow.
+
+
+
+SPECIAL SETUP FOR ALL 4 OH LINES
+Changed to DDC constraints Jan 2014.  Shift frequency 0.44 MHz down,
+but then go to a multiple of 0.25.  Doppler will likely shift that around.
+
+#file vOH.set
+!         Setup for all OH lines.
+         18 cm wavelength  8X oversampling.
+         32 Mbps - 2 pass/headpos  (4 at the VLA)
+  nchan    = 8 
+  samprate = 2.0
+  bits     = 2 
+  bbfilter = 1.0
+! 0.125 BW  freqref  =  1612.11,1612.11, 1665.28,1665.28, 1667.22,1667.22, 1720.41,1720.41
+  freqref  =  1611.75,1611.75, 1665.00,1665.00, 1667.00,1667.00, 1720.00,1720.00
+  netside  =       U,      U,       U,      U,       U,      U,       U,      U
+  bbc      =       1,      2,       3,      4,       5,      6,       7,      8
+  pol      = dual
+  pcal     = 'off'
+  /
+!          VLA can only do 2 center lines.
+!          This may preclude using Doppler if the VLA is there.
+  nchan    = 4
+  station  = VLA1, VLA27
+  freqref  = 1665.00,1665.00, 1667.00,1667.00
+  /
+#end
+
+
+
+SPECIAL SETUP FOR METHANOL AT 12 GHz
+
+#file vmeth.set
+!          SCHED setup file for Methanol 12 GHz observations.
+!          Just over 24 hours recording at 13 minutes per pass.
+!          16 Mbps - 8 pass/headpos  
+  station  = VLBA
+  format   = VLBA1:1
+  nchan    = 2 
+  bits     = 2
+  bbfilter = 2.0
+  freqref  = 12165.0
+  netside  = U, U  
+  pol      = dual
+  bbc      = 1, 2
+  pcal     = 'off'
+  / 
+!  Uncomment for stations with VLBA recorders and Field System control
+!  format   = 'VLBA1:1'
+!  station  = 
+! /
+!  Uncomment for stations with MarkIV recorders and Field System control
+!  format   = 'MKIV1:1'
+!  station  = 
+! /
+#end
+
+
+
+
+POINTING FILES
+
+#mode ptg
+!      Two channel VLBA Pointing observations.
+!      I've long forgotten why I did this with freqoff=-6.
+!      But don't change now or we'll get in trouble.
+  station = VLBA
+  nchan    = 2
+  bits     = 2
+  bbfilter = 16.0   
+  bbc      = 1, 2
+  netside  = U, U
+  pol      = dual
+  freqoff  = -6, -6
+  #end
+#mode ptg4
+!      Four channel VLBA Pointing observations.
+!      Especially for on/off frequency on line sources.
+  station  = VLBA
+  nchan    = 4  
+  bits     = 2 
+  netside  = U, U, U, U   
+  bbc      = 1, 2, 3, 4  
+  pol      = dual
+  #end
+
+#mode ptg16
+!      16 channel VLBA Pointing observations for use with RDBE_PFB
+!      Mainly to be used with 7mm.
+  nchan = 16  bits = 2  netside  = L  sideband  = L  pol = dual
+  bbfilt = 32.0
+  bbsyn    = 912, 912,  880, 880, 848, 848,  816.0, 816,
+             784, 784,  752, 752, 720, 720,  688.0, 688
+  #end
+
+#file pt18cm.set  @mode ptg4
+  format   = NONE
+  bbfilter = 16  
+  freqref  = 1430.49, 1430.49, 1650.49, 1650.49
+  ptincr   = 15.0  /  #end
+#file pt13cm.set  @mode ptg
+  format   = NONE
+  freqref  = 2266.99  
+  ptincr   = 9.0   /  #end
+#file pt6cm.set   @mode ptg
+  firstlo  = 4100.0
+  format   = NONE
+  freqref  = 4990.99  
+  ptincr   = 6.0   /  #end
+#file pt6cmw.set   @mode ptg4
+!   Will get processed as on-off so don't use
+  firstlo  = 4100.0
+  format   = NONE
+  bbfilter = 16.0
+  freqref  = 4990.99, 4990.99, 6660.49, 6660.49
+  ptincr   = 4.0   /  #end
+
+  Don't forget the freqoff=-6,-6 in the ptg mode.
+
+#file pt7ghz.set   @mode ptg
+!  Center on the Methanol line at most sites.
+!  BR has RFI so shift it to a clear band.
+!  Note cannot take all down to 6657 because OV bad.
+  format   = NONE
+  bbfilter = 16.0
+  freqref  = 6666.49, 6666.49
+  ptincr   = 5.0   / 
+  freqref  = 6696.49, 6696.49 station=vlba_br /  #end
+#file pt4cm.set   @mode ptg
+  format   = NONE
+  freqref  = 8416.99  
+  ptincr   = 2.5   /  #end
+#file pt2cm.set   @mode ptg
+  format   = NONE
+  freqref  = 15360.99 
+  ptincr   = 1.5   /  #end
+#file pt1cm2.set   @mode ptg
+  format   = NONE
+  bbfilter = 16
+  freqref  = 22228.49, 22228.49, 22278.49, 22278.49 
+  ptincr   = 1.0   /  #end
+#file pt1cm.set   @mode ptg4
+  format   = NONE
+  bbfilter = 16
+  freqref  = 22228.49, 22228.49, 22278.49, 22278.49 
+  ptincr   = 1.0   /  #end
+#file pt24ghz.set   @mode ptg
+  format   = NONE
+  bbfilter = 16
+  freqref  = 23799.49
+  ptincr   = 1.0   /  #end
+#file pt7mm.set   @mode ptg4
+  format   = NONE
+  bbfilter = 16
+  freqref  = 43115.99, 43115.99, 43215.99, 43215.99
+  ptincr   = 0.5   /  #end
+#file pt3mm.set   @mode ptg4
+  format   = NONE
+  bbfilter = 16.0
+  freqref  = 86244.99
+  freqoff  = -8, -8, 98, 98
+  ptincr   = 0.25  /  #end
+
+#file pt90cm.set  @mode ptg4
+  format   = NONE
+  bbfilter = 4.0  
+  freqref  = 324.49, 324.49, 608.99, 608.99
+  ptincr   = 30.0  /   #end
+#file pt4cmsx.set @mode ptg4
+  format   = NONE
+  bbfilter = 16.0
+  freqref  = 8416.99, 8416.99, 2266.99, 2266.99
+  freqoff  = -6., -6., -6., -6.
+  ptincr   = 2.5   
+  ptoff    = 36.0 /   #end
+
+Had the ptv files without FORMAT to try to get vex files.  But I
+don't think those are needed any more.
+
+So reuse them to build versions that use the RDBE in DDC mode.
+Call them ptdxx.set.
+
+#file ptd18cm.set  @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 16
+  freqref  = 1430.25, 1430.25, 1650.25, 1650.25
+  ptincr   = 15.0  /  #end
+#file ptd13cm.set  @mode ptg
+  dbe = rdbe_ddc
+  freqref  = 2266.75  
+  ptincr   = 9.0   /  #end
+#file ptd6cm.set   @mode ptg
+  firstlo  = 4100.0
+  dbe = rdbe_ddc
+  freqref  = 4990.75  
+  ptincr   = 6.0   /  #end
+#file ptd7ghz.set   @mode ptg
+!  Center on the Methanol line at most sites.
+!  BR has RFI so shift it to a clear band.
+!  Note cannot take all down to 6657 because OV bad.
+  dbe = rdbe_ddc
+  freqref  = 6666.49, 6666.49
+  ptincr   = 5.0   / 
+  freqref  = 6696.49, 6696.49 station=vlba_br /  #end
+#file ptd4cm.set   @mode ptg
+  dbe = rdbe_ddc
+  freqref  = 8416.75  
+  ptincr   = 2.5   /  #end
+#file ptd2cm.set   @mode ptg
+  dbe = rdbe_ddc
+  freqref  = 15360.75 
+  ptincr   = 1.5   /  #end
+#file ptd1cm2.set   @mode ptg
+  dbe = rdbe_ddc
+  bbfilter = 16
+  freqref  = 22228.25, 22228.25, 22278.25, 22278.25 
+  ptincr   = 1.0   /  #end
+#file ptd1cm.set   @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 16
+  freqref  = 22228.25, 22228.25, 22278.25, 22278.25 
+  ptincr   = 1.0   /  #end
+#file ptd24ghz.set   @mode ptg
+  dbe = rdbe_ddc
+  bbfilter = 16
+  freqref  = 23799.25
+  ptincr   = 1.0   /  #end
+#file ptd7mm.set   @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 16
+  freqref  = 43115.75, 43115.75, 43215.75, 43215.75
+  ptincr   = 0.5   /  #end
+#file ptd3mm.set   @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 16.0
+  freqref  = 86244.75
+  freqoff  = -8, -8, 98, 98
+  ptincr   = 0.25  /  #end
+
+#file ptd90cm.set  @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 4.0  
+  freqref  = 324.25, 324.25, 608.75, 608.75
+  ptincr   = 30.0  /   #end
+#file ptd4cmsx.set @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 16.0
+  freqref  = 8416.75, 8416.75, 2266.75, 2266.75
+  freqoff  = -6., -6., -6., -6.
+  ptincr   = 2.5   
+  ptoff    = 36.0 /   #end
+
+The following are for pointing with spectral line sources with
+2 MHz bandwidths.  They are not needed when oversampling is 
+allowed, but changing the BW on the fly with the digital systems
+that cannot oversample is not allowed.  Only bother with 1cm
+7mm and 3mm.
+
+#file ptdl1cm.set   @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 2
+  freqref  = 22228.25, 22228.25, 22278.25, 22278.25 
+  ptincr   = 1.0   /  #end
+#file ptdl7mm.set   @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 2
+  freqref  = 43115.75, 43115.75, 43215.75, 43215.75
+  ptincr   = 0.5   /  #end
+#file ptdl3mm.set   @mode ptg4
+  dbe = rdbe_ddc
+  bbfilter = 2
+  freqref  = 86244.75
+  freqoff  = -8, -8, 98, 98
+  ptincr   = 0.25  /  #end
+
+
+Version to be used for the RDBE_PFB/MARK5C schedule when doing
+reference pointing with the old BBCs and old control system
+on the VLBA during RDBE_PFB observations.  This ensures 
+the RF switches are set right.  Only setting up for 7mm as that
+is the band used for reference pointing.    We cannot make line
+versions like the above because the PFB can't do it.  Trust to
+the CRDBW setting.  And be sure no non-VLBA stations get such
+a request.
+
+#file ptr7mm.set   @mode ptg16
+  format   = NONE
+  firstlo  = 42400.0 
+  ptincr   = 0.5   /  #end
+
+
+----------------------------------------------------------------------------
+
+The following are for pointing scans at the EVLA.
+
+#mode ptevla
+   dbe = widar
+   bits     = 2
+   pcal = off
+   nchan = 4
+   bbfilt = 128.0
+   netside  = U
+   pol = dual
+   ifchan   = A, C, B, D
+   station = vla27
+#end
+
+#file vla_c_pointing.set
+! VLA Primary C band pointing from NRAO Defaults in the RCT
+   @mode ptevla
+   band     = '6cm'
+   sideband = U
+   firstlo = 4704.0
+   bbsyn = 128.,128.,256.,256.
+     /
+endset /
+#end
+
+#file vla_x_pointing.set
+! VLA Primary X band pointing from NRAO Defaults in the RCT
+   @mode ptevla
+   band     = '4cm'
+   sideband = L
+   firstlo = 8588.0
+   bbsyn = 256.,256.,128.,128.
+     /
+endset /
+#end
+
+
+Make some "standard" setups for the RDBE. 
+Start with PFB versions.
+
+#mode pfbcomment
+!  The RDBE with the PFB personality can only make 16 baseband channels
+!  of 32 MHz each with lower sideband at IF frequencies that are fixed 
+!  by the polyphase filters.  Those filter DC edges are at IF frequencies
+!  of 512+16+N*32 MHz with N between 0 and 16.  N=0 and N=16 produce 
+!  basebands that cross the 512 or 1024 MHz IF edge and are not useful.  
+!  But, since the PFB must produce 16 distinct channels, they are
+!  allowed for single polarization observations.  If N=0 is used, it
+!  will be converted to N=16 by the VLBA on-line system.
+#end
+
+#mode pfbFrqUpDual
+!  If a change of baseband frequencies is desired, the 16 new values of 
+!  bbsyn (=freqoff if freqref=firstlo) must be chosen from the following:
+!  bbsyn    = 560.0, 560.0,  592.0, 592.0,  624.0, 624.0,  656.0, 656.0, 
+!             688.0, 688.0,  720.0, 720.0,  752.0, 752.0,  784.0, 784.0, 
+!             816.0, 816.0,  848.0, 848.0,  880.0, 880.0,  912.0, 912.0, 
+!             944.0, 944.0,  976.0, 976.0, 1008.0, 1008.0
+!  Other values are not allowed by the nature of the polyphase filter.
+!  The number of channels, bits per sample, and sideband cannot be changed.
+#end
+
+#mode pfbFrqUpSingle
+!  The allowed bbsyn (or freqoff if freqref=firstlo) values for a single 
+!  polarization observation with an upper sideband IF are:
+!  bbsyn    = 560.0, 592.0, 624.0, 656.0, 688.0, 720.0, 752.0, 784.0, 
+!             816.0, 848.0, 880.0, 912.0, 944.0, 976.0, 1008.0, 1040.0
+!  Don't use 1040 if you don't have to to get 16 channels.  The data are bad.
+#end
+
+#mode pfbFrqDownDual
+!  If a change of baseband frequencies is desired, the 16 new values of 
+!  bbsyn (=freqoff if freqref=firstlo) must be chosen from the following:
+!  bbsyn    = -1008.0, -1008.0, -976.0,  -976.0, -944.0,  -944.0, -912.0,  -912.0,
+!              -880.0,  -880.0, -848.0,  -848.0, -816.0,  -816.0, -784.0,  -784.0,
+!              -752.0,  -752.0, -720.0,  -720.0, -688.0,  -688.0, -656.0,  -656.0,
+!              -624.0,  -624.0, -592.0,  -592.0, -560.0,  -560.0
+!  Other values are not allowed by the nature of the polyphase filter.
+!  The number of channels, bits per sample, and sideband cannot be changed.
+#end
+
+#mode pfbFrqDownSingle
+!  The allowed bbsyn (or freqoff if freqref=firstlo) values for a single 
+!  polarization observation with a lower sideband IF are:
+!  bbsyn    = -1040., -1008., -976., -944., -912., -880., -848., -816.,
+!              -784., -752.,  -720., -688., -656., -624., -592., -560., 
+!  Don't use -1040 if you don't have to to get 16 channels.  The data are bad.
+#end
+
+#mode inverted_sideband_used
+!  That LO provides an IF covering the same RF range as the other stations, 
+!  but with inverted sidebands on the BBC's.  The BBC frequencies in the
+!  .sum file will be offset by the bandwidth from the other stations.  
+!  SCHED invokes the inverted sideband mode of DiFX to allow this.
+#end
+
+#mode rdbe_pfb_common_dual
+  dbe      = 'rdbe_pfb'
+  nchan    = 16  
+  bbfilt   = 32
+  bits     = 2
+  pol      = dual
+  pcal     = '1MHz'
+#end
+#mode rdbe_pfb_common_lcp
+  dbe      = 'rdbe_pfb'
+  nchan    = 16  
+  bbfilt   = 32
+  bits     = 2
+  pol      = L
+  pcal     = '1MHz'
+#end
+
+----------------
+
+#file rdbe_pfb_1548_dual.set
+!  Setup for 20cm observations with the RDBE using the PFB personality.
+!  There are 2 LO settings on the VLBA for 20cm observations.  
+
+!  With the 2.1 GHz LO, the frequency range tops out at 1600 MHz.  The 
+!  bottom is set by the receiver and, at some sites, RFI filters.  
+!  See freq_RDBE.dat for details, but expect problems below about 1350 MHz.
+!  The top is set by the IF range at most sites.  SC, has an IF-based 
+!  665-1027 MHz RFI filter that cuts signals above 1435 MHz (with this LO)
+!
+!  With the 2.4 GHz LO, the lower frequency limit is 1392 for the PFB (1376 
+!  for the DDC).  The top is set by the receiver to around 1850 MHz, with
+!  values closer to 1750 MHz for the sites with RFI filters.  Again see
+!  freq_RDBE.dat for details.
+
+!  For reasons of RFI, it is generally preferred to use the 2.4 GHz LO over
+!  the 2.1 GHz option unless the science absolutely requires going to 
+!  lower frequencies.  For this setup, the 2.4 GHz LO is used.
+
+!  The freq_RDBE.dat entry v20cm_2 will be used with firstlo=2400 for the VLBA
+!  The GBT uses the same LO so there is a good match.  EB_RDBE has an option
+!  to observe in the range 1584 to 1706 MHz with matching PFB channels but
+!  sideband inversion has to be used.
+
+!  The following RF frequencies are allowed with the PFB and 2.4 GHz LO.
+!  They are the bottom of the 32 MHz bands (bad IF 1040 channel not shown)
+!  1392.  1424.  1456.  1488.  1520.  1552.  1584.
+!  1616.  1648.  1680.  1712.  1744.  1776.  1808.  1840.
+
+!  Hydrodgen is at 1420.4 MHz.  OH is at 1612.2, 1665.4, 1667.4, and 1720.5 
+!  MHz, so those are covered.   Very approximately, the bad RFI regions 
+!  for the VLBA are 1525 to 1555 MHz, near 1620 MHz, and 1690 to 1720 MHz.
+!  For dual band, we need to leave out 7 of those listed.  Taking into 
+!  account the RFI and band edges, and trying to get the spectral lines,
+!  Leave out:  1520, 1616, 1680, 1744, 1776, 1808, and 1840
+!  Keep:   1392, 1424, 1456, 1488, 1552, 1584, 1648, and 1712
+!  Note that this set is not a good match for EB so a separate setup is
+!  provided for that station that covers the range 1584 to 1706 solidly
+
+@mode pfbFrqDownDual
+
+@mode rdbe_pfb_common_dual
+
+
+  freqref = 2400.0
+  freqoff = -1008, -1008, -976,  -976, -944,  -944, -912,  -912,
+             -848,  -848, -816,  -816, -752,  -752, -688,  -688
+  netside = U
+  station = vlba, gbt_vlba, gbt_cold
+  /
+#end
+
+-----------------
+
+#file rdbe_pfb_18cm_HSA_dual.set
+!  Setup for 20cm observations with the RDBE using the PFB personality.
+!  This is much like rdbe_pfb_1548_dual.set so see the comments in
+!  that file for details.  The difference is that this one is meant
+!  for better overlap with EB_RDBE so the list of baseband frequencies
+!  is a bit different, with solid coverage in the 1584-1706 range covered
+!  at EB_RDBE with a 1056 MHz LO.  Basically, the basebands are split 
+!  into two chunks, one near 1400 and the other with the EB overlap.
+!  Keep:   1392, 1424, 1456, 1488, 1584, 1616, 1648, and 1680
+!  But for EB_RDBE, we will need to use dummy basebands at higher 
+!  frequencies.  Also we need to use sideband inversion.
+!  Note that the .sum file will show EB frequencies 32 MHz above those 
+!  on the other stations because of the different sidebands.  The 
+!  first 4 polarization pairs at EB correlate with the last 4 at the
+!  other stations.
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 2400.0
+  freqoff = -1008, -1008, -976,  -976, -944,  -944, -912,  -912,
+            -816,  -816,  -784,  -784, -752,  -752, -720,  -720
+  netside = U
+  station = vlba, gbt_vlba, gbt_cold
+  /
+! eb lo/if system settings are not yet clear.
+!  firstlo = 1056
+!  station = eb_rdbe
+!  freqref = 1056
+!  freqoff = 560.0, 560.0,  592.0, 592.0,  624.0, 624.0,  656.0, 656.0, 
+!            688.0, 688.0,  720.0, 720.0,  752.0, 752.0,  784.0, 784.0
+!  netside = L
+!  /
+#end
+
+-----------------
+
+
+#file rdbe_pfb_2284_dual.set
+!  Setup for 13cm observations with the RDBE using the PFB personality.
+!  There is a filter that passes only 2200 to 2400 MHz at 7 of the VLBA
+!  stations.  The 25 MHz range from 2320 to 2345 MHz is badly affected by 
+!  the Sirius and XM Satellite Radio signals.  Fortunately that is 
+!  concentrated in baseband channels 11 and 12.  Channels 1 and 2 will
+!  basically not get data.  3, 4, 15, and 16 will span the edges of the
+!  RF filters at the stations that have them.
+
+!  The freq_RDBE.dat entry v13cm_2 will be used with firstlo=3100 for the VLBA
+!  The GBT uses the same LO so there is a good match.  EB_RDBE has no 
+!  tuning flexibility in this range and it cannot match the frequencies 
+!  of the baseband channels, so it cannot be used with the VLBA with
+!  the PFB.  The RDBE_DDC or the DBBC must be used.
+
+!  This setup gives the following rf frequencies for the bottom of each
+!  32 MHz wide baseband channel.
+!  netsideband is upper so each channel covers the 32 MHz above the value listed.
+!   2156.  2156.  2188.  2188.  2220.  2220.  2252.  2252.
+!   2284.  2284.  2316.  2316.  2348.  2348.  2380.  2380.
+
+@mode pfbFrqDownDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 3100.0
+  freqoff  = -944.,  -944., -912.,  -912., -880.,  -880., -848.,  -848., 
+             -816.,  -816., -784.,  -784., -752.,  -752., -720.,  -720.
+  netside = U
+  station = vlba, gbt_vlba, gbt_cold
+  /
+#end
+
+----------------
+
+#file rdbe_pfb_4120_dual.set
+!  Setup for 6cm observations near the low end of the 4-8 GHz receiver.
+!  This should be useful for spectral index and rotation measure 
+!  observations when used in the same project as a higher frequency 
+!  setup.  This setup using a compact frequency sequence with the 
+!  RDBE PFB personality.  
+!  This setup is actually centered on 4120 MHz.
+!  For the VLBA and GBT.
+
+!  This setup is subject to change based on RFI and sensitivity test
+!  results
+
+!  The freq_RDBE.dat entry vc_a will be used with firstlo=3400 for the VLBA
+!  The upper sideband IF forces lower sideband basebands.
+
+!  The GBT uses a high-side LO (5636) based on gbt6cmc in freq_RDBE.dat.  
+@mode inverted_sideband_used
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 3400.0
+  freqoff  = 624.0, 624.0,  656.0, 656.0,  688.0, 688.0,  720.0, 720.0,  
+             752.0, 752.0,  784.0, 784.0,  816.0, 816.0,  848.0, 848.0
+  netside = L
+  station = vlba, gbt_vlba, gbt_cold
+  /
+#end
+
+---------------
+
+#file rdbe_pfb_4980_dual.set
+!  Setup for 6cm observations centered on the old standard of 4990 MHz
+!  using a compact frequency sequence with the RDBE PFB personality.  
+!  This setup is actually centered on 4980 MHz.
+!  For the VLBA, EB_RDBE, and GBT.
+
+!  The freq_RDBE.dat entry vc_d will be used with firstlo=4100 for the VLBA
+!  The upper sideband IF forces lower sideband basebands.
+
+!  The GBT uses a high-side LO (5636) based on gbt6cmc in freq_RDBE.dat.  
+@mode inverted_sideband_used
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 4100.0
+  freqoff  = 784.0, 784.0,  816.0, 816.0,  848.0, 848.0,  880.0, 880.0,  
+             912.0, 912.0,  944.0, 944.0,  976.0, 976.0, 1008.0, 1008.0
+  netside = L
+  station = vlba, eb_rdbe, gbt_vlba, gbt_cold
+  /
+#end
+
+---------------
+
+#file rdbe_pfb_6588_dual.set
+!  Setup for 6cm observations centered near the methanol line at 6668.5 MHz.
+!  It uses a compact frequency sequence with the RDBE PFB personality.  
+!  This setup is actually centered on 6588 MHz.
+!  For the VLBA and EB_RDBE  (GBT doesn't cover this frequency)
+
+!  There are RFI issues in this region, especially at BR.  The optimal
+!  selection of baseband frequencies needs study.
+
+!  The freq_RDBE.dat entry vc_p will be used with firstlo=5900 for the VLBA
+!  The upper sideband IF forces lower sideband basebands.
+
+!  The GBT uses a high-side LO (5636) based on gbt6cmc in freq_RDBE.dat.  
+@mode inverted_sideband_used
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 5900.0
+  freqoff  = 592.0, 592.0,  624.0, 624.0,  656.0, 656.0, 688.0, 688.0,  
+             720.0, 720.0,  752.0, 752.0,  784.0, 784.0, 816.0, 816.0
+  netside = L
+  station = vlba, eb_rdbe
+  /
+#end
+
+------------------
+
+#file rdbe_pfb_7680_dual.set
+!  Setup for 4-8 GHz receiver observations near the top of the band.
+!  It uses a compact frequency sequence with the RDBE PFB personality.  
+!  This setup is actually centered on 7680 MHz.
+!  For the VLBA only - GBT and EB don't cover the frequency
+
+!  There are RFI issues in this region, especially at BR.  The optimal
+!  selection of baseband frequencies needs study.
+
+!  The freq_RDBE.dat entry vc_v will be used with firstlo=8400 for the VLBA
+!  The upper sideband IF forces lower sideband basebands.
+
+
+@mode pfbFrqDownDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 8400.0
+  freqoff  = -816.,  -816., -784.,  -784., -752.,  -752., -720.,  -720., 
+             -688.,  -688., -656.,  -656., -624.,  -624., -592.,  -592.
+  netside = U 
+  station = vlba
+  /
+#end
+
+------------------
+
+#file rdbe_pfb_6cm_wide_lcp.set
+!  Setup for 4-8 GHz receiver observations using LCP only but with 
+!  frequencies separated by nearly the full bandwidth of the receiver.
+!  Within each of the 2 IFs, the frequencies will be spread for wide
+!  spanned bandwidth coverage.  This uses the RDBE_PFB personality
+!  VLBA only.
+
+!  Note that a slightly wider spread could be achieved with a freqref
+!  of 3400 at the low end, but that risks problems related to the
+!  harmonic of the LO mixing in unwanted signal as described in 
+!  freq_RDBE.dat.  Initial tests suggests that this might not be a
+!  problem and if that stands up, the low end may be moved back down
+!  (it was 3400 in the initial version of this file). 
+
+!  This setup may change as experience is gained with the RFI 
+!  environment.
+
+!  The freq_RDBE.dat entry vc_av will be used.
+
+@mode pfbFrqUpSingle
+! Note that this observation has an upper sideband IF near 4 GHz and a
+! lower sideband IF near 7.5 GHz.
+
+@mode rdbe_pfb_common_lcp
+
+  freqref    = 3600., 3600., 3600., 3600., 3600., 3600., 3600., 3600., 
+               8400., 8400., 8400., 8400., 8400., 8400., 8400., 8400.
+  freqoff    = 560.0, 624.0, 688.0, 752.0, 816.0, 880.0, 944.0, 1008.0,
+              -1008., -944., -880., -816., -752., -688., -624., -560.
+  netside = L,L,L,L, L,L,L,L, U,U,U,U, U,U,U,U
+  station = vlba
+  /
+#end
+
+---------------
+
+#file rdbe_pfb_8416_dual.set
+!  Setup for 4cm observations centered near the old standard of 8415 MHz
+!  using a compact frequency sequence with the RDBE PFB personality.
+!  This file is actually centered at 8416 MHz.
+!  For the VLBA, EB_RDBE, and GBT.
+
+!  The freq_RDBE.dat entry v4cm_3 will be used with firstlo=7600 for the VLBA
+!  The upper sideband IF forces lower sideband basebands.
+!  Note the VLBA could also use a high side LO (9100) if that were desired.
+
+!  The GBT uses a high-side LO (9136) based on gbt6cmc in freq_RDBE.dat.  
+@mode inverted_sideband_used
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 7600.0
+  freqoff  =  720.0, 720.0,  752.0, 752.0,  784.0, 784.0, 816.0, 816.0,  
+              848.0, 848.0,  880.0, 880.0,  912.0, 912.0, 944.0, 944.0
+  netside = L
+  station = vlba, eb_rdbe, gbt_vlba, gbt_cold
+  /
+#end
+
+------------
+
+#file rdbe_pfb_15256_dual.set
+!  Setup for 2cm observations near the old standard of 15256 MHz
+!  using a compact frequency sequence with the RDBE PFB personality.  
+!  This setup will actually be centered near 15288.
+!  For the VLBA, EB_RDBE, and GBT.
+
+!  The freq_RDBE.dat entry v2cm_d2 would best be used with firstlo=14400 
+!  for the VLBA.  But EB_RDBE does not yet have that entry in freq.dat.
+!  The next higher LO option (14600) has an IF that extends beyond the 
+!  good range for the VLBA receiver (top at 15500), but the basebands can
+!  be kept below that and that is what we will use.
+
+!  The upper sideband IF forces lower sideband basebands.
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+!  Could use this without eb_rdbe, or if it gets added to freq.dat.
+!   freqref = 14400
+!   freqoff  =  752.0, 752.0,  784.0, 784.0, 816.0, 816.0,  848.0, 848.0,
+!               880.0, 880.0,  912.0, 912.0, 944.0, 944.0,  976.0, 976.0
+
+!   Specify the firstlo in this case, or it will take 14400 for the VLBA,
+!   then not work for EB_RDBE
+  freqref = 14600  firstlo=14600
+  freqoff  = 560.0, 560.0,  592.0, 592.0,  624.0, 624.0,  656.0, 656.0,
+             688.0, 688.0,  720.0, 720.0,  752.0, 752.0,  784.0, 784.0
+
+  netside = L
+  station = vlba, eb_rdbe, gbt_vlba, gbt_cold
+  /
+#end
+
+--------
+
+
+#file rdbe_pfb_22220_dual.set
+!  Setup for 1cm observations near the old standard of 22235 MHz at
+!  the water maser line.  This setup uses a compact frequency 
+!  sequence with the RDBE PFB personality.  
+!  This setup will actually be centered at 22220 MHz.
+!  For the VLBA, EB_RDBE, and GBT.
+
+!  The freq_RDBE.dat entry v1cm_b3 (or v1cm_a4 - they have the same
+!  firstlo with different syn(1) and syn(3) settings) will be used with 
+!  firstlo=21500 for the VLBA.
+
+!  The upper sideband IF forces lower sideband basebands.
+@mode inverted_sideband_used
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 21500
+  freqoff  =  624.0, 624.0,  656.0, 656.0, 688.0, 688.0,  720.0, 720.0,  
+              752.0, 752.0,  784.0, 784.0, 816.0, 816.0,  848.0, 848.0
+  netside = L
+  station = vlba, eb_rdbe, gbt_vlba, gbt_cold
+  /
+#end
+
+----------------
+
+#file rdbe_pfb_43120_dual.set
+!  Setup for 1cm observations near the old standard of 43124 MHz near
+!  the SiO maser line at 43122.  This setup uses a compact frequency 
+!  sequence with the RDBE PFB personality.  
+!  This setup will actually be centered at 43120 MHz.
+!  For the VLBA, EB_RDBE, and GBT.
+
+!  The freq_RDBE.dat entry v7mm_c8 will be used with 
+!  firstlo=42400 for the VLBA.
+
+!  The upper sideband IF forces lower sideband basebands.
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 42400
+  freqoff  =  624.0, 624.0,  656.0, 656.0, 688.0, 688.0,  720.0, 720.0,  
+              752.0, 752.0,  784.0, 784.0, 816.0, 816.0,  848.0, 848.0
+  netside = L
+  station = vlba, gbt_vlba, gbt_cold
+!  eb_rdbe removed because there is no matching set in freq.dat.  Hopefully
+!  that will change soon (Dec. 2013)
+
+  /
+#end
+
+------------------------
+
+#file rdbe_pfb_86252_dual.set
+!  Setup for 1cm observations near the old standard of 86245 MHz near
+!  the SiO maser line at 86243.  This setup uses a compact frequency 
+!  sequence with the RDBE PFB personality.  
+!  This setup will actually be centered at 86252 MHz.
+!  For the VLBA, EB_RDBE, and GBT.
+
+!  The freq_RDBE.dat entry v7mm_c8 will be used with 
+!  firstlo=85500 for the VLBA.
+
+!  The upper sideband IF forces lower sideband basebands.
+
+!  Caution:  The two primary LO's (syn(1) and syn(3) that must be used 
+!  in this setup on the VLBA are 800 MHz apart so there could be a birdy 
+!  at 800 MHz in the IF which is at 86300 in the RF.  That will be in 
+!  the middle of baseband channels 11 and 12.
+
+@mode pfbFrqUpDual
+
+@mode rdbe_pfb_common_dual
+
+  freqref = 85500
+  freqoff  =  656.0, 656.0, 688.0, 688.0,  720.0, 720.0, 752.0, 752.0,   
+              784.0, 784.0, 816.0, 816.0,  848.0, 848.0, 880.0, 880.0
+  netside = L
+  station = vlba, eb_rdbe, gbt_vlba, gbt_cold
+  /
+#end
+
