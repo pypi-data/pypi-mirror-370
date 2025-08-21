@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <title>Watching: {{ username }}</title>
+</head>
+<body>
+  <h1>Watching Stream of {{ username }}</h1>
+  <img id="videoFeed" style="width: 100%; max-width: 800px;" />
+
+<script>
+  const username = "{{ username }}";
+  // 1) Force only WebSocket
+  const socket = io({ transports: ["websocket"] });
+
+  // Join the room as a watcher
+  socket.emit("join_room", { username });
+
+  socket.on("connect", () => {
+    console.log("Connected as watcher for", username);
+  });
+
+  // Listen for binary frames
+  socket.on("video_frame", (data) => {
+    // data = { username, frame: <binary> }
+    if (data.username === username && data.frame) {
+      // Reconstruct a Blob from the received 'frame' (binary)
+      const blob = new Blob([data.frame], { type: "image/jpeg" });
+      document.getElementById("videoFeed").src = URL.createObjectURL(blob);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Disconnected");
+  });
+</script>
+
+</body>
+</html>
+
