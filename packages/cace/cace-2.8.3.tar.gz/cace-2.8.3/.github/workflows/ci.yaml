@@ -1,0 +1,71 @@
+name: CI
+
+# Events that trigger workflow
+on:
+  # Runs on all pushes to branches
+  push:
+  # Runs on all PRs
+  pull_request:
+  # Manual Dispatch
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+      - name: Install Dependencies
+        run: make dependencies
+      - name: Lint
+        run: |
+          make lint
+
+  build:
+    runs-on: ubuntu-22.04
+    needs: [lint]
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
+      fail-fast: false
+    name: Build Package (Python ${{ matrix.python-version }})
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Dependencies
+        run: make dependencies
+      - name: Build Package
+        run: |
+          make build
+      - name: Install Package
+        run: |
+          make install
+      - name: Run CACE
+        run: |
+          cace --help
+
+  docs:
+    runs-on: ubuntu-22.04
+    needs: [lint]
+    name: Build Documentation
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - name: Install Dependencies
+        run: make dependencies
+      - name: Build Documentation
+        run: |
+          make docs
