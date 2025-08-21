@@ -1,0 +1,96 @@
+{% load custom_tags_and_filters %}
+<div class="panel-body">
+    <h3 class="customization-section-title" id="rate">CAP Discount settings</h3>
+    <form method="POST" action="{% url 'customize' 'cap_discount' %}" class="form-horizontal">
+        {% csrf_token %}
+        <div class="form-group {% if errors.cap_billing_default_billable_types %}has-error{% endif %}">
+            <label class="control-label col-sm-3">Default charges:</label>
+            <div class="col-sm-4 col-md-3">
+                <div class="checkbox">
+                    {% for value, display in billable_types %}
+                        <div>
+                            <label>
+                                <input type="checkbox"
+                                       name="cap_billing_default_billable_types_list"
+                                       {% if value in selected_billable_types %}checked{% endif %}
+                                       value="{{ value }}">
+                                {{ display }}
+                            </label>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-sm-5 col-md-6 help-block light-grey">
+                {% if errors.cap_billing_default_billable_types %}{{ errors.cap_billing_default_billable_types.error }}{% endif %}
+            </div>
+        </div>
+        <div class="form-group {% if errors.cap_billing_default_interval or errors.cap_billing_default_frequency %}has-error{% endif %}">
+            <label class="control-label col-sm-3">Default reset:</label>
+            <div class="col-sm-2 col-md-2">
+                <input aria-label="Reset interval"
+                       class="form-control"
+                       type="number"
+                       id="cap_billing_default_interval"
+                       name="cap_billing_default_interval"
+                       value="{{ cap_billing_default_interval }}">
+            </div>
+            <div class="col-sm-4 col-md-3">
+                <select class="col-sm-2 form-control"
+                        style="display:inline-block"
+                        aria-label="Reset frequency"
+                        name="cap_billing_default_frequency"
+                        id="cap_billing_default_frequency">
+                    <option value="" selected></option>
+                    {% for value, display in recurrence_frequencies %}
+                        <option value="{{ value }}" {% if cap_billing_default_frequency|to_int == value %}selected{% endif %}>
+                            {{ display }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-group"
+             {% if not errors.cap_billing_default_interval and not errors.cap_billing_default_frequency %}style="margin-bottom: 0"{% endif %}>
+            <div class="col-sm-offset-3 col-sm-5 col-md-6 help-block light-grey"
+                 {% if not errors.cap_billing_default_interval and not errors.cap_billing_default_frequency %}style="margin-bottom: 0;margin-top: 0"{% endif %}>
+                {% if errors.cap_billing_default_interval or errors.cap_billing_default_frequency %}
+                    {{ errors.cap_billing_default_interval.error }}
+                    {{ errors.cap_billing_default_frequency.error }}
+                {% endif %}
+            </div>
+        </div>
+        <div class="form-group {% if errors.cap_billing_exclude_tools %}has-error{% endif %}">
+            <label class="control-label col-sm-3" for="exclude_tool">Excluded tools</label>
+            <div class="col-sm-6 col-md-5">
+                <input id="exclude_tool"
+                       type="text"
+                       autocomplete="off"
+                       class="form-control"
+                       placeholder="Search for a tool to exclude">
+            </div>
+            <div class="col-sm-3 col-md-4 help-block light-grey">
+                {% if errors.cap_billing_exclude_tools %}{{ errors.cap_billing_exclude_tools.error }}{% endif %}
+            </div>
+        </div>
+        <div class="form-group">
+            <div id="exclude-list" class="col-sm-offset-3 col-sm-4">No tools are excluded.</div>
+        </div>
+        <div class="customization-separation" style="margin-bottom: 15px"></div>
+        <div class="text-center">{% button type="save" value="Save settings" %}</div>
+    </form>
+</div>
+<script>
+	function add_tool(jquery_event, search_selection, dataset_name)
+	{
+        $(this).typeahead('val', '').focus();
+		add_to_list("#exclude-list", "remove_tool", search_selection.id, search_selection.name, "Remove " + search_selection.name, "cap_billing_exclude_tools_list");
+	}
+    function remove_tool(tool_id)
+	{
+		remove_from_list("#exclude-list", "#cap_billing_exclude_tools_list_" + tool_id, "No tools are excluded.");
+	}
+	$('#exclude_tool').autocomplete('tools', add_tool, {{ tools|json_search_base }});
+    {% for tool in selected_tools %}
+		add_tool(undefined, {name:'{{ tool.name }}', id:{{ tool.id }}});
+	{% endfor %}
+</script>

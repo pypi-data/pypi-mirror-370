@@ -1,0 +1,213 @@
+{% extends 'rates/base.html' %}
+{% load custom_tags_and_filters %}
+{% block extrahead %}
+    {% load static %}
+    <script type="text/javascript" src="{% static "datetimepicker/bootstrap-datetimepicker.js" %}"></script>
+    <link rel="stylesheet" type="text/css" href="{% static "datetimepicker/bootstrap-datetimepicker.css" %}" />
+{% endblock %}
+{% block title %}Rate{% endblock %}
+{% block content %}
+    <h1>
+        {% if item %}
+            {{ item }}
+        {% elif forms %}
+            {{ forms.0.instance.type }}
+        {% else %}
+            Create
+        {% endif %}
+        rate
+    </h1>
+    <p>
+        <br>
+        <span class="primary-highlight glyphicon glyphicon-info-sign"></span> The rates for tool usage & training, area access and staff charges are to be expressed <strong>per hour</strong>.
+    </p>
+    {% if not forms %}
+        <form id="rate_form" method="post" class="form-horizontal" style="margin-top: 25px">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="rate_type">
+                    <strong>Rate type</strong>
+                </label>
+                <div class="col-sm-4">
+                    <select id="rate_type" name="rate_type" class="form-control" onchange="rate_type_selection(this.value)">
+                        <option value="">Select rate type</option>
+                        {% for value, display in rate_type_choices %}
+                            <option value="{{ value }}" {% if value == rate_type_choice %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div id="tool_select" class="form-group item_select" style="display: none">
+                <label class="control-label col-sm-2" for="tool">
+                    <strong>Tool</strong>
+                </label>
+                <div class="col-sm-4">
+                    <select id="tool" name="tool" class="form-control" onchange="rate_type_selection('Tool', this.value)">
+                        <option disabled selected>Choose a tool</option>
+                        {% regroup tools by category as tool_categories %}
+                        {% for category in tool_categories %}
+                            {% if tool_categories|length > 1 or category.grouper %}
+                                <optgroup label="{{ category.grouper|default_if_none:'Uncategorized' }}">
+                                {% endif %}
+                                {% for item in category.list %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
+                                {% if tool_categories|length > 1 or category.grouper %}</optgroup>{% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div id="area_select" class="form-group item_select" style="display: none">
+                <label class="control-label col-sm-2" for="area">
+                    <strong>Area</strong>
+                </label>
+                <div class="col-sm-4">
+                    <select id="area" name="area" class="form-control" onchange="rate_type_selection('Area', this.value)">
+                        <option disabled selected>Choose an area</option>
+                        {% if areas|length == 1 %}
+                            <option value="{{ areas.0.id }}">{{ areas.0 }}</option>
+                        {% elif areas %}
+                            {% for area in areas %}<option value="{{ area.id }}">{{ area.name }}</option>{% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+            <div id="consumable_select" class="form-group item_select" style="display: none">
+                <label class="control-label col-sm-2" for="consumable">
+                    <strong>Supply</strong>
+                </label>
+                <div class="col-sm-4">
+                    <select id="consumable"
+                            name="consumable"
+                            class="form-control"
+                            onchange="rate_type_selection('CONSUMABLE', this.value)">
+                        <option disabled selected value="">Choose a supply</option>
+                        {% regroup consumables by category as consumable_categories %}
+                        {% for category in consumable_categories %}
+                            {% if consumable_categories|length > 1 or category.grouper %}
+                                <optgroup label="{{ category.grouper|default_if_none:"Uncategorized" }}">
+                                {% endif %}
+                                {% for item in category.list %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
+                                {% if consumable_categories|length > 1 or category.grouper %}</optgroup>{% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </form>
+    {% else %}
+        {% regroup forms by instance.category.name as forms_by_category %}
+        {% if forms_by_category|length > 1 %}
+            <ul class="nav nav-tabs" id="tabs" style="border-bottom: none;">
+                {% for rate_form_by_category in forms_by_category %}
+                    <li class="{% if forloop.first %}active{% endif %}">
+                        <a href="#{{ rate_form_by_category.grouper|slugify }}">{{ rate_form_by_category.grouper }}</a>
+                    </li>
+                {% endfor %}
+            </ul>
+            <div class="tab-content">
+                {% for rate_form_by_category in forms_by_category %}
+                    {% with cat_index=forloop.counter %}
+                        <div class="tab-pane {% if forloop.first %}active{% endif %}"
+                             id="{{ rate_form_by_category.grouper|slugify }}">
+                            <table class="table table-bordered table-align-middle" style="border: none">
+                                {% for rate_form in rate_form_by_category.list %}
+                                    {% if not forloop.first %}
+                                        <tbody style="border:none">
+                                            <tr class="no-border" style="height: 25px">
+                                                <td colspan="6"></td>
+                                            </tr>
+                                        </tbody>
+                                    {% endif %}
+                                    {% with index=cat_index|concat:"_"|concat:forloop.counter %}
+                                        <tbody id="rate_form_tbody_{{ index }}">
+                                            {% include "rates/rate_form_details.html" with rate_form=rate_form %}
+                                        </tbody>
+                                    {% endwith %}
+                                {% endfor %}
+                            </table>
+                        </div>
+                    {% endwith %}
+                {% endfor %}
+            </div>
+        {% else %}
+            {# No need for tabs here #}
+            <table class="table table-bordered table-align-middle" style="border: none">
+                {% for rate_form in forms_by_category.0.list %}
+                    {% if not forloop.first %}
+                        <tbody style="border:none">
+                            <tr class="no-border" style="height: 25px">
+                                <td colspan="6"></td>
+                            </tr>
+                        </tbody>
+                    {% endif %}
+                    {% with index=cat_index|concat:"_"|concat:forloop.counter %}
+                        <tbody id="rate_form_tbody_{{ index }}">
+                            {% include "rates/rate_form_details.html" with rate_form=rate_form %}
+                        </tbody>
+                    {% endwith %}
+                {% endfor %}
+            </table>
+        {% endif %}
+    {% endif %}
+    <script>
+	function rate_type_selection(rate_type, id)
+    {
+        if (rate_type)
+        {
+			if (id)
+			{
+				window.location = '{% url 'create_rate' 'tool' '9999' %}'.replace('tool', rate_type).replace('9999', id);
+			}
+			else if (rate_type.toLowerCase() !== 'tool' && rate_type.toLowerCase() !== 'area' && rate_type.toLowerCase() !== 'consumable')
+			{
+				window.location = '{% url 'create_rate' 'tool' %}'.replace('tool', rate_type);
+			}
+			else
+			{
+                $('.item_select').hide();
+				$('#'+rate_type.toLowerCase()+"_select").show();
+			}
+        }
+	}
+    function save_rate_form(index) {
+        let rate_form_selector = 'rate_form_' + index;
+        let rate_form = $('#' + rate_form_selector);
+        if (rate_form[0].reportValidity())
+        {
+			let data = rate_form.serialize();
+			data += '&index=' + index;
+			data += '&' + $('input[form="' + rate_form_selector + '"]').serialize();
+			let success_callback = function (response) {
+				$('#rate_form_tbody_' + index).html(response)
+			};
+			ajax_post(rate_form.action, data, success_callback, ajax_failure_callback('Error saving rate'));
+    	}
+	}
+    function delete_rate_form(selector, rate_id)
+    {
+        let success_callback = function () { $(selector).remove(); }
+        if (rate_id)
+        {
+            if (confirm("Are you sure you want to delete this rate? This cannot be undone."))
+            {
+            	ajax_get('{% url 'delete_rate_time' '9999' %}'.replace('9999', rate_id), undefined, success_callback, ajax_failure_callback('Error deleting rate'));
+            }
+		}
+        else
+        {
+            success_callback();
+        }
+	}
+	function update_daily_split_checkbox(checkbox, label_selector)
+    {
+        let daily_split_label = $('#' + label_selector);
+		if ($(checkbox).is(':checked'))
+        {
+            daily_split_label.show();
+        }
+        else
+        {
+            daily_split_label.hide();
+        }
+	}
+	$("#tabs").find("a").click(switch_tab);
+    </script>
+{% endblock %}

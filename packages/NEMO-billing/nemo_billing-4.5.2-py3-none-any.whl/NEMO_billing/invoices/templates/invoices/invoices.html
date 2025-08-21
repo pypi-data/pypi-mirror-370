@@ -1,0 +1,367 @@
+{% extends 'pagination/pagination_base.html' %}
+{% load custom_tags_and_filters %}
+{% load billing_tags %}
+{% block title %}Invoices{% endblock %}
+{% block before_pagination %}
+    <h1>Invoices</h1>
+    {% if not configuration_list and user.is_superuser %}
+        <h3 style="margin-bottom: 30px">There are no invoice configurations set</h3>
+        <h3>
+            You can change that in the <a href="{% url 'admin:invoices_invoiceconfiguration_changelist' %}">Invoice Configuration section of 'Detailed Administration'</a>.
+        </h3>
+    {% else %}
+        <div class="row" style="margin-bottom: 40px">
+            <div class="col-sm-4">
+                <input id="search" type="text" placeholder="Search for an invoice" class="form-control" autofocus>
+            </div>
+        </div>
+        {% if user.is_accounting_officer or user.is_facility_manager or user.is_superuser %}
+            <form id="generate-invoice-form"
+                  action="{% url 'generate_monthly_invoices' %}"
+                  class="form-horizontal"
+                  method="post">
+                {% csrf_token %}
+                <div class="col-xs-12 col-sm-6 {% if configuration_list|length_is:1 %}col-md-4{% else %}col-md-3{% endif %}"
+                     style="margin-bottom: 15px;
+                            padding: 0">
+                    <label for="month" class="col-xs-2 col-sm-3 control-label">Month</label>
+                    <div class="col-xs-10 col-sm-9" style="padding-right:0;">
+                        <select name="month" id="month" class="form-control" required>
+                            <option selected disabled value=""></option>
+                            {% for month in month_list %}<option>{{ month|date:"F, Y" }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-xs-12 col-sm-6 {% if configuration_list|length_is:1 %}col-md-5{% else %}col-md-5{% endif %}"
+                     style="margin-bottom: 15px;
+                            padding: 0">
+                    <label for="account_id" class="col-xs-2 col-sm-3 control-label">Account</label>
+                    <div class="col-xs-10 col-sm-9" style="padding-right:0;">
+                        <select name="account_id" id="account_id" class="form-control" required>
+                            <option selected disabled value=""></option>
+                            <option value="All">All</option>
+                            {% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% if configuration_list|length_is:1 %}
+                    <input type="hidden" name="configuration_id" value="{{ configuration_list.0.id }}">
+                {% else %}
+                    <div class="col-xs-12 col-sm-6 col-md-4" style="margin-bottom: 15px; padding: 0">
+                        <label for="configuration_id" class="col-xs-2 col-sm-3 control-label">Config</label>
+                        <div class="col-xs-10 col-sm-9" style="padding-right:0;">
+                            <select class="form-control" name="configuration_id" id="configuration_id" required>
+                                <option disabled selected value="">Select a configuration</option>
+                                {% for configuration in configuration_list %}
+                                    <option value="{{ configuration.id }}">{{ configuration.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                {% endif %}
+                <div class="col-xs-12 col-sm-6 {% if configuration_list|length_is:1 %}col-md-3 col-sm-offset-6 col-md-offset-0{% else %}col-md-4 col-md-offset-8{% endif %} text-right"
+                     style="margin-bottom: 15px;
+                            padding-right:0">
+                    {% button type="save" onclick="show_spinner(this.form);" value="Generate invoice(s)" icon="glyphicon-list-alt" %}
+                </div>
+            </form>
+        {% endif %}
+        <div class="text-right">{% button value="Export invoice list" type="export" onclick="export_invoice_list()" %}</div>
+        <div id="download_invoices" class="row" style="display: none; margin-top: 15px; margin-right: 0">
+            <div class="form-group">
+                {% url 'mark_invoices_as_paid_in_full' as mark_paid_in_full_url %}
+                {% url 'review_and_send_invoices' as review_and_send_url %}
+                {% url 'zip_invoices' 'csv' as zip_csv_url %}
+                {% url 'zip_invoices' as zip_url %}
+                {% button type="export" style="margin-left: 10px; float: right;" value="Mark paid in full" onclick="$('#selected-invoices').attr('action', '"|concat:mark_paid_in_full_url|concat:"');$('#selected-invoices').submit();$('#selected-invoices :checkbox').prop('checked', false);update_download_button_state();" %}
+                {% button type="export" style="margin-left: 10px; float: right;" value="Review and send" onclick="$('#selected-invoices').attr('action', '"|concat:review_and_send_url|concat:"');$('#selected-invoices').submit();$('#selected-invoices :checkbox').prop('checked', false);update_download_button_state();" %}
+                {% button type="export" style="margin-left: 10px; float: right;" value="Export (CSV)" onclick="$('#selected-invoices').attr('action', '"|concat:zip_csv_url|concat:"');$('#selected-invoices').submit();$('#selected-invoices :checkbox').prop('checked', false);update_download_button_state();" %}
+                {% button type="export" style="float: right;" value="Export" onclick="$('#selected-invoices').attr('action', '"|concat:zip_url|concat:"');$('#selected-invoices').submit();$('#selected-invoices :checkbox').prop('checked', false);update_download_button_state();" %}
+                <label class="pull-right control-label form-control-static" style="margin-right: 10px;">Selected invoices:</label>
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}
+{% block pagination_header %}
+    <div class="row" style="width: 100%; margin: 20px 0 0 0;">
+        {% regroup filter_month_list by year as filter_by_year %}
+        {% if filter_month_list %}
+            <div class="col-sm-12" style="padding-left: 0">
+                {% for year in filter_by_year %}
+                    <button style="margin-right: 2px"
+                            class="year-button btn btn-sm btn-default {% if filter_year and filter_year == year.grouper %}focus{% endif %}"
+                            type="button"
+                            onclick="$('.year-button').removeClass('focus');$('.filter_year').hide();$('#filter_year_{{ year.grouper }}').show();">
+                        {{ year.grouper }}
+                    </button>
+                {% endfor %}
+                {% if filter_month %}
+                    <a class="btn btn-sm btn-default" type="button" href="{% url 'invoices' %}"><i class="glyphicon glyphicon-remove"></i> Clear</a>
+                {% endif %}
+            </div>
+            <div class="col-xs-7 col-sm-8 col-lg-10" style="padding-left: 0">
+                {% for year in filter_by_year %}
+                    <div id="filter_year_{{ year.grouper }}"
+                         class="filter_year"
+                         style="margin-top:10px;
+                                {% if not filter_year or filter_year != year.grouper %}display: none;{% endif %}">
+                        {% for month in year.list %}
+                            <a style="margin-right: 10px" href="{% url 'invoices_month' month.year month.month %}">{{ month|date:"F" }}</a>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        <div class="col-xs-5 col-sm-4 col-lg-2 text-right" style="padding-right: 0">
+            {% include "pagination/pagination_selector.html" %}
+        </div>
+        <div class="col-sm-12" style="margin-left: -15px;float: left">
+            <div class="checkbox">
+                <span class="control-label">Columns:</span>
+                <label>
+                    <input id="invoices_col_3" type="checkbox" onchange="toggle_column(3, this.checked)">
+                    Created date
+                </label>
+                <label>
+                    <input id="invoices_col_4" type="checkbox" onchange="toggle_column(4, this.checked)">
+                    Month
+                </label>
+                <label>
+                    <input id="invoices_col_5" type="checkbox" onchange="toggle_column(5, this.checked)">
+                    Category
+                </label>
+                <label>
+                    <input id="invoices_col_6" type="checkbox" onchange="toggle_column(6, this.checked)">
+                    {{ "projects_and_accounts"|customization:"project_application_identifier_name" }}
+                </label>
+                <label>
+                    <input id="invoices_col_8" type="checkbox" onchange="toggle_column(8, this.checked)">
+                    Project ID
+                </label>
+                <label>
+                    <input id="invoices_col_10" type="checkbox" onchange="toggle_column(10, this.checked)">
+                    Account ID
+                </label>
+                <label>
+                    <input id="invoices_col_11" type="checkbox" onchange="toggle_column(11, this.checked)">
+                    Sent date
+                </label>
+                <label>
+                    <input id="invoices_col_12" type="checkbox" onchange="toggle_column(12, this.checked)">
+                    Due date
+                </label>
+                <label>
+                    <input id="invoices_col_13" type="checkbox" onchange="toggle_column(13, this.checked)">
+                    Reviewed date
+                </label>
+                {% with facilities_length=core_facilities|length base_column_number=display_general_facility|yesno:"16,15"|to_int %}
+                    {% with tax_column_number=base_column_number|add:facilities_length %}
+                        <label>
+                            <input id="invoices_col_{{ tax_column_number }}"
+                                   type="checkbox"
+                                   onchange="toggle_column({{ tax_column_number }}, this.checked)">
+                            Tax
+                        </label>
+                        <label>
+                            <input id="invoices_col_{{ tax_column_number|add:1 }}"
+                                   type="checkbox"
+                                   onchange="toggle_column({{ tax_column_number|add:1 }}, this.checked)">
+                            Outstanding
+                        </label>
+                        <label>
+                            <input id="invoices_col_{{ tax_column_number|add:2 }}"
+                                   type="checkbox"
+                                   onchange="toggle_column({{ tax_column_number|add:2 }}, this.checked)">
+                            Emails
+                        </label>
+                        <label>
+                            <input id="invoices_col_{{ tax_column_number|add:3 }}"
+                                   type="checkbox"
+                                   onchange="toggle_column({{ tax_column_number|add:3 }}, this.checked)">
+                            Actions
+                        </label>
+                    {% endwith %}
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block pagination_content %}
+    <form id="selected-invoices" action="{% url 'zip_invoices' %}" method="post">
+        {% csrf_token %}
+        <table id="invoices_table"
+               class="table table-bordered table-condensed table-striped table-hover thead-light">
+            <thead>
+                <tr>
+                    <th class="button-column-minimum">
+                        <input type="checkbox"
+                               onchange="$('#selected-invoices :checkbox').prop('checked', $(this).prop('checked'));update_download_button_state();">
+                    </th>
+                    <th class="button-column-minimum">
+                        {% include 'pagination/pagination_column.html' with order_by='invoice_number' name='#' %}
+                    </th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='created_date' name='Created' %}</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='start' name='Month' %}</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='project_details__category' name='Category' %}</th>
+                    <th>
+                        {% include 'pagination/pagination_column.html' with order_by='project_details__project__application_identifier' name="projects_and_accounts"|customization:"project_application_identifier_name" %}
+                    </th>
+                    <th>
+                        {% include 'pagination/pagination_column.html' with order_by='project_details__project__name' name='Project' %}
+                    </th>
+                    <th>
+                        {% include 'pagination/pagination_column.html' with order_by='project_details__project__id' name='Project ID' %}
+                    </th>
+                    <th>
+                        {% include 'pagination/pagination_column.html' with order_by='project_details__project__account__name' name='Account' %}
+                    </th>
+                    <th>
+                        {% include 'pagination/pagination_column.html' with order_by='project_details__project__account__id' name='Account ID' %}
+                    </th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='last_sent_date' name='Sent' %}</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='due_date' name='Due' %}</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='reviewed_date' name='Reviewed' %}</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='total_amount' name='Total' %}</th>
+                    {% for core_facility in core_facilities %}
+                        <th>
+                            {% include 'pagination/pagination_column.html' with order_by='facility_total_'|concat:core_facility.id name=core_facility.name %}
+                        </th>
+                    {% endfor %}
+                    {% if display_general_facility %}
+                        <th>{% include 'pagination/pagination_column.html' with order_by='facility_total_general' name="General" %}</th>
+                    {% endif %}
+                    <th>{% include 'pagination/pagination_column.html' with order_by='total_tax' name='Tax' %}</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='outstanding' name='Outstanding' %}</th>
+                    <th>Emails</th>
+                    <th class="button-column-minimum"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in page %}
+                    {% url 'view_invoice' invoice.id as view_invoice_url %}
+                    {% with td_attribute="onclick=\"window.location.href = '"|concat:view_invoice_url|concat:"'\" style=\"cursor:pointer\"" %}
+                        <tr>
+                            <td class="text-center">
+                                <input type="checkbox"
+                                       id="select_{{ invoice.id }}"
+                                       name="selected_invoice_id[]"
+                                       aria-label="{{ invoice.invoice_number }}"
+                                       value="{{ invoice.id }}"
+                                       onchange="update_download_button_state();" />
+                            </td>
+                            <td style="white-space: nowrap">
+                                <label for="select_{{ invoice.id }}">{{ invoice.invoice_number }}</label>
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.created_date|date:"SHORT_DATETIME_FORMAT" }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.start|date:"F Y" }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.project_details.category }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.project_details.project.application_identifier }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.project_details.project.name }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.project_details.project.id }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.project_details.project.account.name }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.project_details.project.account.id }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.last_sent_date|date:"SHORT_DATE_FORMAT"|default_if_none:"" }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.due_date|date:"SHORT_DATE_FORMAT"|default_if_none:"" }}
+                            </td>
+                            <td {{ td_attribute|safe }}>{{ invoice.reviewed_date|date:"SHORT_DATE_FORMAT"|default_if_none:"" }}
+                            </td>
+                            <td {{ td_attribute|safe }} class="text-right">{{ invoice.total_amount_display }}
+                            </td>
+                            {% for core_facility in core_facilities %}
+                                <td {{ td_attribute|safe }} class="text-right">
+                                    {% with facility_subtotal=invoice.facility_subtotals|to_dict:"core_facility"|get_item:core_facility.name %}
+                                        {{ facility_subtotal.amount|default:0|display_amount:invoice.configuration }}
+                                    {% endwith %}
+                                </td>
+                            {% endfor %}
+                            {% if display_general_facility %}
+                                <td {{ td_attribute|safe }} class="text-right">
+                                    {% with general_subtotal=invoice.facility_subtotals|to_dict:"core_facility"|get_item:None %}
+                                        {{ general_subtotal.amount|default:0|display_amount:invoice.configuration }}
+                                    {% endwith %}
+                                </td>
+                            {% endif %}
+                            <td {{ td_attribute|safe }} class="text-right">{{ invoice.total_tax|display_amount:invoice.configuration }}
+                            </td>
+                            <td {{ td_attribute|safe }} class="text-right">{{ invoice.outstanding|display_amount:invoice.configuration }}
+                            </td>
+                            <td {{ td_attribute|safe }} class="text-right">{{ invoice.project_details.email_to|join:"<br>" }}
+                            </td>
+                            <td>{% button size="xsmall" type="view" value="View" title="View invoice" url=view_invoice_url %}</td>
+                        </tr>
+                    {% endwith %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+{% endblock %}
+{% block table_empty_content %}
+    <div style="margin-top: 35px">
+        <i>No invoices could be found.</i>
+    </div>
+{% endblock %}
+{% block after_pagination %}
+    <script>
+		function export_invoice_list()
+        {
+            let hasParams = new URL(document.location.href).searchParams.size;
+            window.open(document.location.href+(hasParams?'':'?')+'&csv=true');
+		}
+
+		function toggle_column(column_number, checked)
+		{
+            $("#invoices_col_"+column_number).prop("checked", checked);
+            localStorage.setItem("invoices_col_"+column_number, ""+checked);
+            $('#invoices_table td:nth-child(' + column_number + '),#invoices_table th:nth-child(' + column_number + ')').toggle(checked);
+        }
+
+		function update_download_button_state()
+		{
+			if ($("#selected-invoices input:checkbox:checked").length > 0)
+			{
+				$('#download_invoices').show();
+			}
+			else
+			{
+				$('#download_invoices').hide();
+			}
+		}
+		function get_invoice(jquery_event, search_selection, dataset_name)
+		{
+			window.location.href = "{% url 'view_invoice' 999 %}".replace('999', search_selection.id);
+		}
+		function on_load()
+		{
+            $("#search").autocomplete('invoices', get_invoice, '{% url 'search_invoices' %}', true).focus();
+
+			toggle_column(3, localStorage.getItem("invoices_col_3") !== "false");
+			toggle_column(4, localStorage.getItem("invoices_col_4") !== "false");
+			toggle_column(5, localStorage.getItem("invoices_col_5") !== "false");
+			toggle_column(6, localStorage.getItem("invoices_col_6") !== "false");
+			toggle_column(8, localStorage.getItem("invoices_col_8") !== "false");
+			toggle_column(10, localStorage.getItem("invoices_col_10") !== "false");
+			toggle_column(11, localStorage.getItem("invoices_col_11") !== "false");
+			toggle_column(12, localStorage.getItem("invoices_col_12") !== "false");
+			toggle_column(13, localStorage.getItem("invoices_col_13") !== "false");
+            {% with facilities_length=core_facilities|length base_column_number=display_general_facility|yesno:"16,15"|to_int %}
+				{% with tax_column_number=base_column_number|add:facilities_length %}
+					toggle_column({{ tax_column_number }}, localStorage.getItem("invoices_col_{{ tax_column_number }}") !== "false");
+					toggle_column({{ tax_column_number|add:1 }}, localStorage.getItem("invoices_col_{{ tax_column_number|add:1 }}") !== "false");
+					toggle_column({{ tax_column_number|add:2 }}, localStorage.getItem("invoices_col_{{ tax_column_number|add:2 }}") === "true");
+					toggle_column({{ tax_column_number|add:3 }}, localStorage.getItem("invoices_col_{{ tax_column_number|add:3 }}") !== "false");
+            	{% endwith %}
+            {% endwith %}
+		}
+		window.addEventListener('load', on_load, true);
+	
+    </script>
+{% endblock %}

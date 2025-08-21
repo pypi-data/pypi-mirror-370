@@ -1,0 +1,182 @@
+{% load custom_tags_and_filters %}
+<tr class="info">
+    <th colspan="{% if rate_times %}7{% else %}6{% endif %}" class="text-center">
+        {# Set the form here (as good as any place) #}
+        <form id="rate_form_{{ index }}"
+              method="post"
+              class="form-horizontal"
+              action="{% if item %}{% url 'create_rate' rate_type_choice item.id %}{% else %}{% url 'create_rate' rate_type_choice %}{% endif %}">
+            {% csrf_token %}
+        </form>
+        <div class="text-center">
+            <h4>{{ rate_form.display_title }}</h4>
+        </div>
+    </th>
+</tr>
+<tr class="warning">
+    <th class="text-center">Effective date</th>
+    {% if rate_times %}<th class="text-center">Time</th>{% endif %}
+    <th class="text-center">Amount</th>
+    <th class="text-center">Minimum charge</th>
+    <th class="text-center">Flat</th>
+    <th class="text-center">Daily rate</th>
+    <th class="button-column-minimum"></th>
+</tr>
+{% for rate in rate_form.rate_history.all_rates %}
+    <tr id="rate_history_{{ rate.id }}"
+        class="{% if rate in rate_form.rate_history.current_rate.values %}success{% endif %}">
+        <td class="text-center">{{ rate.effective_date|default_if_none:"" }}</td>
+        {% if rate_times %}<td class="text-center">{{ rate.time|default_if_none:"" }}</td>{% endif %}
+        <td class="text-right">{{ rate.amount }}</td>
+        <td class="text-right">{{ rate.minimum_charge|default_if_none:"" }}</td>
+        <td class="text-center">
+            {% if rate.flat %}<span class="glyphicon glyphicon-ok success-highlight"></span>{% endif %}
+        </td>
+        <td class="text-center">
+            {% if rate.daily %}
+                <span class="glyphicon glyphicon-ok success-highlight"></span>
+                {% if rate.daily_split_multi_day_charges %}
+                    (Split per day)
+                {% else %}
+                    (Once at the end)
+                {% endif %}
+            {% endif %}
+        </td>
+        <td>
+            {% now "Y-m-d" as today_date %}
+            {% if rate.effective_date and rate.effective_date|date:"Y-m-d" >= today_date %}
+                {% button type="delete" value="" size="small" title="Delete this rate" onclick="delete_rate_form('#rate_history_"|concat:rate.id|concat:"', '"|concat:rate.id|default_if_none:''|concat:"');" %}
+            {% endif %}
+        </td>
+    </tr>
+{% endfor %}
+<tr>
+    <td style="position: relative">
+        {% csrf_token %}
+        <input form="rate_form_{{ index }}" type="hidden" name="type" value="{{ rate_form.instance.type.id }}">
+        <input form="rate_form_{{ index }}"
+               type="hidden"
+               name="category"
+               value="{{ rate_form.instance.category.id }}">
+        <input form="rate_form_{{ index }}" type="hidden" name="tool" value="{{ rate_form.instance.tool.id }}">
+        <input form="rate_form_{{ index }}" type="hidden" name="area" value="{{ rate_form.instance.area.id }}">
+        <input form="rate_form_{{ index }}"
+               type="hidden"
+               name="consumable"
+               value="{{ rate_form.instance.consumable.id }}">
+        <input form="rate_form_{{ index }}"
+               class="form-control"
+               id="effective_date_{{ index }}"
+               name="effective_date"
+               value="{{ rate_form.effective_date.value|default_if_none:'' }}">
+        {% if rate_form.effective_date.errors %}
+            <div class="form-control-static danger-highlight">{{ rate_form.effective_date.errors|striptags }}</div>
+        {% endif %}
+    </td>
+    {% if rate_times %}
+        <td>
+            {% if rate_form.instance.type.can_have_rate_time %}
+                <select form="rate_form_{{ index }}" class="form-control" id="time_{{ index }}" name="time">
+                    <option value="" selected></option>
+                    {% for rate_time in rate_form.fields.time.queryset %}
+                        <option value="{{ rate_time.id }}" {% if rate_form.time.value|to_int == rate_time.id %}selected{% endif %}>
+                            {{ rate_time }}
+                        </option>
+                    {% endfor %}
+                </select>
+                {% if rate_form.time.errors %}
+                    <div class="form-control-static danger-highlight">{{ rate_form.time.errors|striptags }}</div>
+                {% endif %}
+            {% endif %}
+        </td>
+    {% endif %}
+    <td>
+        <input form="rate_form_{{ index }}"
+               class="form-control text-right"
+               type="number"
+               step=".01"
+               id="amount_{{ index }}"
+               name="amount"
+               value="{{ rate_form.amount.value|default_if_none:'' }}"
+               required>
+        {% if rate_form.amount.errors %}
+            <div class="form-control-static danger-highlight">{{ rate_form.amount.errors|striptags }}</div>
+        {% endif %}
+    </td>
+    <td>
+        <input form="rate_form_{{ index }}"
+               class="form-control text-right"
+               type="number"
+               step=".01"
+               id="minimum_charge_{{ index }}"
+               name="minimum_charge"
+               value="{{ rate_form.minimum_charge.value|default_if_none:'' }}">
+        {% if rate_form.minimum_charge.errors %}
+            <div class="form-control-static danger-highlight">{{ rate_form.minimum_charge.errors|striptags }}</div>
+        {% endif %}
+    </td>
+    <td class="text-center">
+        <div class="checkbox">
+            <input form="rate_form_{{ index }}"
+                   type="checkbox"
+                   style="position: initial;
+                          margin-left: initial"
+                   id="flat_{{ index }}"
+                   name="flat"
+                   {% if rate_form.flat.value %}checked{% endif %}>
+        </div>
+        {% if rate_form.flat.errors %}
+            <div class="form-control-static danger-highlight">{{ rate_form.flat.errors|striptags }}</div>
+        {% endif %}
+    </td>
+    <td class="text-center">
+        {% if rate_form.instance.type.type == "TOOL_USAGE" or rate_form.instance.type.type == "AREA_USAGE" %}
+            <div class="checkbox">
+                <label>
+                    <input form="rate_form_{{ index }}"
+                           id="daily_{{ index }}"
+                           type="checkbox"
+                           onclick="update_daily_split_checkbox(this, 'daily_split_multi_day_charges_label_{{ index }}')"
+                           onchange="update_daily_split_checkbox(this, 'daily_split_multi_day_charges_label_{{ index }}')"
+                           name="daily"
+                           {% if rate_form.daily.value %}checked{% endif %}>
+                    Daily rate
+                </label>
+                <label id="daily_split_multi_day_charges_label_{{ index }}" style="margin-left: 5px; display: none">
+                    <input form="rate_form_{{ index }}"
+                           type="checkbox"
+                           id="daily_split_multi_day_charges_{{ index }}"
+                           name="daily_split_multi_day_charges"
+                           {% if rate_form.daily_split_multi_day_charges.value %}checked{% endif %}>
+                    Split multi day charges
+                </label>
+                {% if rate_form.daily.errors or rate_form.daily_split_multi_day_charges.errors %}
+                    <div class="form-control-static danger-highlight">
+                        {{ rate_form.daily.errors|striptags }} {{ rate_form.daily_split_multi_day_charges.errors|striptags }}
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </td>
+    <td>
+        <div class="text-right">
+            {% button type="save" size="small" submit=False value="" onclick="save_rate_form('"|concat:index|concat:"')" %}
+        </div>
+    </td>
+</tr>
+{% if rate_form.non_field_errors %}
+    <tr>
+        <td colspan="{% if rate_times %}7{% else %}6{% endif %}">
+            <div class="form-control-static danger-highlight tool-rate-section" style="border-top: none">
+                {{ rate_form.non_field_errors|striptags }}
+            </div>
+        </td>
+    </tr>
+{% endif %}
+<script>
+	$(function()
+	{
+		update_daily_split_checkbox($('#daily_{{ index }}'), 'daily_split_multi_day_charges_label_{{ index }}');
+        $("#effective_date_{{ index }}").datetimepicker({format: "{{ date_input_js_format }}", useCurrent: false});
+	});
+</script>

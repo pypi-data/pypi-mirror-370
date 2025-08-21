@@ -1,0 +1,463 @@
+{% extends 'base.html' %}
+{% load custom_tags_and_filters %}
+{% block title %}
+    {% if form.instance.pk %}
+        Edit
+    {% else %}
+        New
+    {% endif %}
+    project
+{% endblock %}
+{% block extrahead %}
+    {% load static %}
+    <script type="text/javascript" src="{% static "datetimepicker/bootstrap-datetimepicker.js" %}"></script>
+    <link rel="stylesheet" type="text/css" href="{% static "datetimepicker/bootstrap-datetimepicker.css" %}" />
+{% endblock %}
+{% block content %}
+    {% with edit=form.instance.pk project_types_allow_multiple="projects_and_accounts"|customization:"project_type_allow_multiple" %}
+        <h1 class="form-group">
+            {% if edit %}
+                Edit
+            {% else %}
+                New
+            {% endif %}
+            project
+        </h1>
+        {% if form.errors %}
+            <div class="col-sm-12">
+                <div class="col-sm-6 alert alert-danger">
+                    Oops! Something went wrong. Please correct the errors highlighted below.
+                    <br>
+                    {{ form.non_field_errors }}
+                </div>
+            </div>
+        {% endif %}
+        <form id="project_form"
+              method="post"
+              action="{% if edit %}{% url 'invoices_edit_project' form.instance.id %}{% else %}{% url 'invoices_create_project' %}{% endif %}"
+              class="form-horizontal"
+              enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="name" class="control-label col-sm-2">
+                    <b>Name</b>
+                </label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           name="name"
+                           id="name"
+                           maxlength="100"
+                           class="form-control"
+                           value="{{ form.name.value|default_if_none:'' }}"
+                           autofocus
+                           required>
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form.name.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="account_search" class="control-label col-sm-2">
+                    <b>Account</b>
+                </label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           id="account_search"
+                           name="account"
+                           class="form-control"
+                           value="{{ form.account.value|default_if_none:"" }}"
+                           {% if form.account.value %}style="display:none"{% else %} required{% endif %}>
+                    <input type="button"
+                           id="selected_account"
+                           class="btn btn-default"
+                           onclick="clear_account_selection()"
+                           value="{% if edit %}{{ form.instance.account }}{% else %}{{ form.cleaned_data.account|default_if_none:"" }}{% endif %}"
+                           style="{% if not form.account.value %}display:none{% endif %}">
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form.account.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="application_identifier" class="control-label col-sm-2">
+                    <b>{{ "projects_and_accounts"|customization:"project_application_identifier_name" }}</b>
+                </label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           name="application_identifier"
+                           id="application_identifier"
+                           maxlength="100"
+                           class="form-control"
+                           value="{{ form.application_identifier.value|default_if_none:'' }}"
+                           required>
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form.application_identifier.errors|striptags }}</div>
+            </div>
+            {% if form.fields.principal_investigators %}
+                <div class="form-group">
+                    <label class="control-label col-sm-2" for="pi_search">PIs</label>
+                    <div class="col-sm-4">
+                        <input id="pi_search"
+                               type="text"
+                               autocomplete="off"
+                               class="form-control"
+                               placeholder="Add a principal investigator">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div id="pi-list" class="col-sm-offset-2 col-sm-4">This project has no principal investigators.</div>
+                </div>
+            {% endif %}
+            {% if form.fields.project_types.queryset %}
+                {% if project_types_allow_multiple %}
+                    <div class="form-group">
+                        <label class="control-label col-sm-2" for="project_type_search">Project types</label>
+                        <div class="col-sm-4">
+                            <input id="project_type_search"
+                                   type="text"
+                                   autocomplete="off"
+                                   class="form-control"
+                                   placeholder="Add a project type">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div id="project-type-list" class="col-sm-offset-2 col-sm-4">This project has no project types.</div>
+                    </div>
+                {% else %}
+                    <div class="form-group">
+                        <label for="project_types" class="control-label col-sm-2">Project type</label>
+                        <div class="col-sm-4">
+                            <select name="project_types" id="project_types" class="form-control">
+                                <option value="">---------</option>
+                                {% for project_type_id, project_type_name in form.fields.project_types.choices %}
+                                    <option value="{{ project_type_id }}"
+                                            {% if project_type_id in form.project_types.value %}selected{% endif %}>
+                                        {{ project_type_name|default_if_none:'' }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-sm-6 form-control-static danger-highlight">{{ form.project_types.errors|striptags }}</div>
+                    </div>
+                {% endif %}
+            {% endif %}
+            {% if form.fields.discipline.choices.queryset %}
+                <div class="form-group">
+                    <label for="discipline" class="control-label col-sm-2">Discipline</label>
+                    <div class="col-sm-4">
+                        <select name="discipline" id="discipline" class="form-control">
+                            {% for discipline_id, discipline_name in form.fields.discipline.choices %}
+                                <option value="{{ discipline_id }}"
+                                        {% if discipline_id == form.discipline.value|to_int %}selected{% endif %}>
+                                    {{ discipline_name|default_if_none:'' }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form.discipline.errors|striptags }}</div>
+                </div>
+            {% endif %}
+            {% if rate_categories %}
+                <div class="form-group">
+                    <label for="category" class="control-label col-sm-2">
+                        <b>Rate Category</b>
+                    </label>
+                    <div class="col-sm-4">
+                        <select name="category" id="category" class="form-control" required>
+                            <option disabled selected value="">&nbsp;</option>
+                            {% for rate_category in rate_categories %}
+                                <option value="{{ rate_category.id }}"
+                                        {% if rate_category.id == form_details.category.value|to_int %}selected{% endif %}>
+                                    {{ rate_category.name|default_if_none:'' }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.category.errors|striptags }}</div>
+                </div>
+            {% endif %}
+            {% if form_details.fields.institution.choices.queryset %}
+                <div class="form-group">
+                    <label for="institution_search" class="control-label col-sm-2">Institution</label>
+                    <div class="col-sm-4">
+                        <input type="text"
+                               id="institution_search"
+                               name="institution"
+                               class="form-control"
+                               value="{{ form_details.institution.value|default_if_none:"" }}"
+                               {% if form_details.institution.value %}style="display:none"{% else %} required{% endif %}
+                               pattern="\S(.*\S)?"
+                               title="This field is required">
+                        <input type="button"
+                               id="selected_institution"
+                               class="btn btn-default"
+                               onclick="clear_institution_selection()"
+                               value="{% if edit %}{{ form_details.instance.institution }}{% else %}{{ form_details.cleaned_data.institution|default_if_none:"" }}{% endif %}"
+                               style="{% if not form_details.institution.value %}display:none{% endif %}">
+                    </div>
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.institution.errors|striptags }}</div>
+                </div>
+            {% endif %}
+            {% if form_details.fields.department.choices.queryset %}
+                <div class="form-group">
+                    <label for="department" class="control-label col-sm-2">Department</label>
+                    <div class="col-sm-4">
+                        <select name="department" id="department" class="form-control">
+                            {% for department_id, department_name in form_details.fields.department.choices %}
+                                <option value="{{ department_id }}"
+                                        {% if department_id == form_details.department.value|to_int %}selected{% endif %}>
+                                    {{ department_name|default_if_none:'' }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.department.errors|striptags }}</div>
+                </div>
+            {% endif %}
+            {% if form_details.fields.staff_host.choices.queryset %}
+                <div class="form-group">
+                    <label for="staff_host" class="control-label col-sm-2">Staff host</label>
+                    <div class="col-sm-4">
+                        <select name="staff_host" id="staff_host" class="form-control">
+                            {% for staff_host_id, staff_host_name in form_details.fields.staff_host.choices %}
+                                <option value="{{ staff_host_id }}"
+                                        {% if staff_host_id == form_details.staff_host.value|to_int %}selected{% endif %}>
+                                    {{ staff_host_name|default_if_none:'' }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.staff_host.errors|striptags }}</div>
+                </div>
+            {% endif %}
+            <div class="form-group">
+                <label for="project_name" class="control-label col-sm-2">Name for invoice</label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           name="project_name"
+                           id="project_name"
+                           class="form-control"
+                           value="{{ form_details.project_name.value|default_if_none:'' }}">
+                    <div class="form-control-static">
+                        <small><i>{{ form_details.project_name.help_text }}</i></small>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="form-control-static danger-highlight">{{ form_details.project_name.errors|striptags }}</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="contact_name" class="control-label col-sm-2">Contact name</label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           name="contact_name"
+                           id="contact_name"
+                           class="form-control"
+                           value="{{ form_details.contact_name.value|default_if_none:'' }}">
+                    <div class="form-control-static">
+                        <small><i>{{ form_details.contact_name.help_text }}</i></small>
+                    </div>
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.contact_name.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="contact_email" class="control-label col-sm-2">Email</label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           name="contact_email"
+                           id="contact_email"
+                           class="form-control"
+                           value="{{ form_details.contact_email.value|default_if_none:'' }}">
+                    <div class="form-control-static">
+                        <small><i>{{ form_details.contact_email.help_text }}</i></small>
+                    </div>
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.contact_email.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="contact_phone" class="control-label col-sm-2">Phone number</label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           name="contact_phone"
+                           id="contact_phone"
+                           class="form-control"
+                           value="{{ form_details.contact_phone.value|default_if_none:'' }}">
+                    <div class="form-control-static">
+                        <small><i>{{ form_details.contact_phone.help_text }}</i></small>
+                    </div>
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.contact_phone.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="addressee" class="control-label col-sm-2">Addressee</label>
+                <div class="col-sm-4">
+                    <textarea rows="6" name="addressee" id="addressee" class="form-control">{{ form_details.addressee.value|default_if_none:'' }}</textarea>
+                    <div class="form-control-static">
+                        <small><i>Addressee details will be displayed on the invoice</i></small>
+                    </div>
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.addressee.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="comments" class="control-label col-sm-2">Comments</label>
+                <div class="col-sm-4">
+                    <textarea rows="6" name="comments" id="comments" class="form-control">{{ form_details.comments.value|default_if_none:'' }}</textarea>
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form_details.comments.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="start_date" class="control-label col-sm-2">Start date</label>
+                <div class="col-sm-4">
+                    <input type="text"
+                           id="start_date"
+                           name="start_date"
+                           class="form-control"
+                           placeholder="Choose a date"
+                           value="{{ form.start_date.value|input_date_format }}">
+                </div>
+                <div class="col-sm-6 form-control-static danger-highlight">{{ form.start_date.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <label for="expires_on" class="control-label col-sm-2">Expires on</label>
+                <div class="col-sm-2">
+                    <input id="expires_on"
+                           name="expires_on"
+                           type="text"
+                           autocomplete="off"
+                           class="form-control"
+                           value="{{ form_details.expires_on.value|input_date_format }}">
+                </div>
+                <div class="col-sm-8 form-control-static danger-highlight">{{ form_details.expires_on.errors|striptags }}</div>
+            </div>
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox" name="no_charge" {% if form_details.no_charge.value %}checked{% endif %}>
+                            No charge (invoices will not be generated for this project)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox" name="no_tax" {% if form_details.no_tax.value %}checked{% endif %}>
+                            Tax exempt
+                        </label>
+                    </div>
+                </div>
+            </div>
+            {% if form.instance.project_documents.all or allow_document_upload %}
+                <div class="form-group">
+                    <span class="control-label col-sm-2">Documents</span>
+                    <div class="col-sm-10">
+                        {% for d in form.instance.project_documents.all %}
+                            <div id="document_{{ d.id }}">
+                                <a href="javascript:mark_document_for_removal('{{ d.id }}')"
+                                   class="grey hover-black"
+                                   title="Remove {{ d.filename }}"><span class="glyphicon glyphicon-remove-circle"></span></a> <a href="{{ d.document.url }}" target="_blank" style="margin-right: 5px">{{ d.filename }}</a>
+                            </div>
+                        {% endfor %}
+                        {% if allow_document_upload %}
+                            <div style="padding-top: 10px">
+                                <input id="fileupload" type="file" name="project_documents" multiple>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox" name="active" {% if form.active.value %}checked{% endif %}>
+                            Active
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="col-sm-offset-2 col-sm-10">
+                    {% button type="save" value=edit|yesno:"Save changes,Create new project" %}
+                </div>
+            </div>
+        </form>
+        <script>
+			function select_pi(jquery_event, search_selection, dataset_name)
+			{
+                add_to_list("#pi-list", "remove_pi", search_selection.id, search_selection.name, "remove", "principal_investigators");
+				$("#pi_search").typeahead('val', '');
+			}
+			function remove_pi(id)
+			{
+                remove_from_list("#pi-list", "#principal_investigators_"+id, "This project has no principal investigators.")
+			}
+			function select_account(jquery_event, search_selection, dataset_name)
+			{
+				$('#account_search').typeahead('val', search_selection.id).hide();
+				$("#selected_account").val(search_selection.name).show();
+			}
+			function clear_account_selection()
+			{
+				$("#selected_account").hide();
+				$('#account_search').typeahead('val', '').show().focus();
+			}
+            function select_project_type(jquery_event, search_selection, dataset_name)
+            {
+                add_to_list("#project-type-list", "remove_project_type", search_selection.id, search_selection.name, "remove " + search_selection.name + " project type", "project_types");
+                $("#project_type_search").typeahead('val', '');
+            }
+            function remove_project_type(id)
+            {
+                remove_from_list("#project-type-list", "#project_types_" + id, "This project has no project types.")
+            }
+			function select_institution(jquery_event, search_selection, dataset_name)
+			{
+				$('#institution_search').typeahead('val', search_selection.id).hide();
+				$("#selected_institution").val(search_selection.name).show();
+			}
+			function clear_institution_selection()
+			{
+				$("#selected_institution").hide();
+				$('#institution_search').typeahead('val', '').show().focus();
+			}
+            function mark_document_for_removal(document_id)
+			{
+				$("#document_"+document_id).remove();
+				$("#project_form").append('<input type="hidden" name="remove_documents" value="'+document_id+'" />');
+			}
+			window.addEventListener('load', function ()
+			{
+				$("#expires_on").datetimepicker({format: '{{ date_input_js_format }}'});
+				$("#start_date").datetimepicker({format: '{{ date_input_js_format }}'});
+			    $('#pi_search').autocomplete('pis', select_pi, {{ user_list|json_search_base }});
+				$('#account_search').autocomplete('account', select_account, {{ form.fields.account.choices.queryset|json_search_base }});
+				$('#institution_search').autocomplete('institution', select_institution, {{ form_details.fields.institution.choices.queryset|json_search_base }});
+                {% for pi in form.principal_investigators.value %}
+                    {% for user in user_list %}
+                        {% if user.id == pi|to_int %}select_pi(null, {"id": "{{ user.id }}", "name": "{{ user }}"});{% endif %}
+					{% endfor %}
+                {% endfor %}
+				{% if project_types_allow_multiple %}
+                    $('#project_type_search').autocomplete('project_types', select_project_type, {{ form.fields.project_types.queryset|json_search_base }});
+                    {% for project_type in form.project_types.value %}
+                        {% for form_project_type in form.fields.project_types.queryset %}
+                            {% if form_project_type.id == project_type|to_int %}select_project_type(null, {"id": "{{ form_project_type.id }}", "name": "{{ form_project_type }}"});{% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                {% endif %}
+			});
+
+			{% if not project_types_allow_multiple %}
+                const form = document.querySelector("form");
+                $(form).on("submit", function (event)
+                {
+                    const select = document.getElementById("project_types");
+                    if (!select.value)
+                    {
+                        select.removeAttribute("name");
+                    }
+                });
+            {% endif %}
+		
+        </script>
+    {% endwith %}
+{% endblock %}

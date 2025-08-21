@@ -1,0 +1,351 @@
+{% extends 'invoices/base.html' %}
+{% load custom_tags_and_filters %}
+{% block title %}Invoice{% endblock %}
+{% block invoiceextrahead %}
+    {% load static %}
+    <script type="text/javascript" src="{% static "datetimepicker/bootstrap-datetimepicker.js" %}"></script>
+    <link rel="stylesheet" type="text/css" href="{% static "datetimepicker/bootstrap-datetimepicker.css" %}" />
+{% endblock %}
+{% block content %}
+    <div class="col-lg-offset-1 col-lg-10 col-sm-12" style="margin-bottom: 15px">
+        <div style="margin-left: -15px;margin-right: -15px">
+            {% button type="default" url="invoices" value="Back to list" %}
+        </div>
+    </div>
+    {% if previous_id or next_id %}
+        <div class="col-lg-offset-1 col-lg-10 col-sm-12">
+            <div style="margin-left: -15px;margin-right: -15px">
+                {% if previous_id %}
+                    {% url 'view_invoice' previous_id as view_previous_invoice %}
+                    {% button type="default" url=view_previous_invoice value="previous" style="float: left;" %}
+                {% endif %}
+                {% if next_id %}
+                    {% url 'view_invoice' next_id as view_next_invoice %}
+                    {% button type="default" url=view_next_invoice value="next" style="float: right;" %}
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+    <div class="col-lg-offset-1 col-lg-10 col-sm-12">
+        <h1>
+            {% if invoice.voided_date %}<s>{% endif %}
+                {{ invoice.configuration.invoice_title }} {{ invoice.invoice_number }} for {{ invoice.project_details.name }}
+                {% if invoice.project_details.category %}({{ invoice.project_details.category }}){% endif %}
+                {% if invoice.voided_date %}</s> (Void){% endif %}
+        </h1>
+        <h3>
+            <i>From {{ invoice.start|date:'F jS, Y' }} to {{ invoice.end|date:'F jS, Y' }}</i>
+        </h3>
+    </div>
+    <div class="row" style="margin-left: 0;margin-right: 0">
+        <div class="panel panel-default col-lg-offset-1 col-lg-10 col-sm-12" style="margin-top: 30px">
+            <div class="form-horizontal">
+                <div class="form-group" style="margin-top: 15px">
+                    <div class="control-label col-sm-2">
+                        <strong>Created:</strong>
+                    </div>
+                    <div class="col-sm-4">
+                        <p class="form-control-static">
+                            {{ invoice.created_date|date:'F jS, Y @ g:i A' }} ({{ invoice.created_by.username }})
+                        </p>
+                    </div>
+                    {% if invoice.project_details.project.application_identifier %}
+                        <div class="control-label col-sm-2">
+                            <strong>{{ "projects_and_accounts"|customization:"project_application_identifier_name" }}</strong>
+                        </div>
+                        <div class="col-sm-4">
+                            <p class="form-control-static">{{ invoice.project_details.project.application_identifier|default_if_none:'' }}</p>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <div class="control-label col-sm-2">
+                        <strong>Total</strong>
+                    </div>
+                    <div class="col-sm-4">
+                        <p class="form-control-static">{{ invoice.total_amount_display }}</p>
+                    </div>
+                    <div class="control-label col-sm-2">
+                        <strong>Outstanding</strong>
+                    </div>
+                    <div class="col-sm-4">
+                        <p class="form-control-static">{{ invoice.total_payments_display }}</p>
+                    </div>
+                </div>
+                {% if user.is_accouting_officer or user.is_facility_manager or user.is_superuser %}
+                    <div class="form-group">
+                        <div class="control-label col-sm-2">
+                            <strong>Reviewed</strong>
+                        </div>
+                        <div class="col-sm-4">
+                            {% if invoice.reviewed_date %}
+                                <p class="form-control-static">
+                                    {{ invoice.reviewed_date|date:'F jS, Y @ g:i A' }} ({{ invoice.reviewed_by.username }})
+                                </p>
+                            {% else %}
+                                <form action="{% url 'review_invoice' invoice.id %}" method="post">
+                                    {% csrf_token %}
+                                    {% button type="info" submit=True size="small" value="Mark as reviewed" onclick="show_spinner();" icon="glyphicon-ok-circle" %}
+                                </form>
+                            {% endif %}
+                        </div>
+                        <div class="control-label col-sm-2">
+                            <strong>Void</strong>
+                        </div>
+                        <div class="col-sm-4">
+                            {% if invoice.voided_date %}
+                                <p class="form-control-static">{{ invoice.voided_date|date:'F jS, Y @ g:i A' }} ({{ invoice.voided_by.username }})</p>
+                            {% else %}
+                                <form action="{% url 'void_invoice' invoice.id %}" method="post">
+                                    {% csrf_token %}
+                                    {% button type="delete" submit=True size="small" value="Void invoice" onclick="show_spinner();" icon="glyphicon-ban-circle" %}
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+                <div class="form-group">
+                    {% if user.is_accouting_officer or user.is_facility_manager or user.is_superuser %}
+                        <div class="control-label col-sm-2">
+                            <strong>Last sent</strong>
+                        </div>
+                        <div class="col-sm-4">
+                            {% if invoice.last_sent_date %}
+                                <div class="form-control-static" style="display: inline-block;vertical-align: sub;">
+                                    {{ invoice.last_sent_date|date:'F jS, Y @ g:i A' }}
+                                </div>
+                            {% elif not invoice.reviewed_date %}
+                                <p class="form-control-static">Invoice hasn't been reviewed</p>
+                            {% endif %}
+                            {% if invoice.reviewed_date %}
+                                <form action="{% url 'send_invoice' invoice.id %}" method="post" style="display: inline-block">
+                                    {% csrf_token %}
+                                    {% button type="save" size="small" value=invoice.last_sent_date|yesno:"Re-send,Send invoice" onclick="show_spinner();" icon="glyphicon-send" %}
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    <div class="control-label col-sm-2">
+                        <strong>File</strong>
+                    </div>
+                    <div class="col-sm-4">
+                        {% if invoice.file %}
+                            <p class="form-control-static">
+                                <a href="{{ invoice.file.url }}" target="_blank">{{ invoice.filename }}</a>
+                            </p>
+                        {% else %}
+                            {% url 're_render_invoice' invoice.id as re_render_url %}
+                            {% button type="warn" size="small" value="Re-render invoice file" onclick="show_spinner();" url=re_render_url icon="glyphicon-refresh" %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row" style="margin-top:30px">
+        <div class="col-xs-7 col-lg-offset-1">
+            <ul class="nav nav-pills" id="tabs">
+                <li class="active">
+                    <a href="#summary">Summary</a>
+                </li>
+                <li>
+                    <a href="#details">Details</a>
+                </li>
+                <li>
+                    <a href="#payments">Payments</a>
+                </li>
+            </ul>
+        </div>
+        <div class="col-lg-3 col-xs-5 text-right">
+            {% url 'csv_invoice' invoice.id as export_csv_url %}
+            {% button type="export" value="Export data in CSV" url=export_csv_url %}
+        </div>
+    </div>
+    <div class="tab-content" style="margin-top: 15px">
+        <div id="summary" class="tab-pane active col-lg-offset-1 col-lg-10 col-sm-12" style="padding: 0">
+            <table class="invoice-summary-table table table-hover">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Details</th>
+                        <th class="button-column-minimum">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for facility in invoice.sorted_core_facilities %}
+                        <tr class="invoice-summary-{% if facility %}facility{% else %}general{% endif %} invoice-summary-category">
+                            <td class="summary-item-name">{{ facility|default_if_none:'General Charges' }}</td>
+                            <td></td>
+                            <td class="summary-item-amount"></td>
+                        </tr>
+                        {% for summary_item in invoice.summary_dict|get_item:facility %}
+                            <tr class="invoice-summary-{% if facility %}facility{% else %}general{% endif %} invoice-summary-{{ summary_item.get_summary_item_type_display }}">
+                                <td class="summary-item-name">
+                                    {% if summary_item.category_name_for_item_type %}{{ summary_item.category_name_for_item_type }} -{% endif %}
+                                    {{ summary_item.name|default_if_none:'' }}
+                                </td>
+                                <td>
+                                    {% if summary_item.get_summary_item_type_display != 'fund' %}{{ summary_item.details|default_if_none:'' }}{% endif %}
+                                </td>
+                                <td class="summary-item-amount">{{ summary_item.amount_display|default_if_none:'' }}</td>
+                            </tr>
+                        {% endfor %}
+                    {% endfor %}
+                    {# Add general summary items here if there were not added before as part of facility summary items #}
+                    {% if None not in invoice.sorted_core_facilities %}
+                        {% for summary_item in invoice.summary_dict|get_item:None %}
+                            <tr class="invoice-summary-{{ summary_item.get_summary_item_type_display }}">
+                                <td class="summary-item-name">{{ summary_item.name|default_if_none:'' }}</td>
+                                <td>
+                                    {% if summary_item.get_summary_item_type_display != 'fund' %}{{ summary_item.details|default_if_none:'' }}{% endif %}
+                                </td>
+                                <td class="summary-item-amount">{{ summary_item.amount_display|default_if_none:'' }}</td>
+                            </tr>
+                        {% endfor %}
+                    {% endif %}
+                    <tr class="invoice-summary-category">
+                        <td class="summary-item-name">Grand Total</td>
+                        <td></td>
+                        <td class="summary-item-amount">{{ invoice.total_amount_display }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="details" class="tab-pane col-lg-offset-1 col-lg-10 col-sm-12">
+            {% for core_facility, items in invoice.details_dict.items %}
+                <div class="h2 text-center panel panel-default" style="margin-top: 30px;padding: 15px">
+                    {{ core_facility|default_if_none:"General charges" }}
+                </div>
+                {% include 'invoices/invoice_details.html' with items=items|get_item:'tool_usage' key='tool_usage' title=tool_title %}
+                {% include 'invoices/invoice_details.html' with items=items|get_item:'area_access' key='area_access' title=area_title %}
+                {% include 'invoices/invoice_details.html' with items=items|get_item:'staff_charges' key='staff_charges' title=staff_charge_title %}
+                {% include 'invoices/invoice_details.html' with items=items|get_item:'consumable_withdrawals' key='consumable_withdrawals' title=consumable_title %}
+                {% include 'invoices/invoice_details.html' with items=items|get_item:'trainings' key='trainings' title=training_title %}
+                {% include 'invoices/invoice_details.html' with items=items|get_item:'missed_reservations' key='missed_reservations' title=missed_reservation_title %}
+                {% include 'invoices/invoice_details.html' with items=items|get_item:'custom_charges' key='custom_charges' title=custom_charge_title %}
+            {% endfor %}
+        </div>
+        <div id="payments" class="tab-pane col-lg-offset-1 col-lg-10 col-sm-12">
+            <ul class="invoice-payment-list">
+                {% for payment in invoice.invoicepayment_set.all %}
+                    <li>
+                        <div class="form-inline" style="display:inline-block;">
+                            <div class="form-control-static">
+                                {{ payment.amount_display }}
+                                {% if payment.note %}({{ payment.note }}){% endif %}
+                                received on {{ payment.payment_received|date:'F jS, Y' }}
+                            </div>
+                        </div>
+                        {% if payment.payment_processed %}
+                            <div class="form-inline" style="display:inline-block;">
+                                <div class="form-control-static">- processed on {{ payment.payment_processed|date:'F jS, Y' }}</div>
+                            </div>
+                        {% else %}
+                            <button class="btn btn-sm btn-info"
+                                    onclick="$(this).hide();$('#form_payment_processed_{{ payment.id }}').css('display','inline');$('#payment_processed_date_{{ payment.id }}').datetimepicker({ format: '{{ date_input_js_format }}', useCurrent: false });">
+                                Mark as processed
+                            </button>
+                            <form id="form_payment_processed_{{ payment.id }}"
+                                  style="display: none;
+                                         position: relative"
+                                  action="{% url 'invoice_payment_processed' payment.id %}"
+                                  method="post"
+                                  class="form-inline">
+                                {% csrf_token %}
+                                <div class="form-group">
+                                    <label style="vertical-align: text-bottom"
+                                           class="form-control-static"
+                                           for="payment_processed_date_{{ payment.id }}">- processed on:</label>
+                                </div>
+                                <div class="form-group extra-side-padding">
+                                    <input id="payment_processed_date_{{ payment.id }}"
+                                           name="payment_processed_date"
+                                           autocomplete="off"
+                                           class="form-control input-sm"
+                                           type="text"
+                                           required>
+                                </div>
+                                <div class="form-group extra-side-padding">
+                                    <input type="submit" class="btn btn-sm btn-success" value="Confirm" onclick="show_spinner(this.form);">
+                                </div>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <i style="padding-left: 5px;">No payment have been received for this invoice.</i>
+                {% endfor %}
+            </ul>
+            <button class="btn btn-success btn-sm" style="margin-top: 15px" onclick="show_add_payment_modal()">
+                Record new payment
+            </button>
+            {% if invoice.total_outstanding_amount > 0 %}
+                <button class="btn btn-success btn-sm"
+                        style="margin-top: 15px"
+                        onclick="location.href = '{% url 'mark_invoice_as_paid_in_full' invoice.id %}'">
+                    Mark paid in full
+                </button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="modal fade" id="new-payment-dialog" tabindex="-1" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content" style="width: 90%">
+                <div class="container-fluid" style="margin: 35px;padding: 0;">
+                    <h3 style="margin-top: 0">Payment received form</h3>
+                    <form action="{% url 'invoice_payment_received' invoice.id %}"
+                          class="form-horizontal"
+                          method="post"
+                          style="margin-top: 25px">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="payment_received_date" class="control-label col-sm-3">Received on:</label>
+                            <div class="col-sm-4">
+                                <input id="payment_received_date"
+                                       name="payment_received_date"
+                                       autocomplete="off"
+                                       class="form-control input-sm"
+                                       type="text"
+                                       required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="payment_received_amount" class="control-label col-sm-3">Amount:</label>
+                            <div class="col-sm-4">
+                                <input id="payment_received_amount"
+                                       name="payment_received_amount"
+                                       autocomplete="off"
+                                       class="form-control input-sm"
+                                       type="number"
+                                       step=".01"
+                                       min="1"
+                                       required>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0">
+                            <label for="payment_note" class="control-label col-sm-3">Note:</label>
+                            <div class="col-sm-4">
+                                <input id="payment_note" name="payment_note" autocomplete="off" class="form-control input-sm">
+                            </div>
+                            <div class="col-sm-5">
+                                <input class="btn btn-sm btn-success pull-right" type="submit" value="Confirm">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+		function show_add_payment_modal()
+		{
+		    $("#new-payment-dialog .modal-content").html($('#form_add_payment_content').html());
+			$("#new-payment-dialog").modal('show');
+			$("#payment_received_date").datetimepicker({ format: '{{ date_input_js_format }}', useCurrent: false });
+		}
+		window.addEventListener('load', function ()
+		{
+			$("#tabs").find("a").click(switch_tab);
+		});
+	
+    </script>
+{% endblock %}

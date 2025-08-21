@@ -1,0 +1,152 @@
+<div id="pi-institution-types">
+    {% if institution_types != None %}
+        {% if institution_types %}
+            <div class="row">
+                <div class="col-sm-4">
+                    <label style="font-size: 2rem">Create PI institution type query</label>
+                </div>
+            </div>
+            <form class="col-sm-6" method="get" action="{% url 'compose_email' %}">
+                <input type="hidden" name="audience" value="pi_institution_types">
+                <div class="row">
+                    <div class="col-sm-4 checkbox">
+                        <label>
+                            <input type="checkbox" name="no_type" checked />
+                            Active projects
+                        </label>
+                    </div>
+                </div>
+                <fieldset id="selected-institution-types">
+                    <legend style="font-size:1.75rem">New "AND" institution type</legend>
+                    {% for institution_type in institution_types %}
+                        <div class="row checkbox" style="margin-left: 1rem">
+                            <label>
+                                <input type="checkbox" value="{{ institution_type.id }}" />
+                                {{ institution_type.name }}
+                            </label>
+                        </div>
+                    {% endfor %}
+                    <div style="text-align: right">
+                        <div class="btn btn-sm btn-default add-institution-type-btn">
+                            <i class="glyphicon glyphicon-plus"></i>
+                            &nbsp;Add institution type to query
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset id="query-institution-type-content" style="margin: 1rem 0">
+                    <legend style="font-size:1.75rem">Query</legend>
+                    <div class="hidden query-institution-type row" style="margin: 0.5rem">
+                        <input type="hidden" />
+                        <span class="col-sm-1 condition">&nbsp;</span>
+                        <span class="col-sm-9 institution-types">&nbsp;</span>
+                        <span class="col-sm-1 btn btn-xs btn-danger delete-type-btn">
+                            <i class="glyphicon glyphicon-remove"></i>
+                        </span>
+                    </div>
+                    <div class="empty">No institution type in query!</div>
+                </fieldset>
+                <div class="row" style="margin-top: 2rem;">
+                    <input id="institution-type-submit" type="submit" class="btn btn-sm btn-success" disabled value="Confirm" />
+                    <span id="institution-type-warning" class="btn alert-warning btn-sm" disabled style="opacity: 1;">
+                        <i class="glyphicon glyphicon-alert"></i>
+                        &nbsp;Add a institution type in query to proceed
+                    </span>
+                </div>
+            </form>
+        {% else %}
+            <div class="empty">No institution types available.</div>
+        {% endif %}
+    {% endif %}
+</div>
+<script type="text/javascript">
+    /**
+     * Function to remove a set of institution-types from the query
+     * @param event
+     */
+    let delete_institution_type_from_query = (event) => {
+        event.preventDefault();
+
+        // Remove the line where the button has been clicked.
+        $(event.target).parents(".query-institution-type").remove();
+
+        let queryContent = $("#query-institution-type-content");
+
+        // Remove the OR from the first query institution type item
+        queryContent.find(".query-institution-type:eq(1)>.condition").text("");
+
+        // Add warning if query content is empty
+        if(queryContent.children().length === 3) {
+            queryContent.find(".empty").removeClass("hidden");
+
+            let submitButton = $("#institution-type-submit");
+            submitButton.prop("disabled", true);
+            submitButton.parent().children("#institution-type-warning").removeClass("hidden")
+        }
+    }
+
+    /**
+     * Function adding a set of institution types to the query. Institution types are ANDed together.
+     * @param event
+     */
+    let add_institution_type_to_query = (event) => {
+        event.preventDefault();
+
+        // Compute the name of the query to display.
+        let queryInstitutionTypeText = "";
+        let queryInstitutionTypeIds = [];
+        $("#selected-institution-types").find("input[type='checkbox']:checked").each((index, item) => {
+            queryInstitutionTypeIds.push($(item).val());
+            let institutionTypeName = $(item).parent().text().trim()
+
+            if(queryInstitutionTypeText !== "") {
+                queryInstitutionTypeText += " AND "
+            }
+            queryInstitutionTypeText += institutionTypeName
+
+            $(item).prop("checked", false)
+        })
+
+        // Do not add a new query institution type if no institution type has been checked.
+        if(queryInstitutionTypeText === "") return;
+
+        let queryInstitutionTypeContent = $("#query-institution-type-content");
+        let newQueryInstitutionType = $("div.query-institution-type.hidden").clone(true);
+        newQueryInstitutionType.removeClass("hidden")
+
+        if(queryInstitutionTypeContent.children().length >= 4) {
+            newQueryInstitutionType.find(".condition").text("OR")
+        }
+
+        // Configure input value and name
+        newQueryInstitutionType.find("input[type='hidden']").attr("name", "selection")
+        newQueryInstitutionType.find("input[type='hidden']").val(queryInstitutionTypeIds.join(" "))
+
+        // Insert text
+        newQueryInstitutionType.find(".institution-types").text("(" + queryInstitutionTypeText + ")")
+
+        // Insert query institution type
+        newQueryInstitutionType.insertAfter(queryInstitutionTypeContent.children(":last"))
+
+        // If there is something in the query do not display the warning message
+        if(queryInstitutionTypeContent.children().length === 4) {
+            queryInstitutionTypeContent.find(".empty").addClass("hidden");
+
+            let submitButton = $("#institution-type-submit");
+            submitButton.prop("disabled", false);
+            submitButton.parent().children("#institution-type-warning").addClass("hidden")
+        }
+    }
+
+    let init_institution_type_email = () => {
+        let piInstitutionTypeEmailPosition = 7;
+        $("div.container>ul>li:nth-of-type(" + (piInstitutionTypeEmailPosition - 1) + ")").after(
+            "<li><a href='{% url 'email_broadcast' 'pi_institution_types' %}'>are project principal investigators for selected institution types</a></li>"
+        );
+        $("#pi-institution-types").insertAfter($(".body-container>.container>ul"))
+        $("#institution-type-submit").prop("disabled", true)
+    }
+
+    $(document).on("click", ".add-institution-type-btn", add_institution_type_to_query)
+    $(document).on("click", ".delete-type-btn", delete_institution_type_from_query)
+    $(init_institution_type_email);
+</script>

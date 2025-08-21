@@ -1,0 +1,2 @@
+QUOTE_DATE_FORMAT = "%B %d, %Y"
+QUOTE_DATETIME_FORMAT = "%m/%d/%Y %H:%M:%S"

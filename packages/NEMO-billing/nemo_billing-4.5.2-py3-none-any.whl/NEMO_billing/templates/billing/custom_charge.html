@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% load static %}
+{% load custom_tags_and_filters %}
+{% load billing_tags %}
+{% block extrahead %}
+    <script type="text/javascript" src="{% static "datetimepicker/bootstrap-datetimepicker.js" %}"></script>
+    <link rel="stylesheet" type="text/css" href="{% static "datetimepicker/bootstrap-datetimepicker.css" %}" />
+{% endblock %}
+{% block title %}
+    {% if form.instance.pk %}
+        Edit
+    {% else %}
+        New
+    {% endif %}
+    Custom charge
+{% endblock %}
+{% block content %}
+    {% with edit=form.instance.pk %}
+        <h1>
+            {% if edit %}
+                Edit
+            {% else %}
+                New
+            {% endif %}
+            custom charge
+        </h1>
+        {% if form.errors %}
+            <div class="alert alert-danger">
+                Oops! Something went wrong. Please correct the errors highlighted below.
+                <br>
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+        {% if not edit %}
+            <p>
+                Use this form to create a new custom charge.
+                <br>
+                Set a negative amount in case of an adjustment.
+            </p>
+        {% endif %}
+        <form class="form-horizontal"
+              action="{% if edit %}{% url 'edit_custom_charge' form.instance.pk %}{% else %}{% url 'create_custom_charge' %}{% endif %}"
+              method="post"
+              style="margin-top: 25px">
+            {% csrf_token %}
+            {% if edit %}<input type="hidden" value="{{ form.instance.id }}" name="custom_charge_id">{% endif %}
+            <input type="hidden" id="creator" name="creator" value="{{ request.user.id }}">
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="charge_name">
+                    <strong>Name</strong>
+                </label>
+                <div class="col-sm-4">
+                    <input id="charge_name"
+                           name="name"
+                           type="text"
+                           autocomplete="off"
+                           class="form-control"
+                           value="{{ form.name.value|default_if_none:"" }}"
+                           autofocus
+                           required>
+                </div>
+                {% if form.name.errors %}
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form.name.errors|striptags }}</div>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="description">Description</label>
+                <div class="col-sm-4">
+                    <input id="description"
+                           name="additional_details"
+                           type="text"
+                           autocomplete="off"
+                           class="form-control"
+                           value="{{ form.additional_details.value|default_if_none:"" }}"
+                           autofocus>
+                </div>
+                {% if form.additional_details.errors %}
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form.additional_details.errors|striptags }}</div>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="date">
+                    <strong>Date</strong>
+                </label>
+                <div class="col-sm-4">
+                    <input id="date"
+                           name="date"
+                           class="form-control"
+                           type="text"
+                           placeholder="Charge date"
+                           value="{{ form.date.value|input_date_format }}"
+                           required>
+                </div>
+                {% if form.date.errors %}
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form.date.errors|striptags }}</div>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="customer_search">
+                    <strong>Customer {{ form.instance.customer }}</strong>
+                </label>
+                <div class="col-sm-4">
+                    <input id="customer_search"
+                           class="form-control"
+                           type="text"
+                           placeholder="Search for a customer"
+                           style="{% if form.customer.value %}display:none{% endif %}"
+                           {% if not form.customer.value %}required{% endif %}>
+                    <input type="button"
+                           id="chosen_customer"
+                           class="btn btn-default"
+                           onclick="clear_customer(); return false"
+                           value="{% if edit %}{{ form.instance.customer }}{% else %}{{ form.cleaned_data.customer|default_if_none:"" }}{% endif %}"
+                           style="{% if not form.customer.value %}display:none{% endif %}">
+                    <input type="hidden" id="customer" name="customer" value="{{ form.customer.value|default_if_none:"" }}">
+                </div>
+                {% if form.customer.errors %}
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form.customer.errors|striptags }}</div>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="project">
+                    <strong>Project</strong>
+                </label>
+                <div class="col-sm-4">
+                    <select id="project" name="project" class="form-control" {% if not projects %}disabled{% endif %} required>
+                        {% if projects|length == 0 %}
+                            <option disabled selected value="">
+                                {% if form.customer.value %}No active projects!{% endif %}
+                            </option>
+                        {% elif projects|length == 1 %}
+                            <option value="{{ projects.0.id }}">{{ projects.0 }}</option>
+                        {% elif projects %}
+                            <option disabled selected value="">Choose a project to bill</option>
+                            {% for project in projects %}
+                                <option value="{{ project.id }}" {% if form.project.value|to_int == project.id %}selected{% endif %}>
+                                    {{ project }}
+                                </option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                {% if form.project.errors %}
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form.project.errors|striptags }}</div>
+                {% endif %}
+            </div>
+            {% if core_facility_required or core_facilities %}
+                <div class="form-group">
+                    <label class="control-label col-sm-2" for="core_facility">
+                        {% if core_facility_required %}
+                            <strong>Core Facility</strong>
+                        {% else %}
+                            Core Facility
+                        {% endif %}
+                    </label>
+                    <div class="col-sm-4">
+                        <select id="core_facility"
+                                name="core_facility"
+                                class="form-control"
+                                {% if core_facility_required %}required{% endif %}>
+                            <option disabled selected value="">Select a core facility</option>
+                            {% for core_facility in core_facilities %}
+                                <option value="{{ core_facility.id }}"
+                                        {% if form.core_facility.value|to_int == core_facility.id %}selected{% endif %}>
+                                    {{ core_facility.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if form.core_facility.errors %}
+                        <div class="col-sm-6 form-control-static danger-highlight">{{ form.core_facility.errors|striptags }}</div>
+                    {% endif %}
+                </div>
+            {% endif %}
+            <div class="form-group">
+                <label class="control-label col-sm-2" for="amount">
+                    <strong>Amount</strong>
+                </label>
+                <div class="col-sm-4">
+                    <input id="amount"
+                           name="amount"
+                           type="number"
+                           step="0.01"
+                           autocomplete="off"
+                           class="form-control"
+                           value="{{ form.amount.value|default_if_none:0 }}"
+                           required>
+                </div>
+                {% if form.amount.errors %}
+                    <div class="col-sm-6 form-control-static danger-highlight">{{ form.amount.errors|striptags }}</div>
+                {% endif %}
+            </div>
+            {% cap_discount_installed as cap_discount_installed %}
+            {% if cap_discount_installed %}
+                <div class="form-group">
+                    <label class="control-label col-sm-2" for="cap_eligible">Cap eligible</label>
+                    <div class="col-sm-4 checkbox">
+                        <label>
+                            <input id="cap_eligible"
+                                   name="cap_eligible"
+                                   type="checkbox"
+                                   {% if form.cap_eligible.value %}checked{% endif %}>
+                            Check to make this charge count towards CAP
+                        </label>
+                    </div>
+                    {% if form.cap_eligible.errors %}
+                        <div class="col-sm-6 form-control-static danger-highlight">{{ form.cap_eligible.errors|striptags }}</div>
+                    {% endif %}
+                </div>
+            {% endif %}
+            <div class="col-sm-6 text-right">{% button type="save" value="Confirm" %}</div>
+        </form>
+        <script>
+		function clear_customer()
+		{
+			$("#chosen_customer").val('').hide();
+			$("#customer_search").typeahead('val', '').prop('required', true).show().focus();
+			$("#customer").val('');
+			$('#project').find('option').remove().end().attr('disabled', 'disabled');
+		}
+		function get_customer(jquery_event, search_selection, dataset_name)
+		{
+			$('#customer_search').prop('required', false).hide();
+			$('#chosen_customer').val(search_selection.name).show();
+			$('#customer').val(search_selection.id);
+			ajax_get("{% url 'get_projects_for_custom_charges' %}", {'user_id': search_selection.id}, update_projects);
+		}
+		function update_projects(response, status, xml_http_request)
+		{
+			let project_selector = $('#project');
+			project_selector.find('option').remove().end().removeAttr('disabled');
+			let projects = response['projects'];
+
+			if (projects.length === 0)
+				project_selector.append($('<option />', {text: "No active projects!"})).attr('disabled', 'disabled');
+			else if (projects.length === 1)
+				project_selector.append($('<option />', {value: response['projects'][0].id, text: response['projects'][0].name}));
+			else
+			{
+				project_selector.append($('<option />', {
+					text: "Choose a project to bill",
+					disabled: true,
+					selected: true,
+					value: ""
+				}));
+				$.each(projects, function(count, project)
+				{
+					project_selector.append($('<option />', {value: project.id, text: project.name}));
+				});
+			}
+		}
+		window.addEventListener('load', function()
+		{
+			$('#customer_search').autocomplete('customers', get_customer, {{ users|json_search_base }});
+            let timepicker_properties = {
+                format: '{{ datetime_input_js_format }}', 'sideBySide': true
+            };
+			$('#date').datetimepicker(timepicker_properties);
+		}, true);
+		
+        </script>
+    {% endwith %}
+{% endblock %}
