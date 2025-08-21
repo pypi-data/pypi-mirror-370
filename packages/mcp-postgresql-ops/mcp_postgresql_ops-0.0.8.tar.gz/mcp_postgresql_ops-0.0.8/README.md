@@ -1,0 +1,241 @@
+# MCP PostgreSQL Operations Server
+
+A professional MCP server for PostgreSQL database server operations, monitoring, and management. Provides advanced performance analysis capabilities using `pg_stat_statements` and `pg_stat_monitor` extensions.
+
+## Features
+
+- ✅ **PostgreSQL Monitoring**: Performance analysis based on pg_stat_statements and pg_stat_monitor
+- ✅ **Structure Exploration**: Database, table, and user listing
+- ✅ **Performance Analysis**: Slow query identification and index usage analysis
+- ✅ **Capacity Management**: Database and table size analysis
+- ✅ **Configuration Retrieval**: PostgreSQL configuration parameter verification
+- ✅ **Safe Read-Only**: All operations are read-only and safe
+
+# Example Usage
+
+![MCP-PostgreSQL-Ops Usage Screenshot](img/screenshot-000.png)
+
+## Quick start
+
+1) Environment Setup
+
+```bash
+# Check and modify .env file
+cp .env.example .env
+# Configure PostgreSQL connection information:
+# POSTGRES_HOST=host.docker.internal
+# POSTGRES_PORT=5432
+# POSTGRES_USER=postgres
+# POSTGRES_PASSWORD=your-password
+# POSTGRES_DB=postgres
+```
+
+2) Install Dependencies
+
+```bash
+uv venv --python 3.11 --seed
+uv sync
+```
+
+3) Run Server
+
+```bash
+# Development & Testing (recommended)
+./scripts/run-mcp-inspector-local.sh
+
+# Direct execution for debugging
+python -m src.mcp_postgresql_ops.mcp_main --log-level DEBUG
+```
+
+## Available Tools
+
+### 📊 Server Information & Status
+- `get_server_info` - PostgreSQL server information and extension status
+- `get_active_connections` - Current active connections and session information
+- `get_postgresql_config` - PostgreSQL configuration parameters with keyword search capability
+
+### 🗄️ Structure Exploration
+- `get_database_list` - All database list and size information
+- `get_table_list` - Table list and size information
+- `get_user_list` - Database user list and permissions
+
+### ⚡ Performance Monitoring
+- `get_pg_stat_statements_top_queries` - Slow query analysis based on performance statistics
+- `get_pg_stat_monitor_recent_queries` - Real-time query monitoring
+- `get_index_usage_stats` - Index usage rate and efficiency analysis
+
+### 💾 Capacity Management
+- `get_database_size_info` - Database capacity analysis
+- `get_table_size_info` - Table and index size analysis
+- `get_vacuum_analyze_stats` - VACUUM/ANALYZE status and history
+
+## Usage Examples
+
+### Claude Desktop Integration
+Add to your Claude Desktop configuration file:
+
+```json
+{
+  "mcpServers": {
+    "postgresql-ops": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "src.mcp_postgresql_ops.mcp_main"],
+      "cwd": "/path/to/MCP-PostgreSQL-Ops",
+      "env": {
+        "POSTGRES_HOST": "host.docker.internal",
+        "POSTGRES_PORT": "5432",
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "your-password",
+        "POSTGRES_DB": "postgres"
+      }
+    }
+  }
+}
+```
+
+### Command Line Usage
+
+```bash
+# HTTP mode for testing
+python -m src.mcp_postgresql_ops.mcp_main \
+  --type streamable-http \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --log-level DEBUG
+```
+
+## Environment Variables
+
+| Variable | Description | Default | Project Default |
+|----------|-------------|---------|-----------------|
+| `PYTHONPATH` | Python module search path for MCP server imports | `/app/src` | `/app/src` |
+| `MCP_LOG_LEVEL` | Server logging verbosity (DEBUG, INFO, WARNING, ERROR) | `INFO` | `INFO` |
+| `FASTMCP_TYPE` | MCP transport protocol (stdio for CLI, streamable-http for web) | `stdio` | `streamable-http` |
+| `FASTMCP_HOST` | HTTP server bind address (0.0.0.0 for all interfaces) | `127.0.0.1` | `0.0.0.0` |
+| `FASTMCP_PORT` | HTTP server port for MCP communication | `8080` | `8080` |
+| `PGSQL_VERSION` | PostgreSQL major version for Docker image selection | `16` | `15` |
+| `POSTGRES_HOST` | PostgreSQL server hostname or IP address | `localhost` | `127.0.0.1` |
+| `POSTGRES_PORT` | PostgreSQL server port number | `5432` | `15432` |
+| `POSTGRES_USER` | PostgreSQL connection username (needs read permissions) | `postgres` | `postgres` |
+| `POSTGRES_PASSWORD` | PostgreSQL user password (supports special characters) | `` | `changeme!@34` |
+| `POSTGRES_DB` | Default database name for connections | `postgres` | `mcp_postgres_ops` |
+| `POSTGRES_MAX_CONNECTIONS` | PostgreSQL max_connections configuration parameter | `100` | `200` |
+| `DOCKER_EXTERNAL_PORT_OPENWEBUI` | Host port mapping for Open WebUI container | `8080` | `3003` |
+| `DOCKER_EXTERNAL_PORT_MCP_SERVER` | Host port mapping for MCP server container | `8080` | `18003` |
+| `DOCKER_EXTERNAL_PORT_MCPO_PROXY` | Host port mapping for MCPO proxy container | `8000` | `8003` |
+
+## Prerequisites
+
+### Required PostgreSQL Extensions
+
+**⚠️ Important**: This MCP server requires `pg_stat_statements` for performance monitoring tools. Without it, several functions will not work properly.
+
+```sql
+-- Query performance statistics (required for get_pg_stat_statements_top_queries)
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+-- Advanced monitoring (optional for get_pg_stat_monitor_recent_queries)
+CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;
+```
+
+**Quick Setup**: For new PostgreSQL installations, add to `postgresql.conf`:
+```
+shared_preload_libraries = 'pg_stat_statements'
+```
+Then restart PostgreSQL and run the CREATE EXTENSION commands above.
+
+### Minimum Requirements
+- PostgreSQL 12+ (tested with PostgreSQL 16)
+- Python 3.11
+- Network access to PostgreSQL server
+- Read permissions on system catalogs
+
+## Example Queries
+
+**Server Status & Health Check**
+```bash
+"Check PostgreSQL server status"
+"Check PostgreSQL server version and connection status" 
+"Verify if extensions are installed"
+"Show current active connection count"
+```
+
+**Configuration Management**
+```bash
+"Show the shared_buffers configuration"
+"Show PostgreSQL configuration parameter for shared_buffers"
+"Find all memory-related configuration settings"
+"Show logging configuration parameters"
+"Display connection-related settings" 
+"Find all timeout configurations"
+"Show all PostgreSQL configuration parameters"
+```
+
+**Performance Analysis**
+```bash
+"Show top 10 slowest queries"
+"Show top 20 slowest queries"
+"Analyze slow queries in specific database"
+"Find unused indexes"
+"Analyze recent query activity"
+"Check index efficiency in specific database"
+```
+
+**Capacity & Structure Management**
+```bash
+"Check database sizes"
+"Find largest tables"
+"Show tables that need VACUUM"
+"Check table sizes in specific database schema"
+"List tables in specific database"
+"Check maintenance status in specific database"
+```
+
+**💡 Pro Tip**: All tools support multi-database operations using the `database_name` parameter. This allows PostgreSQL superusers to analyze and monitor multiple databases from a single MCP server instance.
+
+📖 **[More Useful Example Queries →](src/mcp_postgresql_ops/prompt_template.md#example-queries)**
+
+## Troubleshooting
+
+### Connection Issues
+1. Check PostgreSQL server status
+2. Verify connection parameters in `.env` file
+3. Ensure network connectivity
+4. Check user permissions
+
+### Extension Errors
+1. Run `get_server_info` to check extension status
+2. Install missing extensions:
+   ```sql
+   CREATE EXTENSION pg_stat_statements;
+   CREATE EXTENSION pg_stat_monitor;
+   ```
+3. Restart PostgreSQL if needed
+
+### Performance Issues
+1. Use `limit` parameters to reduce result size
+2. Run monitoring during off-peak hours
+3. Check database load before running analysis
+
+## Development
+
+### Testing & Development
+
+```bash
+# Test with MCP Inspector
+./scripts/run-mcp-inspector-local.sh
+
+# Direct execution for debugging
+python -m src.mcp_postgresql_ops.mcp_main --log-level DEBUG
+
+# Run tests (if you add any)
+uv run pytest
+```
+
+## Security Notes
+
+- All tools are **read-only** - no data modification capabilities
+- Sensitive information (passwords) are masked in outputs
+- No direct SQL execution - only predefined queries
+- Follows principle of least privilege
+
