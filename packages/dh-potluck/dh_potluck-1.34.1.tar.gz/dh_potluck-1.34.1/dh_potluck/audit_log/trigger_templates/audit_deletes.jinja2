@@ -1,0 +1,29 @@
+CREATE TRIGGER `{{ trigger_name }}` AFTER DELETE ON `{{ table_name }}` FOR EACH ROW BEGIN
+    DECLARE old_data JSON;
+    DECLARE columns TEXT;
+    SET old_data = JSON_OBJECT();
+    SELECT GROUP_CONCAT(CONCAT('"', column_name, '"')) INTO columns
+        FROM information_schema.columns WHERE table_name = '{{ table_name }}';
+
+    {% for column in column_names %}
+        {# Guard against accessing columns that are dropped during migrations, but haven't yet
+           been removed from this trigger. #}
+        IF LOCATE('"{{ column }}"', columns) > 0 THEN
+            {# Build up a JSON object of old data. #}
+            SET old_data = JSON_SET(old_data, '$.{{ column }}', OLD.{{ column }});
+        END IF;
+    {% endfor %}
+
+    INSERT INTO audit_log SET
+        timestamp=CURRENT_TIMESTAMP,
+        {# Deletes don't include any details about who made the update, so the only attribution
+           information we can add is the MySQL user. #}
+        updated_by_type='mysql',
+        updated_by_id=SUBSTRING_INDEX(USER(), '@', 1),
+        updated_by_ip=SUBSTRING_INDEX(USER(), '@', -1),
+        table_name='{{ table_name }}',
+        object_id=OLD.id,
+        operation='delete',
+        old_data=old_data,
+        changed_data=NULL;
+END
