@@ -1,0 +1,185 @@
+name: CD
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - 'main'
+  workflow_dispatch:
+
+
+jobs:
+  version-type:
+    name: Get version type
+    if: github.event.pull_request.merged == true
+    uses: ./.github/workflows/_version_type.yml
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+
+  version-bump:
+    name: Version bump
+    if: needs.version-type.outputs.version_bump_type != 'skip'
+    runs-on: ubuntu-24.04
+    needs: version-type
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      commit_hash: ${{ steps.version-commit.outputs.commit_hash }}
+    steps:
+      - name: Log in to Azure
+        uses: bitwarden/gh-actions/azure-login@main
+        with:
+          subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          client_id: ${{ secrets.AZURE_CLIENT_ID }}
+
+      - name: Retrieve secrets
+        id: retrieve-secrets
+        uses: bitwarden/gh-actions/get-keyvault-secrets@main
+        with:
+          keyvault: "bitwarden-ci"
+          secrets: "github-gpg-private-key,
+            github-gpg-private-key-passphrase"
+
+      - name: Get Azure Key Vault secrets
+        id: get-kv-secrets
+        uses: bitwarden/gh-actions/get-keyvault-secrets@main
+        with:
+          keyvault: gh-org-bitwarden
+          secrets: "BW-GHAPP-ID,BW-GHAPP-KEY"
+
+      - name: Log out from Azure
+        uses: bitwarden/gh-actions/azure-logout@main
+
+      - name: Generate GH App token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        id: app-token
+        with:
+          app-id: ${{ steps.get-kv-secrets.outputs.BW-GHAPP-ID }}
+          private-key: ${{ steps.get-kv-secrets.outputs.BW-GHAPP-KEY }}
+
+      - name: Check out repo
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Get current version
+        run: echo "OLD_VERSION=$(hatch version)" >> $GITHUB_ENV
+
+      - name: Bump version
+        run: hatch version ${{ needs.version-type.outputs.version_bump_type }}
+
+      - name: Get bumped version
+        id: get-version
+        run: |
+          VERSION=$(hatch version)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
+        with:
+          gpg_private_key: ${{ steps.retrieve-secrets.outputs.github-gpg-private-key }}
+          passphrase: ${{ steps.retrieve-secrets.outputs.github-gpg-private-key-passphrase }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Setup git
+        run: |
+          git config --local user.email "106330231+bitwarden-devops-bot@users.noreply.github.com"
+          git config --local user.name "bitwarden-devops-bot"
+
+      - name: Commit version bump
+        env:
+          OLD_VERSION: ${{ env.OLD_VERSION }}
+          VERSION: ${{ steps.get-version.outputs.version }}
+        run: |
+          git commit -am "Bump version from $OLD_VERSION to $VERSION"
+          git tag v$VERSION
+          git push
+          git push --tags
+
+      - name: Output version bump commit hash
+        id: version-commit
+        run: |
+          echo "commit_hash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+  release:
+    name: GitHub release
+    runs-on: ubuntu-22.04
+    needs: version-bump
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Create GitHub release
+        uses: ncipollo/release-action@bcfe5470707e8832e12347755757cec0eb3c22af # v1.18.0
+        with:
+          commit: ${{ github.sha }}
+          tag: v${{ needs.version-bump.outputs.version }}
+          name: v${{ needs.version-bump.outputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+
+  deploy:
+    name: Deploy workflow-linter (v2)
+    runs-on: ubuntu-22.04
+    needs: version-bump
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.version-bump.outputs.commit_hash }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Log in to Azure
+        uses: bitwarden/gh-actions/azure-login@main
+        with:
+          subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          client_id: ${{ secrets.AZURE_CLIENT_ID }}
+
+      - name: Retrieve pypi api token
+        id: retrieve-secret
+        uses: bitwarden/gh-actions/get-keyvault-secrets@main
+        with:
+          keyvault: "bitwarden-ci"
+          secrets: "pypi-api-token"
+
+      - name: Log out from Azure
+        uses: bitwarden/gh-actions/azure-logout@main
+
+      - name: Build
+        run: hatch build
+
+      - name: Publish
+        env:
+          HATCH_INDEX_USER: __token__
+          HATCH_INDEX_AUTH: ${{ steps.retrieve-secret.outputs.pypi-api-token }}
+        run: hatch publish

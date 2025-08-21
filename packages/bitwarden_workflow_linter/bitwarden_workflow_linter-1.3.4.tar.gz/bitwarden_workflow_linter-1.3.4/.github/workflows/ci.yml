@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  test:
+    name: CI workflow-linter (v2)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+          - os: windows-2022
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipenv
+          pipenv install --dev
+
+      - name: Run pytest
+        if: startsWith(matrix.os, 'ubuntu')
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+        run: pipenv run pytest tests --cov=src
+
+      - name: Check type hinting
+        if: startsWith(matrix.os, 'ubuntu')
+        run: pipenv run pytype src
+
+      - name: Install local bwwl binary
+        run: pipenv run pip install -e .
+
+      - name: Test against example workflows
+        # run notes:
+        # - Changing directories will help catch any repo specific paths in the linter
+        #   that would not work in a different repository
+        # - Changing directories utilizes the default_settings.yaml rather than this repos
+        #   settings.yaml, which better simulates running from another repository
+        # - Using strict to ensure that our examples pass all checks including warnings
+        working-directory: .github/workflows
+        run: pipenv run bwwl lint --strict -f ./examples
+
+      - name: Test bwwl actions - add
+        env:
+          _ACTION: bitwarden/gh-actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Avoid rate limiting
+        run: pipenv run bwwl actions add -o src/bitwarden_workflow_linter/default_actions.json "$_ACTION"
+
+      # TODO: Add this test back in and added related error logging to fix the underlying issue
+      # - name: Test bwwl actions - update
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Avoid rate limiting
+      #   run: pipenv run bwwl actions update -o src/bitwarden_workflow_linter/default_actions.json
