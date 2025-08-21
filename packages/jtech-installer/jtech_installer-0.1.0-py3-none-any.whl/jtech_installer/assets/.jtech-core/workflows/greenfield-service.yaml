@@ -1,0 +1,115 @@
+# <!-- Powered by JTECH™ Core -->
+workflow:
+  id: greenfield-service
+  name: Desenvolvimento de Serviço/API Greenfield
+  description: >-
+    Workflow de agentes para construir serviços backend do conceito ao desenvolvimento.
+    Suporta tanto planejamento abrangente para serviços complexos quanto prototipagem rápida para APIs simples.
+  type: greenfield
+  project_types:
+    - rest-api
+    - graphql-api
+    - microsserviço
+    - serviço-backend
+    - protótipo-api
+    - serviço-simples
+
+  sequence:
+    - agent: analyst
+      creates: project-brief.md
+      optional_steps:
+        - sessão_brainstorming
+        - prompt_pesquisa_mercado
+      notes: "Pode fazer brainstorming primeiro, depois pesquisa aprofundada opcional antes de criar o brief do projeto. SALVAR SAÍDA: Copie o project-brief.md final para a pasta docs/ do seu projeto."
+
+    - agent: pm
+      creates: prd.md
+      requires: project-brief.md
+      notes: "Cria PRD a partir do brief do projeto usando prd-tmpl, focado em requisitos de API/serviço. SALVAR SAÍDA: Copie o prd.md final para a pasta docs/ do seu projeto."
+
+    - agent: architect
+      creates: architecture.md
+      requires: prd.md
+      optional_steps:
+        - prompt_pesquisa_técnica
+      notes: "Cria arquitetura backend/serviço usando architecture-tmpl. Pode sugerir mudanças nas stories do PRD ou novas stories. SALVAR SAÍDA: Copie o architecture.md final para a pasta docs/ do seu projeto."
+
+    - agent: pm
+      updates: prd.md (se necessário)
+      requires: architecture.md
+      condition: arquitetura_sugere_mudanças_prd
+      notes: "Atualiza PRD se a arquitetura sugerir mudanças nas stories ou requisitos."
+
+    - agent: po
+      validates: todos_os_artefatos
+      uses: po-master-checklist
+      notes: "Valida todos os documentos para alinhamento e viabilidade técnica. Pode requerer atualizações em qualquer documento."
+
+    - agent: vários
+      action: criação_de_stories
+      creates: múltiplas_stories
+      uses: story-tmpl
+      requires:
+        - prd.md
+        - architecture.md
+      notes: |
+        Criar stories baseadas nos épicos identificados no PRD:
+        1. PM cria stories iniciais usando story-tmpl focadas em endpoints/funcionalidades de API
+        2. Architect adiciona especificações técnicas detalhadas
+        3. QA adiciona critérios de teste específicos para APIs (testes de contrato, performance, etc.)
+        4. SM coordena priorização considerando dependências de API
+
+        SALVAR SAÍDA: Salve cada story na pasta docs/stories/ do seu projeto com nomenclatura [épico].[story].[título].md
+
+    - agent: sm
+      validates: entrega_completa
+      uses: story-dod-checklist
+      notes: "Valida que todas as stories estão prontas para desenvolvimento com critérios claros, especificações de API e testes definidos."
+
+  artifacts:
+    primary:
+      - project-brief.md
+      - prd.md (service-focused)
+      - architecture.md (backend/service architecture)
+      - multiple story files in docs/stories/
+
+    validation:
+      - po-master-checklist validation results
+      - story-dod-checklist validation results
+
+  exit_criteria:
+    - Brief do projeto aprovado com problema e solução técnica claros
+    - PRD completo com requisitos de API bem definidos
+    - Arquitetura de serviço detalhada e escalável
+    - Stories prontas para desenvolvimento com especificações de API
+    - Documentação de API preparada
+
+  team_composition:
+    core_agents:
+      - analyst (pesquisa e brief)
+      - pm (gerenciamento de produto)
+      - architect (arquitetura de serviço)
+      - po (validação de produto)
+      - sm (gestão e validação de entrega)
+    optional_agents:
+      - qa (testes de API e performance)
+      - dev (viabilidade técnica e implementação)
+
+  considerations:
+    api_design: "Foco especial em design de API RESTful ou GraphQL"
+    scalability: "Considerações de escalabilidade e performance desde o início"
+    security: "Implementação de autenticação e autorização adequadas"
+    documentation: "Documentação de API clara e completa"
+    testing: "Estratégia robusta de testes automatizados"
+
+  success_metrics:
+    - API bem documentada e especificada
+    - Arquitetura que suporta escalabilidade
+    - Testes de API abrangentes definidos
+    - Especificações claras para implementação
+    - Estratégia de deployment e monitoramento
+
+  notes: |
+    Workflow especializado para desenvolvimento de serviços backend e APIs.
+    Enfatiza design de API, escalabilidade e testes automatizados.
+    Adequado para microsserviços, APIs REST, GraphQL e serviços backend complexos.
