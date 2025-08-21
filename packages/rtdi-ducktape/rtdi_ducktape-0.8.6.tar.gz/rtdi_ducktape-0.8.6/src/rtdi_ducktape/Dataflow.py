@@ -1,0 +1,26 @@
+import logging
+from rtdi_ducktape.Metadata import Step, OperationalMetadata, Table
+
+logger = logging.getLogger("Dataflow")
+
+class Dataflow:
+
+    def __init__(self):
+        self.nodes = []
+        self.last_execution = None
+
+    def add(self, step: Step):
+        self.nodes.append(step)
+        return step
+
+    def start(self, duckdb):
+        if len(self.nodes) > 0:
+            self.last_execution = OperationalMetadata()
+            self.nodes[0].start(duckdb)
+            rows_loaded = 0
+            for node in self.nodes:
+                if isinstance(node, Table) and node.last_execution is not None:
+                    rows_loaded += node.last_execution.rows_processed
+            self.last_execution.processed(rows_loaded)
+            self.nodes[0].completed()
+            logger.info(f"Dataflow() - {self.last_execution}")
