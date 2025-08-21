@@ -1,0 +1,88 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Optional: Allow manual triggering
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # A quick run of our unit tests on all 3 major platforms
+  unit:
+    strategy:
+      fail-fast: true
+      matrix:
+        # Run all support python version on linux
+        # We're doing this at the CI level to make reporting a bit clearer
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        os: ["ubuntu-latest"]
+        include:
+          - os: windows-latest
+            python-version: "3.12"
+          - os: macos-latest
+            python-version: "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v6 # zizmor: ignore[unpinned-uses]
+      - name: typecheck
+        run: uv run --group lint mypy --check-untyped-defs denvr tests
+      - name: Lint
+        run: uv run --group lint ruff check
+      - name: Tests
+        run: uv run --group test pytest -m "not integration" --cov=denvr tests/
+  # Run more detailed integration tests on all supported versions of python
+  integration:
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v6 # zizmor: ignore[unpinned-uses]
+      - name: Tests
+        run: uv run --group test pytest --cov=denvr tests/
+      - name: Report Coverage
+        run: uv run --group cov coverage report -m
+      - name: Report Coverage (lcov)
+        run: uv run --group cov coverage lcov
+      - name: Coveralls GitHub Action
+        uses: coverallsapp/github-action@v2.3.6   # zizmor: ignore[unpinned-uses]
+    services:
+      # Run a mock-server for our integration tests
+      mock-server:
+        image: mockserver/mockserver
+        ports:
+          - 1080:1080
+  docs:
+    runs-on: ubuntu-latest
+    needs: integration
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v6 # zizmor: ignore[unpinned-uses]
+      - run: uv run --group docs mkdocs build --clean

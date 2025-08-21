@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+from denvr.validate import validate_kwargs
+
+from typing import TYPE_CHECKING, Any  # noqa: F401
+
+if TYPE_CHECKING:
+    from denvr.session import Session
+
+class Client:
+    def __init__(self, session: Session):
+        self.session = session
+
+    {% for method in methods %}
+    def {{ method.name }}(
+        self,
+        {% if method.params %}
+        {% for entry in method.params %}
+        {{ entry.kwarg }}: {{ entry.type }} | None = None,
+        {% endfor %}
+        {% endif %}
+        {% if method.json %}
+        {% for entry in method.json %}
+        {{ entry.kwarg }}: {{ entry.type }} | None = None,
+        {% endfor %}
+        {% endif %}
+    ){% if method.rtype %} -> {{ method.rtype }}{% endif %}:
+        """
+        {{ method.description }} ::
+
+            client.{{ method.name }}(
+                {% if method.params %}
+                {% for entry in method.params %}
+                {% if entry.param in method.example %}
+                {{ entry.kwarg }} = {{ method.example[entry.param] | quotify | safe }},
+                {% endif %}
+                {% endfor %}
+                {% endif %}
+                {% if method.json %}
+                {% for entry in method.json %}
+                {% if entry.param in method.example %}
+                {{ entry.kwarg }} = {{ method.example[entry.param] | quotify | safe }},
+                {% endif %}
+                {% endfor %}
+                {% endif %}
+            )
+
+        {% if method.params or method.json %}
+        Keyword Arguments:
+            {% if method.params %}
+            {% for entry in method.params %}
+            {{ entry.kwarg }} ({{ entry.type }}): {% if entry.desc %}{{ entry.desc | truncate(100) | safe }}{% endif +%}
+            {% endfor %}
+            {% endif %}
+            {% if method.json %}
+            {% for entry in method.json %}
+            {{ entry.kwarg }} ({{ entry.type }}): {% if entry.desc %}{{ entry.desc | truncate(100) | safe }}{% endif +%}
+            {% endfor %}
+            {% endif %}
+        {% endif %}
+
+        {% if method.rtype and method.rprops %}
+        Returns:
+            {% for entry in method.rprops %}
+            {{ entry.name }} ({{ entry.type }}):{% if entry.desc %} {{ entry.desc | truncate(100) | safe }}{% endif +%}
+            {% endfor %}{% endif %}
+        """
+        config = self.session.config  # noqa: F841
+
+        parameters : dict[str, dict] = {
+            {% if method.params %}
+            'params': {
+                {% for entry in method.params %}
+                '{{ entry.param }}': config.getkwarg('{{ entry.kwarg }}', {{ entry.kwarg }}),
+                {% endfor %}
+            },
+            {% endif %}
+            {% if method.json %}
+            'json': {
+                {% for entry in method.json %}
+                '{{ entry.param }}': config.getkwarg('{{ entry.kwarg }}', {{ entry.kwarg }}),
+                {% endfor %}
+            },
+            {% endif %}
+        }
+
+        kwargs = validate_kwargs(
+            '{{ method.method }}',
+            '{{ method.path }}',
+            parameters,
+            { {% if method.required %}"{{ method.required | join('", "') | safe }}"{% endif %} },
+        )
+
+        return self.session.request(
+            '{{ method.method }}',
+            '{{ method.path }}',
+            **kwargs,
+        )
+
+    {% endfor %}
