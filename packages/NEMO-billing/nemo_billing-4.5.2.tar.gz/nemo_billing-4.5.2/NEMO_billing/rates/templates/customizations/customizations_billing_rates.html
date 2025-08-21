@@ -1,0 +1,234 @@
+{% load custom_tags_and_filters %}
+{% load billing_tags %}
+<div class="panel-body">
+    <h3 class="customization-section-title" id="rate">Rates settings</h3>
+    <form method="POST" action="{% url 'customize' 'billing_rates' %}" class="form-horizontal">
+        {% csrf_token %}
+        <div class="form-group">
+            <div class="control-label col-lg-3 col-md-4">Daily rate</div>
+            <div class="col-lg-9 col-md-8">
+                <div class="radio">
+                    <label>
+                        <input type="radio"
+                               name="rates_daily_per_account"
+                               {% if not rates_daily_per_account %}checked{% endif %}
+                               value="">
+                        By user/project
+                    </label>
+                    <label>
+                        <input type="radio"
+                               name="rates_daily_per_account"
+                               {% if rates_daily_per_account %}checked{% endif %}
+                               value="enabled">
+                        By user/account
+                    </label>
+                </div>
+            </div>
+            <div class="col-lg-offset-3 col-md-offset-4 col-lg-9 col-md-8 form-control-static">
+                For daily rates, areas can be grouped together so that only the most expensive one per day is charged.
+                <br>
+                See <a href="{% url 'admin:rates_areahighestdailyrategroup_changelist' %}">AreaHighestDailyRateGroups</a> to add or change current groups.
+            </div>
+        </div>
+        <div class="customization-separation" style="margin-bottom: 15px"></div>
+        <h3 class="customization-section-title" id="rate">Rates display</h3>
+        <div class="form-group">
+            <div class="control-label col-lg-3 col-md-4">Tool control</div>
+            <div class="col-lg-9 col-md-8">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox" name="rates_hide_table" {% if rates_hide_table %}checked{% endif %} value="enabled">
+                        Hide rates table
+                    </label>
+                    <br />
+                    <label>
+                        <input type="checkbox"
+                               name="rates_expand_table"
+                               {% if rates_expand_table %}checked{% endif %}
+                               value="enabled">
+                        Expand rates table
+                    </label>
+                    <br />
+                    <label>
+                        <input type="checkbox"
+                               name="rates_show_all_categories"
+                               {% if rates_show_all_categories %}checked{% endif %}
+                               value="enabled">
+                        Check this box to show rates for all rate categories (otherwise only rate categories matching the user's projects are shown)
+                    </label>
+                    <br />
+                </div>
+            </div>
+            <div class="control-label col-lg-3 col-md-4">Consumable rates</div>
+            <div class="col-lg-9 col-md-8">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox"
+                               name="rates_hide_consumable_rates"
+                               {% if rates_hide_consumable_rates %}checked{% endif %}
+                               value="enabled">
+                        Hide consumable rates
+                    </label>
+                    <br />
+                </div>
+            </div>
+            <div class="control-label col-lg-3 col-md-4">Usage charges</div>
+            <div class="col-lg-9 col-md-8">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox"
+                               name="rates_usage_hide_charges"
+                               {% if rates_usage_hide_charges %}checked{% endif %}
+                               value="enabled">
+                        Hide charges amount in My Usage
+                    </label>
+                    <br />
+                </div>
+            </div>
+        </div>
+        <div class="customization-separation" style="margin-bottom: 15px"></div>
+        <h3 class="customization-section-title">Rate list page settings</h3>
+        <div class="form-group">
+            <div class="col-md-offset-1 col-md-9 help-block light-grey">
+                If enabled, the rate list is available at <a target="_blank" href="{% url 'rate_list' %}">{% absolute_url 'rate_list' %}</a>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="control-label col-lg-3 col-md-4">View permissions</div>
+            <div class="col-lg-9 col-md-8 radio">
+                <label>
+                    <input type="radio"
+                           name="rates_rate_list_page_access"
+                           {% if not rates_rate_list_page_access %}checked{% endif %}
+                           value="">
+                    Rate list page is disabled for all users
+                </label>
+            </div>
+            <div class="col-lg-offset-3 col-md-offset-4 col-lg-9 col-md-8 radio">
+                <label>
+                    <input type="radio"
+                           name="rates_rate_list_page_access"
+                           {% if rates_rate_list_page_access == "auth" %}checked{% endif %}
+                           value="auth">
+                    Rate list page is enabled for authenticated users
+                </label>
+            </div>
+            <div class="col-lg-offset-3 col-md-offset-4 col-lg-9 col-md-8 radio">
+                <label>
+                    <input type="radio"
+                           name="rates_rate_list_page_access"
+                           {% if rates_rate_list_page_access == "public" %}checked{% endif %}
+                           value="public">
+                    Rate list page is enabled for public users
+                </label>
+            </div>
+        </div>
+        <div class="form-group{% if errors.rates_rate_list_page_show_types %} has-error{% endif %}">
+            <div class="control-label col-lg-3 col-md-4">Show rate types</div>
+            {% for rate_type in rate_types %}
+                <div class="{% if forloop.counter != 1 %}col-lg-offset-3 col-md-offset-4 {% endif %}col-lg-9 col-md-8">
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox"
+                                   name="rates_rate_list_page_show_types_list"
+                                   {% if not rates_rate_list_page_show_types or rate_type.id|stringformat:"i" in rates_rate_list_page_show_types %}checked{% endif %}
+                                   value="{{ rate_type.id }}">
+                            {{ rate_type }}
+                        </label>
+                        <br />
+                    </div>
+                </div>
+            {% endfor %}
+            {% if errors.rates_rate_list_page_show_types %}
+                <div class="col-lg-offset-3 col-md-offset-4 col-lg-9 col-md-8 help-block light-grey">
+                    {{ errors.rates_rate_list_page_show_types.error }}
+                </div>
+            {% endif %}
+        </div>
+        <div class="form-group{% if errors.rates_rate_list_page_show_categories %} has-error{% endif %}">
+            <div class="control-label col-lg-3 col-md-4">Show rate categories</div>
+            {% for rate_category in rate_categories %}
+                <div class="{% if forloop.counter != 1 %}col-lg-offset-3 col-md-offset-4 {% endif %}col-lg-9 col-md-8">
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox"
+                                   name="rates_rate_list_page_show_categories_list"
+                                   {% if not rates_rate_list_page_show_categories or rate_category.id|stringformat:"i" in rates_rate_list_page_show_categories %}checked{% endif %}
+                                   value="{{ rate_category.id }}">
+                            {{ rate_category.name }}
+                        </label>
+                        <br />
+                    </div>
+                </div>
+            {% endfor %}
+            {% if errors.rates_rate_list_page_show_categories %}
+                <div class="col-lg-offset-3 col-md-offset-4 col-lg-9 col-md-8 help-block light-grey">
+                    {{ errors.rates_rate_list_page_show_categories.error }}
+                </div>
+            {% endif %}
+        </div>
+        <div class="form-group {% if errors.rates_rate_list_excluded_tools %}has-error{% endif %}">
+            <label class="control-label col-md-3" for="rate_list_exclude_tool">Excluded tools</label>
+            <div class="col-md-7">
+                <input id="rate_list_exclude_tool"
+                       type="text"
+                       autocomplete="off"
+                       class="form-control"
+                       placeholder="Search for a tool to exclude from the rate list">
+            </div>
+            {% if errors.rates_rate_list_excluded_tools %}
+                <div class="col-md-offset-3 col-md-9 help-block light-grey">{{ errors.rates_rate_list_excluded_tools.error }}</div>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <div id="rate-list-excluded-tool-list" class="col-md-offset-3 col-md-9">No tools are excluded.</div>
+        </div>
+        <div class="form-group">
+            <div class="control-label col-lg-3 col-md-4">Show zero rates</div>
+            <div class="col-lg-9 col-md-8">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox"
+                               name="rates_rate_list_show_zero_rates"
+                               {% if rates_rate_list_show_zero_rates == "enabled" %}checked{% endif %}
+                               value="enabled">
+                        Check this box to show rates that are zero
+                    </label>
+                    <br />
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="control-label col-lg-3 col-md-4">Show facilities</div>
+            <div class="col-lg-9 col-md-8">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox"
+                               name="rates_rate_list_show_facilities"
+                               {% if rates_rate_list_show_facilities == "enabled" %}checked{% endif %}
+                               value="enabled">
+                        Check this box to show and group rates by Core Facility
+                    </label>
+                    <br />
+                </div>
+            </div>
+        </div>
+        <div class="customization-separation" style="margin-bottom: 15px"></div>
+        <div class="text-center">{% button type="save" value="Save settings" %}</div>
+    </form>
+</div>
+<script>
+	function add_rate_list_excluded_tool(jquery_event, search_selection, dataset_name)
+	{
+        $(this).typeahead('val', '').focus();
+		add_to_list("#rate-list-excluded-tool-list", "remove_rate_list_excluded_tool", search_selection.id, search_selection.name, "Remove " + search_selection.name, "rate_list_excluded_tool_list");
+	}
+    function remove_rate_list_excluded_tool(tool_id)
+	{
+		remove_from_list("#rate-list-excluded-tool-list", "#rate_list_excluded_tool_list_" + tool_id, "No tools are excluded.");
+	}
+	$('#rate_list_exclude_tool').autocomplete('tool', add_rate_list_excluded_tool, {% json_search_base_with_extra_fields tools %}, true, true);
+    {% for tool in rate_list_excluded_tools %}
+		add_rate_list_excluded_tool(undefined, {name:'{{ tool.name }}', id:{{ tool.id }}}, "tool");
+	{% endfor %}
+</script>

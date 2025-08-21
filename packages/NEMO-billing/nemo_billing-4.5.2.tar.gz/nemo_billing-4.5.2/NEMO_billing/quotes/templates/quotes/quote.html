@@ -1,0 +1,1038 @@
+{% extends 'quotes/base.html' %}
+{% load custom_tags_and_filters %}
+{% block title %}Quote{% endblock %}
+{% block content %}
+    <h1>Quote</h1>
+    <div class="panel panel-default col-sm-12" style="margin-top: 30px; padding: 15px;">
+        <div id="quote-info">
+            <div style="display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        flex-wrap: wrap;
+                        justify-content: space-between">
+                <h3 style="margin: 0; display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+                    <span class="label label-{% if published %}success{% elif submitted %}warning{% else %}default{% endif %}"
+                          style="font-size: 0.9em;
+                                 margin-right: 10px">{{ quote.get_status_display }}</span>
+                    {{ quote.name }}
+                    {% if quote.quote_number %}<span style="color: lightgray;">({{ quote.quote_number }})</span>{% endif %}
+                </h3>
+                <div>
+                    {% if not requires_approval and can_edit %}
+                        <form action="{% url 'update_quote_status' quote.id %}" method="post" class="pull-right">
+                            {% csrf_token %}
+                            {% button type="save" submit=False name="publish_quote" size="small" value="Publish" icon="glyphicon-ok"  onclick="if (confirm('Are you sure you want to publish this quote?')) {submit_and_disable(this)}" %}
+                        </form>
+                    {% endif %}
+                    {% if requires_approval and can_edit %}
+                        <form action="{% url 'update_quote_status' quote.id %}" method="post" class="pull-right">
+                            {% csrf_token %}
+                            {% button type="warn" submit=False name="submit_quote" size="small" value="Request Approval" icon="glyphicon-ok"  onclick="if (confirm('Are you sure you want to submit this quote for approval?')) {submit_and_disable(this)}" %}
+                        </form>
+                    {% endif %}
+                    {% if can_approve %}
+                        <form action="{% url 'update_quote_status' quote.id %}" method="post" class="pull-right">
+                            {% csrf_token %}
+                            {% button type="save" submit=False name="approve_quote" size="small" value="Approve" icon="glyphicon-ok"  onclick="if (confirm('Are you sure you want to approve this quote?')) {submit_and_disable(this)}" %}
+                            {% button type="delete" submit=False name="deny_quote" size="small" value="Deny" icon="glyphicon-remove"  onclick="if (confirm('Are you sure you want to deny this quote?')) {submit_and_disable(this)}" %}
+                        </form>
+                    {% endif %}
+                    {% if can_edit_metadata %}
+                        <button class="btn btn-sm btn-primary pull-right"
+                                style="margin-right: 5px"
+                                onclick="toggle_additional_info_form()">
+                            <i class="glyphicon glyphicon-pencil"></i> Edit
+                        </button>
+                    {% endif %}
+                    {% if show_send_emails_button %}
+                        <form action="{% url 'quote_send_emails' quote.id %}"
+                              style="margin-right: 5px"
+                              method="post"
+                              class="pull-right">
+                            {% csrf_token %}
+                            {% button type="save" submit=False name="send_emails" size="small" value="Send Email" icon="glyphicon-send"  onclick="if (confirm('Are you sure you want to send quote email?')) {submit_and_disable(this)}" %}
+                        </form>
+                    {% endif %}
+                    {% if quote.is_published %}
+                        <form action="{% url 'quote_render' quote.id %}"
+                              style="margin-right: 5px"
+                              method="post"
+                              class="pull-right">
+                            {% csrf_token %}
+                            {% button type="warn" submit=True name="render" size="small" value="Render Quote File" icon="glyphicon-refresh" %}
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+            <div style="color: gray; margin-top: 10px;">
+                Created on {{ quote.created_date|date:"SHORT_DATETIME_FORMAT" }} by {{ quote.creator }}
+            </div>
+            {% if updated %}
+                <div style="color: gray; margin-top: 10px;">Updated on {{ quote.updated_date|date:"SHORT_DATETIME_FORMAT" }}</div>
+            {% endif %}
+            {% if quote.published_date %}
+                <div style="color: gray; margin-top: 10px;">Published on {{ quote.published_date|date:"SHORT_DATETIME_FORMAT" }}</div>
+            {% endif %}
+            {% if quote.last_emails_sent_date %}
+                <div style="color: gray; margin-top: 10px;">
+                    Last emails sent on {{ quote.last_emails_sent_date|date:"SHORT_DATETIME_FORMAT" }}
+                </div>
+            {% endif %}
+            {% if quote.expiration_date %}
+                <div style="color: gray; margin-top: 10px;">
+                    Expires on {{ quote.expiration_date|date:"SHORT_DATE_FORMAT" }}
+                    {% if quote.is_expired %}<span class="text-danger">- Expired</span>{% endif %}
+                </div>
+            {% endif %}
+            {% if quote.file %}
+                <a href="{{ quote.file.url }}" target="_blank">
+                    <button class="btn btn-sm btn-secondary" style="margin-top: 10px;">
+                        <i class="glyphicon glyphicon-file"></i> View Quote File
+                    </button>
+                </a>
+            {% endif %}
+            <hr>
+            <a onclick="toggle_details(this)" data-toggle="collapse" data-target="#addition-info" class="pointer">
+                <span class="glyphicon glyphicon-chevron-down chevron"></span>Quote Details
+            </a>
+            <div id="addition-info" class="collapse in">
+                <hr>
+                <div>
+                    <strong style="line-height: 2;">Project</strong>
+                    <div style="line-height: 2;">
+                        {% if quote.project %}
+                            {{ quote.project.name }}
+                        {% else %}
+                            No project assigned to quote.
+                        {% endif %}
+                    </div>
+                </div>
+                <hr>
+                <div>
+                    <strong style="line-height: 2;">NEMO Users</strong>
+                    <div style="line-height: 2;">
+                        {% if quote.users and quote.users.all %}
+                            {% for user in quote.users.all %}
+                                <span>{{ user }}</span>
+                                <br>
+                            {% endfor %}
+                        {% else %}
+                            No NEMO users assigned to quote.
+                        {% endif %}
+                    </div>
+                </div>
+                <hr>
+                <div>
+                    <strong style="line-height: 2;">Email Addresses</strong>
+                    <div style="line-height: 2;">
+                        {% if quote.emails %}
+                            {% for email in quote.emails %}
+                                <span>{{ email }}</span>
+                                <br>
+                            {% endfor %}
+                        {% else %}
+                            No email addresses assigned to quote.
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <hr>
+            <div style="font-size: 1.5em; color: blue; margin-top: 10px;">Total {{ quote.total_display }}</div>
+        </div>
+        <form id="quote-edit-form" action="{% url 'quote' quote.id %}" method="post" style="display: none;">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <ul>
+                        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+            <div class="form-group">
+                <strong class="control-label">Quote Status</strong>
+                <div style="margin-top: 5px;">
+                    <span class="label label-default" style="font-size: 1.08em;">{{ quote.get_status_display }}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="name" class="control-label">
+                    <strong>Name</strong>
+                </label>
+                {% if form.name.errors %}- <span style="color:red">{{ form.name.errors|striptags }}</span>{% endif %}
+                <input class="form-control" name="name" id="name" value="{{ form.name.value|default:'' }}">
+            </div>
+            <div class="form-group">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <label for="search_projects" class="control-label">
+                            <strong>Project</strong>
+                        </label>
+                        <input id="search_projects"
+                               type="text"
+                               class="form-control"
+                               placeholder="Search for project to link to this quote"
+                               style="min-width: 250px">
+                    </div>
+                    <div class="col-sm-6" id="project_label" style="display: none">
+                        <div style="margin-bottom: 5px;">
+                            <strong>Selected Project</strong>
+                        </div>
+                        <div id="project" class="form-control form-control-static" style="height: 100%"></div>
+                    </div>
+                </div>
+                {% if form.project.errors %}
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <span style="color:red">{{ form.project.errors|striptags }}</span>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <label for="search_users" class="control-label">
+                            <strong>NEMO Users</strong>
+                        </label>
+                        <input id="search_users"
+                               type="text"
+                               class="form-control"
+                               placeholder="Search for users to add to this quote"
+                               style="min-width: 250px">
+                    </div>
+                    <div class="col-sm-6" id="users_label" style="display: none">
+                        <div style="margin-bottom: 5px;">
+                            <strong>Selected Users</strong>
+                        </div>
+                        <ul id="users" class="form-control form-control-static" style="height: 100%">
+                        </ul>
+                    </div>
+                </div>
+                {% if form.users.errors %}
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <span style="color:red">{{ form.users.errors|striptags }}</span>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="emails" class="control-label">
+                    <strong>Email Addresses</strong>
+                </label>
+                {% if form.emails.errors %}- <span style="color:red">{{ form.emails.errors|striptags }}</span>{% endif %}
+                <textarea rows="2" class="form-control" name="emails" id="emails">{{ form.emails.value|default:'' }}</textarea>
+            </div>
+            <div class="form-group text-right">
+                <button type="button" class="btn btn-danger" onclick="toggle_additional_info_form()">Cancel</button>
+                <button type="submit" class="btn btn-success" name="update_additional_info">Save</button>
+            </div>
+        </form>
+    </div>
+    <div class="modal fade"
+         id="edit-item-dialog"
+         tabindex="-1"
+         role="dialog"
+         aria-labelledby="edit-item-dialog-label">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                    <h4 class="modal-title" id="edit-item-dialog-label">Edit Quote Item</h4>
+                </div>
+                <form id="edit-quote-item-form" method="post" class="form-horizontal">
+                    <div class="modal-body">
+                        {% csrf_token %}
+                        <input type="hidden" id="edit-item-id" name="id" value="">
+                        {% if edit_item_form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                <ul style="margin: 0;">
+                                    {% for error in edit_item_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        <div class="form-group">
+                            <label for="edit-item-description" class="col-sm-3 control-label">Description</label>
+                            <div class="col-sm-9">
+                                <input type="text" id="edit-item-description" name="description" class="form-control" required>
+                            </div>
+                            <div id="edit-item-description-error" class="col-sm-offset-3 col-sm-9" style="display: none; color: red"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-item-quantity" class="col-sm-3 control-label">Quantity</label>
+                            <div class="col-sm-9">
+                                <input type="number" id="edit-item-quantity" name="quantity" class="form-control" min="1" required>
+                            </div>
+                            <div id="edit-item-quantity-error" class="col-sm-offset-3 col-sm-9" style="display: none; color: red;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-3 control-label">Rate Type</label>
+                            <div class="col-sm-9" style="display: flex; align-items: center; gap: 10px;">
+                                <div class="radio">
+                                    <label>
+                                        <input type="radio" name="rate_type" value="0" checked>
+                                        N/A
+                                    </label>
+                                </div>
+                                <div class="radio">
+                                    <label>
+                                        <input type="radio" name="rate_type" value="1">
+                                        Flat
+                                    </label>
+                                </div>
+                                <div class="radio">
+                                    <label>
+                                        <input type="radio" name="rate_type" value="2">
+                                        Hourly
+                                    </label>
+                                </div>
+                                <div class="radio">
+                                    <label>
+                                        <input type="radio" name="rate_type" value="3">
+                                        Daily
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="edit-item-rate-type-error" class="col-sm-offset-3 col-sm-9" style="display: none; color: red;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-item-amount" class="col-sm-3 control-label">Amount</label>
+                            <div class="col-sm-9">
+                                <input type="number" id="edit-item-amount" name="amount" class="form-control" required>
+                            </div>
+                            <div id="edit-item-amount-error" class="col-sm-offset-3 col-sm-9" style="display: none; color: red;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-item-minimum-charge" class="col-sm-3 control-label">Minimum Charge</label>
+                            <div class="col-sm-9">
+                                <input type="number" id="edit-item-minimum-charge" name="minimum_charge" class="form-control" min="0">
+                            </div>
+                            <div id="edit-item-minimum-charge-error"
+                                 class="col-sm-offset-3 col-sm-9"
+                                 style="display: none;
+                                        color: red"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-success">Save changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <table class="table table-striped table-bordered table-hover" style="margin-top: 30px">
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Rate</th>
+                <th>Total</th>
+                {% if can_edit %}<th></th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% if quote_items %}
+                {% for item in quote_items %}
+                    <tr id="{{ item.id }}-item-row"
+                        data-description="{{ item.description }}"
+                        data-quantity="{{ item.quantity }}"
+                        data-amount="{{ item.amount }}"
+                        data-minimum="{{ item.minimum_charge }}"
+                        data-rate-type="{{ item.rate_type }}">
+                        <td style="vertical-align: middle">{{ item.description }}</td>
+                        <td style="vertical-align: middle">{{ item.quantity }}</td>
+                        <td style="vertical-align: middle">{{ item.display_rate }}</td>
+                        <td style="vertical-align: middle">{{ item.total_display }}</td>
+                        {% if can_edit %}
+                            <td style="width: 100px; vertical-align: middle;">
+                                <div style="width: 100%; display: flex; justify-content: flex-end; align-items: center; gap: 3px;">
+                                    <form method="post" action="{% url 'delete_quote_item' item.id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                    </form>
+                                    <button id="{{ item.id }}-edit-button"
+                                            class="btn btn-sm btn-primary"
+                                            data-item-id="{{ item.id }}"
+                                            onclick="show_edit_dialog('{{ item.id }}')">Edit</button>
+                                </div>
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                {% if quote.configuration.tax and quote.add_tax %}
+                    <tr style="vertical-align: middle;">
+                        <th colspan="2" class="text-right" style="background-color: white; vertical-align: middle;">
+                            Tax ({{ quote.configuration.tax_name }})
+                        </th>
+                        <td style="vertical-align: middle;">
+                            <strong>{{ quote.tax_display }}</strong>
+                        </td>
+                        <td style="vertical-align: middle;">{{ quote.tax_amount_display }}</td>
+                        {% if can_edit %}
+                            <td style="vertical-align: middle;">
+                                <form method="post" action="{% url 'quote_remove_tax' quote.id %}">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-danger">Remove Tax</button>
+                                </form>
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endif %}
+                {% if quote.configuration.tax and not quote.add_tax and can_edit %}
+                    <tr>
+                        <th colspan="5" style="vertical-align: middle;">
+                            <form method="post" action="{% url 'quote_add_tax' quote.id %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-success" style="margin-right: 10px;">
+                                    <i class="glyphicon glyphicon-plus"></i>
+                                    Add Tax
+                                </button>
+                            </form>
+                            <span style="font-weight: bold;">{{ quote.configuration.tax_name }} {{ quote.configuration.tax|floatformat:2 }}%</span>
+                            <span style="color: darkred; font-weight: normal;">(not applied)</span>
+                        </th>
+                    </tr>
+                {% endif %}
+            {% else %}
+                <tr>
+                    <td colspan="5" class="text-center">No items added to this quote yet.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+    {% if can_edit %}
+        <div class="row"
+             style="margin-left: 0;
+                    margin-right: 0;
+                    border-top: 1px solid lightgrey;
+                    padding-top: 30px;
+                    margin-top: 30px">
+            <h3>Add Quote Item</h3>
+            <ul class="nav nav-tabs" id="tabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link" role="tab" data-toggle="tab" href="#existing" aria-controls="existing">Existing Rate</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" role="tab" data-toggle="tab" href="#custom" aria-controls="custom">Custom Item</a>
+                </li>
+            </ul>
+            <div class="tab-content">
+                <div role="tabpanel" class="tab-pane" id="custom" style="padding-top: 20px;">
+                    <p>
+                        <i class="glyphicon glyphicon-info-sign"></i> Add a custom item to the quote
+                    </p>
+                    <form method="post"
+                          action="{% url 'add_quote_item' quote.id %}"
+                          class="form-horizontal"
+                          style="margin-top: 30px">
+                        {% csrf_token %}
+                        {% if custom_item_form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                <ul style="margin: 0;">
+                                    {% for error in custom_item_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        <div class="form-group">
+                            <label for="description" class="col-sm-2 control-label">Description</label>
+                            <div class="col-sm-10">
+                                <input type="text"
+                                       id="description"
+                                       name="description"
+                                       class="form-control"
+                                       value="{{ custom_item_form.description.value|default:'' }}"
+                                       required>
+                                {% if custom_item_form.description.errors %}
+                                    <span style="color:red">{{ custom_item_form.description.errors|striptags }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="quantity" class="col-sm-2 control-label">Quantity</label>
+                            <div class="col-sm-4">
+                                <input onchange="update_item_total()"
+                                       type="number"
+                                       id="quantity"
+                                       name="quantity"
+                                       class="form-control"
+                                       value="{{ custom_item_form.quantity.value|default:'1' }}"
+                                       min="1"
+                                       required>
+                                {% if custom_item_form.quantity.errors %}
+                                    <span style="color:red">{{ custom_item_form.quantity.errors|striptags }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Type</label>
+                            <div class="col-sm-4" style="display: flex; align-items: center; gap: 10px;">
+                                <div class="radio" style="margin: 0;">
+                                    <label style="margin-bottom: 0;">
+                                        <input type="radio"
+                                               value="0"
+                                               name="rate_type"
+                                               {% if custom_item_form.rate_type.value == "0" or not custom_item_form.rate_type.value %}checked{% endif %}>
+                                        N/A
+                                    </label>
+                                </div>
+                                <div class="radio" style="margin: 0;">
+                                    <label style="margin-bottom: 0;">
+                                        <input type="radio"
+                                               value="1"
+                                               name="rate_type"
+                                               {% if custom_item_form.rate_type.value == "1" %}checked{% endif %}>
+                                        Flat
+                                    </label>
+                                </div>
+                                <div class="radio" style="margin: 0;">
+                                    <label style="margin-bottom: 0;">
+                                        <input type="radio"
+                                               value="2"
+                                               name="rate_type"
+                                               {% if custom_item_form.rate_type.value == "2" %}checked{% endif %}>
+                                        Hourly
+                                    </label>
+                                </div>
+                                <div class="radio" style="margin: 0;">
+                                    <label style="margin-bottom: 0;">
+                                        <input type="radio"
+                                               value="3"
+                                               name="rate_type"
+                                               {% if custom_item_form.rate_type.value == "3" %}checked{% endif %}>
+                                        Daily
+                                    </label>
+                                </div>
+                            </div>
+                            {% if custom_item_form.rate_type.errors %}
+                                <div class="col-sm-offset-2 col-sm-10">
+                                    <span style="color:red">{{ custom_item_form.rate_type.errors|striptags }}</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="amount" class="col-sm-2 control-label">Amount</label>
+                            <div class="col-sm-4">
+                                <input onchange="update_item_total()"
+                                       type="number"
+                                       id="amount"
+                                       name="amount"
+                                       class="form-control"
+                                       value="{{ custom_item_form.amount.value|default:'' }}"
+                                       step="0.01"
+                                       required>
+                                {% if custom_item_form.amount.errors %}
+                                    <span style="color:red">{{ custom_item_form.amount.errors|striptags }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="minimum-charge" class="col-sm-2 control-label">Minimum Charge</label>
+                            <div class="col-sm-4">
+                                <input onchange="update_item_total()"
+                                       type="number"
+                                       id="minimum-charge"
+                                       name="minimum_charge"
+                                       class="form-control"
+                                       value="{{ custom_item_form.minimum_charge.value|default:'' }}"
+                                       step="0.01">
+                                {% if custom_item_form.minimum_charge.errors %}
+                                    <span style="color:red">{{ custom_item_form.minimum_charge.errors|striptags }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <input type="hidden" name="quote_item_type" value="custom" id="custom-quote-item-type">
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Total</label>
+                            <div class="col-sm-4" style="padding-top: 7px;">
+                                {{ quote.configuration.currency_symbol }}<strong id="total">0</strong> {{ quote.configuration.currency }}
+                            </div>
+                            <div class="col-sm-6 text-right">
+                                <button type="submit" class="btn btn-success">Add</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div role="tabpanel" class="tab-pane" id="existing" style="padding-top: 20px;">
+                    <form id="rate_form"
+                          method="post"
+                          class="form-horizontal"
+                          style="padding-top: 10px;
+                                 border: 1px solid lightgrey;
+                                 border-radius: 10px;
+                                 background-color: #f9f9f9">
+                        <div style="margin-left: 15px;">
+                            <h4>Search Existing Rates</h4>
+                        </div>
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label class="control-label col-sm-2" for="rate_type">
+                                <strong>Rate type</strong>
+                            </label>
+                            <div class="col-sm-4">
+                                <select id="rate_type" name="rate_type" class="form-control" onchange="rate_type_selection(this.value)">
+                                    <option value="">Select rate type</option>
+                                    {% for value, display in rate_type_choices %}<option value="{{ value }}">{{ display }}</option>{% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div id="tool_select" class="form-group item_select" style="display: none">
+                            <label class="control-label col-sm-2" for="tool">
+                                <strong>Tool</strong>
+                            </label>
+                            <div class="col-sm-4">
+                                <select id="tool" name="tool" class="form-control" onchange="rate_type_selection('Tool', this.value)">
+                                    <option disabled selected>Choose a tool</option>
+                                    {% regroup tools by category as tool_categories %}
+                                    {% for category in tool_categories %}
+                                        {% if tool_categories|length > 1 or category.grouper %}
+                                            <optgroup label="{{ category.grouper|default_if_none:'Uncategorized' }}">
+                                            {% endif %}
+                                            {% for item in category.list %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
+                                            {% if tool_categories|length > 1 or category.grouper %}</optgroup>{% endif %}
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div id="area_select" class="form-group item_select" style="display: none">
+                            <label class="control-label col-sm-2" for="area">
+                                <strong>Area</strong>
+                            </label>
+                            <div class="col-sm-4">
+                                <select id="area" name="area" class="form-control" onchange="rate_type_selection('Area', this.value)">
+                                    <option disabled selected>Choose an area</option>
+                                    {% if areas|length == 1 %}
+                                        <option value="{{ areas.0.id }}">{{ areas.0 }}</option>
+                                    {% elif areas %}
+                                        {% for area in areas %}<option value="{{ area.id }}">{{ area.name }}</option>{% endfor %}
+                                    {% endif %}
+                                </select>
+                            </div>
+                        </div>
+                        <div id="consumable_select" class="form-group item_select" style="display: none">
+                            <label class="control-label col-sm-2" for="consumable">
+                                <strong>Supply</strong>
+                            </label>
+                            <div class="col-sm-4">
+                                <select id="consumable"
+                                        name="consumable"
+                                        class="form-control"
+                                        onchange="rate_type_selection('CONSUMABLE', this.value)">
+                                    <option disabled selected value="">Choose a supply</option>
+                                    {% regroup consumables by category as consumable_categories %}
+                                    {% for category in consumable_categories %}
+                                        {% if consumable_categories|length > 1 or category.grouper %}
+                                            <optgroup label="{{ category.grouper|default_if_none:"Uncategorized" }}">
+                                            {% endif %}
+                                            {% for item in category.list %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
+                                            {% if consumable_categories|length > 1 or category.grouper %}</optgroup>{% endif %}
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                    <div style="margin-top: 15px;">
+                        {% if search_selection %}
+                            <span style="font-size: 1.2em;">{{ found_count }} <strong>rates found for {{ search_selection }}</strong></span>
+                        {% endif %}
+                        {% if active_quote_item_tab == "rate" and rate_item_form.errors %}
+                            <div class="alert alert-danger" style="margin-top: 10px;">
+                                <strong>Error adding item for rate {{ selected_rate.quote_display }}</strong>
+                                <ul style="margin: 5px 0 0 0;">
+                                    {% if rate_item_form.non_field_errors %}
+                                        {% for error in rate_item_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                                    {% endif %}
+                                    {% for field in rate_item_form %}
+                                        {% if field.errors %}
+                                            <li>
+                                                <strong>{{ field.label }}:</strong> {{ field.errors|striptags }}
+                                                {% if field.value %}(submitted value: "{{ field.value }}"){% endif %}
+                                            </li>
+                                        {% endif %}
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        {% if found_count > 0 %}
+                            <table class="table table-striped table-bordered table-hover"
+                                   style="margin-top: 10px;
+                                          background-color: white">
+                                <thead>
+                                    <tr>
+                                        <th>Rate</th>
+                                        <th>Effective Date</th>
+                                        <th>Quantity</th>
+                                        <th>Amount</th>
+                                        <th>Total</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rate in rates %}
+                                        <tr>
+                                            <td>
+                                                <div id="{{ rate.id }}-change-description" class="form-group" style="margin: 0;">
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-primary"
+                                                            style="margin-right: 10px"
+                                                            onclick="change_rate_description('{{ rate.id }}');">
+                                                        <i class="glyphicon glyphicon-pencil"></i>
+                                                    </button>
+                                                    <span>{{ rate.quote_display }}</span>
+                                                </div>
+                                                <div id="{{ rate.id }}-change-description-form" class="form-group" style="margin: 0; display: none;">
+                                                    <label>
+                                                        Change Description
+                                                        <br>
+                                                        <strong>{{ rate.quote_display }}</strong>
+                                                    </label>
+                                                    <div class="input-group">
+                                                        <input id="{{ rate.id }}-change-description-value" type="text" class="form-control">
+                                                        <span class="input-group-btn">
+                                                            <button class="btn btn-danger" type="button" onclick="cancel_rate_description_change('{{ rate.id }}');">Cancel</button>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>{{ rate.effective_date|default_if_none:"" }}</td>
+                                            <td style="width: 100px;">
+                                                <label style="width: 100%; margin-bottom: 0; margin-top: 0;">
+                                                    <input id="{{ rate.id }}-quantity"
+                                                           type="number"
+                                                           class="form-control"
+                                                           value="1"
+                                                           min="1"
+                                                           onchange="update_rate_total('{{ rate.id }}', {{ rate.amount }}, {{ rate.minimum_charge|default_if_none:0 }});">
+                                                </label>
+                                            </td>
+                                            <td style="vertical-align: bottom; width: 300px;">
+                                                <div id="{{ rate.id }}-change-amount" class="form-group" style="margin: 0;">
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-primary"
+                                                            style="margin-right: 10px"
+                                                            onclick="change_rate_amount('{{ rate.id }}');">
+                                                        <i class="glyphicon glyphicon-pencil"></i>
+                                                    </button>
+                                                    <strong>{{ rate.display_rate }}</strong>
+                                                </div>
+                                                <div id="{{ rate.id }}-change-amount-form" class="form-group" style="margin: 0; display: none;">
+                                                    <label>
+                                                        Change Amount
+                                                        <br>
+                                                        <strong>{{ rate.display_rate }}</strong>
+                                                    </label>
+                                                    <div class="form-group">
+                                                        <label for="{{ rate.id }}-change-amount-value">Amount</label>
+                                                        <input id="{{ rate.id }}-change-amount-value"
+                                                               type="number"
+                                                               class="form-control"
+                                                               placeholder="{{ rate.amount }}"
+                                                               onchange="update_rate_total('{{ rate.id }}', {{ rate.amount }}, {{ rate.minimum_charge|default_if_none:0 }});">
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label for="{{ rate.id }}-change-minimum-charge-value">Minimum Charge</label>
+                                                        <input id="{{ rate.id }}-change-minimum-charge-value"
+                                                               type="number"
+                                                               class="form-control"
+                                                               placeholder="{{ rate.minimum_charge|default_if_none:'' }}"
+                                                               onchange="update_rate_total('{{ rate.id }}', {{ rate.amount }}, {{ rate.minimum_charge|default_if_none:0 }});">
+                                                    </div>
+                                                    <div class="form-group text-right">
+                                                        <button class="btn btn-danger"
+                                                                type="button"
+                                                                onclick="cancel_rate_amount_change('{{ rate.id }}', {{ rate.amount }}, {{ rate.minimum_charge|default_if_none:0 }});">
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <strong id="{{ rate.id }}-total"></strong>
+                                            </td>
+                                            <td style="width: 50px;">
+                                                <form method="post" action="{% url 'add_quote_item' quote.id %}">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="rate" value="{{ rate.id }}">
+                                                    <input type="hidden" name="quantity" id="{{ rate.id }}-quantity-hidden">
+                                                    <input type="hidden" name="amount" id="{{ rate.id }}-custom-amount-hidden">
+                                                    <input type="hidden" name="minimum_charge" id="{{ rate.id }}-custom-minimum-charge-hidden">
+                                                    <input type="hidden" name="description" id="{{ rate.id }}-custom-description-hidden">
+                                                    <input type="hidden" name="quote_item_type" value="rate" id="{{ rate.id }}-quote-item-type">
+                                                    <input type="hidden" name="rate_type_choice" value="{{ rate_type_choice }}">
+                                                    <input type="hidden" name="rate_type_item_id" value="{{ item_id }}">
+                                                    <button type="submit" class="btn btn-sm btn-success" onclick="add_item('{{ rate.id }}')">Add</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    <script>
+        function toggle_additional_info_form()
+        {
+            if ($("#quote-edit-form").is(":visible")) {
+                $("#quote-edit-form").hide();
+                $("#quote-info").show();
+            } else {
+                $("#quote-edit-form").show();
+                $("#quote-info").hide();
+            }
+        }
+
+        function change_rate_amount(rate_id)
+        {
+            $("#" + rate_id + "-change-amount").hide();
+            $("#" + rate_id + "-change-amount-form").show();
+        }
+
+        function cancel_rate_amount_change(rate_id, value, minimum)
+        {
+            $("#" + rate_id + "-change-amount").show();
+            $("#" + rate_id + "-change-amount-form").hide();
+            $("#" + rate_id + "-change-amount-value").val(value);
+            $("#" + rate_id + "-change-minimum-charge-value").val(minimum);
+            update_rate_total(rate_id, value, minimum);
+        }
+
+        function change_rate_description(rate_id)
+        {
+            $("#" + rate_id + "-change-description").hide();
+            $("#" + rate_id + "-change-description-form").show();
+        }
+
+        function cancel_rate_description_change(rate_id)
+        {
+            $("#" + rate_id + "-change-description").show();
+            $("#" + rate_id + "-change-description-form").hide();
+        }
+
+        function update_item_total()
+        {
+            let quantity = intOrZero($("#quantity").val());
+            if (quantity)
+            {
+                let amount = intOrZero($("#amount").val());
+                let minimum_charge = intOrZero($("#minimum-charge").val());
+                let total = Math.max(quantity * amount, minimum_charge);
+                $("#total").text(total);
+            }
+            else
+            {
+                $("#total").text("0");
+            }
+        }
+
+        function update_rate_total(rate_id, amount, minimum_charge)
+        {
+            let quantity = parseInt($("#" + rate_id + "-quantity").val());
+            if (quantity)
+            {
+                let effective_amount = get_rate_amount(rate_id, amount);
+                let effective_minimum_charge = get_rate_minimum_charge(rate_id, minimum_charge);
+                let total = Math.max(quantity * effective_amount, effective_minimum_charge);
+                $("#" + rate_id + "-total").text(total);
+            }
+            else
+            {
+                $("#" + rate_id + "-total").text("0");
+            }
+        }
+
+        function get_rate_amount(rate_id, value)
+        {
+            let is_changed = $("#" + rate_id + "-change-amount-form").is(":visible");
+            let changed_rate = parseInt($("#" + rate_id + "-change-amount-value").val());
+            return is_changed && changed_rate ? changed_rate : value;
+        }
+
+        function get_rate_minimum_charge(rate_id, value)
+        {
+            const current = intOrZero(value);
+            let is_changed = $("#" + rate_id + "-change-amount-form").is(":visible");
+            let changed_minimum_charge = parseInt($("#" + rate_id + "-change-minimum-charge-value").val());
+            return is_changed && changed_minimum_charge ? changed_minimum_charge : current;
+        }
+
+        function intOrZero(value)
+        {
+            return isNaN(+value) ? 0 : +value;
+        }
+
+        function add_item(rate_id)
+        {
+            let quantity = $("#" + rate_id + "-quantity").val();
+            $("#" + rate_id + "-quantity-hidden").val(quantity);
+            if ($("#" + rate_id + "-change-amount-form").is(":visible"))
+            {
+                let custom_amount = $("#" + rate_id + "-change-amount-value").val();
+                $("#" + rate_id + "-custom-amount-hidden").val(custom_amount);
+                let custom_minimum_charge = $("#" + rate_id + "-change-minimum-charge-value").val();
+                $("#" + rate_id + "-custom-minimum-charge-hidden").val(custom_minimum_charge);
+            }
+            if ($("#" + rate_id + "-change-description-form").is(":visible"))
+            {
+                let custom_description = $("#" + rate_id + "-change-description-value").val();
+                $("#" + rate_id + "-custom-description-hidden").val(custom_description);
+            }
+        }
+
+        function rate_type_selection(rate_type, id)
+        {
+            if (rate_type)
+            {
+                if (id)
+                {
+                    window.location = '{% url 'quote' quote.id %}' + `?type=${rate_type}&id=${id}`;
+                }
+                else if (rate_type.toLowerCase() !== 'tool' && rate_type.toLowerCase() !== 'area' && rate_type.toLowerCase() !== 'consumable')
+                {
+                    window.location = '{% url 'quote' quote.id %}' + `?type=${rate_type}`;
+                }
+                else
+                {
+                    $('.item_select').hide();
+                    $('#'+rate_type.toLowerCase()+"_select").show();
+                }
+            }
+        }
+
+        function select_project(jquery_event, search_selection, dataset_name)
+		{
+		    $('#project_label').show();
+			$(this).typeahead('val', '').focus();
+			if (!$("input[name='project'][value='"+search_selection.id+"']").length)
+            {
+                $('#project').html('<div><input type="hidden" name="project" value="' + search_selection.id + '" />' + search_selection.name + ' <a class="grey hover-black" href="javascript:void" onclick="remove_project(this)"><span class="glyphicon glyphicon-remove-circle"></span></a></div>');
+            }
+		}
+		function remove_project(project_anchor)
+		{
+		    $(project_anchor).parent().remove();
+		    if (!$("input[name='project']").length)
+            {
+		        $('#project_label').hide();
+            }
+		}
+
+        function add_user(jquery_event, search_selection, dataset_name)
+		{
+		    $('#users_label').show();
+			$(this).typeahead('val', '').focus();
+			if (!$("input[name='users'][value='"+search_selection.id+"']").length)
+            {
+                $('#users').append('<li style="list-style: none"><input type="hidden" name="users" value="' + search_selection.id + '" />' + search_selection.name + ' <a class="grey hover-black" href="javascript:void" onclick="remove_user(this)"><span class="glyphicon glyphicon-remove-circle"></span></a></li>');
+            }
+		}
+		function remove_user(user_anchor)
+		{
+		    $(user_anchor).parent().remove();
+		    if (!$("input[name='users']").length)
+            {
+		        $('#users_label').hide();
+            }
+		}
+
+        $('#search_users').autocomplete('users', add_user, {{ users|json_search_base:'get_name' }});
+        $('#search_projects').autocomplete('projects', select_project, {{ projects|json_search_base:'__str__' }});
+
+        function show_edit_dialog(itemId)
+        {
+            const row = $(`#${itemId}-item-row`);
+            const description = row.data('description');
+            const quantity = row.data('quantity');
+            const rateType = row.data('rate-type');
+            const amount = row.data('amount');
+            const minimumCharge = row.data('minimum');
+
+            const modal = $('#edit-item-dialog');
+            modal.find('input[name="description"]').val(description);
+            modal.find('#edit-item-description-error').text('').hide();
+            modal.find('input[name="quantity"]').val(quantity);
+            modal.find('#edit-item-quantity-error').text('').hide();
+            modal.find('input[name="amount"]').val(amount);
+            modal.find('#edit-item-amount-error').text('').hide();
+            modal.find('input[name="minimum_charge"]').val(minimumCharge);
+            modal.find('#edit-item-minimum-charge-error').text('').hide();
+            modal.find('input[name="rate_type"][value="' + rateType + '"]').prop('checked', true);
+            modal.find('#edit-item-rate-type-error').text('').hide();
+            modal.find('input[name="id"]').val(itemId);
+            modal.find('#edit-quote-item-form').attr('action', '{% url 'edit_quote_item' 9999 %}'.replace('9999', itemId));
+            modal.modal('show');
+        }
+
+        {% if edit_item_form and edit_item_id %}
+            $(document).ready(function() {
+                const modal = $('#edit-item-dialog');
+                modal.find('input[name="description"]').val('{{ edit_item_form.description.value|default:"" }}');
+                modal.find('#edit-item-description-error').text('').hide();
+                {% if edit_item_form.description.errors %}
+                    modal.find('#edit-item-description-error').text('{{ edit_item_form.description.errors|striptags }}').show();
+                {% endif %}
+                modal.find('input[name="quantity"]').val('{{ edit_item_form.quantity.value|default:"" }}');
+                modal.find('#edit-item-quantity-error').text('').hide();
+                {% if edit_item_form.quantity.errors %}
+                    modal.find('#edit-item-quantity-error').text('{{ edit_item_form.quantity.errors|striptags }}').show();
+                {% endif %}
+                modal.find('input[name="amount"]').val('{{ edit_item_form.amount.value|default:"" }}');
+                modal.find('#edit-item-amount-error').text('').hide();
+                {% if edit_item_form.amount.errors %}
+                    modal.find('#edit-item-amount-error').text('{{ edit_item_form.amount.errors|striptags }}').show();
+                {% endif %}
+                modal.find('input[name="minimum_charge"]').val('{{ edit_item_form.minimum_charge.value|default:"" }}');
+                modal.find('#edit-item-minimum-charge-error').text('').hide();
+                {% if edit_item_form.minimum_charge.errors %}
+                    modal.find('#edit-item-minimum-charge-error').text('{{ edit_item_form.minimum_charge.errors|striptags }}').show();
+                {% endif %}
+                {% if edit_item_form.rate_type.value %}
+                    modal.find('input[name="rate_type"][value="{{ edit_item_form.rate_type.value }}"]').prop('checked', true);
+                {% endif %}
+                modal.find('#edit-item-rate-type-error').text('').hide();
+                {% if edit_item_form.rate_type.errors %}
+                    modal.find('#edit-item-rate-type-error').text('{{ edit_item_form.rate_type.errors|striptags }}').show();
+                {% endif %}
+                modal.find('input[name="id"]').val('{{ edit_item_id }}');
+                modal.find('#edit-quote-item-form').attr('action', '{% url 'edit_quote_item' 9999 %}'.replace('9999', '{{ edit_item_id }}'));
+                modal.modal('show');
+            });
+        {% endif %}
+
+        {% if submitted_users != None %}
+            {% for user in submitted_users %}
+                add_user(false, {'id': '{{ user.id }}', 'name': '{{ user }}' });
+            {% endfor %}
+        {% elif form.instance.id and form.instance.users %}
+            {% for user in form.instance.users.all %}
+                add_user(false, {'id': '{{ user.id }}', 'name': '{{ user }}' });
+            {% endfor %}
+        {% endif %}
+
+        {% if form.cleaned_data and form.cleaned_data.project %}
+            select_project(false, {'id': '{{ form.cleaned_data.project.id }}', 'name': '{{ form.cleaned_data.project }}' });
+        {% elif form.instance.id and form.instance.project %}
+            select_project(false, {'id': '{{ form.instance.project.id }}', 'name': '{{ form.instance.project }}' });
+        {% endif %}
+
+
+        {% if form.errors %}
+            toggle_additional_info_form();
+        {% endif %}
+
+        {%  if active_quote_item_tab != "rate" %}
+            $('#tabs a[href="#custom"]').tab('show');
+        {%  else %}
+            $('#tabs a[href="#existing"]').tab('show');
+        {%  endif %}
+
+        {%  for rate in rates %}
+            update_rate_total({{ rate.id }}, {{ rate.amount }}, {{ rate.minimum_charge|default_if_none:0 }});
+        {% endfor %}
+    </script>
+{% endblock %}

@@ -1,0 +1,1 @@
+INVOICE_DATA_PROCESSOR_CLASS = "NEMO_billing.cap_discount.processors.CAPDiscountInvoiceDataProcessor"

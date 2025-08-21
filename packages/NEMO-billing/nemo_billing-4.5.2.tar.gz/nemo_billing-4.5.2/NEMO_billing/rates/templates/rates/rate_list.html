@@ -1,0 +1,149 @@
+{% load static %}
+{% load custom_tags_and_filters %}
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        {# This meta-tag forcefully disables 'compatibility mode' in Internet Explorer because it causes rendering problems. #}
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta charset="UTF-8">
+        {# jQuery #}
+        <script type="text/javascript" src="{% static "jquery.min.js" %}"></script>
+        {# Bootstrap #}
+        <script type="text/javascript" src="{% static "bootstrap/js/bootstrap.min.js" %}"></script>
+        <link rel="stylesheet" type="text/css" href="{% static "bootstrap/css/bootstrap.min.css" %}" />
+        <link rel="stylesheet" type="text/css" href="{% static "bootstrap/css/bootstrap-theme.min.css" %}" />
+        {# NEMO #}
+        <link rel="shortcut icon" type="image/x-icon" href="{% static 'favicon.ico' %}" />
+        <script type="text/javascript" src="{% static "nemo.js" %}"></script>
+        <link rel="stylesheet" type="text/css" href="{% static "nemo.css" %}" />
+        <style>
+		.primary-rate {
+			font-weight:700
+		}
+	
+        </style>
+        <title>Rate List</title>
+    </head>
+    <body>
+        <div class="body-container">
+            <div class="container">
+                <div class="row">
+                    <div class="col-xs-12">
+                        <h1>{{ facility_name }} Rate List</h1>
+                    </div>
+                </div>
+                <div class="row" style="margin-bottom: 40px">
+                    <div class="col-sm-4">
+                        <input id="search" type="text" placeholder="Search for a rate" class="form-control" autofocus>
+                    </div>
+                </div>
+                <div class="pull-left">
+                    <ul class="nav nav-pills nav-pills-spacer" id="tabs" style="border-bottom: none;">
+                        {% if show_tools_type %}
+                            <li {% if rate_type|lower == 'tool' %}class="active"{% endif %}>
+                                <a href="{% url 'rate_list' 'Tool' %}">Tools</a>
+                            </li>
+                        {% endif %}
+                        {% if show_areas_type %}
+                            <li {% if rate_type|lower == 'area' %}class="active"{% endif %}>
+                                <a href="{% url 'rate_list' 'Area' %}">Areas</a>
+                            </li>
+                        {% endif %}
+                        {% if show_supplies_type %}
+                            <li {% if rate_type|lower == 'consumable' %}class="active"{% endif %}>
+                                <a href="{% url 'rate_list' 'CONSUMABLE' %}">Supplies</a>
+                            </li>
+                        {% endif %}
+                        {% if show_other_type %}
+                            <li {% if rate_type|lower == 'other' %}class="active"{% endif %}>
+                                <a href="{% url 'rate_list' 'other' %}">Other</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </div>
+                {% regroup formatted_rates by facility as facility_list %}
+                {% for facility in facility_list %}
+                    <div class="row">
+                        <div class="col-xs-12">
+                            {% if facility.grouper %}
+                                <h2>{{ facility.grouper }}</h2>
+                            {% else %}
+                                <br />
+                            {% endif %}
+                        </div>
+                    </div>
+                    <table class="table table-align-middle table-bordered table-condensed table-hover thead-light">
+                        <thead>
+                            <tr>
+                                <th class="text-center col-md-4">{{ item_label }}</th>
+                                {% if has_multiple_rate_types %}<th class="text-center col-md-2">Type</th>{% endif %}
+                                {% if has_empty_category %}<th class="col-md-2"></th>{% endif %}
+                                {% for category in rate_categories %}<th class="text-center">{{ category }}</th>{% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody class="table-to-filter">
+                            {% for item_rate_type in facility.list %}
+                                <tr {% if item_rate_type.is_first %}class="primary-rate"{% else %}class="collapse {{ item_rate_type.item_index }}_details"{% endif %}>
+                                    <td>
+                                        {% if item_rate_type.is_first and item_rate_type.has_children %}
+                                            <a onclick="toggle_rates(this)"
+                                               class="pointer collapsed"
+                                               data-toggle="collapse"
+                                               data-target=".{{ item_rate_type.item_index }}_details"><span class="glyphicon pull-left chevron glyphicon-chevron-right"></span></a>
+                                        {% endif %}
+                                        {% if item_rate_type.is_first %}
+                                            {{ item_rate_type.item|default_if_none:"" }}
+                                        {% else %}
+                                            <span style="display:none">{{ item_rate_type.item|default_if_none:"" }}</span>
+                                        {% endif %}
+                                    </td>
+                                    {% if has_multiple_rate_types %}<td>{{ item_rate_type.rate_type }}</td>{% endif %}
+                                    {% for rate in item_rate_type.rates %}<td>{{ rate|safe }}</td>{% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% endfor %}
+            </div>
+        </div>
+        <script>
+		$("#search").keyup(function ()
+        {
+            let rows = $(".table-to-filter").find("tr").hide();
+            if (this.value.length)
+            {
+                let data = this.value.split(" ");
+                $.each(data, function (i, v)
+                {
+                    $.each(rows, function(i, row)
+                    {
+                       let $row = $(row);
+                       // Only look in td within the row that don't have display:none, so we don't look in keywords unless they are shown
+                       if ($row.find("td:first").filter(function() { return $(this).css('display') !== 'none'; }).filter(":icontains('" + v + "')").length !== 0)
+                       {
+							if ($row.hasClass("in") || $row.hasClass("primary-rate"))
+							{
+								$row.show();
+							}
+                       }
+                    });
+                });
+            }
+            else
+            {
+                rows.filter(function() { return $(this).hasClass('primary-rate') || $(this).hasClass('in'); }).show();
+            }
+        });
+		function toggle_rates(rateElement)
+		{
+			let toggleTarget = $(rateElement).data("target");
+
+			// remove display none inline style from search, conflicts with collapse UI
+			let rateRows = $(".table-to-filter").find(toggleTarget).css("display", "");
+
+			toggle_details(rateElement);
+		}
+	
+        </script>
+    </body>
+</html>

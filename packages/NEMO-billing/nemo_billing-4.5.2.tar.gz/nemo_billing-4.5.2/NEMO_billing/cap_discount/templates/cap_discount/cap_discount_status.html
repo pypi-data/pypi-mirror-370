@@ -1,0 +1,58 @@
+{% extends 'billing/cap_and_prepaid_base.html' %}
+{% load custom_tags_and_filters %}
+{% load billing_tags %}
+{% block title %}CAP status{% endblock %}
+{% block tab_title %}CAP status{% endblock %}
+{% block before_pagination %}
+    {% if configurations|length > 1 %}
+        <div class="form-inline">
+            <label class="control-label" for="configuration">Configuration:</label>
+            <select id="configuration"
+                    class="form-control"
+                    onchange="window.location.href = this.value ? '{% url 'cap_discount_status_configuration' '99999' %}'.replace('99999', this.value) : '{% url 'cap_discount_status' %}'">
+                <option value="" selected>All</option>
+                {% for configuration in configurations %}
+                    <option value="{{ configuration.id }}"
+                            {% if selected_configuration.id == configuration.id %}selected{% endif %}>
+                        {{ configuration }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    {% endif %}
+{% endblock %}
+{% block pagination_content %}
+    <table class="table table-bordered table-striped table-align-middle thead-light">
+        <thead>
+            <tr>
+                <th>{% include 'pagination/pagination_column.html' with order_by="configuration" name='CAP' %}</th>
+                <th>{% include 'pagination/pagination_column.html' with order_by="account" name='Account' %}</th>
+                <th>{% include 'pagination/pagination_column.html' with order_by="user" name='User' %}</th>
+                <th>Last reset</th>
+                <th>Current amount</th>
+                <th>Last updated</th>
+                <th>Charges since</th>
+                <th>{% include 'pagination/pagination_column.html' with order_by="current_level_reached" name='CAP reached' %}</th>
+                <th>Next reset</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cap_discount in page %}
+                <tr>
+                    <td>{{ cap_discount.configuration }}</td>
+                    <td>{{ cap_discount.account.name }}</td>
+                    <td>{{ cap_discount.user|default_if_none:"" }}</td>
+                    <td>{{ cap_discount.last_reset|date:"F Y" }}</td>
+                    <td>{{ cap_discount.latest_amount.end }}</td>
+                    <td>{{ cap_discount.latest_amount.amount_date|date:"F, Y" }}</td>
+                    <td>{{ cap_discount.estimated_charges_since_last_update|floatformat:2 }}</td>
+                    <td>
+                        {% if cap_discount.current_level_reached %}{{ cap_discount.current_level_reached }}{% endif %}
+                    </td>
+                    <td>{{ cap_discount.next_reset|date:"F, Y" }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
+{% block table_empty_content %}There are no current CAP set{% endblock %}

@@ -1,0 +1,109 @@
+{% load custom_tags_and_filters %}
+<table class="table table-bordered table-striped table-align-middle thead-light">
+    <thead>
+        <tr>
+            {% with request_start=request.GET.start request_end=request.GET.end %}
+                {% with extra_params='start='|concat:request_start|concat:'&end='|concat:request_end %}
+                    <th>{% include 'pagination/pagination_column.html' with order_by="project" name='Project' %}</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by="project__institution" name='Institution' %}</th>
+                    <th>Allowed charges</th>
+                    {% if core_facilities_exist %}
+                        <th>
+                            {% include 'pagination/pagination_column.html' with order_by="only_core_facilities" name='Allowed facilities' %}
+                        </th>
+                    {% endif %}
+                    <th class="text-right">Total active funds</th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by="balance_last_updated" name='Updated' %}</th>
+                    <th>Balance</th>
+                    <th class="text-right">Charges since</th>
+                    <th class="text-right">Current balance</th>
+                    <th class="text-right button-column-minimum">Charges</th>
+                {% endwith %}
+            {% endwith %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for prepaid_project in page %}
+            <tr>
+                {% if prepaid_project.charges %}
+                    <td id="chevron_{{ prepaid_project.id }}"
+                        data-toggle="collapse"
+                        data-target=".prepaid_project_{{ prepaid_project.id }}"
+                        onclick="toggle_details($('#chevron_{{ prepaid_project.id }}'))">
+                        <span class="glyphicon glyphicon-chevron-right pull-left chevron"></span>
+                        {{ prepaid_project.project }}
+                    </td>
+                {% else %}
+                    <td>{{ prepaid_project.project }}</td>
+                {% endif %}
+                <td>{{ prepaid_project.project.institution }}</td>
+                <td>{{ prepaid_project.get_charge_types_display }}</td>
+                {% if core_facilities_exist %}<td>{{ prepaid_project.get_only_core_facilities_display }}</td>{% endif %}
+                <td class="text-right">{{ prepaid_project.total_funds|floatformat:2 }}</td>
+                <td class="text-center">{{ prepaid_project.balance_last_updated|date:"SHORT_DATE_FORMAT" }}</td>
+                <td class="text-right">{{ prepaid_project.balance|floatformat:2 }}</td>
+                <td class="text-right">{{ prepaid_project.total_charges_amount|floatformat:2 }}</td>
+                <td class="text-right">{{ prepaid_project.total_funds_left|floatformat:2 }}</td>
+                <td class="text-right">
+                    {% if prepaid_project.charges %}
+                        <button class="btn btn-sm btn-primary"
+                                type="button"
+                                onclick="toggle_details($('#chevron_{{ prepaid_project.id }}'))"
+                                title="See charges"
+                                aria-label="See charges"
+                                data-toggle="collapse"
+                                data-target=".prepaid_project_{{ prepaid_project.id }}">
+                            <i class="glyphicon glyphicon-list"></i> See charges
+                        </button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% if prepaid_project.charges %}
+                <tr class="collapse prepaid_project_{{ prepaid_project.id }}">
+                    <td colspan="{% if core_facilities_exist %}9{% else %}8{% endif %}" style="padding: 0">
+                        <table class="table table-bordered table-align-middle table-condensed" style="margin: 0">
+                            <thead>
+                                <tr>
+                                    <th class="alert-info">User</th>
+                                    <th class="alert-info">Item</th>
+                                    <th class="alert-info">Date</th>
+                                    <th class="alert-info">Duration</th>
+                                    <th class="alert-info text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            {% for charge in prepaid_project.charges %}
+                                <tr>
+                                    <td>{{ charge.user }}</td>
+                                    <td>{{ charge.name }}</td>
+                                    <td>{{ charge.start|date:"SHORT_DATETIME_FORMAT" }}</td>
+                                    <td>{{ charge.display_quantity }}</td>
+                                    <td class="text-right">{{ charge.amount|floatformat:2 }}</td>
+                                </tr>
+                            {% endfor %}
+                            <tr>
+                                <td colspan="4" class="text-right">
+                                    {% if prepaid_project.taxes_amount %}
+                                        Subtotal
+                                    {% else %}
+                                        Total
+                                    {% endif %}
+                                </td>
+                                <td class="text-right">{{ prepaid_project.charges_amount|floatformat:2 }}</td>
+                            </tr>
+                            {% if prepaid_project.taxes_amount %}
+                                <tr>
+                                    <td colspan="4" class="text-right">Taxes</td>
+                                    <td class="text-right">{{ prepaid_project.taxes_amount|floatformat:2 }}</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="4" class="text-right">Total</td>
+                                    <td class="text-right">{{ prepaid_project.total_charges_amount|floatformat:2 }}</td>
+                                </tr>
+                            {% endif %}
+                        </table>
+                    </td>
+                </tr>
+            {% endif %}
+        {% endfor %}
+    </tbody>
+</table>

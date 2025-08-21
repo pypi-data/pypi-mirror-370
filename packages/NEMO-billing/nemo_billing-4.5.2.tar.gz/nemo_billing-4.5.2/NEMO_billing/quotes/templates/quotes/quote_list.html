@@ -1,0 +1,55 @@
+{% extends 'quotes/quote_list_base.html' %}
+{% load custom_tags_and_filters %}
+{% block add_button %}
+    {% if configurations_exist and user_can_create %}
+        {% url 'create_quote' selected_configuration.id as create_quote_url %}
+        {% button type="add" url=create_quote_url value="New Quote" %}
+    {% endif %}
+{% endblock %}
+{% block title %}Quotes{% endblock %}
+{% block before_pagination %}
+    {{ block.super }}
+    {% if not configurations_exist %}
+        <h3 style="margin-bottom: 30px">There are no quote configurations set</h3>
+        <h3>
+            You can add one in the <a href="{% admin_add_url 'quotes' 'quoteconfiguration' request.path %}">Quote Configuration section of 'Detailed Administration'</a>.
+        </h3>
+    {% endif %}
+{% endblock %}
+{% block pagination_content %}
+    <table class="table table-align-middle table-bordered table-condensed table-striped table-hover thead-light">
+        <thead>
+            <tr>
+                <th>{% include 'pagination/pagination_column.html' with order_by='name' name='Name' %}</th>
+                <th>{% include 'pagination/pagination_column.html' with order_by='status' name='Status' %}</th>
+                <th>Expires on</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for quote in page %}
+                <tr>
+                    <td>
+                        <a href="{% url 'quote' quote.id %}">{{ quote.name }}
+                            {% if quote.quote_number %}<span style="color: gray">({{ quote.quote_number }})</span>{% endif %}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="label label-{% if quote.status == 2 %}success{% elif quote.status == 1 %}warning{% else %}default{% endif %}"
+                              style="font-size: 1em">{{ quote.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {{ quote.expiration_date|date:"SHORT_DATE_FORMAT" }}
+                        {% if quote.expiration_date and quote.expiration_date < today %}<span class="text-danger">- Expired</span>{% endif %}
+                    </td>
+                    <td>{{ quote.total_display }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
+{% block table_empty_content %}
+    <div style="margin-top: 35px">
+        <i>No quotes could be found.</i>
+    </div>
+{% endblock %}

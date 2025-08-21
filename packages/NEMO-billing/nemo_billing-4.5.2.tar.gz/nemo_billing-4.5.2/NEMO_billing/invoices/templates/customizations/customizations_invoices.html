@@ -1,0 +1,178 @@
+{% load custom_tags_and_filters %}
+<div class="panel-body" style="padding-bottom: 0">
+    <h3 class="customization-section-title">Invoices settings</h3>
+    <form method="POST" action="{% url 'customize' 'invoices' %}" class="form-horizontal">
+        {% csrf_token %}
+        <div class="form-group {% if errors.invoice_month_list_since %}has-error{% endif %}">
+            <label class="control-label col-md-4 col-lg-3" for="invoice_month_list_since">Invoice generation</label>
+            <div class="col-md-5">
+                <input type="text"
+                       id="invoice_month_list_since"
+                       name="invoice_month_list_since"
+                       class="form-control"
+                       value="{% if errors.invoice_month_list_since %}{{ errors.invoice_month_list_since.value }}{% else %}{{ invoice_month_list_since }}{% endif %}">
+            </div>
+            <div class="col-lg-offset-3 col-md-offset-4 col-md-8 col-lg-9 help-block light-grey">
+                {% if errors.invoice_month_list_since %}
+                    {{ errors.invoice_month_list_since.error }}
+                {% else %}
+                    Only allow generating invoices from this date forward.
+                {% endif %}
+            </div>
+        </div>
+        <div class="form-group {% if errors.invoice_number_format %}has-error{% endif %}">
+            <label class="control-label col-md-4 col-lg-3" for="invoice_number_format">Invoice number format</label>
+            <div class="col-md-5">
+                <input type="text"
+                       id="invoice_number_format"
+                       name="invoice_number_format"
+                       class="form-control"
+                       value="{% if errors.invoice_number_format %}{{ errors.invoice_number_format.value }}{% else %}{{ invoice_number_format }}{% endif %}" />
+            </div>
+            <div class="col-lg-offset-3 col-md-offset-4 col-md-8 col-lg-9 help-block light-grey">
+                {% if errors.invoice_number_format %}
+                    {{ errors.invoice_number_format.error }}
+                {% else %}
+                    The format to use when creating invoice numbers. See <a href="https://docs.python.org/3/library/string.html#formatstrings">Python Format String Syntax</a> for more details.
+                {% endif %}
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="control-label col-md-4 col-lg-3" for="invoice_number_current">Current invoice number</label>
+            <div class="col-md-5">
+                <input type="number"
+                       min="0"
+                       step="1"
+                       id="invoice_number_current"
+                       name="invoice_number_current"
+                       class="form-control"
+                       value="{{ invoice_number_current }}">
+            </div>
+            <div class="col-lg-offset-3 col-md-offset-4 col-md-8 col-lg-9 help-block light-grey">The current invoice number.</div>
+        </div>
+        <div class="form-group">
+            <label class="control-label col-md-4 col-lg-3">Formatted result</label>
+            <div class="col-md-5">
+                <div class="form-control-static">{{ invoice_number_formatted }}</div>
+            </div>
+        </div>
+        <div class="form-group {% if errors.invoice_zip_export_template %}has-error{% endif %}">
+            <label class="control-label col-md-4 col-lg-3" for="invoice_zip_export_template">Zip filename template</label>
+            <div class="col-md-8 col-lg-9">
+                <textarea oninput="auto_size_textarea(this);"
+                          id="invoice_zip_export_template"
+                          name="invoice_zip_export_template"
+                          class="form-control">{% if errors.invoice_zip_export_template %}{{ errors.invoice_zip_export_template.value }}{% else %}{{ invoice_zip_export_template }}{% endif %}</textarea>
+            </div>
+            <div class="col-lg-offset-3 col-md-offset-4 col-md-8 col-lg-9 help-block light-grey">
+                {% if errors.invoice_zip_export_template %}
+                    {{ errors.invoice_zip_export_template.error }}
+                {% else %}
+                    The django template used in the zip file when downloading invoices. Use '/' to organize into subfolders. The context variables <b>invoice</b>, <b>project_name</b>, <b>account_name</b> are provided.
+                {% endif %}
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="control-label col-md-4 col-lg-3">Formatted result</label>
+            <div class="col-md-8 col-lg-9">
+                <div class="form-control-static">{{ invoice_zip_template_formatted }}</div>
+            </div>
+        </div>
+        {% if "NEMO_billing.prepayments"|app_installed %}
+            <div class="form-group">
+                <label class="control-label col-md-4 col-lg-3">Invoice funds</label>
+                <div class="col-md-8 col-lg-9">
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox"
+                                   name="invoice_funds_show_total_balance"
+                                   {% if invoice_funds_show_total_balance %}checked{% endif %}
+                                   value="enabled">
+                            Show total funds remaining in invoice summary
+                        </label>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+        <div class="form-group">
+            <label class="control-label col-md-4 col-lg-3">Hard CAPs</label>
+            <div class="col-md-8 col-lg-9">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox"
+                               name="invoice_show_hard_cap_status"
+                               {% if invoice_show_hard_cap_status %}checked{% endif %}
+                               value="enabled">
+                        Show hard CAP status in invoice summary
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="control-label col-md-4 col-lg-3">Invoice/API inactives</label>
+            <div class="col-md-8 col-lg-9">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox"
+                               name="invoice_skip_inactive_accounts"
+                               {% if invoice_skip_inactive_accounts %}checked{% endif %}
+                               value="enabled">
+                        Skip inactive accounts in invoices/API
+                    </label>
+                    <br>
+                    <label>
+                        <input type="checkbox"
+                               name="invoice_skip_inactive_projects"
+                               {% if invoice_skip_inactive_projects %}checked{% endif %}
+                               value="enabled">
+                        Skip inactive projects in invoices/API
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="customization-separation" style="margin-bottom: 15px"></div>
+        <div class="text-center" style="margin-bottom: 15px">{% button type="save" value="Save settings" %}</div>
+    </form>
+    <div class="customization-separation" style="clear: both"></div>
+    <div class="form-group form-horizontal" style="margin-top: 15px">
+        <h3 class="customization-section-title" id="email_send_invoice_message_id">Invoice email subject & message</h3>
+        <p>
+            This is the email the project contact will receive with his invoice. The following context variables are provided when the email is rendered:
+        </p>
+        <ul style="margin-bottom: 25px">
+            <li>
+                <b>invoice</b> - the project's invoice
+            </li>
+        </ul>
+        <div class="col-md-6">
+            {% include 'customizations/customizations_upload.html' with element=email_send_invoice_subject name='email send invoice subject' button_name='Upload invoice email subject' extension='txt' key='invoices' %}
+        </div>
+        <div class="col-md-6">
+            {% include 'customizations/customizations_upload.html' with element=email_send_invoice_message name='email send invoice message' button_name='Upload invoice email' key='invoices' %}
+        </div>
+    </div>
+    <div class="customization-separation" style="clear: both"></div>
+    <div class="form-group form-horizontal" style="margin-top: 15px;">
+        <h3 class="customization-section-title" id="email_send_invoice_reminder_message_id">
+            Invoice reminder email subject & message
+        </h3>
+        <p>
+            This is the email the project contact will receive as a reminder when his invoice has an outstanding balance. The following context variables are provided when the email is rendered:
+        </p>
+        <ul style="margin-bottom: 25px">
+            <li>
+                <b>invoice</b> - the project's invoice
+            </li>
+        </ul>
+        <div class="col-md-6">
+            {% include 'customizations/customizations_upload.html' with element=email_send_invoice_reminder_subject name='email send invoice reminder subject' button_name='Upload invoice reminder email subject' extension='txt' key='invoices' %}
+        </div>
+        <div class="col-md-6">
+            {% include 'customizations/customizations_upload.html' with element=email_send_invoice_reminder_message name='email send invoice reminder message' button_name='Upload invoice reminder email' key='invoices' %}
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+	auto_size_textarea(document.getElementById("invoice_zip_export_template"));
+    $("#invoice_month_list_since").datetimepicker({format: "{{ date_input_js_format }}"});
+</script>

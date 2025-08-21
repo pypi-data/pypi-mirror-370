@@ -1,0 +1,125 @@
+{% extends 'pagination/pagination_base.html' %}
+{% block extrahead %}
+    <style>
+		.container .pagination {
+			margin: initial;
+		}
+		.nav-tabs > li.active > a, .nav-tabs > li.active > a:hover {
+			background-color: #e9ecef;
+		}
+	
+    </style>
+{% endblock %}
+{% load custom_tags_and_filters %}
+{% block title %}Rates{% endblock %}
+{% block before_pagination %}
+    <div class="row">
+        <div class="col-xs-7">
+            <h1>Rates</h1>
+        </div>
+        <div class="col-sm-5 text-right">
+            <h1>{% button type="add" url="create_rate" value="New rate" %}</h1>
+        </div>
+    </div>
+    <div class="row" style="margin-bottom: 40px">
+        <div class="col-sm-4">
+            <input id="search" type="text" placeholder="Search for a rate" class="form-control" autofocus>
+        </div>
+    </div>
+    <div class="pull-left">
+        <ul class="nav nav-tabs" id="tabs" style="border-bottom: none;">
+            <li {% if rate_type|lower == 'tool' %}class="active"{% endif %}>
+                <a href="{% url 'rates' 'Tool' %}">Tools</a>
+            </li>
+            <li {% if rate_type|lower == 'area' %}class="active"{% endif %}>
+                <a href="{% url 'rates' 'Area' %}">Areas</a>
+            </li>
+            <li {% if rate_type|lower == 'consumable' %}class="active"{% endif %}>
+                <a href="{% url 'rates' 'CONSUMABLE' %}">Supplies</a>
+            </li>
+            <li {% if rate_type|lower == 'other' %}class="active"{% endif %}>
+                <a href="{% url 'rates' 'other' %}">Other</a>
+            </li>
+        </ul>
+    </div>
+{% endblock %}
+{% block pagination_content %}
+    {% with 'tool area consumable' as rate_type_list %}
+        <table class="table table-align-middle table-bordered table-condensed table-striped table-hover thead-light">
+            <thead>
+                <tr>
+                    {% if rate_type|lower in rate_type_list.split %}
+                        <th>{% include 'pagination/pagination_column.html' with order_by=rate_type|lower name=rate_type|lower|capfirst %}</th>
+                    {% endif %}
+                    <th>{% include 'pagination/pagination_column.html' with order_by='effective_date' name='Effective_date' %}</th>
+                    {% if show_type %}
+                        <th>{% include 'pagination/pagination_column.html' with order_by='type' name='Type' %}</th>
+                    {% endif %}
+                    {% if show_category %}
+                        <th>{% include 'pagination/pagination_column.html' with order_by='category' name='Category' %}</th>
+                    {% endif %}
+                    {% if show_time %}
+                        <th>{% include 'pagination/pagination_column.html' with order_by='time' name='Time' %}</th>
+                    {% endif %}
+                    <th>{% include 'pagination/pagination_column.html' with order_by='amount' name='Rate' %}</th>
+                    <th class="button-column-minimum">
+                        {% include 'pagination/pagination_column.html' with order_by='flat' name='Flat Rate' %}
+                    </th>
+                    <th>{% include 'pagination/pagination_column.html' with order_by='minimum_charge' name='Minimum Charge' %}</th>
+                    <th class="text-center button-column-minimum"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rate in page %}
+                    <tr>
+                        {% if rate_type|lower in rate_type_list.split %}<td>{{ rate.get_item|default_if_none:"" }}</td>{% endif %}
+                        <td>{{ rate.effective_date|default_if_none:'' }}</td>
+                        {% if show_type %}<td>{{ rate.type }}</td>{% endif %}
+                        {% if show_category %}<td>{{ rate.category|default_if_none:"" }}</td>{% endif %}
+                        {% if show_time %}<td>{{ rate.time|default_if_none:"" }}</td>{% endif %}
+                        <td>{{ rate.amount }}</td>
+                        <td class="text-center">
+                            <span class="glyphicon {% if rate.flat %}glyphicon-ok success-highlight{% endif %}"></span>
+                        </td>
+                        <td>{{ rate.minimum_charge|default_if_none:'' }}</td>
+                        <td>
+                            {% if rate.get_item.id %}
+                                {% url 'create_rate' rate.type.get_rate_group_type rate.get_item.id as edit_rate_url %}
+                                {% button type="edit" size="small" url=edit_rate_url title="Edit rate" value="Edit" %}
+                            {% else %}
+                                {% url 'create_rate' rate.type.get_rate_group_type as edit_rate_url %}
+                                {% button type="edit" size="small" url=edit_rate_url title="Edit rate" value="Edit" %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endwith %}
+    <script>
+		function get_rate(jquery_event, search_selection, dataset_name)
+		{
+			if (search_selection.id)
+			{
+				window.location.href = "{% url 'create_rate' 'tool' 999 %}".replace('tool', search_selection.type_value).replace('999', search_selection.id);
+			}
+            else
+            {
+                window.location.href = "{% url 'create_rate' 'tool' %}".replace('tool', search_selection.type_value);
+            }
+		}
+		function on_load()
+		{
+			$("#search").autocomplete('users', get_rate, {{ search_rates }}).focus();
+		}
+		window.addEventListener('load', on_load, true);
+	
+    </script>
+{% endblock %}
+{% block table_empty_content %}
+    <table class="table table-bordered table-condensed table-striped table-hover thead-light">
+        <tr>
+            <th style="clear: both; padding: 15px; font-weight: initial">No rates of this type have been created yet.</th>
+        </tr>
+    </table>
+{% endblock %}

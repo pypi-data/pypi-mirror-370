@@ -1,0 +1,470 @@
+{% extends 'usage/usage_base.html' %}
+{% load static %}
+{% load custom_tags_and_filters %}
+{% load billing_tags %}
+{% block extrahead %}
+    <script type="text/javascript" src="{% static "datetimepicker/bootstrap-datetimepicker.js" %}"></script>
+    <link rel="stylesheet" type="text/css" href="{% static "datetimepicker/bootstrap-datetimepicker.css" %}" />
+    <link rel="stylesheet" type="text/css" href="{% static "invoices/invoices.css" %}" />
+    <style>
+	/* Change this so the button is placed correctly in our usage page */
+	.usage-charge-adjustment-button {
+		top: -7px !important;
+		right: -7px !important;
+	}
+	
+    </style>
+{% endblock %}
+{% block usage_content %}
+    <div class="hidden">
+        {% if cap_discounts_url %}
+            <li id="cap_discount_item">
+                <a href="#cap_discount" onclick="$('#cap_discount').load('{{ cap_discounts_url }}')" data-toggle="tab">Cap information</a>
+            </li>
+        {% endif %}
+        {% if project_prepayments_url %}
+            <li id="project_prepayments_item">
+                <a href="#project_prepayments"
+                   onclick="$('#project_prepayments').load('{{ project_prepayments_url }}')"
+                   data-toggle="tab">Project funds</a>
+            </li>
+        {% endif %}
+    </div>
+    <div id="content" class="tab-content">
+        <div class="tab-pane active" id="usage">
+            <br />
+            <div class="pull-left">
+                This data is provided for informational purposes and uses the <b>latest rates</b>.
+                <br />
+                Other adjustments/discounts <b>might not be included</b> in this information.
+                {% if "adjustment_requests"|customization:"adjustment_requests_enabled" and adjustment_time_limit %}
+                    <br>
+                    <br>
+                    Adjustment requests can be made for charges ending after {{ adjustment_time_limit.date }}.
+                {% endif %}
+                <div>
+                    <br>
+                    <label class="control-label">
+                        <input type="checkbox"
+                               value=""
+                               onclick="const params = new URLSearchParams(window.location.search); params.set('run_data_collapse', $(this).is(':checked')); window.location.search = params.toString(); "
+                               {% if run_data_collapse %}checked{% endif %}>
+                        Collapse pre/post run data by default
+                    </label>
+                </div>
+            </div>
+            {% if no_charges %}
+                <div style="height: 15px;clear: both;"></div>
+                <h3>There was no usage between {{ start_date|date }} and {{ end_date|date }}.</h3>
+            {% else %}
+                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                    <div class="pull-right">
+                        Total charges: <b>{{ total_charges }}</b>
+                        {% if pending_charges %}(includes {{ pending_charges }} pending){% endif %}
+                    </div>
+                {% endif %}
+            {% endif %}
+            <div style="height: 15px;clear: both;"></div>
+            {% regroup detailed_items by item_type as detailed_items_by_type %}
+            {% for detailed_item in detailed_items_by_type %}
+                {% if detailed_item.grouper.name == "MISSED_RESERVATION" %}
+                    <h3>Missed reservations</h3>
+                    {% for m in detailed_item.list %}
+                        <div class="alert alert-danger table-display">
+                            <div class="table-cell-display col-sm-7">
+                                <span style="font-weight:bold">{{ m.item.reservation_item }}{{ m.rate_time_name_add }}</span>
+                                <br>
+                                {% if explicitly_display_customer %}
+                                    Missed by {{ m.user }}
+                                    <br>
+                                {% endif %}
+                                {{ m.start }}
+                                <br>
+                                Charged to project {{ m.project }}
+                            </div>
+                            <div class="table-cell-display text-center col-sm-3">
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                    {{ m.billable_rate|default_if_none:"" }}
+                                {% endif %}
+                            </div>
+                            <div class="table-cell-display text-right col-sm-2">
+                                {% if m.item|can_be_adjusted:user %}
+                                    {% include "usage/adjustment_request_button.html" with charge=m.item %}
+                                {% endif %}
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ m.billable_display_amount }}{% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% if detailed_item.grouper.name == "CONSUMABLE" %}
+                    <h3>Supplies and consumables</h3>
+                    {% for c in detailed_item.list %}
+                        <div class="alert alert-info table-display">
+                            <div class="table-cell-display col-sm-7">
+                                <span style="font-weight:bold">{{ c.consumable }}{{ c.rate_time_name_add }}</span>
+                                <br>
+                                {% if explicitly_display_customer %}
+                                    <span style="font-weight:bold">For {{ c.item.customer }}</span>
+                                    <br>
+                                {% endif %}
+                                Quantity {{ c.quantity }}
+                                <br>
+                                Purchased from {{ c.item.merchant }}
+                                <br>
+                                {{ c.start }}
+                                <br>
+                                Charged to project {{ c.project }}
+                            </div>
+                            <div class="table-cell-display text-center col-sm-3">
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                    {{ c.billable_rate|default_if_none:"" }}
+                                {% endif %}
+                            </div>
+                            <div class="table-cell-display text-right col-sm-2">
+                                {% if c.item|can_be_adjusted:user %}
+                                    {% include "usage/adjustment_request_button.html" with charge=c.item %}
+                                {% endif %}
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ c.billable_display_amount }}{% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% if detailed_item.grouper.name == "STAFF_CHARGE" %}
+                    <h3>Staff charges</h3>
+                    {% for s in detailed_item.list %}
+                        {% if s.area %}
+                            <div class="alert alert-warning table-display">
+                                <div class="table-cell-display col-sm-7">
+                                    <span style="font-weight:bold">{{ s.area }}{{ s.rate_time_name_add }}</span>
+                                    <br>
+                                    <span style="font-weight:bold">Area accessed by {{ s.proxy_user }}
+                                        {% if explicitly_display_customer %}
+                                            on behalf of {{ s.user }}
+                                        {% else %}
+                                            on your behalf
+                                        {% endif %}
+                                    </span>
+                                    <br>
+                                    {{ s.start }}
+                                    <br>
+                                    {{ s.end|default_if_none:"In progress" }}
+                                    <br>
+                                    Charged to project {{ s.project }}
+                                </div>
+                                <div class="table-cell-display text-center col-sm-3">
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                        {{ s.billable_rate|default_if_none:"" }}
+                                    {% endif %}
+                                </div>
+                                <div class="table-cell-display text-right col-sm-2">
+                                    {% if s.item|can_be_adjusted:user %}
+                                        {% include "usage/adjustment_request_button.html" with charge=s.item %}
+                                    {% endif %}
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ s.billable_display_amount }}{% endif %}
+                                </div>
+                            </div>
+                        {% elif s.tool %}
+                            <div class="alert alert-warning table-display">
+                                <div class="table-cell-display col-sm-7">
+                                    <span style="font-weight:bold">{{ s.tool }}{{ s.rate_time_name_add }}</span>
+                                    <br>
+                                    <span style="font-weight:bold">Operated by {{ s.proxy_user }}
+                                        {% if explicitly_display_customer %}
+                                            on behalf of {{ s.user }}
+                                        {% else %}
+                                            on your behalf
+                                        {% endif %}
+                                    </span>
+                                    <br>
+                                    {{ s.start }}
+                                    <br>
+                                    {{ s.end }}
+                                    <br>
+                                    Charged to project {{ s.project }}
+                                </div>
+                                <div class="table-cell-display text-center col-sm-3">
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                        {{ s.billable_rate|default_if_none:"" }}
+                                    {% endif %}
+                                </div>
+                                <div class="table-cell-display text-right col-sm-2">
+                                    {% if s.item|can_be_adjusted:user %}
+                                        {% include "usage/adjustment_request_button.html" with charge=s.item %}
+                                    {% endif %}
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ s.billable_display_amount }}{% endif %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info table-display">
+                                <div class="table-cell-display col-sm-7">
+                                    <span style="font-weight:bold">Work performed by {{ s.proxy_user }}
+                                        {% if explicitly_display_customer %}
+                                            on behalf of {{ s.user }}
+                                        {% else %}
+                                            on your behalf
+                                        {% endif %}
+                                    {{ s.rate_time_name_add }}</span>
+                                    <br>
+                                    {% if s.item.note %}
+                                        Charge note: {{ s.item.note|linebreaksbr }}
+                                        <br>
+                                    {% endif %}
+                                    {{ s.start }}
+                                    <br>
+                                    {{ s.end }}
+                                    <br>
+                                    Charged to project {{ s.project }}
+                                </div>
+                                <div class="table-cell-display text-center col-sm-3">
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                        {{ s.billable_rate|default_if_none:"" }}
+                                    {% endif %}
+                                </div>
+                                <div class="table-cell-display text-right col-sm-2">
+                                    {% if s.item|can_be_adjusted:user %}
+                                        {% include "usage/adjustment_request_button.html" with charge=s.item %}
+                                    {% endif %}
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ s.billable_display_amount }}{% endif %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+                {% if detailed_item.grouper.name == "TRAINING" %}
+                    <h3>Training sessions</h3>
+                    {% for t in detailed_item.list %}
+                        <div class="alert alert-info table-display">
+                            <div class="table-cell-display col-sm-7">
+                                <span style="font-weight:bold">{{ t.tool }}{{ t.rate_time_name_add }}</span>
+                                <br>
+                                {{ t.item.get_type_display }} training
+                                {% if explicitly_display_customer %}for {{ t.user }}{% endif %}
+                                for {{ t.quantity }} minutes taught by <span style="font-weight:bold">{{ t.proxy_user }}</span>
+                                {{ t.start }}
+                                <br>
+                                Charged to project {{ t.project }}
+                            </div>
+                            <div class="table-cell-display text-center col-sm-3">
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                    {{ t.billable_rate|default_if_none:"" }}
+                                {% endif %}
+                            </div>
+                            <div class="table-cell-display text-right col-sm-2">
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ t.billable_display_amount }}{% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% if detailed_item.grouper.name == "AREA_ACCESS" %}
+                    <h3>Area access</h3>
+                    {% for a in detailed_item.list %}
+                        <div class="alert {% if not a.item.staff_charge %}alert-info{% else %}alert-warning{% endif %} table-display">
+                            <div class="table-cell-display col-sm-7">
+                                <span style="font-weight:bold">{{ a.area }}{{ a.rate_time_name_add }}</span>
+                                <br>
+                                {% if a.item.staff_charge %}
+                                    <span style="font-weight:bold">Area accessed by {{ a.proxy_user }}
+                                        {% if explicitly_display_customer %}
+                                            on behalf of {{ a.user }}
+                                        {% else %}
+                                            on your behalf
+                                        {% endif %}
+                                    </span>
+                                    <br>
+                                {% else %}
+                                    {% if explicitly_display_customer %}
+                                        <span style="font-weight:bold">Area accessed by {{ a.user }}</span>
+                                        <br>
+                                    {% endif %}
+                                {% endif %}
+                                {{ a.start }}
+                                <br>
+                                {{ a.end|default_if_none:"In progress" }}
+                                <br>
+                                Charged to project {{ a.project }}
+                            </div>
+                            <div class="table-cell-display text-center col-sm-3">
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                    {{ a.billable_rate|default_if_none:"" }}
+                                {% endif %}
+                            </div>
+                            <div class="table-cell-display text-right col-sm-2">
+                                {% if a.item|can_be_adjusted:user %}
+                                    {% include "usage/adjustment_request_button.html" with charge=a.item %}
+                                {% endif %}
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ a.billable_display_amount }}{% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% if detailed_item.grouper.name == "TOOL_USAGE" %}
+                    <h3>Tool usage</h3>
+                    {% for u in detailed_item.list %}
+                        <div class="alert {% if u.user == u.proxy_user %}alert-info{% else %}alert-warning{% endif %}">
+                            <div class="table-display">
+                                <div class="table-cell-display col-sm-7">
+                                    <span style="font-weight:bold">{{ u.tool }}{{ u.rate_time_name_add }}</span>
+                                    <br>
+                                    {% if u.user != u.proxy_user %}
+                                        <span style="font-weight:bold">Operated by {{ u.proxy_user }}
+                                            {% if explicitly_display_customer %}
+                                                on behalf of {{ u.user }}
+                                            {% else %}
+                                                on your behalf
+                                            {% endif %}
+                                        </span>
+                                        <br>
+                                    {% else %}
+                                        {% if explicitly_display_customer %}
+                                            <span style="font-weight:bold">Operated by {{ u.user }}</span>
+                                            <br>
+                                        {% endif %}
+                                    {% endif %}
+                                    {{ u.start }}
+                                    <br>
+                                    {{ u.end }}
+                                    <br>
+                                    Charged to project {{ u.project }}
+                                </div>
+                                <div class="table-cell-display text-center col-sm-3">
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                        {{ u.billable_rate|default_if_none:"" }}
+                                    {% endif %}
+                                </div>
+                                <div class="table-cell-display text-right col-sm-2">
+                                    {% if u.item|can_be_adjusted:user %}
+                                        {% include "usage/adjustment_request_button.html" with charge=u.item %}
+                                    {% endif %}
+                                    {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ u.billable_display_amount }}{% endif %}
+                                </div>
+                            </div>
+                            {% if u.item.pre_run_data_json.items or u.item.post_run_data_json.items %}
+                                {% if u.item.pre_run_data_json.items %}
+                                    <div onclick="toggle_details(this)"
+                                         data-toggle="collapse"
+                                         data-target="#{{ u.item.id }}_pre_run_data"
+                                         class="pointer"
+                                         style="margin-left: 15px">
+                                        <span class="glyphicon {% if run_data_collapse %}glyphicon-chevron-right{% else %}glyphicon-chevron-down{% endif %} chevron"
+                                              style="color:inherit;
+                                                     margin-top: 15px"></span>Pre run data
+                                    </div>
+                                    <div id="{{ u.item.id }}_pre_run_data" class="collapse {% if not run_data_collapse %}in{% endif %}">
+                                        <table class="table table-striped" style="background-color: #fff; margin-top: 10px; margin-bottom: 0">
+                                            {% for question_name, data in u.item.pre_run_data_json.items %}
+                                                {% if not data.readonly %}
+                                                    {% if data.type == 'group' %}
+                                                        <tr>
+                                                            <td {% if forloop.first %}style="border-top:none;"{% endif %}>
+                                                                {{ data.title }}
+                                                                {% if data.title|slice:"-1:" != ":" %}:{% endif %}
+                                                            </td>
+                                                            <td style="padding: 0;{% if forloop.first %}border-top:none;{% endif %}">
+                                                                <table class="table table-striped" style="margin-bottom: 0;">
+                                                                    {% res_question_tbody data %}
+                                                                </table>
+                                                            </td>
+                                                        </tr>
+                                                    {% else %}
+                                                        <tr>
+                                                            <td {% if forloop.first %}style="border-top:none;"{% endif %}>
+                                                                {{ data.title }}
+                                                                {% if data.title|slice:"-1:" != ":" %}:{% endif %}
+                                                            </td>
+                                                            <td {% if forloop.first %}style="border-top:none;"{% endif %}>
+                                                                {{ data.user_input|linebreaksbr }}
+                                                                {% if data.user_input and data.suffix %}{{ data.suffix }}{% endif %}
+                                                            </td>
+                                                        </tr>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        </table>
+                                    </div>
+                                {% endif %}
+                                {% if u.item.post_run_data_json.items %}
+                                    <div onclick="toggle_details(this)"
+                                         data-toggle="collapse"
+                                         data-target="#{{ u.item.id }}_post_run_data"
+                                         class="pointer"
+                                         style="margin-left: 15px">
+                                        <span class="glyphicon {% if run_data_collapse %}glyphicon-chevron-right{% else %}glyphicon-chevron-down{% endif %} chevron"
+                                              style="color: inherit;
+                                                     margin-top: 15px"></span>Post run data
+                                    </div>
+                                    <div id="{{ u.item.id }}_post_run_data" class="collapse {% if not run_data_collapse %}in{% endif %}">
+                                        <table class="table table-striped" style="background-color: #fff; margin-top:10px; margin-bottom: 0">
+                                            {% for question_name, data in u.item.post_run_data_json.items %}
+                                                {% if not data.readonly %}
+                                                    {% if data.type == 'group' %}
+                                                        <tr>
+                                                            <td {% if forloop.first %}style="border-top:none;"{% endif %}>
+                                                                {{ data.title }}
+                                                                {% if data.title|slice:"-1:" != ":" %}:{% endif %}
+                                                            </td>
+                                                            <td style="padding: 0;{% if forloop.first %}border-top:none;{% endif %}">
+                                                                <table class="table table-striped" style="margin-bottom: 0;">
+                                                                    {% res_question_tbody data %}
+                                                                </table>
+                                                            </td>
+                                                        </tr>
+                                                    {% else %}
+                                                        <tr>
+                                                            <td {% if forloop.first %}style="border-top:none;"{% endif %}>
+                                                                {{ data.title }}
+                                                                {% if data.title|slice:"-1:" != ":" %}:{% endif %}
+                                                            </td>
+                                                            <td {% if forloop.first %}style="border-top:none;"{% endif %}>
+                                                                {{ data.user_input|linebreaksbr }}
+                                                                {% if data.user_input and data.suffix %}{{ data.suffix }}{% endif %}
+                                                            </td>
+                                                        </tr>
+                                                    {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        </table>
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% if detailed_item.grouper.name == "CUSTOM_CHARGE" %}
+                    <h3>Custom charges</h3>
+                    {% for c in detailed_item.list %}
+                        <div class="alert alert-info alert-table table-display">
+                            <div class="table-cell-display col-sm-7">
+                                <span style="font-weight:bold">{{ c.item.name }}
+                                    <br>
+                                    {% if explicitly_display_customer %}
+                                        For {{ c.user }}
+                                        <br>
+                                    {% endif %}
+                                </span>
+                                {{ c.start }}
+                                <br>
+                                Charged to project {{ c.project }}
+                                <br>
+                            </div>
+                            <div class="table-cell-display text-center col-sm-3">
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}
+                                    {{ c.billable_rate|default_if_none:"" }}
+                                {% endif %}
+                            </div>
+                            <div class="table-cell-display text-right col-sm-2">
+                                {% if not "billing_rates"|customization:"rates_usage_hide_charges" %}{{ c.billable_display_amount }}{% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="tab-pane" id="cap_discount"></div>
+        <div class="tab-pane" id="project_prepayments" style="padding-top:20px"></div>
+    </div>
+    <script>
+		{% if cap_discounts_url %}$("#tabs").append($("#cap_discount_item"));{% endif %}
+		{% if project_prepayments_url %}$("#tabs").append($("#project_prepayments_item"));{% endif %}
+	
+    </script>
+{% endblock %}
