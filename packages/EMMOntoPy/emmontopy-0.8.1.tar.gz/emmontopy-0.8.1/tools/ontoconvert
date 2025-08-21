@@ -1,0 +1,321 @@
+#!/usr/bin/env python
+"""Converts file format of input ontology and write it to output file(s)."""
+import argparse
+import warnings
+
+from rdflib.util import guess_format
+
+from ontopy import get_ontology
+from ontopy.utils import annotate_source, rename_iris, copy_annotation
+
+import owlready2  # pylint: disable=wrong-import-order
+import owlready2.reasoning  # pylint: disable=wrong-import-order
+
+
+def main(argv: list = None):
+    """Main run function.
+
+    Parameters:
+        argv: List of arguments, similar to `sys.argv[1:]`.
+            Mainly for testing purposes, since it allows one to invoke the tool
+            manually / through Python.
+
+    """
+    # pylint: disable=too-many-branches,too-many-statements,invalid-name
+    # pylint: disable=too-many-locals
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", help="IRI/file to OWL source.")
+    parser.add_argument("output", help="Output file name.")
+    parser.add_argument(
+        "--input-format",
+        "-f",
+        help=(
+            "Input format (default is to infer from input).  Available "
+            'formats: "xml" (rdf/xml), "n3", "nt", "trix", "rdfa"'
+        ),
+    )
+    parser.add_argument(
+        "--output-format",
+        "-F",
+        help=(
+            "Output format (default is to infer from output.  Available "
+            'formats: "xml" (rdf/xml), "n3", "turtle", "nt", "pretty-xml", '
+            '"trix"'
+        ),
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-d",
+        default=".",
+        help=(
+            "Output directory.  If `output` is a relative path, it will be "
+            "relative to this directory."
+        ),
+    )
+    parser.add_argument(
+        "--overwrite",
+        "-w",
+        action="store_true",
+        help=(
+            "Whether to remove `output` if it already exists. "
+            "The default is to append to it."
+        ),
+    )
+    parser.add_argument(
+        "--copy-annotation",
+        "-c",
+        action="append",
+        default=[],
+        metavar="FROM-->TO",
+        help=(
+            "Copy annotation FROM to annotation TO in each class and "
+            "property in the ontology.  FROM and TO may be given as "
+            "full IRIs or (if they already exists as annotations in the "
+            "ontology) as entity names.  "
+            "This option be given multiple times."
+        ),
+    )
+    parser.add_argument(
+        "--copy-emmo-annotations",
+        "-e",
+        action="store_true",
+        help=(
+            "Make a copy of EMMO annotations to plain RDFS for increased "
+            "interoperability. "
+            "Alias for: `--copy-annotation="
+            "http://www.w3.org/2004/02/skos/core#prefLabel"
+            "-->http://www.w3.org/2000/01/rdf-schema#label "
+            "--copy-annotation=elucidation"
+            "-->http://www.w3.org/2000/01/rdf-schema#comment` "
+            "--copy-annotation=definition"
+            "-->http://www.w3.org/2000/01/rdf-schema#comment` "
+            "--copy-annotation=comment"
+            "-->http://www.w3.org/2000/01/rdf-schema#comment`"
+        ),
+    )
+    parser.add_argument(
+        "--namespace",
+        "-n",
+        action="append",
+        default=[],
+        metavar="PREFIX:NAMESPACE",
+        help=(
+            "Additional prefix:namespace pair that will be added to the header "
+            "of turtle output. The argument can be used multiple times, once "
+            "for each added prefix:namespace pair."
+        ),
+    )
+    parser.add_argument(
+        "--no-catalog",
+        "-N",
+        action="store_false",
+        dest="url_from_catalog",
+        default=None,
+        help="Whether to not read catalog file even if it exists.",
+    )
+    parser.add_argument(
+        "--reasoner",
+        "--infer",
+        "-i",
+        nargs="?",
+        const="HermiT",
+        choices=["HermiT", "Pellet", "FaCT++"],
+        metavar="NAME",
+        help=(
+            "Add additional relations inferred by the reasoner.  Supported "
+            'reasoners are "HermiT" (default), "Pellet" and "FaCT++".'
+        ),
+    )
+    parser.add_argument(
+        "--no-infer-imported",
+        "--no-reason-imported",
+        action="store_true",
+        help="Do not infer imported ontologies.",
+    )
+    parser.add_argument(
+        "--java-executable",
+        help="Path to Java executable to use. Default is `java`.",
+    )
+    parser.add_argument(
+        "--java-memory",
+        help="Maximum memory allocated to Java in MB. Default is 2000.",
+    )
+    parser.add_argument(
+        "--iri",
+        "-I",
+        help="IRI of converted ontology.",
+    )
+    parser.add_argument(
+        "--base-iri",
+        "-b",
+        help=(
+            "Base IRI of converted ontology. The default is the base iri of "
+            "the input ontology."
+            "\n\nThis argument can be used to workaround the bug in Owlready2 "
+            "that changes the base IRI of the ontology to always end with a "
+            "slash."
+        ),
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Don't print a lot of stuff to stdout during reasoning.",
+    )
+    parser.add_argument(
+        "--recursive",
+        "-r",
+        action="store_true",
+        help=(
+            "Whether to also convert imported ontologies recursively using "
+            "rdflib. The output is written to a directory structure matching "
+            "the input. "
+            "This option requires Protege catalog files to be present. "
+            "It is typically combined with --output-dir. "
+        ),
+    )
+    parser.add_argument(
+        "--squash",
+        "-s",
+        action="store_true",
+        help=(
+            "Whether to also squash imported ontologies into a single output "
+            "file. "
+            "When combining --squash with --recursive, a folder structure of "
+            "overlapping single-file ontologies will be generated."
+        ),
+    )
+    parser.add_argument(
+        "--annotate-source",
+        "-a",
+        action="store_true",
+        help=(
+            "Whether to annotate all entities with the base IRI of the source "
+            "ontology using `dcterms:source` relations.  This is contextual "
+            "information that is otherwise lost when ontologies are inferred "
+            "and/or squashed."
+        ),
+    )
+    parser.add_argument(
+        "--rename-iris",
+        "-R",
+        nargs="?",
+        const="prefLabel",
+        metavar="ANNOTATION",
+        help=(
+            "For all entities that have the given annotation ('prefLabel' "
+            "by default), change the name of the entity to the value of the "
+            "annotation.\n"
+            "For all changed entities, an `equivalentTo` annotation is "
+            "added, referring to the old name.\n"
+            "This option is useful to create a copy of an ontology with "
+            "more human readable IRIs."
+        ),
+    )
+    parser.add_argument(
+        "--catalog-file",
+        "-C",
+        nargs="?",
+        const="catalog-v001.xml",
+        metavar="FILENAME",
+        help='Whether to write catalog file. Defaults to "catalog-v001.xml".',
+    )
+    parser.add_argument(
+        "--append-catalog",
+        "-A",
+        action="store_true",
+        help="Whether to append to (possible) existing catalog file.",
+    )
+
+    args = parser.parse_args(args=argv)
+
+    # Inferred default input and output file formats
+    if args.input_format:
+        input_format = args.input_format
+    else:
+        input_format = guess_format(args.input)
+
+    if args.output_format:
+        output_format = args.output_format
+    else:
+        output_format = guess_format(args.output)
+    if not output_format:
+        output_format = "xml"
+
+    # Settings for running Java
+    if args.java_executable:
+        owlready2.JAVA_EXE = args.java_executable
+    if args.java_memory:
+        owlready2.reasoning.JAVA_MEMORY = int(args.java_memory)
+
+    # Annotations to copy with --copy-emmo-annotations
+    if args.copy_emmo_annotations:
+        args.copy_annotation.extend(
+            [
+                "http://www.w3.org/2004/02/skos/core#prefLabel"
+                "-->http://www.w3.org/2000/01/rdf-schema#label",
+                "elucidation-->http://www.w3.org/2000/01/rdf-schema#comment",
+                "definition-->http://www.w3.org/2000/01/rdf-schema#comment",
+                "conceptualisation"
+                "-->http://www.w3.org/2000/01/rdf-schema#comment",
+                "comment-->http://www.w3.org/2000/01/rdf-schema#comment",
+            ]
+        )
+
+    # Perform conversion
+    with warnings.catch_warnings(record=True) as warnings_handle:
+        warnings.simplefilter("always")
+
+        onto = get_ontology(args.input).load(
+            format=input_format,
+            url_from_catalog=args.url_from_catalog,
+        )
+
+        if args.iri:
+            onto.iri = args.iri
+
+        if args.base_iri:
+            onto.base_iri = args.base_iri
+
+        if args.annotate_source:
+            annotate_source(onto)
+
+        if args.rename_iris:
+            rename_iris(onto, args.rename_iris)
+
+        if args.reasoner:
+            include_imported = not args.no_infer_imported
+            verbose = not args.quiet
+            onto.sync_reasoner(
+                reasoner=args.reasoner,
+                include_imported=include_imported,
+                debug=verbose,
+            )
+
+        for cpy in args.copy_annotation:
+            src, dst = cpy.split("-->", 1)
+            copy_annotation(onto, src.strip(), dst.strip())
+
+        onto.save(
+            args.output,
+            format=output_format,
+            dir=args.output_dir,
+            mkdir=True,
+            overwrite=args.overwrite,
+            recursive=args.recursive,
+            squash=args.squash,
+            namespaces=dict(arg.split(":", 1) for arg in args.namespace),
+            write_catalog_file=bool(args.catalog_file),
+            append_catalog=args.append_catalog,
+            catalog_file=args.catalog_file,
+        )
+
+        for warning in warnings_handle:
+            print(
+                f"\033[93mWARNING\033[0m: [{warning.category.__name__}] "
+                f"{warning.message}"
+            )
+
+
+if __name__ == "__main__":
+    main()
