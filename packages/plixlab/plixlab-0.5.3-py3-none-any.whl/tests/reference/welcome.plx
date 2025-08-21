@@ -1,0 +1,1 @@
+§slide_0ƒ¨children©slide_0_0…¤type¨Markdown§display¤flex¤text°Welcome to Plix!¨fontsizeË?©™™™™™š¥style¥color¥whiteªwhiteSpace¦nowrap¨fontSizeË?©™™™™™š¨position¨absolute¤left¥50.0%£top¥50.0%©transformµtranslate(-50%, -50%)§display¤flex®justifyContent¦center©textAlign¦centerªalignItems¦center¥width¤auto¦height¤auto¥style¯backgroundColor§#303030©animation‘¡0Â
