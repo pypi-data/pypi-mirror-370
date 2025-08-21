@@ -1,0 +1,33 @@
+from setuptools import setup
+# v 1.6.0 works in case of rollout without pulling from s3
+__version__ = "1.6.4" 
+
+with open("README.md") as f:
+    long_description = f.read()
+
+setup(
+    name="enhanced-s3-storage-provider",
+    version=__version__,
+    zip_safe=False,
+    author="matrix.org team and contributors",
+    description="A storage provider which can fetch and store media in Amazon S3.",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/elyesbenamor/synapse-s3-storage-provider.git",
+    classifiers=[
+        "Programming Language :: Python :: 3",
+    ],
+    license="Apache-2.0",
+    py_modules=["s3_storage_provider"],
+    scripts=["scripts/s3_media_upload"],
+    install_requires=[
+        "boto3>=1.20.0,<2.0",
+        "botocore>=1.23.0,<2.0",
+        "humanize>=4.0,<5.0",
+        "psycopg2-binary>=2.7.5,<3.0",
+        "PyYAML>=5.4,<7.0",
+        "tqdm>=4.26.0,<5.0",
+        "Twisted",
+        "minio",
+    ],
+)
