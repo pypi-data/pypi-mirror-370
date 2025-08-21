@@ -1,0 +1,1 @@
+import{f as t}from"./mdast-util-from-markdown-qQprfQAh.js";function s(s){const n=this;n.parser=function(o){return t(o,{...n.data("settings"),...s,extensions:n.data("micromarkExtensions")||[],mdastExtensions:n.data("fromMarkdownExtensions")||[]})}}export{s as r};
