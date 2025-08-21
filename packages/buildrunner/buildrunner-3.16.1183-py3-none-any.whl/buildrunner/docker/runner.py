@@ -1,0 +1,820 @@
+"""
+Copyright 2021 Adobe
+All Rights Reserved.
+
+NOTICE: Adobe permits you to use, modify, and distribute this file in accordance
+with the terms of the Adobe license agreement accompanying it.
+"""
+
+import datetime
+import io
+import os.path
+import platform
+import socket
+import ssl
+from collections import OrderedDict
+from os import listdir
+from os.path import isfile, join, getmtime
+from pathlib import Path
+import tarfile
+from types import GeneratorType
+from typing import Optional, Union
+
+from docker.utils import compare_version
+from retry import retry
+import docker.errors
+import timeout_decorator
+
+from buildrunner import BuildRunnerConfig
+from buildrunner.docker import (
+    new_client,
+    force_remove_container,
+    BuildRunnerContainerError,
+)
+from buildrunner.loggers import ConsoleLogger, ContainerLogger, DockerPullProgress
+from buildrunner.utils import (
+    acquire_flock_open_read_binary,
+    acquire_flock_open_write_binary,
+    release_flock,
+    tempfile,
+)
+
+CACHE_NUM_RETRIES = 2
+CACHE_TIMEOUT_SECONDS = 240
+
+
+class BuildRunnerCacheTimeout(Exception):
+    """
+    Exception which is raised when there is a timeout issue related to caching.
+    """
+
+    pass
+
+
+class BuildRunnerSavingCache(Exception):
+    """
+    Exception which is raised when there is an issue related to saving cache.
+    """
+
+    pass
+
+
+class DockerRunner:
+    """
+    An object that manages and orchestrates the lifecycle and execution of a
+    Docker container.
+    """
+
+    class ImageConfig:
+        """
+        An object that captures image-specific configuration
+        """
+
+        def __init__(self, image_name, pull_image=True, platform=None):
+            self.image_name = image_name
+            self.pull_image = pull_image
+            self.platform = platform
+
+    def __init__(
+        self,
+        image_config,
+        dockerd_url=None,
+        log: Union[ContainerLogger, None] = None,
+        run_log_debug: bool = False,
+    ):
+        image_name = image_config.image_name
+        pull_image = image_config.pull_image
+        image_platform = image_config.platform
+
+        self.image_name = image_name.lower()
+        self.platform = image_platform
+        if log and self.image_name != image_name:
+            log.write(
+                f"Forcing image_name to lowercase: {image_name} => {self.image_name}\n"
+            )
+        self.docker_client = new_client(
+            dockerd_url=dockerd_url,
+            # Disable timeouts for running commands
+            timeout=0,
+        )
+        self.run_log_debug = run_log_debug
+        self.container = None
+        self.shell = None
+        self.committed_image = None
+        self.containers = []
+
+        # By default, pull the image.  If the pull_image parameter is
+        # set to False, only pull the image if it can't be found locally
+        #
+        # Pull all images to ensure we get the hashes for intermediate images
+        found_image = False
+        for image in self.docker_client.images(all=True):
+            if (
+                image["Id"].startswith("sha256:" + self.image_name)
+                or image["Id"] == self.image_name
+            ):
+                # If the image name is simply a hash, it refers to an intermediate
+                # or imported image.  We don't want to "pull" these, as the hash
+                # won't exist as a valid upstream repoistory/image
+                found_image = True
+                pull_image = False
+            else:
+                for tag in image["RepoTags"] or []:
+                    if tag == self.image_name:
+                        found_image = True
+                        break
+            if found_image:
+                # No need to continue once we've found the image
+                break
+
+        if pull_image or not found_image:
+            if log:
+                log.write(f"Pulling image {self.image_name}\n")
+            with DockerPullProgress() as docker_progress:
+                for data in self.docker_client.pull(
+                    self.image_name, stream=True, decode=True, platform=self.platform
+                ):
+                    docker_progress.status_report(data)
+            if log:
+                log.write("\nImage pulled successfully\n")
+
+    def _run_log(
+        self,
+        log: Union[ConsoleLogger, ContainerLogger, None],
+        output: Union[str, bytes],
+    ):
+        """
+        Log a message to the given log stream at a debug or info level depending on configuration.
+        """
+        if log:
+            for line in log.clean_output(output).split("\n"):
+                if self.run_log_debug:
+                    log.debug(line)
+                else:
+                    log.info(line)
+
+    def start(
+        self,
+        shell="/bin/sh",
+        entrypoint=None,
+        working_dir=None,
+        name=None,
+        volumes=None,
+        volumes_from=None,
+        links=None,
+        ports=None,
+        provisioners=None,
+        environment=None,
+        user=None,
+        hostname=None,
+        dns=None,
+        dns_search=None,
+        extra_hosts=None,
+        containers=None,
+        systemd: bool = False,
+        systemd_cgroup2: bool = False,
+        cap_add=None,
+        privileged=False,
+        network=None,
+    ):
+        """
+        Kwargs:
+          volumes (dict): mount the local dir (key) to the given container
+                          path (value)
+        """
+        if self.container:
+            raise BuildRunnerContainerError("Container already started")
+        self.shell = shell
+
+        # save any spawned containers
+        if containers:
+            self.containers = containers
+
+        # prepare volumes
+        _volumes = []
+        _binds = {}
+
+        security_opt = None
+        command = shell
+        tmpfs = {}
+        cgroupns = None
+        if systemd:
+            # If we are running in a systemd context, the following 3 settings are necessary to
+            # allow services to run.
+            if systemd_cgroup2:
+                # Ensure that cgroup v2 is supported before attempting to use it
+                # Note: this check only works on linux systems
+                if platform.system() == "Linux" and not os.path.exists(
+                    "/sys/fs/cgroup/cgroup.controllers"
+                ):
+                    raise BuildRunnerContainerError(
+                        "cgroup v2 is not enabled on this host but is set on the container, please check configuration"
+                    )
+                volumes["/sys/fs/cgroup/buildrunner.scope"] = "/sys/fs/cgroup:rw"
+                tmpfs["/run"] = ""
+                cgroupns = "host"
+            else:
+                volumes["/sys/fs/cgroup"] = "/sys/fs/cgroup:ro"
+            security_opt = ["seccomp=unconfined"]
+            command = "/usr/sbin/init"
+
+        if volumes:
+            for key, value in volumes.items():
+                to_bind = value
+                _ro = False
+                if to_bind.rfind(":") > 0:
+                    tokens = to_bind.rsplit(":", 1)
+                    to_bind = tokens[0]
+                    _ro = tokens[1] == "ro"
+                _volumes.append(to_bind)
+                _binds[key] = {
+                    "bind": to_bind,
+                    "ro": _ro,
+                }
+
+        # prepare ports
+        _port_list = None
+        if ports:
+            _port_list = list(ports.keys())
+
+        # check args
+        if dns_search and isinstance(dns_search, str):
+            dns_search = dns_search.split(",")
+
+        kwargs = {
+            "name": name,
+            "command": command,
+            "volumes": _volumes,
+            "ports": _port_list,
+            "stdin_open": True,
+            "tty": True,
+            "environment": environment,
+            "user": user,
+            "working_dir": working_dir,
+            "hostname": hostname,
+            "labels": BuildRunnerConfig.get_instance().container_labels,
+            "host_config": self.docker_client.create_host_config(
+                binds=_binds,
+                links=links,
+                port_bindings=ports,
+                volumes_from=volumes_from,
+                dns=dns,
+                dns_search=dns_search,
+                extra_hosts=extra_hosts,
+                security_opt=security_opt,
+                cap_add=cap_add,
+                privileged=privileged,
+                tmpfs=tmpfs,
+                cgroupns=cgroupns,
+            ),
+        }
+        if entrypoint:
+            kwargs["entrypoint"] = entrypoint
+            del kwargs["command"]
+        if network:
+            kwargs["networking_config"] = (
+                self.docker_client.create_networking_config(
+                    {
+                        network: self.docker_client.create_endpoint_config(
+                            aliases=[hostname] if hostname else None
+                        )
+                    }
+                )
+                if network
+                else None
+            )
+
+        if compare_version("1.10", self.docker_client.api_version) < 0:
+            kwargs["dns"] = dns
+
+        # start the container
+        self.container = self.docker_client.create_container(self.image_name, **kwargs)
+        self.docker_client.start(self.container["Id"])
+
+        # run any supplied provisioners
+        if provisioners:
+            for provisioner in provisioners:
+                try:
+                    provisioner.provision(self)
+                except Exception as ex:
+                    self.cleanup()
+                    raise ex
+
+        return self.container["Id"]
+
+    def stop(self):
+        """
+        Stop the backing Docker container.
+        """
+        if self.container:
+            self.docker_client.stop(
+                self.container["Id"],
+                timeout=0,
+            )
+
+    def cleanup(self):
+        """
+        Cleanup the backing Docker container, stopping it if necessary.
+        """
+        if self.container:
+            for container in self.containers:
+                try:
+                    force_remove_container(self.docker_client, container)
+                except docker.errors.NotFound:
+                    try:
+                        container_ids = self.docker_client.containers(
+                            filters={"label": container}, quiet=True
+                        )
+                        if container_ids:
+                            for container_id in container_ids:
+                                try:
+                                    self.docker_client.remove_container(
+                                        container_id["Id"],
+                                        force=True,
+                                        v=True,
+                                    )
+                                except Exception as _ex:
+                                    print(
+                                        f'Unable to delete docker container with id "{container_id["Id"]}"'
+                                    )
+                        else:
+                            print(
+                                f'Unable to find docker container with name or label "{container}"'
+                            )
+                    except docker.errors.NotFound:
+                        print(
+                            f'Unable to find docker container with name or label "{container}"'
+                        )
+            try:
+                self.docker_client.remove_container(
+                    self.container["Id"],
+                    force=True,
+                    v=True,
+                )
+            except docker.errors.NotFound:
+                print(
+                    f'Unable to delete docker container with id "{self.container["Id"]}"'
+                )
+
+        self.container = None
+
+    @staticmethod
+    def _get_cache_file_from_prefix(
+        logger: ContainerLogger, local_cache_archive_file: str, docker_path: str
+    ) -> Optional[str]:
+        if os.path.exists(local_cache_archive_file):
+            logger.info(
+                f"Using cache {local_cache_archive_file} for destination path {docker_path}"
+            )
+            return local_cache_archive_file
+        cache_dir = os.path.dirname(local_cache_archive_file)
+
+        if not os.path.exists(cache_dir):
+            logger.info(
+                f"Cache directory {cache_dir} does not exist, "
+                f"skipping restore of archive {local_cache_archive_file}"
+            )
+            return None
+
+        files = [f for f in listdir(cache_dir) if isfile(join(cache_dir, f))]
+
+        cache_key = Path(local_cache_archive_file).stem
+
+        most_recent_time = 0
+        local_cache_archive_match = None
+        for file_name in files:
+            if file_name.startswith(cache_key):
+                curr_archive_file = join(cache_dir, file_name)
+                mod_time = getmtime(curr_archive_file)
+                if mod_time > most_recent_time:
+                    most_recent_time = mod_time
+                    local_cache_archive_match = curr_archive_file
+
+        if local_cache_archive_match is None:
+            logger.info(
+                f"Not able to restore cache {docker_path} since "
+                f"there was no matching prefix for `{local_cache_archive_file}`"
+            )
+            return None
+        logger.info(
+            f"Found cache {local_cache_archive_match} matching prefix {local_cache_archive_file} "
+            f"for destination path {docker_path}"
+        )
+
+        return local_cache_archive_match
+
+    @retry(exceptions=BuildRunnerCacheTimeout, tries=CACHE_NUM_RETRIES)
+    @timeout_decorator.timeout(
+        seconds=CACHE_TIMEOUT_SECONDS, timeout_exception=BuildRunnerCacheTimeout
+    )
+    def _put_cache_in_container(self, docker_path: str, file_obj: io.IOBase) -> bool:
+        """
+        Insert a file or folder in an existing container using a tar archive as
+        source.
+
+        :param docker_path: Path of file or folder in the container
+        :param file_obj: Opened file object of cache
+        :return: True if the call succeeds.
+        """
+        return self.docker_client.put_archive(
+            self.container["Id"], docker_path, file_obj
+        )
+
+    def restore_caches(self, logger: ContainerLogger, caches: OrderedDict) -> None:
+        """
+        Restores caches from the host system to the destination location in the docker container.
+        """
+        if caches is None or not isinstance(caches, OrderedDict):
+            raise TypeError(
+                f"Caches should be type OrderDict instead of {type(caches)}"
+            )
+
+        restored_cache_src = set()
+        for local_cache_archive_file, docker_path in caches.items():
+            if docker_path in restored_cache_src:
+                logger.info(
+                    f"Cache for destination path {docker_path} has already been matched and restored to the container, "
+                    f"skipping {local_cache_archive_file}"
+                )
+                continue
+
+            # Check for prefix matching
+            actual_cache_archive_file = self._get_cache_file_from_prefix(
+                logger, local_cache_archive_file, docker_path
+            )
+            if actual_cache_archive_file is None:
+                # Errors are printed out in the other method
+                continue
+
+            orig_shell = self.shell
+            file_obj = None
+            try:
+                self.shell = "/bin/sh"
+                exit_code = self.run(f"mkdir -p {docker_path}")
+                if exit_code:
+                    logger.warning(
+                        f"There was an issue creating {docker_path} on the docker container"
+                    )
+
+                # Allow multiple people to read from the file at the same time
+                # If another instance adds an exclusive lock in the save method below,
+                # this will block until the lock is released
+                file_obj = acquire_flock_open_read_binary(
+                    lock_file=actual_cache_archive_file, logger=logger
+                )
+                logger.info(
+                    "File lock acquired. Attempting to put cache into the container."
+                )
+
+                restored_cache_src.add(docker_path)
+                if not self._put_cache_in_container(docker_path, file_obj):
+                    logger.warning(
+                        f"An error occurred when trying to use cache "
+                        f"{actual_cache_archive_file} at the path {docker_path}"
+                    )
+
+            except docker.errors.APIError:
+                logger.exception("Encountered exception")
+            finally:
+                self.shell = orig_shell
+                release_flock(file_obj, logger)
+                logger.info("Cache was put into the container. Released file lock.")
+
+    @retry(exceptions=BuildRunnerCacheTimeout, tries=CACHE_NUM_RETRIES)
+    @timeout_decorator.timeout(
+        seconds=CACHE_TIMEOUT_SECONDS, timeout_exception=BuildRunnerCacheTimeout
+    )
+    def _write_cache(self, docker_path: str, file_obj: io.IOBase):
+        """
+        Write cache locally from file or folder in a running container
+
+        :param docker_path: Path of file or folder in the container
+        :param file_obj: Opened file object to write cache
+        """
+        bits, _ = self.docker_client.get_archive(
+            self.container["Id"], f"{docker_path}/."
+        )
+        for chunk in bits:
+            file_obj.write(chunk)
+
+    def write_cache_history_log(
+        self,
+        log_str: str,
+        cache_location: str,
+        logger: ContainerLogger,
+    ) -> None:
+        """
+        Writes the cache log to a file in the cache location.
+
+        :param log_str: The log string to write to the file
+        :param cache_location: The location of the cache file
+        :param logger: The logger to write log messages to
+        """
+
+        cache_history_log = f"{cache_location}/cache_history.log"
+        file_obj = None
+        try:
+            file_obj = acquire_flock_open_write_binary(
+                lock_file=cache_history_log, logger=logger, mode="a"
+            )
+            logger.info(
+                f"File lock acquired. Attempting to write cache history log to {cache_history_log}"
+            )
+            file_obj.write(log_str)
+        finally:
+            release_flock(file_obj, logger)
+            logger.info("Writing to cache history log completed, released file lock")
+
+    def save_caches(
+        self, logger: ContainerLogger, caches: OrderedDict, env_vars: dict = dict()
+    ) -> None:
+        """
+        Saves caches from a source locations in the docker container to locations on the host system as archive file.
+        """
+        saved_cache_src = set()
+        if caches and isinstance(caches, OrderedDict):
+            for local_cache_archive_file, docker_path in caches.items():
+                if docker_path not in saved_cache_src:
+                    saved_cache_src.add(docker_path)
+                    logger.info(
+                        f"Saving cache {docker_path} "
+                        f"running on container {self.container['Id']} "
+                        f"to local cache {local_cache_archive_file}"
+                    )
+
+                    log_line = (
+                        f'{datetime.datetime.now().strftime("%m/%d/%Y %H:%M:%S")} - '
+                        f'The cache file "{local_cache_archive_file}" '
+                        f'was written by step "{env_vars.get("BUILDRUNNER_STEP_NAME")}" in '
+                        f'"{env_vars.get("VCSINFO_NAME")}:{env_vars.get("VCSINFO_BRANCH")}:{env_vars.get("VCSINFO_SHORT_ID")}" '
+                        f'on host '
+                        f'"{socket.gethostname()}" [{env_vars.get("BUILDRUNNER_ARCH")}] '
+                        '\n'
+                    )
+
+                    self.write_cache_history_log(
+                        log_line, os.path.dirname(local_cache_archive_file), logger
+                    )
+
+                    file_obj = None
+                    try:
+                        file_obj = acquire_flock_open_write_binary(
+                            lock_file=local_cache_archive_file, logger=logger
+                        )
+                        logger.info("File lock acquired. Attempting to write to cache.")
+                        self._write_cache(docker_path, file_obj)
+                    except Exception as e:
+                        raise BuildRunnerSavingCache(
+                            f"There was an error saving cache to {local_cache_archive_file}.\nException: {e}"
+                        )
+                    finally:
+                        release_flock(file_obj, logger)
+                        assert tarfile.is_tarfile(
+                            local_cache_archive_file
+                        ), f"Failed to create cache {local_cache_archive_file} tar file."
+                        logger.info("Writing to cache completed. Released file lock.")
+                else:
+                    logger.info(
+                        f"The following `{docker_path}` in docker has already been saved. "
+                        f"It will not be saved again to `{local_cache_archive_file}`"
+                    )
+
+    def run(self, cmd, console=None, stream=True, log=None, workdir=None):
+        """
+        Run the given command in the container.
+        """
+        # Unused variable
+        _ = workdir
+
+        if isinstance(cmd, str):
+            cmdv = [self.shell, "-xc", cmd]
+        elif (
+            hasattr(cmd, "next")
+            or hasattr(cmd, "__next__")
+            or hasattr(cmd, "__iter__")
+            or isinstance(cmd, GeneratorType)
+        ):
+            cmdv = cmd
+        else:
+            raise TypeError(f"Unhandled command type: {type(cmd)}:{cmd}")
+        # if console is None:
+        #    raise Exception('No console!')
+        if not self.container:
+            raise BuildRunnerContainerError("Container has not been started")
+        if not self.shell:
+            raise BuildRunnerContainerError(
+                "Cannot call run if container cmd not shell"
+            )
+
+        self._run_log(log, f"Executing: {cmdv}")
+
+        create_res = self.docker_client.exec_create(
+            self.container["Id"],
+            cmdv,
+            tty=False,
+            # workdir=workdir,
+        )
+        output_buffer = self.docker_client.exec_start(
+            create_res,
+            stream=stream,
+        )
+        if isinstance(output_buffer, (bytes, str)):
+            self._run_log(console, output_buffer)
+            self._run_log(log, output_buffer)
+        elif hasattr(output_buffer, "next") or isinstance(output_buffer, GeneratorType):
+            try:
+                # Buffer chunks into complete lines
+                line_buffer = b""
+                for chunk in output_buffer:
+                    if isinstance(chunk, str):
+                        chunk = chunk.encode("utf-8")
+                    line_buffer += chunk
+
+                    # Process complete lines
+                    while b"\n" in line_buffer:
+                        line, line_buffer = line_buffer.split(b"\n", 1)
+                        if (
+                            line or line_buffer
+                        ):  # Don't log empty lines unless there's more content
+                            line_with_newline = line + b"\n"
+                            self._run_log(console, line_with_newline)
+                            self._run_log(log, line_with_newline)
+
+                # Process any remaining content in buffer
+                if line_buffer:
+                    self._run_log(console, line_buffer)
+                    self._run_log(log, line_buffer)
+            except socket.timeout:
+                # Ignore timeouts since we check for the exit code anyways at the end
+                pass
+        else:
+            warning = f"WARNING: Unexpected output object: {output_buffer}"
+            if console:
+                console.write(warning)
+            if log:
+                log.write(warning)
+        inspect_res = self.docker_client.exec_inspect(create_res)
+        if "ExitCode" in inspect_res:
+            if inspect_res["ExitCode"] is None:
+                raise BuildRunnerContainerError(
+                    f"Error running cmd ({cmd}): exit code is None"
+                )
+            return inspect_res["ExitCode"]
+        raise BuildRunnerContainerError("Error running cmd: no exit code")
+
+    def run_script(
+        self,
+        script,
+        args="",
+        console=None,
+    ):
+        """
+        Run the given script within the container.
+        """
+        container_script_path = self.write_to_container_file(script, console)
+
+        # execute the script
+        return self.run(
+            f"{container_script_path} {args}",
+            console=console,
+        )
+
+    def write_to_container_file(self, source_file, logger):
+        """
+        Writes contents to the given path within the container.
+        """
+        container_dir = "/tmp"
+        container_script_path = f"{container_dir}/{os.path.basename(source_file)}"
+        my_tar_file_path = tempfile(prefix="buildrunner-", suffix=".tar")
+
+        try:
+            # Create destination directory in container
+            self.run(f"mkdir -p {container_dir}", console=logger)
+
+            # Create tar file with script to put in container
+            with tarfile.open(my_tar_file_path, "w") as tar:
+                tar.add(source_file, arcname=os.path.basename(source_file))
+
+            # Put the script file in the container
+            with open(my_tar_file_path, "rb") as tar:
+                code = self.docker_client.put_archive(
+                    self.container["Id"],
+                    os.path.dirname(container_script_path),
+                    tar.read(),
+                )
+                if code:
+                    # Make the script executable in the container
+                    self.run(f"chmod +x {container_script_path}", console=logger)
+                else:
+                    logger.error(
+                        f"There was an issue putting the script in the container. Code: {code}"
+                    )
+
+        except Exception as e:
+            raise BuildRunnerContainerError(f"Error writing script to container: {e}")
+        finally:
+            if os.path.exists(my_tar_file_path):
+                os.remove(my_tar_file_path)
+            return container_script_path
+
+    def _get_status(self):
+        """
+        Return the status dict for the container.
+        """
+        status = None
+        try:
+            status = self.docker_client.inspect_container(
+                self.container["Id"],
+            )
+        except docker.errors.APIError:
+            pass
+        return status
+
+    def get_ip(self, network=None):
+        """
+        Return the ip address of the running container
+        """
+        ipaddr = None
+        try:
+            if self.is_running():
+                inspection = self.docker_client.inspect_container(
+                    self.container["Id"],
+                )
+                network_settings = inspection.get("NetworkSettings", {})
+                if network:
+                    ipaddr = (
+                        network_settings.get("Networks", {})
+                        .get(network, {})
+                        .get("IPAddress", None)
+                    )
+                else:
+                    ipaddr = network_settings.get("IPAddress", None)
+        except docker.errors.APIError:
+            pass
+        return ipaddr
+
+    def is_running(self):
+        """
+        Return whether the container backed by this Runner is currently
+        running.
+        """
+        status = self._get_status()
+        if not status:
+            return False
+        if "State" not in status or "Running" not in status["State"]:
+            return False
+        return status["State"]["Running"]
+
+    @property
+    def exit_code(self):
+        """
+        Return the exit code of the completed container, or None if it is still
+        running.
+        """
+        status = self._get_status()
+        if not status:
+            return None
+        if "State" not in status or "ExitCode" not in status["State"]:
+            return None
+        return status["State"]["ExitCode"]
+
+    def attach_until_finished(self, stream=None):
+        """
+        Attach to the container, writing output to the given log stream until
+        the container exits.
+        """
+        docker_socket: socket.SocketIO = self.docker_client.attach_socket(
+            self.container["Id"],
+        )
+        running = self.is_running()
+        while running:
+            try:
+                for line in docker_socket:
+                    if stream:
+                        stream.write(line)
+            except socket.timeout:
+                pass
+            except ssl.SSLError as ssle:
+                if "The read operation timed out" not in str(ssle):
+                    raise
+            running = self.is_running()
+
+    def commit(self, stream):
+        """
+        Commit the ending state of the container as an image, returning the
+        image id.
+        """
+        if self.committed_image:
+            return self.committed_image
+        if not self.container:
+            raise BuildRunnerContainerError("Container not started")
+        if self.is_running():
+            raise BuildRunnerContainerError("Container is still running")
+        stream.write(
+            f"Committing build container {self.container['Id']:.10} as an image...\n"
+        )
+        self.committed_image = self.docker_client.commit(
+            self.container["Id"],
+        )["Id"]
+        stream.write(f"Resulting build container image: {self.committed_image:.10}\n")
+        return self.committed_image
