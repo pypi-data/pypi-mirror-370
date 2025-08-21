@@ -1,0 +1,526 @@
+# Este archivo ha sido generado automáticamente por tai-sql
+# No modifiques este archivo directamente
+{% import "macros.jinja2" as macros %}
+{{ imports|join('\n') }}
+
+# Logger
+logger = Alphi.get_logger_by_name("{{ logger_name }}")
+
+# General Enum class
+class EnumModel:
+
+    def __init__(self, name: str, values: List[str]):
+        self.name = name
+        self.values = values
+    
+    def find_many(self) -> List[str]:
+        """
+        Devuelve una lista de los valores del Enum.
+        
+        Returns:
+            List[str]: Lista de valores del Enum
+        """
+        logger.info(f"Obteniendo valores del Enum '{self.name}' - {len(self.values)} valores disponibles")
+        return self.values
+
+
+{% for model in models %}
+{% set all_pk_autoincrement = true %}
+{% set pk_path_params = "/{" + (model.columns | selectattr('args.primary_key', 'equalto', True) | map(attribute='name') | join('}/{')) + "}" %}
+{% for column in model.columns %}
+    {% if column.args.get('primary_key', False) and not column.args.get('autoincrement', False) %}
+        {% set all_pk_autoincrement = false %}
+    {% endif %}
+{% endfor %}
+class {{ model.name }}Read(BaseModel):
+    """
+    Data Transfer Object de lectura para {{ model.name }}.
+    
+    {% if model.description %}
+    {{ model.description | indent(4) }}
+    {% else %}
+    Representa un registro de {{ model.name }} en la base de datos.
+    {% endif %}
+    
+    Este modelo se utiliza como respuesta en endpoints de la API que devuelven
+    información de {{ model.tablename }} existentes en la base de datos.
+    
+    Campos de la tabla:
+    {% for column in model.columns %}
+        - {{ column.name }} ({{ column.type }}{% if column.nullable %}, opcional{% endif %}): {{ column.description }}
+    {% endfor %}
+    
+    {% if model.relations %}
+    Relaciones disponibles (usar con parámetro 'includes'):
+    {% for relation in model.relations %}
+        - {{ relation.name }}: {% if relation.direction == 'one-to-many' %}Lista de {{ relation.target }} relacionados{% else %}{{ relation.target }} relacionado{% endif %} ({{ relation.direction }})
+          {% if relation.description %}
+            {{ relation.description | indent(10) }}
+          {% endif %}
+    {% endfor %}
+    
+    Uso del parámetro 'includes':
+        Para cargar relaciones específicas, usa el parámetro 'includes' en la consulta:
+        
+        Ejemplos básicos:
+        ```python
+        # Solo datos básicos de {{ model.name }}
+        Un registro > GET /{{ model.tablename }}{{ pk_path_params }}
+        or
+        Varios registros > GET /{{ model.tablename }}
+        
+        {% for relation in model.relations %}
+        # Incluir {{ relation.name }}
+        Un registro > GET /{{ model.tablename }}{{ pk_path_params }}?includes={{ relation.name }}
+        or
+        Varios registros > GET /{{ model.tablename }}?includes={{ relation.name }}
+        
+        {% endfor %}
+        {% if model.relations|length > 1 %}
+        # Múltiples relaciones en una sola consulta
+        Un registro > GET /{{ model.tablename }}{{ pk_path_params }}?{% for relation in model.relations[:2] %}includes={{ relation.name }}{{ "&" if not loop.last }}{% endfor %}{{''}}
+        or
+        Varios registros > GET /{{ model.tablename }}?{% for relation in model.relations[:2] %}includes={{ relation.name }}{{ "&" if not loop.last }}{% endfor %}{{''}}
+        
+        {% endif %}
+        # Relaciones anidadas (hasta {{ max_depth }} niveles):
+        {% for relation in model.relations %}
+        # {{ relation.name }} con sus propias relaciones
+        Un registro > GET /{{ model.tablename }}{{ pk_path_params }}?includes={{ relation.name }}.{nested_relation}
+        or
+        Varios registros > GET /{{ model.tablename }}?includes={{ relation.name }}.{nested_relation}
+        {% endfor %}
+        ```
+    
+    Casos de uso típicos:
+        {% if model.relations %}
+        - Consulta básica: Obtener {{ model.tablename }} sin relaciones (rápido)
+        {% for relation in model.relations %}
+        - Con {{ relation.name }}: Para mostrar {{ model.tablename }} con {% if relation.direction == 'one-to-many' %}todos sus {{ relation.target | lower }}s{% else %}su {{ relation.target | lower }} relacionado{% endif %}{{''}}
+        {% endfor %}
+        - Consulta completa: Todas las relaciones para vistas detalladas
+        {% else %}
+        - Consulta de registros de {{ model.name }} (sin relaciones disponibles)
+        {% endif %}
+    
+    {% if model.examples %}
+    Ejemplos de respuesta JSON:
+        {% set first_example = model.examples[0] %}
+        Respuesta básica (sin includes):
+        ```json
+        {
+            {% for column in model.columns %}
+            "{{ column.name }}": {% if first_example[column.name] is defined %}{{ first_example[column.name] | tojson }}{% else %}"valor_ejemplo"{% endif %}{{ "," }}
+            {% endfor %}
+            {% if model.relations %}
+            {% for relation in model.relations %}
+            "{{ relation.name }}": null{{ "," if not loop.last }}
+            {% endfor %}
+            {% endif %}
+        }
+        ```
+        
+        {% if model.relations %}
+        {% set first_relation = model.relations[0] %}
+        Respuesta con includes={{ first_relation.name }}:
+        ```json
+        {
+            {% for column in model.columns %}
+            "{{ column.name }}": {% if first_example[column.name] is defined %}{{ first_example[column.name] | tojson }}{% else %}"valor_ejemplo"{% endif %},
+            {% endfor %}
+            "{{ first_relation.name }}": {% if first_relation.direction == 'one-to-many' %}[
+                {
+                    "...": "campos de {{ first_relation.target }}"
+                }
+            ]{% else %}{
+                "...": "campos de {{ first_relation.target }}"
+            }{% endif %}{% if model.relations|length > 1 %},
+            {% for relation in model.relations[1:] %}
+            "{{ relation.name }}": null{{ "," if not loop.last }}
+            {% endfor %}
+            {% endif %}{{''}}
+        }
+        ```
+        {% endif %}
+        {% endif %}
+    {% endif %}
+    
+    Rendimiento:
+        - Sin includes: Consulta rápida, solo tabla {{ model.name }}
+        {% for relation in model.relations %}
+        - Con {{ relation.name }}: {% if relation.direction == 'one-to-many' %}Carga múltiples registros de {{ relation.target }}{% else %}Una consulta adicional para {{ relation.target }}{% endif %}{{''}}
+        {% endfor %}
+        - Máxima profundidad de anidación: {{ max_depth }} niveles
+    """
+    {% for column in model.columns %}
+    {% set example_value = none %}
+    {% if model.examples and model.examples|length > 0 %}
+    {% set example_value = (model.examples | selectattr(column.name, 'defined') | map(attribute=column.name) | first) %}
+    {% endif %}
+
+    {{ column.name }}: {% if column.nullable %}Optional[{{ column.type }}]{% else %}{{ column.type }}{% endif %} = Field(
+        description="{{ column.description }}",
+        {% if example_value is not none %}
+        example={{ example_value | tojson }}
+        {% endif %}
+    )
+    {% endfor %}
+
+    {% for relation in model.relations %}
+    {% if relation.direction == 'one-to-many' %}
+
+    {{ relation.name }}: Optional[List[{{ relation.target }}Read]] = Field(
+        default=None,
+        description="""
+        Lista de {{ relation.target }} relacionados con este {{ model.name }}.
+        {% if relation.description %}
+        
+        {{ relation.description | indent(8) }}
+        {% endif %}
+        
+        Para cargar esta relación, incluye '{{ relation.name }}' en el parámetro includes:
+        - includes={{ relation.name }} → Carga {{ relation.target }}s básicos
+        - includes={{ relation.name }}.{nested} → Carga con relaciones anidadas
+        
+        Relación: {{ model.name }} 1:N {{ relation.target }} (un {{ model.tablename }} puede tener múltiples {{ relation.target | lower }}s)
+        """
+    )
+    {% elif relation.direction == 'many-to-one' %}
+
+    {{ relation.name }}: Optional[{{ relation.target }}Read] = Field(
+        default=None,
+        description="""
+        {{ relation.target }} relacionado con este {{ model.name }}.
+        {% if relation.description %}
+        
+        {{ relation.description | indent(8) }}
+        {% endif %}
+        
+        Para cargar esta relación, incluye '{{ relation.name }}' en el parámetro includes:
+        - includes={{ relation.name }} → Carga {{ relation.target }} básico
+        - includes={{ relation.name }}.{nested} → Carga con relaciones anidadas
+        
+        Relación: {{ model.name }} N:1 {{ relation.target }} (múltiples {{ model.tablename }}s pueden tener el mismo {{ relation.target | lower }})
+        """
+    )
+    {% endif %}
+    {% endfor %}
+
+    {{ macros.pydantic_model_config() }}
+    {% if model.examples %}
+    
+    model_config['json_schema_extra'] = {
+        "examples": [
+            {% for example in model.examples %}
+            {
+                {% for column in model.columns %}
+                "{{ column.name }}": {% if example[column.name] is defined %}{{ example[column.name] | tojson }}{% else %}"valor_ejemplo"{% endif %},
+                {% endfor %}
+                {% for relation in model.relations %}
+                "{{ relation.name }}": {% if relation.direction == 'one-to-many' %}[
+                    {
+                        "...": "campos de {{ relation.target }}"
+                    }
+                ]{% else %}{
+                    "...": "campos de {{ relation.target }}"
+                }{% endif %}
+                {% endfor %}{{''}}
+            },
+            {% endfor %}
+        ]
+    }
+    {% endif %}
+    
+    @classmethod
+    def from_instance(
+        cls,
+        instance: {{ model.name }},
+        includes: Optional[List[str]] = None,
+        max_depth: int = {{ max_depth }}
+    ) -> {{ model.name }}Read:
+        """
+        Crea un DTO desde una instancia del modelo SQLAlchemy con carga optimizada de relaciones.
+        
+        Args:
+            instance: Instancia del modelo {{ model.name }}
+            includes: Lista de relaciones a incluir (formato: 'relation' o 'relation.nested_relation')
+            max_depth: Profundidad máxima de anidación para evitar recursión infinita
+            
+        Returns:
+            {{ model.name }}Read: Instancia del DTO
+        """
+
+        # Construir DTO base
+        dto_data = {
+            {% for column in model.columns %}
+            '{{ column.name }}': instance.{{ column.name }},
+            {% endfor %}
+        }
+
+        {% if not model.is_view and model.has_relations %}
+        # Procesar relaciones con control de profundidad
+        if includes is not None and max_depth > 0:
+            {% for relation in model.relations %}
+            {% if relation.direction == 'one-to-many' %}
+            # Relación 1:N - {{ relation.name }}
+            if should_include_relation('{{ relation.name }}', includes):
+                nested_includes = get_nested_includes('{{ relation.name }}', includes)
+                # Este check debería cumplirse siempre, es por seguridad
+                if hasattr(instance, '{{ relation.name }}') and instance.{{ relation.name }} is not None:
+                    dto_data['{{ relation.name }}'] = [
+                        {{ relation.target }}Read.from_instance(
+                            reg, 
+                            nested_includes, 
+                            max_depth - 1
+                        ) 
+                        for reg in instance.{{ relation.name }}
+                    ]
+
+            {% elif relation.direction == 'many-to-one' %}
+            # Relación N:1 - {{ relation.name }}
+            if should_include_relation('{{ relation.name }}', includes):
+                nested_includes = get_nested_includes('{{ relation.name }}', includes)
+                # Este check debería cumplirse siempre, es por seguridad
+                if hasattr(instance, '{{ relation.name }}') and instance.{{ relation.name }} is not None:
+                    dto_data['{{ relation.name }}'] = {{ relation.target }}Read.from_instance(
+                        instance.{{ relation.name }}, 
+                        nested_includes, 
+                        max_depth - 1
+                    )
+
+            {% endif %}
+            {% endfor %}
+        {% endif %}
+        return cls(**dto_data)
+
+    {% if not model.is_view %}
+    @classmethod
+    def from_created_instance(cls, instance: {{ model.name }}, included: set[str], excluded: str=None) -> {{ model.name }}Read:
+        """
+        Crea un DTO desde una instancia del modelo SQLAlchemy
+        
+        Args:
+            instance: Instancia del modelo {{ model.name }}
+            
+        Returns:
+            {{ model.name }}Create: Instancia del DTO
+        """
+
+        # Construir DTO base
+        dto_data = {
+            {% for column in model.columns %}
+            '{{ column.name }}': instance.{{ column.name }},
+            {% endfor %}
+        }
+
+        {% if model.relations %}
+
+        # Evaluación lazy de relaciones costosas
+        {% for relation in model.relations %}
+        if '{{ relation.name }}' in included and not '{{ relation.name }}' == excluded and hasattr(instance, '{{ relation.name }}') and getattr(instance, '{{ relation.name }}') is not None:
+        {% if relation.direction == 'one-to-many' %}
+            dto_data['{{ relation.name }}'] = [
+                {{ relation.target }}Read.from_created_instance(reg, included, '{{ relation.backref }}') 
+                for reg in instance.{{ relation.name }}
+            ]
+        {% elif relation.direction == 'many-to-one' %}
+            dto_data['{{ relation.name }}'] = {{ relation.target }}Read.from_created_instance(
+                instance.{{ relation.name }}, included, '{{ relation.backref }}'
+            )
+        {% endif %}
+        {% endfor %}
+
+        {% endif %}
+        return cls(**dto_data)
+
+    {% endif %}
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> {{ model.name }}Read:
+        """
+        Crea un DTO desde un diccionario
+        
+        Args:
+            data: Diccionario con los datos del DTO
+            
+        Returns:
+            {{ model.name }}Read: Instancia del DTO
+        """
+        return cls(**data)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+{% if not model.is_view %}
+
+
+class {{ model.name }}Create(BaseModel):
+    """Data Transfer Object de escritura para {{ model.name }}. Define objetos para ser creados en la base de datos."""
+    {% for column in model.columns -%}
+    {% if not column.args.get('autoincrement', False) and column.default is none and not column.nullable and not column.is_foreign_key %}
+    {{ column.name }}: {{ column.type }}
+    {% endif %}
+    {% endfor %}
+    {% for column in model.columns -%}
+    {% if column.is_foreign_key %}
+    {{ column.name }}: Optional[{{ column.type }}] = None
+    {% elif column.default is none and column.nullable %}
+    {{ column.name }}: Optional[{{ column.type }}] = None
+    {% elif column.default is not none %}
+        {% if column.default == "datetime.now" %}
+    {{ column.name }}: {{ column.type }} = Field(default_factory=datetime.now)
+        {% elif column.default == "datetime.today" %}
+    {{ column.name }}: {{ column.type }} = Field(default_factory=datetime.today)
+        {% elif column.default in [True, False, None] %}
+    {{ column.name }}: {{ column.type }} = {{ column.default }}
+        {% elif column.default is string %}
+            {% if column.default.isdigit() %}
+    {{ column.name }}: {{ column.type }} = {{ column.default }}
+            {% elif column.default.replace(" ", "").isalnum() %}
+    {{ column.name }}: {{ column.type }} = "{{ column.default }}"
+            {% else %}
+    {{ column.name }}: {{ column.type }} = "{{ column.default | replace('"', '\\"') }}"
+            {% endif %}
+        {% else %}
+    {{ column.name }}: {{ column.type }} = {{ column.default }}
+        {% endif %}
+    {% endif %}
+    {% endfor %}
+
+    {% for relation in model.relations %}
+    {% if relation.direction == 'one-to-many' %}
+    {{ relation.name }}: Optional[List[{{ relation.target }}Create]] = None
+    {% elif relation.direction == 'many-to-one' %}
+    {{ relation.name }}: Optional[{{ relation.target }}Create] = None
+    {% endif %}
+    {% endfor %}
+
+    {{ macros.pydantic_model_config() }}
+    
+    def to_instance(self) -> {{ model.name }}:
+        """
+        Crea una instancia del modelo SQLAlchemy desde el DTO
+        
+        Returns:
+            {{ model.name }}: Instancia del modelo SQLAlchemy
+        """
+
+        model = {{ model.name }}(
+            {% for column in model.columns %}
+            {% if not column.args.get('autoincrement', False) %}
+            {{ column.name }}=self.{{ column.name }},
+            {% endif %}
+            {% endfor %}
+        )
+        
+        # Evaluación lazy de relaciones costosas
+        {% for relation in model.relations %}
+        if self.{{ relation.name }} is not None:
+            {% if relation.direction == 'one-to-many' %}
+            {{ relation.name }} = [{{ relation.target }}(**reg.to_dict()) for reg in self.{{ relation.name }}]
+            {% elif relation.direction == 'many-to-one' %}
+            {{ relation.name }} = {{ relation.target }}(**self.{{ relation.name }}.to_dict())
+            {% endif %}
+            model.{{ relation.name }} = {{ relation.name }}
+        {% endfor %}
+
+        return model
+    
+    @classmethod
+    def from_instance(cls, instance: {{ model.name }}) -> {{ model.name }}Create:
+        """
+        Crea un DTO desde una instancia del modelo SQLAlchemy
+        
+        Args:
+            instance: Instancia del modelo {{ model.name }}
+            
+        Returns:
+            {{ model.name }}Create: Instancia del DTO
+        """
+
+        # Construir DTO base
+        dto_data = {
+            {% for column in model.columns %}
+            '{{ column.name }}': instance.{{ column.name }},
+            {% endfor %}
+        }
+
+        {% if model.relations %}
+
+        # Evaluación lazy de relaciones costosas
+        {% for relation in model.relations %}
+        if hasattr(instance, '{{ relation.name }}') and getattr(instance, '{{ relation.name }}') is not None:
+        {% if relation.direction == 'one-to-many' %}
+            dto_data['{{ relation.name }}'] = [
+                {{ relation.target }}Create.from_instance(reg) 
+                for reg in instance.{{ relation.name }}
+            ]
+        {% elif relation.direction == 'many-to-one' %}
+            dto_data['{{ relation.name }}'] = {{ relation.target }}Create.from_instance(
+                instance.{{ relation.name }}
+            )
+        {% endif %}
+        {% endfor %}
+
+        {% endif %}
+        return cls(**dto_data)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> {{ model.name }}Read:
+        """
+        Crea un DTO desde un diccionario
+        
+        Args:
+            data: Diccionario con los datos del DTO
+            
+        Returns:
+            {{ model.name }}Read: Instancia del DTO
+        """
+        return cls(**data)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+
+class {{ model.name }}Filter(BaseModel):
+    """Data Transfer Object de actualización para {{ model.name }}.
+    Define los filtros que sirven para buscar registros en la DB."""
+    {% for column in model.columns -%}
+    {% if not column.args.get('autoincrement', False) %}
+    {{ column.name }}: {{ column.type }} = None
+    {% endif %}
+    {% endfor %}
+
+    {{ macros.pydantic_model_config() }}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump(exclude_unset=True)
+
+
+class {{ model.name }}UpdateValues(BaseModel):
+    """Data Transfer Object de actualización para {{ model.name }}.
+    Define los valores que se modificarán en los registros correspondientes."""
+    {% for column in model.columns -%}
+    {% if not column.args.get('autoincrement', False) %}
+    {% if not column.nullable %}
+    {{ column.name }}: {{ column.type }} = None
+    {% else %}
+    {{ column.name }}: Optional[{{ column.type }}] = None
+    {% endif %}
+    {% endif %}
+    {% endfor %}
+
+    {{ macros.pydantic_model_config() }}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump(exclude_unset=True)
+
+
+class {{ model.name }}Update(BaseModel):
+    """Data Transfer Object de actualización para {{ model.name }}."""
+    filter: {{ model.name }}Filter
+    values: {{ model.name }}UpdateValues
+
+    {{ macros.pydantic_model_config() }}
+{% endif %}
+
+
+{% endfor %}
