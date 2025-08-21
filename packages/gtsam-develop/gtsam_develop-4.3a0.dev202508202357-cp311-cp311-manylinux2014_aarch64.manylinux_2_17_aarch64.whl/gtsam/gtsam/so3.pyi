@@ -1,0 +1,93 @@
+"""
+so3 submodule
+"""
+from __future__ import annotations
+import numpy
+import typing
+__all__: list[str] = ['DexpFunctor', 'ExpmapFunctor', 'InvJKernel', 'Kernel']
+class DexpFunctor(ExpmapFunctor):
+    def C(self) -> float:
+        ...
+    def D(self) -> float:
+        ...
+    def E(self) -> float:
+        ...
+    def Gamma(self) -> Kernel:
+        ...
+    def InvJacobian(self) -> InvJKernel:
+        ...
+    def Jacobian(self) -> Kernel:
+        ...
+    def Rodrigues(self) -> Kernel:
+        ...
+    @typing.overload
+    def __init__(self, omega: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> None:
+        ...
+    @typing.overload
+    def __init__(self, omega: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]], nearZeroThresholdSq: float, nearPiThresholdSq: float) -> None:
+        ...
+    def leftJacobian(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
+    def rightJacobian(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
+    @property
+    def omega(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]:
+        ...
+class ExpmapFunctor:
+    A: float
+    B: float
+    @typing.overload
+    def __init__(self, omega: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> None:
+        ...
+    @typing.overload
+    def __init__(self, nearZeroThresholdSq: float, axis: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> None:
+        ...
+    @typing.overload
+    def __init__(self, axis: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]], angle: float) -> None:
+        ...
+    def expmap(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        """
+        Rodrigues formula.
+        """
+    @property
+    def W(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
+    @property
+    def WW(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
+    @property
+    def nearZero(self) -> bool:
+        ...
+    @property
+    def theta(self) -> float:
+        ...
+    @property
+    def theta2(self) -> float:
+        ...
+class InvJKernel:
+    J: Kernel
+    def applyLeft(self, v: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]:
+        ...
+    def applyRight(self, v: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]:
+        ...
+    def left(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
+    def right(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
+class Kernel:
+    def applyFrechet(self, v: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        """
+        Apply Fréchet derivative to vector (left specialization)
+        """
+    def applyLeft(self, v: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]:
+        ...
+    def applyRight(self, v: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[1]], numpy.dtype[numpy.float64]]:
+        ...
+    def frechet(self, X: numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        """
+        Fréchet derivative of left-kernel M(ω) in the direction X ∈ so(3) L_M(Ω)[X] = b X + c (Ω X + X Ω) + s (db Ω + dc Ω²), with s = -½ tr(Ω X)
+        """
+    def left(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
+    def right(self) -> numpy.ndarray[tuple[typing.Literal[3], typing.Literal[3]], numpy.dtype[numpy.float64]]:
+        ...
