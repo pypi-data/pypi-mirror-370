@@ -1,0 +1,63 @@
+image: python:3.10
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+
+stages:
+  - build
+  - test
+#  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  VENV_DIR: "$CI_PROJECT_DIR/venv"
+  GIT_TOKEN: "glpat-Cf3vWyPDyvmQyBv6BmB3"
+  GIT_USERNAME: "uchukwu"
+
+before_script:
+  - python -V
+  - pip -V
+
+cache:
+  paths:
+    - .cache/pip
+
+build:
+  stage: build
+  script:
+    - python -m venv $VENV_DIR
+    - source $VENV_DIR/bin/activate
+    - pip install --upgrade pip
+    - pip install build
+    - python -m build
+  artifacts:
+    paths:
+      - $VENV_DIR
+
+test:
+  stage: test
+  script:
+    - ls -la $VENV_DIR
+    - source $VENV_DIR/bin/activate
+    - pip install --upgrade pip
+    - git config --global url."https://${GIT_USERNAME}:${GIT_TOKEN}@git.qci-dev.com".insteadOf "https://git.qci-dev.com"
+    - pip install .[dev]
+    - pytest --cov=eqc-models --cov-report=xml
+  artifacts:
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+    # coverage: /TOTAL.*?(\d+\%)/
+
+#deploy:
+#  stage: deploy
+#  script:
+#    - echo "Deploy stage - implement deployment steps here"
+#    # Add deployment steps here
+#  only:
+#    - main # only deploy from the main branch
