@@ -1,0 +1,24 @@
+# Builds community-ansible-dev-tools-container-base image which provides
+# container-in-container support and all installs all binary dependencies
+# cspell:ignore minrate,opencontainers,cffi,ruamel,subuid,subgid,workdir,chgrp,mountopt,microdnf,makecache,setcaps,pylibssh,chsh,nodev,overlayfs,libssh,markupsafe,additionalimage,USERNS
+FROM community-ansible-dev-tools-base:latest
+LABEL org.opencontainers.image.source=https://github.com/ansible/ansible-dev-tools
+LABEL org.opencontainers.image.authors="Ansible DevTools"
+LABEL org.opencontainers.image.vendor="Red Hat"
+LABEL org.opencontainers.image.licenses="GPL-3.0"
+LABEL org.opencontainers.image.description="An execution environment targeted for Ansible content creators."
+
+USER root
+
+ENV _CONTAINERS_USERNS_CONFIGURED=""
+ENV ANSIBLE_DEV_TOOLS_CONTAINER=1
+ENV PIP_ROOT_USER_ACTION=ignore
+RUN --mount=type=bind,target=/final --mount=type=cache,dst=/var/cache/dnf --mount=type=cache,dst=/root/.cache/pip /final/setup.sh
+
+# Note VOLUME options must always happen after setup.sh due to some chown inside that affects the mount
+# RUN commands can not modify existing volumes
+VOLUME /var/lib/containers
+
+WORKDIR /workdir
+ENTRYPOINT ["/opt/builder/bin/entrypoint", "dumb-init"]
+CMD ["zsh"]
