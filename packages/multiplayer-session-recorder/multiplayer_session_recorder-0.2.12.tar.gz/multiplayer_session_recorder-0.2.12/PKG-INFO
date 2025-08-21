@@ -1,0 +1,203 @@
+Metadata-Version: 2.4
+Name: multiplayer-session-recorder
+Version: 0.2.12
+Summary: Multiplayer Session Recorder
+Project-URL: Homepage, https://github.com/multiplayer-app/multiplayer-session-recorder-python
+Project-URL: Repository, https://github.com/multiplayer-app/multiplayer-session-recorder-python
+Author-email: Multiplayer Authors <hello@multiplayer.app>
+License: Apache-2.0
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: OpenTelemetry
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Typing :: Typed
+Requires-Python: >=3.8
+Requires-Dist: aiohttp>=3.8.0
+Requires-Dist: opentelemetry-api>=1.29.0
+Requires-Dist: opentelemetry-exporter-otlp-proto-grpc>=1.29.0
+Requires-Dist: opentelemetry-exporter-otlp-proto-http>=1.29.0
+Requires-Dist: opentelemetry-sdk>=1.29.0
+Provides-Extra: all
+Requires-Dist: django>=3.2; extra == 'all'
+Requires-Dist: flask>=2.0; extra == 'all'
+Requires-Dist: opentelemetry-instrumentation-django>=0.43b0; extra == 'all'
+Requires-Dist: opentelemetry-instrumentation-flask>=0.43b0; extra == 'all'
+Provides-Extra: django
+Requires-Dist: django>=3.2; extra == 'django'
+Requires-Dist: opentelemetry-instrumentation-django>=0.43b0; extra == 'django'
+Provides-Extra: flask
+Requires-Dist: flask>=2.0; extra == 'flask'
+Requires-Dist: opentelemetry-instrumentation-flask>=0.43b0; extra == 'flask'
+Description-Content-Type: text/markdown
+
+# Session Recorder python
+============================================================================
+##  Introduction
+The `multiplayer-session-recorder` module integrates OpenTelemetry with the Multiplayer platform to enable seamless trace collection and analysis. This library helps developers monitor, debug, and document application performance with detailed trace data. It supports flexible trace ID generation, sampling strategies.
+
+## Installation
+
+To install the `multiplayer-session-recorder` module, use the following command:
+
+```bash
+pip install multiplayer-session-recorder
+```
+
+### Optional Dependencies
+
+The library supports optional dependencies for web framework integrations:
+
+```bash
+# For Django support
+pip install multiplayer-session-recorder[django]
+
+# For Flask support  
+pip install multiplayer-session-recorder[flask]
+
+# For both Django and Flask support
+pip install multiplayer-session-recorder[all]
+```
+
+## Session Recorder Initialization
+
+```python
+from multiplayer_session_recorder import session_recorder
+
+session_recorder.init(
+  apiKey = "{YOUR_API_KEY}",
+  traceIdGenerator = idGenerator,
+  resourceAttributes = {
+    "serviceName": SERVICE_NAME,
+    "version": SERVICE_VERSION,
+    "environment": PLATFORM_ENV,
+  }
+)
+```
+
+## Example Usage
+
+```python
+from multiplayer_session_recorder import session_recorder, SessionType
+// Session recorder trace id generator which is used during opentelemetry initialization
+from .opentelemetry import id_generator
+
+session_recorder.init(
+  apiKey = "{YOUR_API_KEY}",
+  traceIdGenerator = idGenerator,
+  resourceAttributes = {
+    "serviceName": SERVICE_NAME,
+    "version": SERVICE_VERSION,
+    "environment": PLATFORM_ENV,
+  }
+)
+
+# ...
+
+await session_recorder.start(
+    SessionType.PLAIN,
+    {
+      name: "This is test session",
+      sessionAttributes: {
+        accountId: "687e2c0d3ec8ef6053e9dc97",
+        accountName: "Acme Corporation"
+      }
+    }
+  )
+
+  # do something here
+
+await session_recorder.stop()
+```
+
+## Session Recorder trace Id generator
+
+```python
+from multiplayer_session_recorder import SessionRecorderTraceIdRatioBasedSampler
+
+sampler = SessionRecorderTraceIdRatioBasedSampler(rate = 1/2)
+```
+
+## Session Recorder trace id ratio based sampler
+
+```python
+from multiplayer_session_recorder import SessionRecorderRandomIdGenerator
+
+id_generator = SessionRecorderRandomIdGenerator(autoDocTracesRatio = 1/1000)
+```
+
+## Django HTTP Payload Recorder Middleware
+
+First, install Django support:
+```bash
+pip install multiplayer-session-recorder[django]
+```
+
+Then use the middleware in your Django settings:
+
+```python
+from multiplayer_session_recorder import create_django_middleware
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Add the payload recorder middleware
+    create_django_middleware({
+        "captureBody": True,
+        "captureHeaders": True,
+        "maxPayloadSizeBytes": 10000,
+        "isMaskBodyEnabled": True,
+        "maskBodyFieldsList": ["password", "token"],
+        "isMaskHeadersEnabled": True,
+        "maskHeadersList": ["authorization"],
+    }),
+]
+```
+
+## Flask HTTP Payload Recorder Middleware
+
+First, install Flask support:
+```bash
+pip install multiplayer-session-recorder[flask]
+```
+
+Then use the middleware in your Flask application:
+
+```python
+from flask import Flask
+from multiplayer_session_recorder import create_flask_middleware
+
+app = Flask(__name__)
+
+# Create middleware functions
+before_request, after_request = create_flask_middleware({
+    "captureBody": True,
+    "captureHeaders": True,
+    "maxPayloadSizeBytes": 10000,
+    "isMaskBodyEnabled": True,
+    "maskBodyFieldsList": ["password", "secret"],
+    "isMaskHeadersEnabled": True,
+    "maskHeadersList": ["authorization"],
+})
+
+# Register the middleware
+app.before_request(before_request)
+app.after_request(after_request)
+
+@app.route('/')
+def hello():
+    return 'Hello, World!'
+```
