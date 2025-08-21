@@ -1,0 +1,88 @@
+# heputl
+
+[![PyPI version](https://badge.fury.io/py/heputl.svg)](https://pypi.org/project/heputl/)
+
+A Python utility package for high-energy physics (HEP) analysis, providing tools for data preprocessing, plotting, and statistics.
+
+---
+
+## Overview
+
+
+`heputl` is a modular Python package designed to streamline common tasks in HEP data analysis. It includes utilities for:
+
+- **Plotting**: Publication-quality 1D and 2D histograms, graphs, and overlays using `matplotlib` and `mplhep`.
+- **Data Utilities**: Preprocessing helpers, string constants, and toy data generators.
+- **Statistics**: Functions for statistical analysis of HEP datasets.
+- **Logging**: Simple logging setup for scripts and notebooks.
+
+---
+
+## Installation
+
+
+You can install the latest release from [PyPI](https://pypi.org/project/heputl/):
+
+```bash
+pip install heputl
+```
+
+Or, for the latest development version:
+
+```bash
+git clone https://github.com/kingusiu/physkiutl.git
+cd physkiutl
+pip install -e .
+```
+
+Dependencies are managed via `pyproject.toml`.
+
+---
+
+## Usage
+
+
+After installation, simply import modules as needed in your analysis scripts or notebooks:
+
+```python
+from heputl.plotting.oneD import plot_feature_hist_for_n_samples
+from heputl.logging import get_logger
+```
+
+For Jupyter notebooks, if you are working from the source tree, ensure the `src` directory is in your `PYTHONPATH`:
+
+```python
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.pardir, "src")))
+```
+
+---
+
+
+## Modules
+
+- `heputl.plotting`: 1D and 2D plotting utilities
+- `heputl.dats`: Toy data and statistics
+- `heputl.utils`: Preprocessing and constants
+- `heputl.logging`: Simple logger for scripts and notebooks
+
+---
+
+## Demos
+
+Demos can be found under `notebook`.
+
+### `plot_feature_hist_for_for_n_samples_demo` Notebook
+
+This notebook demonstrates how to visualize the distribution of a specific feature in your dataset using histograms.
+
+- Creating a demo dataset
+- Plotting a histogram to observe the feature's distribution
+
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
