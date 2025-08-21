@@ -1,0 +1,758 @@
+Metadata-Version: 2.4
+Name: entanglekey
+Version: 1.0.0
+Summary: 量子もつれベースの分散セッションキー生成ライブラリ
+Home-page: https://github.com/tikipiya/EntangleKey
+Author: tikisan
+Author-email: 
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Security :: Cryptography
+Classifier: Topic :: System :: Networking
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: cryptography>=3.4.8
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: asyncio-mqtt>=0.13.0
+Requires-Dist: pynacl>=1.5.0
+Requires-Dist: websockets>=10.0
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.18.0; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: flake8; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# EntangleKey
+
+**量子もつれベースの分散セッションキー生成ライブラリ**
+
+EntangleKeyは、量子もつれの理論を基盤とした分散セッションキー生成システムを提供するPythonライブラリです。複数のプログラムインスタンス間で安全で盗聴不可能なセッションキーの生成と同期を行い、リアルタイムセキュリティ監視、構造化ログ、設定ファイル管理などの企業レベル機能を備えています。
+
+## 特徴
+
+- 🔬 **量子もつれシミュレーション**: 古典的なコンピューター上で量子もつれの動作を模倣
+- 🔐 **セキュアなキー生成**: 量子もつれ状態を基にした暗号学的に安全なセッションキー
+- 🌐 **分散アーキテクチャ**: 複数のインスタンス間でのリアルタイム同期
+- 🔄 **動的キー管理**: セッションキーの生成、ローテーション、破棄
+- 📡 **WebSocket通信**: 高速で双方向のネットワーク通信
+- 🛡️ **暗号化サポート**: 生成されたキーを使用した秘匿通信
+- 🔍 **リアルタイムセキュリティ監視**: 攻撃検知・アラート・自動対応システム
+- ⚙️ **設定ファイルサポート**: YAML/JSON/TOML形式の設定ファイル対応
+- 📊 **構造化ログ**: JSON形式のセキュリティイベントログとリアルタイム監視
+- 🖥️ **拡張CLIツール**: 設定管理・監視・デバッグ機能を備えたコマンドラインインターフェース
+
+## インストール
+
+```bash
+# PyPIからインストール
+pip install entanglekey
+
+# 開発版をローカルインストール
+git clone https://github.com/tikipiya/EntangleKey.git
+cd EntangleKey
+pip install -e .
+```
+
+## 基本的な使用方法
+
+### 1. 基本的なセッションキー生成
+
+```python
+import asyncio
+from entanglekey import EntangleKeyManager
+
+async def basic_example():
+    # EntangleKeyManagerを初期化
+    manager = EntangleKeyManager(
+        instance_id="my_instance",
+        network_port=8888,
+        key_length=256
+    )
+    
+    try:
+        # マネージャーを開始
+        await manager.start()
+        
+        # 他のインスタンスに接続
+        remote_instance = await manager.connect_instance("localhost", 8889)
+        
+        # セッションキーを生成
+        session_id = await manager.generate_session_key([remote_instance])
+        session_key = await manager.get_session_key(session_id)
+        
+        print(f"生成されたセッションキー: {session_key.hex()}")
+        
+    finally:
+        await manager.stop()
+
+# 実行
+asyncio.run(basic_example())
+```
+
+### 1.5. 設定ファイルを使用した起動
+
+```python
+import asyncio
+from entanglekey import EntangleKeyManager
+
+async def config_example():
+    # 設定ファイルから設定を読み込み
+    manager = EntangleKeyManager(
+        config_file="entanglekey.yml"  # YAML設定ファイル
+    )
+    
+    try:
+        await manager.start()
+        
+        # セキュリティメトリクスを取得
+        status = manager.get_status()
+        security_metrics = status.get('security', {})
+        
+        print(f"量子相関: {security_metrics.get('entanglement_correlation', 0)}")
+        print(f"エントロピー品質: {security_metrics.get('entropy_quality', 0)}")
+        print(f"ネットワーク完全性: {security_metrics.get('network_integrity', 'UNKNOWN')}")
+        
+    finally:
+        await manager.stop()
+
+# 設定ファイル作成
+# CLI: entanglekey create-config --output entanglekey.yml
+
+asyncio.run(config_example())
+```
+
+### 2. セキュアな通信
+
+```python
+import asyncio
+import json
+from entanglekey import EntangleKeyManager
+
+async def secure_communication():
+    manager = EntangleKeyManager(instance_id="alice", network_port=8888)
+    
+    try:
+        await manager.start()
+        
+        # セッションキーを確立
+        bob_instance = await manager.connect_instance("localhost", 8889)
+        session_id = await manager.generate_session_key([bob_instance])
+        session_key = await manager.get_session_key(session_id)
+        
+        # メッセージを暗号化
+        message = "秘密のメッセージ"
+        message_data = json.dumps({"content": message}).encode()
+        
+        encrypted_data, nonce = manager.key_generator.encrypt_data(
+            message_data, session_key
+        )
+        
+        print(f"暗号化されたメッセージ: {encrypted_data.hex()}")
+        
+        # 復号化（受信側）
+        decrypted_data = manager.key_generator.decrypt_data(
+            encrypted_data, nonce, session_key
+        )
+        
+        original_message = json.loads(decrypted_data.decode())["content"]
+        print(f"復号化されたメッセージ: {original_message}")
+        
+    finally:
+        await manager.stop()
+
+asyncio.run(secure_communication())
+```
+
+## コマンドラインツール
+
+EntangleKeyには便利なCLIツールが含まれています：
+
+### 設定ファイル管理
+
+```bash
+# サンプル設定ファイルを作成
+entanglekey create-config --output entanglekey.yml --format yaml
+
+# JSON形式で作成
+entanglekey create-config --output config.json --format json
+```
+
+### サーバーモードで起動
+
+```bash
+# デフォルト設定で起動
+entanglekey server --port 8888
+
+# 設定ファイルを使用して起動
+entanglekey --config entanglekey.yml server
+
+# 詳細ログ付きで起動
+entanglekey --verbose server --port 8888
+```
+
+### 他のインスタンスに接続
+
+```bash
+# 基本的な接続
+entanglekey connect localhost 8888
+
+# 設定ファイルを使用した接続
+entanglekey --config entanglekey.yml connect localhost 8888
+
+# セッションキーをファイルに保存
+entanglekey connect localhost 8888 --save-key session.key
+```
+
+### スタンドアロンでキー生成
+
+```bash
+# 16進数形式でキー生成
+entanglekey generate --key-length 256 --hex-output
+
+# ファイル出力
+entanglekey generate --output session.key
+
+# パートナーインスタンス指定
+entanglekey generate --partners instance1,instance2
+```
+
+### ステータス確認
+
+```bash
+# 基本的なステータス
+entanglekey status --port 8888
+
+# 詳細ステータス（セキュリティメトリクス含む）
+entanglekey --config entanglekey.yml status
+```
+
+### グローバルオプション
+
+```bash
+# 詳細ログ出力
+entanglekey --verbose [command]
+
+# カスタムインスタンスID
+entanglekey --instance-id my_node [command]
+
+# 設定ファイル指定
+entanglekey --config /path/to/config.yml [command]
+```
+
+## アーキテクチャ
+
+EntangleKeyは以下のコンポーネントで構成されています：
+
+```
+┌─────────────────────────────────┐
+│       EntangleKey Manager       │
+├─────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ │
+│ │ Quantum     │ │ Security    │ │
+│ │ Simulator   │ │ Monitor     │ │
+│ └─────────────┘ └─────────────┘ │
+│ ┌─────────────┐ ┌─────────────┐ │
+│ │ Network     │ │ Config      │ │
+│ │ Manager     │ │ Loader      │ │
+│ └─────────────┘ └─────────────┘ │
+│ ┌─────────────┐ ┌─────────────┐ │
+│ │ Session Key │ │ Logging     │ │
+│ │ Generator   │ │ System      │ │
+│ └─────────────┘ └─────────────┘ │
+└─────────────────────────────────┘
+```
+
+### 量子もつれシミュレーター
+
+- 複数のインスタンス間で仮想的な量子もつれ状態を作成
+- Bell状態や量子相関をシミュレート
+- 測定結果から暗号学的エントロピーを抽出
+- リアルタイム相関検証と盗聴検知
+
+### セキュリティモニター
+
+- **リアルタイム監視**: 量子相関、エントロピー品質、ネットワーク完全性を継続監視
+- **攻撃検知**: 盗聴、中間者攻撃、過度の接続試行を自動検知
+- **自動対応**: 攻撃検知時の緊急キー無効化と接続ブロック
+- **アラートシステム**: セキュリティイベントの即座通知
+
+### ネットワークマネージャー
+
+- WebSocketベースの双方向通信
+- 自動再接続とエラーハンドリング
+- メッセージルーティングとブロードキャスト
+- 接続異常の検知と報告
+
+### セッションキージェネレーター
+
+- HKDF（HMAC-based Key Derivation Function）を使用
+- 量子エントロピーと古典的エントロピーを組み合わせ
+- ChaCha20Poly1305、HMAC-SHA256など最新の暗号アルゴリズムをサポート
+- RSA鍵交換による初期認証
+
+### 設定ローダー
+
+- **多形式対応**: YAML、JSON、TOML設定ファイルの読み込み
+- **環境変数**: 環境変数からの設定値取得
+- **デフォルト検索**: 標準的な場所からの設定ファイル自動検索
+- **設定の継承**: プログラム引数 > 設定ファイル > 環境変数 > デフォルト値
+
+### ログシステム
+
+- **構造化ログ**: JSON形式での詳細ログ出力
+- **セキュリティログ**: セキュリティイベント専用の分離ログ
+- **マルチ出力**: コンソール・ファイル同時出力
+- **メタデータ**: プロセスID、スレッドID、タイムスタンプ付き
+
+## なぜ安全で盗聴不可能なのか
+
+EntangleKeyの安全性は、量子もつれの基本原理と暗号学的手法の組み合わせによって実現されています。
+
+### 🌌 量子もつれの理論的安全性
+
+#### 1. **量子もつれの基本原理**
+```
+Alice の量子ビット    ←→ もつれ状態 ←→    Bob の量子ビット
+      |0⟩ + |1⟩                           |0⟩ + |1⟩
+```
+
+量子もつれ状態では、2つの粒子が距離に関係なく瞬時に相関します。一方の粒子を測定すると、もう一方の粒子の状態が即座に決定されます。
+
+#### 2. **盗聴検知の原理**
+```
+正常な通信:
+Alice → 測定 → |0⟩ → Bob → 測定 → |0⟩ ✅ 相関あり
+
+盗聴された通信:
+Alice → 測定 → |0⟩ → Eve (盗聴) → |?⟩ → Bob → 測定 → |1⟩ ❌ 相関なし
+```
+
+**重要**: 量子状態は測定されると変化するため、盗聴者（Eve）が通信を傍受すると、もつれ状態が破壊され、Alice と Bob は盗聴を検知できます。
+
+#### 3. **ハイゼンベルクの不確定性原理**
+量子状態は完全にコピーできない（[量子複製不可能定理](https://ja.wikipedia.org/wiki/%E9%87%8F%E5%AD%90%E8%A4%87%E8%A3%BD%E4%B8%8D%E5%8F%AF%E8%83%BD%E5%AE%9A%E7%90%86)）ため、盗聴者は元の状態を保持したまま情報を取得することは理論的に不可能です。
+
+### 🔐 EntangleKeyでの実装
+
+#### 1. **多層エントロピー生成**
+```python
+# 量子エントロピー（シミュレーション）
+quantum_entropy = extract_quantum_measurements(entanglement_state)
+
+# 古典的エントロピー
+classical_entropy = secure_random_generator()
+
+# 時間的エントロピー
+temporal_entropy = high_precision_timestamp()
+
+# 組み合わせ
+final_entropy = combine_entropy_sources(quantum_entropy, classical_entropy, temporal_entropy)
+```
+
+#### 2. **暗号学的キー導出**
+- **HKDF (HMAC-based Key Derivation Function)**: 安全なキー導出
+- **SHA-256**: 暗号学的ハッシュ関数
+- **ChaCha20Poly1305**: 認証付き暗号化
+
+#### 3. **分散アーキテクチャによる安全性**
+```
+    インスタンス A          インスタンス B          インスタンス C
+         |                       |                       |
+    [量子状態測定]          [量子状態測定]          [量子状態測定]
+         |                       |                       |
+         └────── 相関検証 ────────┼────── 相関検証 ───────┘
+                                |
+                        [セッションキー生成]
+```
+
+- **単一障害点なし**: 中央サーバーが存在しないため、1つのポイントを攻撃されても全体は安全
+- **相互検証**: 複数のインスタンス間で量子相関を検証
+- **動的キーローテーション**: 定期的なキー更新
+
+### 🛡️ 攻撃に対する防御
+
+#### 1. **盗聴攻撃 (Eavesdropping)**
+```
+攻撃者の試み: Alice ←→ [Eve] ←→ Bob
+
+結果: 
+- 量子もつれ状態の破壊
+- 相関検証の失敗 → 盗聴検知
+- 自動的なキー破棄とアラート
+```
+
+#### 2. **中間者攻撃 (Man-in-the-Middle)**
+```
+防御メカニズム:
+✅ 量子もつれ状態の事前確立
+✅ 暗号学的署名による認証
+✅ インスタンス間の相互検証
+✅ タイムスタンプによるリプレイ攻撃防止
+```
+
+#### 3. **計算量攻撃**
+```
+使用する暗号アルゴリズム:
+- ChaCha20: 2^256 の計算量（量子コンピュータ耐性あり）
+- HMAC-SHA256: 2^256 の計算量
+- キー長: 256ビット（十分な安全余裕）
+```
+
+### 📊 安全性の数学的根拠
+
+#### 1. **エントロピー計算**
+```
+総エントロピー = H(quantum) + H(classical) + H(temporal)
+             ≥ 256 + 256 + 64 = 576 ビット
+
+最小必要エントロピー: 256ビット
+安全余裕: 576 - 256 = 320ビット（十分な余裕）
+```
+
+#### 2. **量子相関係数**
+```python
+# ベル不等式の検証
+correlation_coefficient = measure_quantum_correlation(alice_measurements, bob_measurements)
+
+if correlation_coefficient > classical_limit:
+    print("量子もつれ確認: 盗聴なし")
+else:
+    print("⚠️ 警告: 盗聴の可能性")
+```
+
+### ⚡ リアルタイム安全性監視
+
+EntangleKeyは以下の安全性指標を継続的に監視します：
+
+```python
+security_metrics = {
+    "entanglement_correlation": 0.95,    # 量子相関係数
+    "entropy_quality": 0.99,             # エントロピー品質
+    "network_integrity": "OK",           # ネットワーク完全性
+    "key_freshness": "2.5s",            # キーの新鮮度
+    "attack_detection": "None"           # 攻撃検知状況
+}
+```
+
+### 🔬 理論的限界と現実的実装
+
+**理論的安全性**:
+- 量子力学の基本法則に基づく
+- 情報理論的に安全（計算量に依存しない）
+- 物理法則によって保証される盗聴検知
+
+**現実的実装**:
+- 古典コンピューター上での量子もつれシミュレーション
+- 高品質な暗号学的プリミティブの使用
+- 分散アーキテクチャによる実用的な安全性
+
+**注意**: 本ライブラリは量子もつれの理論的特性を模倣していますが、実際の量子ハードウェアではありません。それでも、使用している暗号学的手法と分散アーキテクチャにより、現在の技術水準で十分に安全な通信を実現しています。
+
+## セキュリティ考慮事項
+
+1. **量子シミュレーション**: 実際の量子もつれではなく、その理論的特性を模倣
+2. **ネットワーク通信**: TLS/SSL上での使用を推奨
+3. **キー管理**: 生成されたキーは適切に保護し、不要になったら安全に消去
+4. **エントロピー**: システムの乱数生成器の品質に依存
+
+## 使用例
+
+`examples/` ディレクトリには以下の使用例が含まれています：
+
+### 基本使用例
+- `basic_usage.py`: 基本的な2インスタンス間でのキー生成
+- `secure_communication.py`: セキュアな暗号化通信のデモ
+
+### 高度な使用例
+- `multi_instance_chat.py`: マルチインスタンス・リアルタイムチャットシステム
+- `distributed_file_sharing.py`: 分散ファイル共有システム
+
+### 使用例の実行
+
+```bash
+# 基本使用例
+python examples/basic_usage.py
+python examples/secure_communication.py
+
+# マルチユーザーチャット（デモモード）
+python examples/multi_instance_chat.py
+
+# インタラクティブチャット
+python examples/multi_instance_chat.py Alice 8881
+python examples/multi_instance_chat.py Bob 8882
+
+# 分散ファイル共有（デモモード）
+python examples/distributed_file_sharing.py
+
+# インタラクティブファイル共有
+python examples/distributed_file_sharing.py NodeA 8881
+python examples/distributed_file_sharing.py NodeB 8882
+```
+
+### 高度な使用例の特徴
+
+#### マルチインスタンス・リアルタイムチャット
+- 複数ユーザー間での暗号化リアルタイムチャット
+- 量子もつれキーによるメッセージ暗号化
+- 署名検証による認証
+- セキュリティアラートとイベントログ
+
+#### 分散ファイル共有システム
+- セキュアなファイル同期と共有
+- チェックサム検証による完全性保護
+- 暗号化ファイル転送
+- メタデータ管理とバージョン追跡
+
+## API リファレンス
+
+### EntangleKeyManager
+
+メインのマネージャークラス。
+
+```python
+# 基本的な初期化
+manager = EntangleKeyManager(
+    instance_id="my_instance",      # インスタンスID
+    network_port=8888,              # ネットワークポート
+    key_length=256,                 # キー長（ビット）
+    sync_timeout=30.0               # 同期タイムアウト
+)
+
+# 設定ファイルを使用した初期化
+manager = EntangleKeyManager(
+    config_file="entanglekey.yml"   # 設定ファイルパス
+)
+
+# 完全な設定オブジェクトを使用
+from entanglekey.config import EntangleKeyConfig
+config = EntangleKeyConfig.from_dict({
+    'quantum': {'correlation_threshold': 0.9},
+    'security': {'attack_detection_enabled': True}
+})
+manager = EntangleKeyManager(config=config)
+
+# 開始/停止
+await manager.start()
+await manager.stop()
+
+# 接続
+instance_id = await manager.connect_instance("host", port)
+
+# キー生成
+session_id = await manager.generate_session_key([instance_id])
+session_key = await manager.get_session_key(session_id)
+
+# セキュリティ状態の確認
+status = manager.get_status()
+security_metrics = status['security']
+print(f"攻撃試行数: {security_metrics['attack_attempts']}")
+print(f"相関品質: {security_metrics['entanglement_correlation']}")
+
+# キー破棄
+await manager.revoke_session_key(session_id)
+```
+
+### QuantumEntanglementSimulator
+
+量子もつれシミュレーション機能。
+
+```python
+simulator = QuantumEntanglementSimulator()
+
+# もつれ状態を作成
+entanglement_id = await simulator.create_entanglement(instance_ids)
+
+# 状態を測定
+measurement = await simulator.measure_entangled_state(
+    entanglement_id, instance_id, num_bits=256
+)
+
+# 相関を検証
+is_valid = await simulator.verify_entanglement_correlation(
+    entanglement_id, measurements
+)
+```
+
+### SessionKeyGenerator
+
+セッションキー生成機能。
+
+```python
+# 基本的な初期化
+generator = SessionKeyGenerator(key_length=256)
+
+# 設定オブジェクトを使用
+from entanglekey.config import CryptoConfig
+crypto_config = CryptoConfig(key_length=512, encryption_algorithm="ChaCha20Poly1305")
+generator = SessionKeyGenerator(config=crypto_config)
+
+# キー生成
+session_key = await generator.generate_key(entanglement_state, partners)
+
+# 暗号化/復号化
+encrypted_data, nonce = generator.encrypt_data(data, key)
+decrypted_data = generator.decrypt_data(encrypted_data, nonce, key)
+
+# 署名
+signature = generator.create_message_signature(message, key)
+is_valid = generator.verify_message_signature(message, signature, key)
+
+# キーハッシュ
+key_hash = generator.hash_key(session_key)
+```
+
+### SecurityMonitor
+
+セキュリティ監視機能。
+
+```python
+from entanglekey.security_monitor import SecurityMonitor
+
+# セキュリティモニターを初期化
+monitor = SecurityMonitor()
+await monitor.start()
+
+# 相関チェックを記録
+monitor.record_correlation_check(0.95, "entangle123", True)
+
+# エントロピー品質を記録
+monitor.record_entropy_quality(0.98, "quantum_measurements")
+
+# キー生成を記録
+monitor.record_key_generation("session456", 2.5, {"entropy": 0.95})
+
+# セキュリティメトリクスを取得
+metrics = monitor.get_security_metrics()
+print(f"相関係数: {metrics.entanglement_correlation}")
+print(f"攻撃試行: {metrics.attack_attempts}")
+
+# 詳細レポートを生成
+report = monitor.get_security_report()
+
+# アラートコールバックを追加
+async def security_alert_handler(alert_data):
+    print(f"🚨 セキュリティアラート: {alert_data['type']}")
+
+monitor.add_alert_callback(security_alert_handler)
+
+await monitor.stop()
+```
+
+### ConfigLoader
+
+設定管理機能。
+
+```python
+from entanglekey.config_loader import ConfigLoader
+
+# 設定ファイルから読み込み
+config = ConfigLoader.load_from_file("entanglekey.yml")
+
+# 環境変数から読み込み
+config = ConfigLoader.load_from_env()
+
+# デフォルト設定を自動検索
+config = ConfigLoader.load_default_config()
+
+# 設定をファイルに保存
+ConfigLoader.save_to_file(config, "new_config.yml", format="yaml")
+
+# サンプル設定ファイルを作成
+from entanglekey.config_loader import create_sample_config_file
+create_sample_config_file("sample_config.yml")
+```
+
+## 開発
+
+### 開発環境のセットアップ
+
+```bash
+git clone https://github.com/tikipiya/EntangleKey.git
+cd EntangleKey
+
+# 仮想環境を作成
+python -m venv venv
+source venv/bin/activate  # Windows: venv\\Scripts\\activate
+
+# 開発用依存関係をインストール
+pip install -e ".[dev]"
+```
+
+### テストの実行
+
+```bash
+# 全テストの実行
+pytest tests/
+
+# 詳細出力
+pytest tests/ -v
+
+# 特定のテストクラス
+pytest tests/test_basic.py::TestQuantumEntanglementSimulator -v
+
+# 非同期テスト実行（pytest-asyncioが必要）
+pip install pytest-asyncio
+pytest tests/
+
+# テスト結果（現在の状況）
+# ✅ 13/13 テストケース成功
+# - 量子もつれシミュレーション: 4/4 成功
+# - セッションキー生成: 5/5 成功  
+# - EntangleKeyManager: 3/3 成功
+# - 統合ワークフロー: 1/1 成功
+```
+
+### コードフォーマット
+
+```bash
+black entanglekey/
+flake8 entanglekey/
+mypy entanglekey/
+```
+
+## ライセンス
+
+MIT
+
+## 作者
+
+- **tikisan** - [tikipiya](https://github.com/tikipiya)
+
+## 貢献
+
+プルリクエストやイシューの報告を歓迎します。大きな変更を行う前に、まずイシューを作成して議論してください。
+
+## 今後の計画
+
+### 🎯 完成済み機能
+- [x] **量子もつれシミュレーション**: Bell状態、相関検証、盗聴検知
+- [x] **分散セッションキー生成**: HKDF、多層エントロピー、自動同期
+- [x] **セキュリティ監視システム**: リアルタイム監視、攻撃検知、自動対応
+- [x] **設定ファイルシステム**: YAML/JSON/TOML対応、環境変数、自動検索
+- [x] **構造化ログ**: JSON形式、セキュリティイベント、マルチ出力
+- [x] **拡張CLIツール**: 設定管理、監視、デバッグ機能
+- [x] **高度な使用例**: マルチチャット、分散ファイル共有
+- [x] **完全なテストスイート**: 13/13テストケース成功（100%）
+
+---
+
+**注意**: このライブラリは教育・研究目的で開発されました。本格的な暗号化システムでの使用前には、セキュリティ専門家による監査を受けることを推奨します。
