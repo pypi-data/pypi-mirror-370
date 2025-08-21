@@ -1,0 +1,333 @@
+Metadata-Version: 2.4
+Name: sphero-bolt-plus
+Version: 1.0.1
+Summary: Modern Python library for controlling Sphero BOLT+ robots with enhanced features
+Project-URL: Homepage, https://github.com/assistant/sphero-bolt-plus
+Project-URL: Documentation, https://sphero-bolt-plus.readthedocs.io
+Project-URL: Repository, https://github.com/assistant/sphero-bolt-plus
+Project-URL: Issues, https://github.com/assistant/sphero-bolt-plus/issues
+Author-email: Assistant <assistant@example.com>
+License-Expression: MIT
+License-File: LICENSE
+Keywords: bluetooth,bolt,education,robotics,sphero
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Education
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Education
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.9
+Requires-Dist: bleak>=0.20.0
+Requires-Dist: typing-extensions>=4.0.0; python_version < '3.11'
+Provides-Extra: dev
+Requires-Dist: black>=22.0.0; extra == 'dev'
+Requires-Dist: mypy>=1.0.0; extra == 'dev'
+Requires-Dist: pytest-asyncio>=0.20.0; extra == 'dev'
+Requires-Dist: pytest>=7.0.0; extra == 'dev'
+Requires-Dist: ruff>=0.0.200; extra == 'dev'
+Provides-Extra: docs
+Requires-Dist: sphinx-rtd-theme>=1.0.0; extra == 'docs'
+Requires-Dist: sphinx>=5.0.0; extra == 'docs'
+Description-Content-Type: text/markdown
+
+# Sphero BOLT+ Python Library
+
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+A modern, fully async Python library for controlling Sphero BOLT+ robots with comprehensive type annotations and enhanced features.
+
+## Features
+
+- 🚀 **Fully Async**: Built with `asyncio` for non-blocking operations
+- 📝 **Type Annotations**: Complete type safety with mypy support
+- 🎯 **Modern Python**: Supports Python 3.9+ with latest language features
+- 🤖 **Multiple Models**: Support for BOLT, BOLT+, RVR, Mini, and Spark
+- 🎨 **LED Control**: Main LED, back LED, front LED, and 8x8 LED matrix
+- 🎮 **Movement**: Roll, spin, stop with precise control
+- 📊 **Sensors**: Accelerometer, gyroscope, compass, location, velocity, battery
+- 🔍 **Auto-Discovery**: Bluetooth scanning and robot detection
+- ⚡ **Event-Driven**: Sensor callbacks and real-time data streaming
+- 🛡️ **Robust**: Comprehensive error handling and connection management
+
+## Installation
+
+```bash
+pip install sphero-bolt-plus
+```
+
+For development:
+```bash
+pip install sphero-bolt-plus[dev]
+```
+
+## Quick Start
+
+### Basic Connection and Movement
+
+```python
+import asyncio
+from sphero_bolt_plus import SpheroScanner, SpheroBot, Colors
+
+async def main():
+    # Scan for robots
+    async with SpheroScanner() as scanner:
+        robots = await scanner.scan_for_robots()
+        print(f"Found {len(robots)} robots")
+    
+    # Connect to first robot
+    async with SpheroBot(robots[0]) as robot:
+        # Set LED color
+        await robot.set_main_led(Colors.BLUE)
+        
+        # Move forward
+        await robot.roll(speed=100, heading=0, duration=2.0)
+        
+        # Spin in place
+        await robot.spin(360, duration=2.0)
+        
+        # Stop
+        await robot.stop()
+
+asyncio.run(main())
+```
+
+### LED Matrix Control (BOLT/BOLT+ only)
+
+```python
+import asyncio
+from sphero_bolt_plus import SpheroScanner, SpheroBot, Colors
+
+async def matrix_demo():
+    async with SpheroScanner() as scanner:
+        robots = await scanner.scan_for_robots()
+    
+    async with SpheroBot(robots[0]) as robot:
+        # Clear matrix
+        await robot.clear_matrix()
+        
+        # Set individual pixels
+        await robot.set_matrix_pixel(0, 0, Colors.RED)
+        await robot.set_matrix_pixel(7, 7, Colors.BLUE)
+        
+        # Scroll text
+        await robot.scroll_matrix_text("HELLO!", Colors.GREEN, speed=5)
+
+asyncio.run(matrix_demo())
+```
+
+### Sensor Reading
+
+```python
+import asyncio
+from sphero_bolt_plus import SpheroScanner, SpheroBot
+
+async def sensor_demo():
+    async with SpheroScanner() as scanner:
+        robots = await scanner.scan_for_robots()
+    
+    async with SpheroBot(robots[0]) as robot:
+        # Get battery status
+        battery = await robot.get_battery()
+        print(f"Battery: {battery.percentage}% ({battery.voltage}V)")
+        
+        # Get compass heading
+        compass = await robot.get_compass()
+        print(f"Heading: {compass.heading}°")
+        
+        # Get accelerometer data
+        accel = await robot.get_accelerometer()
+        print(f"Acceleration: X={accel.x}, Y={accel.y}, Z={accel.z}")
+
+asyncio.run(sensor_demo())
+```
+
+### Real-time Sensor Streaming
+
+```python
+import asyncio
+from sphero_bolt_plus import SpheroScanner, SpheroBot
+
+def on_accelerometer_data(reading):
+    print(f"Accel: {reading.x:.2f}, {reading.y:.2f}, {reading.z:.2f}")
+
+async def streaming_demo():
+    async with SpheroScanner() as scanner:
+        robots = await scanner.scan_for_robots()
+    
+    async with SpheroBot(robots[0]) as robot:
+        # Register sensor callback
+        robot.register_sensor_callback("accelerometer", on_accelerometer_data)
+        
+        # Move around to see sensor data
+        await robot.roll(100, 0, duration=5.0)
+
+asyncio.run(streaming_demo())
+```
+
+## Advanced Usage
+
+### Custom Color Control
+
+```python
+from sphero_bolt_plus import Color, Colors
+
+# Create custom colors
+custom_color = Color(255, 128, 64)  # Orange-ish
+hex_color = Color.from_hex("#FF8040")
+rgb_tuple = (255, 128, 64)
+
+# Use with robot
+await robot.set_main_led(custom_color)
+await robot.set_main_led("#FF8040")
+await robot.set_main_led((255, 128, 64))
+```
+
+### Error Handling
+
+```python
+import asyncio
+from sphero_bolt_plus import (
+    SpheroScanner,
+    SpheroBot,
+    ConnectionError,
+    CommandError,
+    RobotNotFoundError,
+)
+
+async def robust_demo():
+    try:
+        async with SpheroScanner(scan_timeout=5.0) as scanner:
+            robots = await scanner.scan_for_robots()
+            
+    except RobotNotFoundError:
+        print("No robots found!")
+        return
+    
+    try:
+        async with SpheroBot(robots[0], connection_timeout=15.0) as robot:
+            await robot.roll(100, 0, duration=2.0)
+            
+    except ConnectionError as e:
+        print(f"Connection failed: {e}")
+    except CommandError as e:
+        print(f"Command failed: {e}")
+
+asyncio.run(robust_demo())
+```
+
+### Finding Specific Robots
+
+```python
+from sphero_bolt_plus import SpheroScanner, RobotModel
+
+async with SpheroScanner() as scanner:
+    # Find by name
+    robot_info = await scanner.find_robot_by_name("SB-1234")
+    
+    # Filter by model
+    bolt_robots = await scanner.scan_for_robots(model_filter=RobotModel.BOLT_PLUS)
+    
+    # Filter by partial name
+    classroom_robots = await scanner.scan_for_robots(name_filter="classroom")
+```
+
+## API Reference
+
+### SpheroScanner
+
+- `scan_for_robots(model_filter=None, name_filter=None)`: Scan for available robots
+- `find_robot_by_name(name, timeout=None)`: Find specific robot by name
+- `scan_continuously(callback, ...)`: Continuous scanning with callback
+
+### SpheroBot
+
+#### Connection
+- `connect()`: Connect to robot
+- `disconnect()`: Disconnect from robot
+- `is_connected`: Check connection status
+- `connection_state`: Get connection state
+
+#### Movement
+- `roll(speed, heading, duration=None)`: Move robot
+- `stop()`: Stop movement
+- `spin(angle, duration)`: Spin robot
+
+#### LED Control
+- `set_main_led(color)`: Set main LED color
+- `set_back_led(brightness)`: Set back LED brightness
+- `set_front_led(color)`: Set front LED color (BOLT+ only)
+- `set_matrix_pixel(x, y, color)`: Set matrix pixel (BOLT+ only)
+- `clear_matrix()`: Clear LED matrix (BOLT+ only)
+- `scroll_matrix_text(text, color, speed)`: Scroll text (BOLT+ only)
+
+#### Sensors
+- `get_accelerometer()`: Get accelerometer reading
+- `get_gyroscope()`: Get gyroscope reading
+- `get_compass()`: Get compass reading
+- `get_location()`: Get location reading
+- `get_velocity()`: Get velocity reading
+- `get_battery()`: Get battery status
+
+#### Configuration
+- `set_stabilization(enabled)`: Enable/disable stabilization
+- `calibrate_compass()`: Calibrate compass
+
+## Supported Robots
+
+| Model | Movement | Main LED | Back LED | Front LED | Matrix | Sensors |
+|-------|----------|----------|----------|-----------|--------|---------|
+| BOLT+ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| BOLT | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| RVR | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Mini | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Spark | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+
+## Requirements
+
+- Python 3.9+
+- Bluetooth Low Energy (BLE) support
+- Compatible Sphero robot
+
+## Development
+
+```bash
+git clone https://github.com/assistant/sphero-bolt-plus
+cd sphero-bolt-plus
+pip install -e .[dev]
+
+# Run tests
+pytest
+
+# Format code
+black sphero_bolt_plus
+
+# Type checking
+mypy sphero_bolt_plus
+
+# Linting
+ruff check sphero_bolt_plus
+```
+
+## Contributing
+
+Contributions are welcome! Please read our contributing guidelines and submit pull requests.
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Acknowledgments
+
+- Based on the original `sphero_unsw` library by Kathryn Kasmarik and Reda Ghanem
+- Built on top of the `spherov2` library
+- Thanks to the Sphero community for protocol documentation
