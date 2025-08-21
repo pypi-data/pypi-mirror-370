@@ -1,0 +1,332 @@
+\documentclass[acmsmall,anonymous,review,screen,nonacm]{acmart}
+\include{definitions}
+
+\begin{document}
+
+\title{GPython}
+
+\maketitle
+
+\newpage
+\begin{figure}[t]
+\raggedright
+\begin{small}
+\begin{tabular}{r >{$}r<{$} >{$}l<{$}}
+	program & \p ::= & \b\\
+	block & \b ::= & \Block{\overline{\s}}\\
+	statements & \s ::= & \Expr{\e} ~|~ \Def{f}{\overline{x: \A}}{\A} ~|~ 
+	%\Assign{x}{\e} ~|~ 
+	\Assign{(\overline{x})}{\e} ~|~ \TAssign{x}{\T}{\e} ~|~
+	\Return{\e} ~|~\\ 
+	&& \Ite{\e}{\b}{\b} ~|~ \While{\e}{\b}{\b} ~|~ \For{x}{\e}{\b}{\b} ~|~
+	\AugAssign{x}{\e} ~|~ \Pass
+	\\
+	expressions & \e ::= & x ~|~ c ~|~ (\overline{e}) ~|~ \lambda \overline{x}. \e ~|~ \e(\overline{\e}) ~|~ \e\binop\e \\
+	types & \T,\S ::= & ... ~|~ \overline{\T} \to \S ~|~ \? ~|~ \List{\T} \\
+	annotations & \A,\B ::= & \T ~|~ \bot
+\end{tabular}
+\end{small}
+\caption{Syntax}
+\end{figure}
+
+\begin{figure}[t]
+\raggedright
+\begin{small}
+\begin{mathpar}
+	\inference{
+		\LEnv[0] = \collectSignatures(\Block{\s}) &
+		\JStmts{\overline{\s}}{\overline{\sp}}[\LEnv, \LEnv[0]] &
+	}{
+		\JStmts{\Block{\overline{\s}}}{\Block{\overline{\sp}}}
+	}
+	\and
+	\inference{
+		\JStmts{\s[0]}{\Block{\overline{\sp[0]}}} & 
+		\JStmts{\overline{\s}}{\overline{\sp}}[\LEnvp][\Ctx][\LEnvpp] & 
+	}{
+		\JStmts{\s[0], \overline{\s}}{\overline{\sp[0]},\overline{\sp}}[\LEnv][\Ctx][\LEnvpp]
+	}
+	\and
+	\inference{
+	}{
+		\JStmts{\emptyset}{\emptyset}[\LEnv][\Ctx][\LEnv]
+	}
+\end{mathpar}
+\end{small}
+\caption{Type rules for blocks of statements}
+\label{fig:typing-stmts}
+\end{figure}
+
+\begin{figure}[t]
+\raggedright
+\begin{small}
+\begin{mathpar}
+	\inference[(SExpr)]{
+		%\mathit{extract\_signature}()
+		\JExpr{\e}{\ep}
+	}{
+		\JStmt{\Expr{\e}}{\Block{\Expr{\ep}}}[\LEnv][\Ctx][\LEnv]
+	}
+	\and
+	\inference[(Def)]{
+		\overline{\T} \to \S = \getTypeFromAnnotation{\overline{\A} \to \B} & 
+		\overline{x} = \getAssignedVars(\overline{\s}) \\
+		\Ctxp = \updateCtx{\mathsf{def}}{\Ctx}{\T} &
+		\JStmts{\Block{\overline{\s}}}{\Block{\overline{\sp}}}[\LEnv/\overline{x}, f: \overline{\T} \to \S, \overline{x: \T}][\Ctxp]
+	}{
+		\JStmt{\Def{f}{\overline{x: \A}}{\B}}{\Block{\Def{f}{\overline{x: \A}}{\B}[\overline{\sp}]}}[\LEnv][\Ctx][\LEnv, f: \overline{\T} \to \S]
+	}
+	\and
+	% \inference[(AsgnN)]{
+	% 	%x \in \dom(\LEnv) &
+	% 	\JExpr{\e}{\_}[\Ctx][\T] &
+	% 	(\S) = \updateType_{=}(\Ctx,\unify(\LEnv, (x), (\T))) &
+	% 	\insertAnnotation{\e}{\S}{\ep} 
+	% }{
+	% 	\JStmt{\Assign{x}{\e}}{\assignToAst{\Assign{x}{\ep}}}[\LEnv][\Ctx][\LEnv, x: \S]
+	% }
+	% \and
+	% \inference[(AsgnA)]{
+	% 	...
+	% }{
+	% 	\JStmt{\Assign{\e[1].x}{\e[2]}}{\Assign{\e[1].x}{\e[2]}}[\LEnv][\Ctx][\LEnv]
+	% }
+	% \and
+	\inference[(AsgnT)]{
+		\JExpr{\e[1]}{\e[2]}[\LEnv][\Ctx][\T] &
+		(\overline{\S}) = \updateType{=}{\Ctx}{\unify(\LEnv, (\overline{x}), \T)} &
+		\cast{\e[2]}{\T}{(\overline{\S})}{\e[3]} 
+	}{
+		\JStmt{\Assign{(\overline{x})}{\e[1]}}{\postProcess{\Assign{(\overline{x})}{\e[3]}}}[\LEnv][\Ctx][\LEnv, \overline{x: \S}]
+	}
+	\and
+	\inference[(AnAsn)]{
+		\T = \getTypeFromAnnotation{\A} &
+		\S = \updateType{=}{\Ctx}{\T} &
+		\Ctxp = \updateCtx{\mathsf{=}}{\Ctx}{\S} &
+		\insertAnnotation{\e}{\S}{\ep}[\Ctxp] 
+	}{
+		\JStmt{\TAssign{x}{\A}{\e}}{\postProcess{\TAssign{x}{\A}{\ep}}}[\LEnv][\Ctx][\LEnv, x: \S]
+	}
+	\and
+	\inference[(Ret)]{
+		\JExpr{\e[1]}{\e[2]}[\LEnv][\Ctx][\T] &
+		\S = \updateType{\mathsf{ret}}{\Ctx}{\T} &
+		\cast{\e[2]}{\T}{\S}{\e[3]}  & 
+		\cast{\e[3]}{\S}{\Ctx.\T}{\e[4]} 
+	}{
+		\JStmt{\Return{\e[1]}}{\postProcess{\Return{\e[4]}}}
+	}
+	\and
+	\inference[(If)]{
+		\JExpr{\e}{\ep}[\LEnv][\Ctx][\T] &
+		\Ctxp = \updateCtx{\mathsf{if}}{\Ctx}{\T} &
+		\JStmts{\b[1]}{\bp[1]}[\LEnv[1]][\Ctxp][\LEnv[2]] & 
+		\JStmts{\b[2]}{\bp[2]}[\LEnv[2]][\Ctxp][\LEnv[3]]
+	}{
+		\JStmt{\Ite{\e}{\b[1]}{\b[2]}}{\postProcess[\Ctxp][\LEnv[3]]{\Ite{\ep}{\bp[1]}{\bp[2]}}}[\LEnv[1]][\Ctx][\LEnv[3]]
+	}
+	\and
+	\inference[(While)]{
+		\JExpr{\e}{\ep}[\LEnv][\Ctx][\T] &
+		\Ctxp = \updateCtx{\mathsf{if}}{\Ctx}{\T} &
+		\JStmts{\b[1]}{\bp[1]}[\LEnv[1]][\Ctxp][\LEnv[2]] & 
+		\JStmts{\b[2]}{\bp[2]}[\LEnv[2]][\Ctxp][\LEnv[3]]
+	}{
+		\JStmt{\While{\e}{\b[1]}{\b[2]}}{\postProcess[\Ctxp][\LEnv[3]]{\While{\ep}{\bp[1]}{\bp[2]}}}[\LEnv[1]][\Ctx][\LEnv[3]]
+	}
+	\and
+	\inference[(For)]{
+		\JExpr{\e}{\ep}[\LEnv][\Ctx][\T] &
+		\extract{\T}{\List{\S}} &
+		\cast{\e}{\T}{\List{\S}}{\ep}  \\ 
+		\Ctxp = \updateCtx{\mathsf{if}}{\updateCtx{\mathsf{if}}{\Ctx}{\T}}{\S} &
+		\JStmts{\b[1]}{\bp[1]}[\LEnv[1], x: \S][\Ctxp][\LEnv[2]] & 
+		\JStmts{\b[2]}{\bp[2]}[\LEnv[2]][\Ctxp][\LEnv[3]]
+	}{
+		\JStmt{\For{x}{\e}{\b[1]}{\b[2]}}{\postProcess[\Ctxp][\LEnv[3]]{\For{x}{\ep}{\bp[1]}{\bp[2]}}}[\LEnv[1]][\Ctx][\LEnv[3]]
+	}
+	\and
+	\inference[(+$\e$)]{
+		\JStmt{\Assign{x}{x + \e}}{\b}[\LEnv][\Ctx][\LEnvp]
+	}{
+		\JStmt{\AugAssign{x}{\e}}{\b}[\LEnv][\Ctx][\LEnvp]
+	}
+	\and
+	\inference[(pass)]{
+	}{
+		\JStmt{\Pass}{\Block{\Pass}}
+	}
+\end{mathpar}
+\end{small}
+\caption{Type rules for statements}
+\end{figure}
+
+\paragraph{Syntax}
+We use notation $\overline{a}$ to denote $a_1,...,a_n$.
+A environment $\LEnv$ is a mapping from variable names $x$ to types $\T$. We use notation $\LEnv(x)$ to extract the type associated to $x$, and $\LEnv(x, \T)$ to return $\LEnv(x)$ if $x \in \dom(\LEnv)$, $\T$ otherwise.
+A context $\Ctx$ is ...
+The definition of types $\T$ depends on the type discipline. The only restriction, due to the limitations of Python's annotations, is that function types must be defined as arrow types where the domain is a list of types.
+An annotation $\A$ is either a type $\T$ or $\bot$ representing the absence of type annotations.
+
+ 
+\paragraph{Type rules for blocks}
+Judgment $\JStmt{\s}{\sp}$ denotes that statement $\s$ is well-typed  under context $\Ctx$ and environment $\LEnv$, produces environment $\LEnvp$ and elaborates to $\sp$.
+
+\paragraph{Type rules for statements}
+Type rule (Def) uses the meta-function $\getTypeFromAnnotation{\cdot}$ to extract the type of the function from the annotation (if any). For example, for simple types, in case of no annotations the unknown type $\?$ is used as a default type: $\getTypeFromAnnotation{(\Int, \bot) \to \bot} = (\Int, \?) \to \?$.
+After that, the variable assigned are collected to made them unavailable until the first reference. For instance, the following program should not type check as \lstinline|x| is not yet defined within the body of \lstinline|foo| 
+\begin{lstlisting}
+x: int = 1
+def foo():
+    print(x)
+    x: bool = True
+    return x
+\end{lstlisting}
+On the other hand if line \lstinline|x: bool = True| is removed, then the program is well-typed as the print statement is now referencing the global variable instead.
+%
+Note that the resulting environment of the body of the function is not forwarded to the resulting environment of the definition as variables defined within the function must not escape its lexical scope.
+
+Rule (AsgnT) uses meta-function $\updateType{\cdot}{\cdot}{\cdot}$ to post-process and taint the type of the subexpression if needed.  For instance, in security types, the current PC could be stamped onto the type information of the expression in the case of a return statement, or it could check that the PC is no larger than the security type of the new value in assigments.
+The environment is extended with the name $x$ now pointing to the updated type $\S$.
+Finally, the elaborated assign expression is passed as argument to a custom post-processing function $\postProcess{\cdot}$ to insert extra runtime check if needed (as in the case of security typing).
+
+The (AnAsn) rule is similar to (AsgnT) except that only works for a single variable. The context $\Ctx$ is updated when typing the expression to provide typing information when type checking lambdas or lists that lack of annotations. Additionally, the type of the subexpression is taken from the annotation instead, overriding (and ignoring) previous annotations that could be found in $\LEnv$.
+
+The (Ret) rule type first typecheck the returning expression. Then the type is tainted and two casts are inserted: one to the tainted type, and other to the expected returned type from the context $\Ctx$.
+
+Rule (If) and (While) are analogous. The condition is not required to be a boolean, as Python tests if the expression is not \lstinline|None|. Before typing both branches, the context is tainted using the meta-function $\updateCtx{\cdot}{\cdot}{\cdot}$. This is useful in the case of security types when the security level of the argument must flow into the PC of each branch.
+Note that the type environment from the $\mathsf{then}$ branch flows as input to the typechecking of the $\mathsf{else}$ branch. This is a design choice also taken by MyPy.
+
+Rule (For) type check \lstinline|for| expressions. It first type checks the iterator $\e$, and then tries to project an iterator type $\List{\S}$ from the type of $\e$. Then the expression is cast to the iterator type. Similarly to conditionals and while loops, the context is now tainted by both the type of the iterator $\T$ and the type of each element $\S$.
+Then the first branch is typed by extending the type environment with the information that each element $x$ has type $\S$. Note that we do the same for the second branch as the following programs are expected to run without problems:\\
+
+\begin{minipage}[t]{0.4\textwidth}
+\begin{lstlisting}
+for x in range(0,10):
+  pass
+print(x)
+\end{lstlisting}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.5\textwidth}
+\begin{lstlisting}
+for x in range(0,10):
+  x: str = "hello world"
+else:
+  print(x.split(' '))
+\end{lstlisting}
+\end{minipage}
+
+
+
+\begin{figure}[t]
+\raggedright
+\begin{small}
+\begin{mathpar}
+	\inference{
+		\JExpr{\e[1]}{\e[2]}[\LEnv][\Ctx][\S] & 
+		\cast{\e[2]}{\S}{\T}{\e[3]}
+	}{
+		\insertAnnotation{\e[1]}{\T}{\e[3]}
+	}
+	\and
+	\inference{
+		%R(\T, \S) & 
+		\ev = \Interior{\S}{\T}
+	}{
+		\cast{\e}{\S}{\T}{\Wrap{\ev}{\e}}
+	}
+\end{mathpar}
+\begin{mathpar}
+	\inference[(Var)]{
+		\LEnv(x) = \T
+	}{
+		\JExpr{x}{x}
+	}
+	\and
+	\inference[(Const)]{
+		\mathit{ty}(c) = \T
+	}{
+		\JExpr{c}{c}
+	}
+	\and
+	\inference[(Tuple)]{
+		\overline{\JExpr{\e}{\ep}[\LEnv][\CtxNE]}
+	}{
+		\JExpr{(\overline{\e})}{(\overline{\ep})}[\LEnv][\Ctx][(\overline{\T})]
+	}
+	\and
+	\inference[(T$\lambda$)]{
+		\Ctx.\T \triangleright (\overline{\T}) \to \S &
+		(\overline{\Tp}) = (\overline{\T},\overline{\?}) &
+		 \#(\overline{\Tp}) = \#(\overline{x}) &
+		 \Ctxp = \updateCtx{\mathsf{\lambda}}{\Ctx}{\S} &
+		\overline{\JExpr{\e}{\ep}[\LEnv, \overline{x : \Tp}][\Ctxp]}
+	}{
+		\JExpr{\lambda \overline{x}. \e}{(\overline{\ep})}[\LEnv][\Ctx][(\overline{\Tp} \to \S)]
+	}
+	\and
+	\inference[(Tapp)]{
+		\JExpr{\e[1]}{\ep[1]}[\LEnv][\CtxNE] &
+		\T \triangleright (\overline{\T}) \to \S &
+		(\overline{\Tp}) = (\overline{\T},\overline{\?}) &
+		 \#(\overline{\Tp}) = \#(\overline{e_2}) \\
+		 \cast{\ep[1]}{\T}{(\overline{\Tp}) \to \S}{\epp[1]}&
+		\overline{\insertAnnotation{\e[2]}{\Tp}{\ep[2]}}
+	}{
+		\JExpr{\e[1](\overline{\e[2]})}{\epp[1](\overline{\ep[2]})}[\LEnv][\Ctx][\mathit{cod}(\T)]
+	}
+	\and
+	\inference[(Tbinop)]{
+		\JExpr{\e[1]}{\ep[1]}[\LEnv][\CtxNE][\T[1]] &
+		\JExpr{\e[2]}{\ep[2]}[\LEnv][\CtxNE][\T[2]] &
+		\mathit{bestCand}(\binop, \T[1],\T[2]) \triangleright (\Tp[1], \Tp[2]) \to \S \\
+		\cast{\ep[1]}{\T[1]}{\Tp[1]}{\epp[1]} & 
+		\cast{\ep[2]}{\T[2]}{\Tp[2]}{\epp[2]}
+	}{
+		\JExpr{\e[1] \binop \e[2]}{\epp[1](\overline{\ep})}[\LEnv][\Ctx][\mathit{cod}(\T)]
+	}
+	\and
+	\inference[(TListT)]{
+		\Ctx.\T \triangleright [\T] &
+		\overline{
+			\insertAnnotation{\e}{\T}{\ep}[\Ctx] 
+		}
+	}{
+		\JExpr{[\overline{\e}]}{[\overline{\ep}]}[\LEnv][\Ctx][[\T]]
+	}
+	\and
+	\inference[(TList$\bot$)]{
+		\Ctx.\T = \bot &
+		\overline{
+			\JExpr{\e} {\ep} [\LEnv][\CtxNE][\T] 
+		} &
+		\S = \curlyvee \overline{\T} &
+		\overline{\cast{\ep}{\T}{\S}{\epp}}
+	}{
+		\JExpr{[\overline{\e}]}{[\overline{\epp}]}[\LEnv][\Ctx][[\S]]
+	}
+\end{mathpar}
+\end{small}
+\caption{Type rules for expressions}
+\label{fig:typing-expr}
+\end{figure}
+
+\paragraph{Type rules for expressions}
+Figure~\ref{fig:typing-expr} present the type rules for expressions.
+
+The typing of expression in check mode type checks the subexpression to a type $\S$ and then tries to insert a cast between $\S$ and $\T$.
+The cast insertion function only work if the interior between the two types is defined. The resulting expression is a \emph{wrapped} expression composed of the evidence that justify the consistent judgment between $\S$ and $\T$, and the expression itself.
+
+Rule (Tuple) type checks each subexpression using context $\CtxNE$, which is a syntactic sugar for the same context where there is no expected type, i.e. $\CtxNE = \Ctx[][\T = \bot]$.
+\begin{figure}[t]
+\begin{small}
+\begin{tabular}{r >{$}r<{$} >{$}l<{$}}
+	types & \T,\S ::= & \Int ~|~ \Bool
+\end{tabular}
+\end{small}	
+\caption{Simple Types}
+\end{figure}
+
+\end{document}
