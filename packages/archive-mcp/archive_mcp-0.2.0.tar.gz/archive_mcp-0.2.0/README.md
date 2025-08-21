@@ -1,0 +1,215 @@
+# Archive Compression & Extraction MCP Server
+
+一个功能完整的 MCP（Model Context Protocol）服务器，支持文件压缩和解压操作，包含多种格式和密码保护功能。
+
+## 🚀 功能特性
+
+### 核心功能
+- ✅ **压缩功能**: 支持 ZIP, 7Z, TAR, TAR.GZ 格式压缩
+- ✅ **解压功能**: 支持 ZIP, 7Z, TAR, TAR.GZ 格式解压
+- ✅ **密码保护**: ZIP 和 7Z 格式支持密码加密
+- ✅ **批量操作**: 支持多文件/文件夹压缩和批量解压
+- ✅ **智能输出**: 自动处理输出路径和文件名
+- ✅ **安全检查**: 路径遍历攻击防护
+- ✅ **详细信息**: 压缩包内容预览和详细信息查看
+
+### 🔐 密码保护支持
+
+| 格式 | 压缩密码 | 解压密码 | 加密算法 | 兼容性说明 |
+|------|----------|----------|----------|------------|
+| ZIP  | ✅       | ✅       | AES-256  | 推荐，系统兼容性最佳 |
+| 7Z   | ✅       | ✅       | AES-256  | ⚠️ macOS可能反复弹出密码提示 |
+| TAR  | ❌       | ❌       | -        | 不支持加密 |
+| TAR.GZ | ❌     | ❌       | -        | 不支持加密 |
+
+**重要提示**：
+- **7Z加密兼容性问题**：在macOS上，加密的7Z文件可能导致系统服务（Spotlight、Quick Look）反复弹出密码提示
+- **推荐方案**：如需密码保护，建议优先使用ZIP格式的AES-256加密，具有更好的系统兼容性
+- **解决方法**：如遇7Z反复弹窗，可以：
+  1. 关闭Spotlight索引：`sudo mdutil -i off /path/to/archive/`
+  2. 使用ZIP格式替代：`format='zip'` + `password='your_password'`
+
+## 📋 可用工具
+
+### 1. compress - 压缩文件或文件夹
+压缩单个或多个文件/文件夹为压缩包。
+
+**参数:**
+- `input` (str | list[str]): 待压缩的文件或文件夹路径
+- `output` (str, 可选): 输出压缩包路径（可选，默认自动生成）
+- `format` (str, 可选): 压缩格式 (zip/7z/tar/tar.gz，默认 zip)
+- `password` (str, 可选): 压缩密码（仅支持 ZIP 和 7Z 格式）
+- `compression_level` (int, 可选): 压缩级别 0-9（TAR 格式不适用），默认 5
+- `overwrite` (bool, 可选): 是否覆盖已存在的文件，默认 false
+- `header_encryption` (bool, 可选): 7Z是否加密文件名，默认 false
+
+### 2. extract - 解压缩文件
+解压单个或多个压缩包。
+
+**参数:**
+- `input` (str | list[str]): 要解压的压缩文件路径或路径数组
+- `output` (str, 可选): 输出目录路径（可选，默认为源文件所在目录）
+- `password` (str, 可选): 加密压缩包的密码（可选，支持ZIP和7Z格式）
+- `overwrite` (bool, 可选): 是否自动覆盖已存在的文件，默认 true
+
+### 3. list_archive - 预览压缩包内容
+列出压缩包内容而不解压。
+
+**参数:**
+- `input` (str): 要查看的压缩文件路径
+- `password` (str, 可选): 加密压缩包的密码
+
+### 4. get_archive_info - 获取压缩包详细信息
+获取压缩包的详细信息包括压缩率、文件列表等。
+
+**参数:**
+- `input` (str): 压缩包文件路径
+- `password` (str, 可选): 加密压缩包的密码
+
+### 5. echo - 测试连接
+回显输入的消息，用于测试MCP连接。
+
+**参数:**
+- `message` (str): 要回显的消息内容
+
+## 🛠 安装和运行
+
+### 使用 uv（推荐）
+
+```bash
+# 进入项目目录
+cd archive-mcp
+
+# 安装依赖
+uv sync
+
+# 运行服务器
+uv run python main.py
+```
+
+### 传统方式
+
+```bash
+# 安装依赖
+pip install -e .
+
+# 运行服务器
+python main.py
+```
+
+## 📝 使用示例
+
+### 压缩文件
+
+```json
+{
+  "name": "compress",
+  "arguments": {
+    "input": ["/path/to/file1.txt", "/path/to/folder1"],
+    "output": "/path/to/output.zip",
+    "format": "zip",
+    "password": "mypassword",
+    "compression_level": 6
+  }
+}
+```
+
+### 解压文件
+
+```json
+{
+  "name": "extract",
+  "arguments": {
+    "input": ["/path/to/archive1.zip", "/path/to/archive2.7z"],
+    "output": "/path/to/extract/to",
+    "password": "mypassword",
+    "overwrite": true
+  }
+}
+```
+
+### 预览压缩包内容
+
+```json
+{
+  "name": "list_archive",
+  "arguments": {
+    "input": "/path/to/archive.zip",
+    "password": "mypassword"
+  }
+}
+```
+
+### 获取压缩包信息
+
+```json
+{
+  "name": "get_archive_info",
+  "arguments": {
+    "input": "/path/to/archive.7z",
+    "password": "mypassword"
+  }
+}
+```
+
+## 🔧 支持的格式详情
+
+### ZIP 格式
+- **压缩库**: pyzipper (AES-256) / pyminizip (备用)
+- **密码支持**: ✅ 完整支持
+- **压缩级别**: 0-9
+- **特点**: 最佳兼容性，标准格式
+
+### 7Z 格式
+- **压缩库**: py7zr
+- **密码支持**: ✅ 完整支持（包括头部加密）
+- **压缩级别**: 0-9
+- **特点**: 最高压缩率，现代格式
+
+### TAR 格式
+- **压缩库**: tarfile (Python标准库)
+- **密码支持**: ❌ 格式限制
+- **压缩级别**: 不适用
+- **特点**: Unix标准，无压缩
+
+### TAR.GZ 格式
+- **压缩库**: tarfile (Python标准库)
+- **密码支持**: ❌ 格式限制
+- **压缩级别**: 固定gzip压缩
+- **特点**: Unix标准，gzip压缩
+
+## 🛡️ 安全特性
+
+- **路径遍历防护**: 防止 `../` 等危险路径
+- **密码保护**: ZIP/7Z 支持 AES-256 加密
+- **输入验证**: 严格的参数验证和错误处理
+- **安全路径**: 确保解压到安全路径内
+
+## 📦 依赖项
+
+- Python 3.10+
+- mcp>=1.0.0
+- py7zr>=0.20.0
+- pydantic>=2.0.0
+- pyminizip>=0.2.6 (ZIP密码支持)
+- pyzipper>=0.3.6 (ZIP AES加密，推荐)
+
+## 📄 许可证
+
+MIT License
+
+## 🆕 更新日志
+
+### v0.2.0
+- ✅ 融合压缩和解压功能
+- ✅ 统一的MCP服务器接口
+- ✅ 删除冗余测试代码
+- ✅ 改进错误处理和安全性
+- ✅ 完整的中文界面
+
+### v0.1.0
+- ✅ 基础压缩功能
+- ✅ 多格式支持
+- ✅ 密码保护
+
+- inspector启动：npx @modelcontextprotocol/inspector uv --directory /Users/fengjinchao/Desktop/mcp/skills/python/压缩_解压 run main.py
