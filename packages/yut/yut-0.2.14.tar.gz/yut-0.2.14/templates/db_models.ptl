@@ -1,0 +1,39 @@
+# -*- {{ py_filename }}: python ; coding: utf-8 -*-
+# ***********************************************************************
+# 创建数据model对应的单表Selection对象
+# 本代码由程序通过反射数据库表结构自动生成，模板文件： db_models.ptl (V1.0)
+# 生成时间: {{ create_time }}
+# ***********************************************************************
+
+from yus.dbm import MetaDb, Selection, QueryManager
+{% set nm_space = name_space|upper%}
+{% set db_name = '_'~name_space|lower~'_db' %} {% set ds_name = '_'~name_space|lower~'_selections' %}
+{{db_name}} = None
+NAME_SPACE = '{{nm_space}}'
+
+
+def get_db():
+    global {{db_name}}
+    if {{db_name}} is None:
+        {{db_name}} = MetaDb(echo=True)
+    return {{db_name}}
+
+
+def get_qm()->QueryManager:
+    return QueryManager.instance('{{nm_space}}')
+
+
+def create_selections():
+    db = get_db()
+    return {
+        {% for table in tables %} {% set table_key = table.name|upper %}
+        # {{table_key}} -> {{ table.name|upper }} {% if table.comment %} - {{ table.comment }} {% endif %}
+        "{{table_key}}": Selection(
+            db=db,
+            title='{% if table.comment %}{{ table.comment }}{% endif %}',
+            tables=['{{ table.name }}'],
+            columns=[
+                {% for column in table.columns %}'{{ column.name|upper }}',{% if column.comment %}  # {{ column.comment }}{% endif %}
+                {% endfor %}]
+            ),{% endfor %}
+        }
