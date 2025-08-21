@@ -1,0 +1,119 @@
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2024-2025 TU Wien.
+#
+# Invenio-Config-TUW is free software; you can redistribute it and/or modify
+# it under the terms of the MIT License; see LICENSE file for more details.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "invenio_config_tuw/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "sonar-project.properties",
+    ".gitlab-ci.yml",
+]
+
+[project]
+name = "Invenio-Config-TUW"
+dynamic = ["version"]
+description = "Workflow customizations and config overrides for TU Wien."
+keywords = ["invenio", "configuration", "tu wien"]
+requires-python = ">=3.12"
+readme = "README.rst"
+license = "MIT"
+authors = [
+    {name = "Team of the Center for Research Data Management (TU Wien)", email = "tudata@tuwien.ac.at"},
+]
+classifiers = [
+    "Environment :: Web Environment",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Development Status :: 5 - Production/Stable",
+]
+dependencies = [
+    "Invenio-App-RDM>=13.0.0",
+    "Invenio-Search>=3.0.0",
+    "Flask-Minify>=0.47",
+    "Invenio-DAMAP>=0.2.0",
+    "Invenio-Curations>=0.2.0",
+]
+
+[project.optional-dependencies]
+tests = [
+    "pytest-ruff>=0.4.1",
+    "pytest-black>=0.3.0",
+    "pytest-invenio>=3.0.0",
+    "invenio-search[opensearch2]>=3.0.0",
+    "httpretty>=1.1.4",
+    "ipdb>=0.13.13",
+    "ipython>=8.18.1",
+    "pytest-mock>=3.14.0",
+]
+
+[project.urls]
+Repository = "https://gitlab.tuwien.ac.at/crdm/invenio-config-tuw"
+
+# Entrypoints
+# -----------
+# note: we omit the usual "invenio_*" prefix here, to be listed *before* the other
+#       invenio extensions in lexicographic ordering so that we can piece together
+#       the config items before they get picked up by the other extensions
+#       since lexicographic ordering is currently not the default however, this
+#       requires a hack performed in "invenio_config_tuw.config"
+[project.entry-points."invenio_base.apps"]
+config_tuw = "invenio_config_tuw:InvenioConfigTUW"
+
+[project.entry-points."invenio_base.api_apps"]
+config_tuw = "invenio_config_tuw:InvenioConfigTUW"
+
+[project.entry-points."invenio_base.blueprints"]
+invenio_config_tuw_settings = "invenio_config_tuw.users.views:user_settings_blueprint"
+
+[project.entry-points."invenio_base.finalize_app"]
+invenio_config_tuw_mail_handler = "invenio_config_tuw.startup:register_smtp_error_handler"
+invenio_config_tuw_search_drafts = "invenio_config_tuw.startup:override_search_drafts_options"
+invenio_config_tuw_curation_settings = "invenio_config_tuw.startup:register_menu_entries"
+invenio_config_tuw_curation_request = "invenio_config_tuw.startup:customize_curation_request_type"
+
+[project.entry-points."invenio_base.api_finalize_app"]
+invenio_config_tuw_mail_handler = "invenio_config_tuw.startup:register_smtp_error_handler"
+invenio_config_tuw_search_drafts = "invenio_config_tuw.startup:override_search_drafts_options"
+invenio_config_tuw_curation_request = "invenio_config_tuw.startup:customize_curation_request_type"
+
+[project.entry-points."invenio_i18n.translations"]
+messages = "invenio_config_tuw"
+
+[project.entry-points."invenio_celery.tasks"]
+invenio_config_tuw = "invenio_config_tuw.tasks"
+invenio_config_tuw_tiss = "invenio_config_tuw.tiss.tasks"
+invenio_config_tuw_curations = "invenio_config_tuw.curations.tasks"
+
+# note: similar to above, we try to get listed *after* all the "invenio_*" entrypoints
+#       so that we can override other packages' configuration items, but still get
+#       executed before "invenio.cfg" (so that the values there take precedence)
+#       unlike above, the lexicographic sorting is performed by `Invenio-Config`
+#       out of the box
+[project.entry-points."invenio_config.module"]
+tuw_config = "invenio_config_tuw.config"
+
+# Configuration for tools
+# -----------------------
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+addopts = '--ruff --black --isort --pydocstyle --doctest-glob="*.rst" --doctest-modules --cov=invenio_config_tuw --cov-report=term-missing'
+testpaths = "tests invenio_config_tuw"
+
+[tool.pydocstyle]
+add_ignore = "D401"
