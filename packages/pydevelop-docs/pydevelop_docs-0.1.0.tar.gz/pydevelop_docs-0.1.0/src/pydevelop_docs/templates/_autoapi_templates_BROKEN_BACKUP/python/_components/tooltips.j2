@@ -1,0 +1,268 @@
+{#- tooltips.j2 - Enhanced tooltip integration with sphinx_tippy -#}
+
+{#- Macro for adding tooltips to type annotations -#}
+{%- macro type_tooltip(type_str, description='') -%}
+{%- if has_tippy %}
+:tippy:`{{ type_str }}<{{ description|default('Type: ' ~ type_str) }}>`
+{%- else %}
+``{{ type_str }}``
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for parameter tooltips with detailed info -#}
+{%- macro param_tooltip(param) -%}
+{%- if has_tippy and param.description %}
+:tippy:`{{ param.name }}<{{ param.description }}{% if param.type %} (Type: {{ param.type }}){% endif %}{% if param.default %} Default: {{ param.default }}{% endif %}>`
+{%- else %}
+``{{ param.name }}``
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for method/function tooltips -#}
+{%- macro method_tooltip(method) -%}
+{%- if has_tippy %}
+{%- set tooltip_content -%}
+{{ method.summary|default(method.name ~ '()') }}
+{%- if method.parameters %}
+
+Parameters:
+{%- for param in method.parameters[:3] %}
+• {{ param.name }}{% if param.type %}: {{ param.type }}{% endif %}
+{%- endfor %}
+{%- if method.parameters|length > 3 %}
+• ... ({{ method.parameters|length - 3 }} more)
+{%- endif %}
+{%- endif %}
+{%- if method.returns %}
+
+Returns: {{ method.returns }}
+{%- endif %}
+{%- endset -%}
+:tippy:`{{ method.name }}()<{{ tooltip_content|trim }}>`
+{%- else %}
+:meth:`{{ method.name }}`
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for class tooltips with inheritance info -#}
+{%- macro class_tooltip(class_obj) -%}
+{%- if has_tippy %}
+{%- set tooltip_content -%}
+{{ class_obj.summary|default(class_obj.name ~ ' class') }}
+{%- if class_obj.bases %}
+
+Inherits from:
+{%- for base in class_obj.bases[:3] %}
+• {{ base }}
+{%- endfor %}
+{%- endif %}
+{%- if class_obj.subclasses %}
+
+Subclasses:
+{%- for sub in class_obj.subclasses[:3] %}
+• {{ sub }}
+{%- endfor %}
+{%- if class_obj.subclasses|length > 3 %}
+• ... ({{ class_obj.subclasses|length - 3 }} more)
+{%- endif %}
+{%- endif %}
+{%- endset -%}
+:tippy:`{{ class_obj.name }}<{{ tooltip_content|trim }}>`
+{%- else %}
+:class:`{{ class_obj.name }}`
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for exception tooltips with cause info -#}
+{%- macro exception_tooltip(exc) -%}
+{%- if has_tippy %}
+{%- set tooltip_content -%}
+{{ exc.summary|default('Exception: ' ~ exc.name) }}
+{%- if exc.cause %}
+
+Common causes:
+• {{ exc.cause|truncate(100) }}
+{%- endif %}
+{%- if exc.resolution %}
+
+How to fix:
+• {{ exc.resolution|truncate(100) }}
+{%- endif %}
+{%- endset -%}
+:tippy:`{{ exc.name }}<{{ tooltip_content|trim }}>`
+{%- else %}
+:exc:`{{ exc.name }}`
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for abbreviation tooltips -#}
+{%- macro abbr_tooltip(abbr, full_text) -%}
+{%- if has_tippy %}
+:tippy:`{{ abbr }}<{{ full_text }}>`
+{%- else %}
+{{ abbr }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for status/badge tooltips -#}
+{%- macro status_tooltip(status, description='') -%}
+{%- if has_tippy %}
+{%- set color = {'stable': 'green', 'beta': 'orange', 'alpha': 'red', 'deprecated': 'gray'}.get(status, 'blue') -%}
+.. raw:: html
+
+   <span class="badge badge-{{ color }}" data-tippy-content="{{ description|default(status|title ~ ' status') }}">{{ status|upper }}</span>
+{%- else %}
+**[{{ status|upper }}]**
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for version tooltips -#}
+{%- macro version_tooltip(version_info) -%}
+{%- if has_tippy %}
+{# djlint:off H025 #}
+:tippy:`v{{ version_info.version }}<Added in version {{ version_info.version }}{% if version_info.date %} ({{ version_info.date }}){% endif %}{% if version_info.notes %}. {{ version_info.notes }}{% endif %}>`
+{# djlint:on #}
+{%- else %}
+*New in version {{ version_info.version }}*
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for complexity indicator with tooltip -#}
+{%- macro complexity_tooltip(complexity_score) -%}
+{%- if has_tippy %}
+{%- set level = 'Simple' if complexity_score < 10 else 'Moderate' if complexity_score < 20 else 'Complex' -%}
+{%- set color = 'green' if complexity_score < 10 else 'orange' if complexity_score < 20 else 'red' -%}
+.. raw:: html
+
+   <span class="complexity-indicator complexity-{{ color }}" data-tippy-content="Complexity: {{ level }} (score: {{ complexity_score }})">
+     {% for i in range(1, 4) %}
+       <span class="dot{% if i <= (complexity_score // 10 + 1) %} filled{% endif %}">•</span>
+     {% endfor %}
+   </span>
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for code snippet tooltips -#}
+{%- macro code_tooltip(text, code_snippet) -%}
+{%- if has_tippy %}
+.. raw:: html
+
+   <span data-tippy-content="<pre><code>{{ code_snippet|e }}</code></pre>" data-tippy-interactive="true" data-tippy-maxWidth="500">{{ text }}</span>
+{%- else %}
+{{ text }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for link preview tooltips -#}
+{%- macro link_tooltip(url, preview_text='') -%}
+{%- if has_tippy %}
+.. raw:: html
+
+   <a href="{{ url }}" data-tippy-content="{{ preview_text|default('Link: ' ~ url)|e }}" data-tippy-placement="top">{{ url }}</a>
+{%- else %}
+`{{ url }}`_
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for keyboard shortcut tooltips -#}
+{%- macro shortcut_tooltip(keys, action) -%}
+{%- if has_tippy %}
+.. raw:: html
+
+   <kbd data-tippy-content="{{ action }}">{{ keys }}</kbd>
+{%- else %}
+``{{ keys }}``
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for warning/info tooltips -#}
+{%- macro info_tooltip(icon, message) -%}
+{%- if has_tippy %}
+.. raw:: html
+
+   <span class="info-icon" data-tippy-content="{{ message|e }}">{{ icon }}</span>
+{%- else %}
+{{ icon }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- CSS for enhanced tooltips (to be included in custom.css) -#}
+{%- macro tooltip_styles() -%}
+<style>
+/* Complexity indicators */
+.complexity-indicator {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: 8px;
+}
+
+.complexity-indicator .dot {
+    color: #ddd;
+    font-size: 16px;
+}
+
+.complexity-indicator .dot.filled {
+    color: currentColor;
+}
+
+.complexity-green { color: #28a745; }
+.complexity-orange { color: #ffc107; }
+.complexity-red { color: #dc3545; }
+
+/* Status badges */
+.badge {
+    display: inline-block;
+    padding: 0.25em 0.4em;
+    font-size: 75%;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.25rem;
+}
+
+.badge-green { background-color: #28a745; color: white; }
+.badge-orange { background-color: #ffc107; color: black; }
+.badge-red { background-color: #dc3545; color: white; }
+.badge-gray { background-color: #6c757d; color: white; }
+.badge-blue { background-color: #007bff; color: white; }
+
+/* Keyboard shortcuts */
+kbd {
+    padding: 0.2em 0.4em;
+    font-size: 87.5%;
+    color: #fff;
+    background-color: #212529;
+    border-radius: 0.2rem;
+}
+
+/* Info icons */
+.info-icon {
+    cursor: help;
+    color: #007bff;
+}
+
+/* Tippy theme customization */
+.tippy-box[data-theme~='pydevelop'] {
+    background-color: #333;
+    color: white;
+    font-size: 14px;
+}
+
+.tippy-box[data-theme~='pydevelop'] .tippy-arrow {
+    color: #333;
+}
+
+.tippy-box[data-theme~='pydevelop'] pre {
+    margin: 0;
+    padding: 8px;
+    background-color: #222;
+    border-radius: 4px;
+}
+
+.tippy-box[data-theme~='pydevelop'] code {
+    color: #f8f8f2;
+}
+</style>
+{%- endmacro -%}
