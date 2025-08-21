@@ -1,0 +1,70 @@
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  image: python:3.11
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+    - python -m build --no-isolation --sdist --wheel
+  artifacts:
+    paths:
+      - dist/*
+
+deploy_gitlab:
+  stage: deploy
+  image: python:3.11
+  variables:
+    TWINE_USERNAME: gitlab-ci-token
+    TWINE_PASSWORD: $CI_JOB_TOKEN
+  script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+    - python -m twine upload --verbose --skip-existing --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
+  needs:
+    - build
+
+deploy_pypi_test:
+  stage: deploy
+  image: python:3.11
+  variables:
+    TWINE_USERNAME: __token__
+    TWINE_PASSWORD: $PYPI_TEST_TOKEN
+  script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install -e ".[dev]"   
+    - python3 -m twine upload --verbose --skip-existing --repository testpypi dist/*
+  needs:
+    - build
+  only:
+    - tags
+  except:
+    - branches
+
+deploy_pypi:
+  stage: deploy
+  image: python:3.11
+  variables:
+    TWINE_USERNAME: __token__
+    TWINE_PASSWORD: $PYPI_TOKEN
+  script:
+    - python -m venv .venv
+    - source .venv/bin/activate
+    - pip install -e ".[dev]"   
+    - python3 -m twine upload --verbose --skip-existing --repository pypi dist/*
+  needs:
+    - build
+    - deploy_pypi_test
+  only:
+    - tags
+  except:
+    - branches

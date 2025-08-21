@@ -1,0 +1,132 @@
+{% block content %}
+<h3>suvi tasks <a href="{{url_for('app_tasks_json')}}"><img src="/static/img/code.svg" width="24" height="24" title="json" /></a></h3>
+<i>Auto-reloads every {{ cycle_wait }} seconds.</i>
+
+<h4 class="mb-2 mt-5">{{ ondemand|length }} <code>ondemand</code> task(s)</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th style="width: 150px">Actions</th>
+            <th style="width: 20%">Config name</th>
+            <th style="width: 150px">Exec</th>
+            <th>Args</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for taskName, task in ondemand.items()|sort(attribute='0') %}
+        <tr>
+            <td>
+                <a href="{{url_for('app_task_info', task_name=taskName)}}"><img src="/static/img/info.svg" width="24" height="24" title="task information"></a>
+                <a href="{{url_for('app_reload', task_name=taskName)}}"><img src="/static/img/reload.svg" width="24" height="24" title="reload config file"></a>
+                <a href="{{url_for('app_run', task_name=taskName)}}"><img src="/static/img/start.svg" width="24" height="24" title="start instance"></a>
+                <a href="{{url_for('app_task_log', task_name=taskName)}}"><img src="/static/img/log.svg" width="24" height="24" title="task log"></a>
+            </td>
+            <td> {{ taskName }}</td>
+            <td><img src="/static/img/exec/{{ task.exec.value }}.svg" width="24" height="24" title="{{ task.exec.value }}"></td>
+            <td><code>
+                {% for arg in task.args %}
+                {{ arg }} 
+                {% endfor %}
+            </code></td>
+            <td>
+                {% if 'talend' in task.runtime %}
+                Talend job <code>{{task.runtime.talend.job}} {{task.runtime.talend.jobVersion}}</code>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h4 class="mb-2 mt-5">{{ schedules|length }} <code>scheduled</code> task(s)</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th style="width: 150px">Actions</th>
+            <th style="width: 20%">Config name</th>
+            <th style="width: 150px">Exec</th>
+            <th>Schedule</th>
+            <th>Args</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for taskName, task in schedules.items()|sort(attribute='0') %}
+        <tr>
+            <td>
+                <a href="{{url_for('app_task_info', task_name=taskName)}}"><img src="/static/img/info.svg" width="24" height="24" title="task information"></a>
+                <a href="{{url_for('app_reload', task_name=taskName)}}"><img src="/static/img/reload.svg" width="24" height="24" title="reload config file"></a>
+                <a href="{{url_for('app_run', task_name=taskName)}}"><img src="/static/img/start.svg" width="24" height="24" title="start instance"></a>
+                <a href="{{url_for('app_task_log', task_name=taskName)}}"><img src="/static/img/log.svg" width="24" height="24" title="task log"></a>
+            </td>
+            <td>{{ taskName }}</td>
+            <td><img src="/static/img/exec/{{ task.exec.value }}.svg" width="24" height="24" title="{{ task.exec.value }}"></td>
+            <td><code>{{ task.schedule }}</code></td>
+            <td><code>
+                {% for arg in task.args %}
+                {{ arg }}
+                {% endfor %}
+            </code></td>
+            <td>
+                {% if 'talend' in task.runtime %}
+                Talend job <code>{{task.runtime.talend.job}} {{task.runtime.talend.jobVersion}}</code>
+                {% endif %}
+            </td>
+
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h4 class="mb-2 mt-5">{{ keepalive|length }} <code>keepalive</code> task(s)</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th style="width: 150px">Actions</th>
+            <th style="width: 20%">Config name</th>
+            <th style="width: 150px">Exec</th>
+            <th>Args</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for taskName, task in keepalive.items()|sort(attribute='0') %}
+        <tr>
+            <td>
+                <a href="{{url_for('app_task_info', task_name=taskName)}}"><img src="/static/img/info.svg" width="24" height="24" title="task information"></a>
+
+                {% if task.runtime.active %}
+                <a class="pointer" hx-get="{{url_for('app_stop_task', task_name=taskName)}}" hx-target="#config-name-{{taskName}}"><img src="/static/img/stop.svg" width="24" height="24" title="stop instance"></a>
+                {% else %}
+                <a class="pointer" hx-get="{{url_for('app_stop_task', task_name=taskName)}}" hx-target="#config-name-{{taskName}}"><img src="/static/img/reload.svg" width="24" height="24" title="reload instance at next cycle"></a>
+                {% endif %}
+                
+                <a class="pointer" hx-get="{{url_for('app_remove', task_name=taskName)}}" hx-target="#config-name-{{taskName}}"><img src="/static/img/remove.svg" width="24" height="24" title="remove from keepalive"></a>
+                <a href="{{url_for('app_task_log', task_name=taskName)}}"><img src="/static/img/log.svg" width="24" height="24" title="task log"></a>
+            </td>
+
+            {% if task.runtime.active %}
+            <td id="config-name-{{taskName}}"> {{ taskName }}</td>
+            {% else %}
+            <td id="config-name-{{taskName}}"><del> {{ taskName }} </del></td>
+            {% endif %}
+
+            <td><img src="/static/img/exec/{{ task.exec.value }}.svg" width="24" height="24" title="{{ task.exec.value }}"></td>
+            <td>
+                <code>
+                    {% for arg in task.args %}
+                    {{ arg }} 
+                    {% endfor %}
+                </code>
+            </td>
+            <td>
+                {% if 'talend' in task.runtime %}
+                Talend job <code>{{task.runtime.talend.job}} {{task.runtime.talend.jobVersion}}</code>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
