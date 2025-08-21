@@ -1,0 +1,2 @@
+class CaddyError(Exception):
+    pass
