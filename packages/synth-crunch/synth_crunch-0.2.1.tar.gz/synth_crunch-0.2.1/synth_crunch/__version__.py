@@ -1,0 +1,6 @@
+__title__ = 'synth-crunch'
+__description__ = 'synth-crunch - Utility package for the Synth competition on CrunchDAO!'
+__version__ = '0.2.1'
+__author__ = 'Enzo CACERES'
+__author_email__ = 'enzo.caceres@crunchdao.com'
+__url__ = 'https://github.com/crunchdao/synth-crunch'
