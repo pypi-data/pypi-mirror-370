@@ -1,0 +1,315 @@
+Metadata-Version: 2.1
+Name: AmiAutomation
+Version: 0.1.5.6
+Summary: Package to extract binary files into pandas dataframes
+Home-page: UNKNOWN
+Author: AMI
+Author-email: luis.castro@amiautomation.com
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: Microsoft :: Windows :: Windows 10
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Requires-Dist: pandas (>=1.1.0)
+
+# RPH extraction
+Contains a tool to read a .rph file into a RphData structure.
+
+
+
+#### Usage
+A simple example is given below:
+```
+from AmiAutomation import RphData
+
+
+# Read from a rph file to a RphData object
+rphData = RphData.rphToDf(path = "path_to_rph_file")
+
+
+# Table data inside a dataframe
+dataframe = rphData.dataFrame
+```
+
+```
+# Timestamps are always returned in RPH's local time with timezone info
+# eg datetime '2023-11-24 15:30:00-04:00'
+
+# To convert Timestamps to utc it is suggested to use the pandas "to_datetime" method:
+
+import pandas as pd
+
+dataframe.Timestamp = pd.to_datetime(dataframe.Timestamp, utc=True)
+```
+
+---
+
+# Binaries extraction
+This package contains the tools to easily extract binary data from PX3's:
+* Heat Log
+* 2 Second Log
+* Wave Log
+* Composite
+* Histogram
+
+Into a pandas dataframe for further processing  
+
+## Usage
+Importing a function is done the same way as any python package:
+
+```
+from AmiAutomation import PX3_Bin, LogData
+```
+
+From there you can call a method with the module prefix:
+
+```
+dataFrame = PX3_Bin.file_to_df(path = "C:\\Binaries")
+```
+or
+```
+dataFrame = LogData.binFileToDF(path = "C:\\Binaries")
+```
+
+---
+
+## LogData Methods
+You can get Binary log data in a LogData format that contains useful data about the binary file, including samples inside a pandas dataframe
+
+___
+
+### LogData.binFileToDF
+Unpacks binary file into LogData
+
+- ### Parameters:
+  * **path** : str
+
+    Complete file path
+
+  * **extension** : str, optional
+
+    Explicitly enforce file extension. Value must be "bin", "cpst" or "hist"\
+    If no value is given, the extension will be infered from the file name if it cannot be infered, the default value will be used instead
+
+    Default Value: bin
+
+  * **null_promoting** : dict, optional
+
+    A dictionary with a .NET Source Type key and a value of either one of the following (default, object, float, Int64, string, error).
+
+    The possible dictionary keys are the .NET simple types:
+    - "SByte" : Signed Byte
+    - "Byte" : Unsigned Byte
+    - "Int16" : 16 bit integer
+    - "UInt16" : 16 bit unsigned integer
+    - "Int32" : 32 bit integer
+    - "UInt32" : 32 bit unsigned integer
+    - "Int64" : 64 bit integer
+    - "UInt64" : 64 bit unsigned integer
+    - "Char" : Character
+    - "Single" : Floating point single precision
+    - "Double" : Floating point double precision
+    - "Boolean" : bit
+    - "Decimal" : 16 byte decimal precision
+    - "DateTime" : Date time
+
+    This dictionary values determines how null values in deserialization affect the resulting LogData dataframe column:
+
+    * "default" : use pandas automatic inference when dealing with null values on a column
+    * "object" : The returned type is the generic python object type
+    * "float" : The returned type is the python float type
+    * "Int64" : The returned type is the pandas Nullable Integer Int64 type
+    * "string" : Values are returned as strings
+    * "error" : Raises and exception when null values are encountered 
+
+    Default value: None
+
+- ### Returns:
+    * **LogData** :\
+      Structure containing most file data
+
+___
+
+### LogData.binStreamToDF 
+Unpacks binary file stream into LogData
+
+- ### Parameters:
+    * **file** : stream
+
+      A python IOStream of the binary file
+
+    * **extension** : str, optional
+
+        Explicitly enforce file extension. Value must be "bin", "cpst" or "hist" 
+
+        Default: bin
+
+    * **null_promoting** : dict, optional\
+        Same as in [LogData.binFileToDF](####LogData.binFileToDF). A dictionary with a .NET Source Type key and a value of either one of the following (default, object, float, Int64, string, error).
+
+- ### Returns:
+    * **LogData** :\
+      Structure containing most file data
+
+___ 
+### **Examples**
+
+#### Simple file conversion
+
+```
+from AmiAutomation import LogData
+
+
+# Execute the conversion from source file
+logData = LogData.binFileToDF("bin_file_path.bin")
+
+
+# To access samples just access the dataframe inside the LogData object
+dataFrame = logData.dataFrame 
+```
+
+#### Conversion from an IO Stream
+
+```
+from AmiAutomation import LogData
+
+
+# Get the file stream
+file_stream = open(file_path, "rb")
+
+
+# Execute the conversion from stream
+logData = LogData.binStreamToDF(file_stream)
+
+
+# Access the dataframe inside the LogData object
+dataFrame = logData.dataFrame 
+```
+
+#### Conversion of a file without extension
+
+```
+from AmiAutomation import LogData
+
+
+# Perform the conversion, explicitly using a file extension
+logData = LogData.binFileToDF("file_path", extension="rph" )
+
+
+# Access the dataframe inside the LogData object
+dataFrame = logData.dataFrame 
+```
+
+#### Conversion with null promoting
+
+```
+from AmiAutomation import LogData
+
+
+# Adding null promoting to handle missing values in these types of data as object
+logData = LogData.binFileToDF("bin_file_path.bin", null_promoting={"Int32":"object", "Int16":"object", "Int64":"object"})
+
+
+# Access the dataframe inside the LogData object
+dataFrame = logData.dataFrame 
+```
+
+This method can also be used to retrive the data table from inside a ".cpst" or ".hist" file, detection is automatic based on file extension in the filename, if none is given, a warning will be issued and ".bin" is assumed
+
+--- 
+
+## LogData Object
+
+The log data object contains some properties metadata from the file read as well as the logged data inside a Pandas Dataframe
+
+The data is structured as follows:
+
+  - **properties** : dict\
+      A Dictionary containing some metadata from each file, it changes depending the type of file read :
+
+    * Bin File:
+      | Key        | Type      | Value                                                  |
+      |------------|-----------|--------------------------------------------------------|
+      | Definition | str       | Xml string with the table definition of contained data |
+      | Version    | int       | file compresion version                                |
+      | Name       | str       | file type name                                         |
+      | StartTime  | datetime  | first sample record time                               |
+      | Increment  | timedelta | time between samples                                   |
+      | Duration   | float     | Total logged time in seconds                           |
+
+    <br/>
+
+
+    * Cpst File:
+      | Key       | Type | Value             |
+      |-----------|------|-------------------|
+      | Name      | str  | file type name    |
+      | FurnaceId | int  | Furnace Id Number |
+
+    <br/>
+
+
+    * Hist File:
+      | Key          | Type     | Value              |
+      |--------------|----------|--------------------|
+      | Name         | str      | file type name     |
+      | HeatId       | int      | Heat Id Number     |
+      | ModelVersion | int      | File Model Version |
+      | Sequence     | int      | Sequence number    |
+      | Timestamp    | datetime | File Timestamp     |
+
+    <br/>
+
+
+  - **dataFrame** : DataFrame\
+    A pandas.core.frame.DataFrame containing logged data
+
+
+
+---
+
+## PX3_Bin Methods
+This method returns a single pandas dataframe containing extracted data from the provided
+    file, path or path with constrained dates 
+
+* **file_to_df ( path, file, start_time, end_time, verbose = False )**
+
+ *  To process a single file you need to provide the absolute path in the file argument
+
+```
+dataFrame = PX3_Bin.file_to_df(file = "C:\\Binaries\\20240403T002821Z$-4038953271967.bin")
+```
+
+ * To process several files just provide the directory path where the binaries are (binaries inside sub-directories are also included) 
+
+```
+dataFrame = PX3_Bin.file_to_df(path = "C:\\Binaries\\")
+```
+
+* You can constrain the binaries inside a directory (and sub-directories) by also providing a start-date or both a start date and end date as a python datetime.datetime object
+
+```
+import datetime
+
+time = datetime.datetime(2020,2,15,13,30) # February 15th 2020, 1:30 PM
+
+### This returns ALL the data available in the path from the given date to the actual time
+dataFrame = PX3_Bin.file_to_df(path = "C:\\Binaries\\", start_time=time)
+```
+
+```
+import datetime
+
+time_start = datetime.datetime(2020,2,15,13,30) # February 15th 2020, 1:30 PM
+time_end = datetime.datetime(2020,2,15,13,45) # February 15th 2020, 1:45 PM
+
+### This returns all the data available in the path from the given 15 minutes
+dataFrame = PX3_Bin.file_to_df(path = "C:\\Binaries\\", start_time=time_start, end_time=time_end )
+```
+
+#### Tested with packages version
+* pythonnet 2.5.1
+* pandas 1.1.0
+
