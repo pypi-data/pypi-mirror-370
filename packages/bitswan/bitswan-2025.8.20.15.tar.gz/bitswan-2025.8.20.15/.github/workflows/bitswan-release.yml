@@ -1,0 +1,89 @@
+name: Release Workflow (PyPI, GitHub Release)
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-upload-pypi:
+    name: Build and Upload PyPI Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Generate CalVer version
+        id: calver
+        run: |
+          # Get current date in YYYY.MM.DD format
+          DATE_VERSION=$(date +%Y.%m.%d)
+          # Get GitHub run number
+          BUILD_NUMBER=${{ github.run_number }}
+          # Combine for final version
+          CALVER_VERSION="${DATE_VERSION}.${BUILD_NUMBER}"
+          echo "version=${CALVER_VERSION}" >> $GITHUB_OUTPUT
+          echo "Generated CalVer version: ${CALVER_VERSION}"
+
+      - name: Update version file
+        run: |
+          # Update the version file with the CalVer version
+          sed -i "s/__version__ = \".*\"/__version__ = \"${{ steps.calver.outputs.version }}\"/" bspump/__version__.py
+          echo "Updated version file with: ${{ steps.calver.outputs.version }}"
+
+      - name: Build package
+        run: python -m build
+
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: "__token__"
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Generate CalVer version
+        id: calver
+        run: |
+          # Get current date in YYYY.MM.DD format
+          DATE_VERSION=$(date +%Y.%m.%d)
+          # Get GitHub run number
+          BUILD_NUMBER=${{ github.run_number }}
+          # Combine for final version
+          CALVER_VERSION="${DATE_VERSION}.${BUILD_NUMBER}"
+          echo "version=${CALVER_VERSION}" >> $GITHUB_OUTPUT
+          echo "Generated CalVer version: ${CALVER_VERSION}"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        with:
+          tag_name: "v${{ steps.calver.outputs.version }}"
+          release_name: "Release v${{ steps.calver.outputs.version }}"
+          body: |
+            ## CalVer Release v${{ steps.calver.outputs.version }}
+            
+            **Build Number:** ${{ github.run_number }}
+            **Commit:** ${{ github.sha }}
+            
+            This is an automated release triggered by a push to master.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
