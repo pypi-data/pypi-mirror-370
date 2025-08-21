@@ -1,0 +1,113 @@
+# -------- global config
+{
+	admin 0.0.0.0:2019
+	local_certs
+	ocsp_stapling off
+	auto_https disable_redirects
+}
+
+# -------- snippets
+(_proxy) {
+	handle_errors {
+		header Content-Type text/plain
+		header Server "ingress"
+		respond "{http.error.status_code} {http.error.status_text}"
+	}
+	log {
+		output stderr
+	}
+	reverse_proxy {args[0]} {
+		trusted_proxies 10.0.0.0/8 172.16.0.0/16 192.168.0.0/16
+	}
+}
+(authelia) {
+	forward_auth authelia:9091 {
+		uri /api/verify?rd=https://[[auth_domain ]]
+		copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+	}
+}
+(proxy) {
+	{args[0]}:80 {
+		import _proxy {args[1]}
+	}
+	{args[0]}:443 {
+		tls internal
+		import _proxy {args[1]}
+	}
+}
+(authed) {
+	{args[0]}:80 {
+		import authelia {args[0]}
+		import _proxy {args[1]}
+	}
+	{args[0]}:443 {
+		import authelia {args[0]}
+		tls internal
+		import _proxy {args[1]}
+	}
+}
+
+# -------- proxies
+[% for p in proxies %]
+[% if p.authelia %]
+import authed [[p.host ]] [[p.target ]]:[[p.port ]]
+[% else %]
+import proxy [[p.host ]] [[p.target ]]:[[p.port ]]
+[% endif %]
+
+[% endfor %]
+
+# -------- duplicates
+[% for dup_host in proxies.duplicates %]
+[[dup_host ]]:80 {
+	respond "duplicate ingress.host" 500
+	log {
+		output stderr
+	}
+}
+[[dup_host ]]:443 {
+	tls internal
+	respond "duplicate ingress.host" 500
+	log {
+		output stderr
+	}
+}
+
+[% endfor %]
+
+# -------- default server
+:443 {
+	tls internal {
+		on_demand
+	}
+	header Content-Type text/html
+	respond 502 {
+		body <<ENDOFHTML
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>ingress list</title>
+    <style media="screen">
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>502 Bad Gateway</h1>
+	<p>No ingress found.</p>
+	<p>Here's a list of available ingresses:</p>
+    <ul>
+    [% for p in proxies %]
+	<li><a href="https://[[ p.host ]]">[[ p.host ]]</a>
+    [% endfor %]
+  </body>
+</html>
+ENDOFHTML
+		close
+	}
+}
