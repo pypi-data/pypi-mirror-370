@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: personnel-matching-data-process-algo-v2-prod
+  labels:
+    app: personnel-matching-data-process-algo-v2-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: personnel-matching-data-process-algo-v2-prod
+  template:
+    metadata:
+      labels:
+        app: personnel-matching-data-process-algo-v2-prod
+    spec:
+      containers:
+      - name: personnel-matching-data-process-algo-v2-service-prod
+        image: 172.22.121.50/personnel-matching/personnel_matching_data_process_algo_v2:v0.0.0
+        ports:
+        - containerPort: 10000
+        volumeMounts:
+          - name: volume-env
+            readOnly: true
+            mountPath: /workspace/.env
+            subPath: .env
+      volumes:
+        - name: volume-env
+          configMap:
+            name: personnel-matching-data-process-algo-v2-config-prod
+            optional: true
+            defaultMode: 420
+      imagePullSecrets:
+      - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: personnel-matching-data-process-algo-v2-service-prod
+spec:
+  type: ClusterIP
+  selector:
+    app: personnel-matching-data-process-algo-v2-prod
+  ports:
+    - protocol: TCP
+      port: 10000
+      targetPort: 10000

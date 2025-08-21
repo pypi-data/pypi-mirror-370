@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-process-task-dispatcher-dev
+  labels:
+    app: data-process-task-dispatcher-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-process-task-dispatcher-dev
+  template:
+    metadata:
+      labels:
+        app: data-process-task-dispatcher-dev
+    spec:
+      containers:
+      - name: data-process-task-dispatcher-service-dev
+        image: 172.22.121.50/personnel-matching/zwx/data-process-task-dispatcher:v0.0.1-beta.6
+        ports:
+        - containerPort: 10000
+        volumeMounts:
+          - name: volume-env
+            readOnly: true
+            mountPath: /workspace/.env
+            subPath: .env
+      volumes:
+        - name: volume-env
+          configMap:
+            name: data-process-task-dispatcher-config-dev
+            optional: true
+            defaultMode: 420
+      imagePullSecrets:
+      - name: harbor-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-process-task-dispatcher-service-dev
+spec:
+  type: NodePort
+  selector:
+    app: data-process-task-dispatcher-dev
+  ports:
+    - protocol: TCP
+      port: 10000
+      targetPort: 10000
