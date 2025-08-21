@@ -1,0 +1,155 @@
+# -*- coding: utf-8 -*-
+from .dxcontent import SerializeFolderToJson as BaseSerializer
+from Acquisition import aq_inner
+from design.plone.contenttypes.interfaces.unita_organizzativa import IUnitaOrganizzativa
+from design.plone.contenttypes.restapi.serializers.summary import (
+    DefaultJSONSummarySerializer,
+)
+from design.plone.contenttypes.restapi.serializers.summary import (
+    get_taxonomy_information,
+)
+from plone import api
+from plone.restapi.interfaces import ISerializeToJson
+from plone.restapi.interfaces import ISerializeToJsonSummary
+from plone.restapi.serializer.converters import json_compatible
+from zc.relation.interfaces import ICatalog
+from zope.component import adapter
+from zope.component import getMultiAdapter
+from zope.component import getUtility
+from zope.globalrequest import getRequest
+from zope.interface import implementer
+from zope.interface import Interface
+from zope.intid.interfaces import IIntIds
+from zope.security import checkPermission
+
+
+@implementer(ISerializeToJson)
+@adapter(IUnitaOrganizzativa, Interface)
+class UOSerializer(BaseSerializer):
+    def get_services(self):
+        """ """
+        catalog = getUtility(ICatalog)
+        intids = getUtility(IIntIds)
+        services = []
+        for attr in ["ufficio_responsabile", "area"]:
+            relations = catalog.findRelations(
+                dict(
+                    to_id=intids.getId(aq_inner(self.context)),
+                    from_attribute=attr,
+                )
+            )
+
+            for rel in relations:
+                obj = intids.queryObject(rel.from_id)
+                if (
+                    obj is not None
+                    and checkPermission("zope2.View", obj)  # noqa
+                    and obj.portal_type == "Servizio"  # noqa
+                ):
+                    summary = getMultiAdapter(
+                        (obj, getRequest()), ISerializeToJsonSummary
+                    )()
+                    services.append(summary)
+        return sorted(services, key=lambda k: k["title"])
+
+    def getChildrenUo(self):
+        res = []
+        children = self.context.listFolderContents(
+            contentFilter={"portal_type": "UnitaOrganizzativa"}
+        )
+        if not children:
+            return []
+
+        for child in children:
+            data = getMultiAdapter((child, self.request), ISerializeToJsonSummary)()
+            data.update(self.getAdditionalInfos(context=child))
+            res.append(json_compatible(data))
+        return res
+
+    def getParentUo(self):
+        parent = self.context.aq_parent
+        if parent.portal_type != "UnitaOrganizzativa":
+            return None
+
+        data = getMultiAdapter((parent, self.request), ISerializeToJsonSummary)()
+        data.update(self.getAdditionalInfos(context=parent))
+        return json_compatible(data)
+
+    def getAdditionalInfos(self, context):
+        return {
+            "city": getattr(context, "city", ""),
+            "zip_code": getattr(context, "zip_code", ""),
+            "street": getattr(context, "street", ""),
+            "contact_info": getattr(context, "contact_info", ""),
+        }
+
+    def getUOServiziDoveRivolgersi(self, UID):
+        """Returns list of servizio having reference to
+        current object in servizio.dove_rivolgersi field
+        """
+        catalog = api.portal.get_tool("portal_catalog")
+        query = {
+            "service_venue": UID,
+            "portal_type": ["Servizio"],
+            "sort_on": "sortable_title",
+            "sort_order": "ascending",
+        }
+
+        return [
+            getMultiAdapter((i, self.request), ISerializeToJsonSummary)()
+            for i in catalog(**query)
+        ]
+
+    def __call__(self, version=None, include_items=True):
+        self.index = "news_uo"
+        result = super(UOSerializer, self).__call__(
+            version=version, include_items=include_items
+        )
+
+        result["servizi_offerti"] = json_compatible(self.get_services())
+        result["uo_parent"] = json_compatible(self.getParentUo())
+        result["uo_children"] = json_compatible(self.getChildrenUo())
+        result["prestazioni"] = json_compatible(
+            self.getUOServiziDoveRivolgersi(result.get("UID", ""))
+        )
+
+        return result
+
+
+@implementer(ISerializeToJsonSummary)
+@adapter(IUnitaOrganizzativa, Interface)
+class UOJSONSummarySerializer(DefaultJSONSummarySerializer):
+    def __call__(self, force_images=True, **kwargs):
+        data = super().__call__(force_images=force_images, **kwargs)
+        fields = [
+            "contact_info",
+            "sede",
+        ]
+        for field in fields:
+            if field in ("contact_info", "sede"):
+                # XXX: in realta' qui andrebbe usato il serializer specifico per
+                #      i field relationfield, questo però richiede recuperare il
+                #      il field e il suo serializeadpater, al momento aggiungiamo
+                #      solo un controllo su relazioni non trovate
+                values = getattr(self.context, field, []) or []
+                data[field] = [val for val in json_compatible(values) if val]
+            else:
+                data[field] = getattr(self.context, field, "")
+
+        data["geolocation"] = self.getGeolocation()
+
+        get_taxonomy_information("tipologia_organizzazione", self.context, data)
+
+        data["image_caption"] = getattr(self.context, "image_caption", None)
+        data["preview_caption"] = getattr(self.context, "preview_caption", None)
+        return data
+
+    def getGeolocation(self):
+        longitude = 0
+        latitude = 0
+
+        if getattr(self.context, "geolocation", None):
+            longitude = getattr(self.context.geolocation, "longitude", 0)
+            latitude = getattr(self.context.geolocation, "latitude", 0)
+
+        return {"longitude": longitude, "latitude": latitude}
