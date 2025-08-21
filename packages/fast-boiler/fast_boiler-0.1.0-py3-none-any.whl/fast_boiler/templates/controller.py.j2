@@ -1,0 +1,39 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.repositories.{{ name }}_repo import {{ ClassName }}Repository
+from app.services.{{ name }}_service import {{ ClassName }}Service
+from app.schemas.{{ name }}_schema import {{ ClassName }}Create, {{ ClassName }}Response
+
+router = APIRouter(prefix="/{{ plural_name }}", tags=["{{ plural_name }}"])
+
+# UPDATED: The dependency injection pattern remains the same, but get_db is now async
+def get_{{ name }}_service(db: AsyncSession = Depends(get_db)) -> {{ ClassName }}Service:
+    repo = {{ ClassName }}Repository(db)
+    return {{ ClassName }}Service(repo)
+
+# UPDATED: All endpoints are now async
+@router.post("/", response_model={{ ClassName }}Response, status_code=201)
+async def create_{{ name }}(
+    payload: {{ ClassName }}Create,
+    service: {{ ClassName }}Service = Depends(get_{{ name }}_service)
+):
+    try:
+        # UPDATED: await the service call
+        return await service.create_{{ name }}(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/{{ '{' }}{{ name }}_id{{ '}' }}", response_model={{ ClassName }}Response)
+async def get_{{ name }}_by_id(
+    {{ name }}_id: int,
+    service: {{ ClassName }}Service = Depends(get_{{ name }}_service)
+):
+    try:
+        db_{{ name }} = await service.get_{{ name }}_by_id({{ name }}_id)
+        if db_{{ name }} is None:
+            raise HTTPException(status_code=404, detail="{{ ClassName }} not found")
+        return db_{{ name }}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
