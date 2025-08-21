@@ -1,0 +1,331 @@
+This guide provides comprehensive documentation for using the Fraim command-line interface to run security analysis workflows.
+
+## Overview
+
+The Fraim CLI is your primary interface for running AI-powered security analysis on code repositories and local directories. It supports multiple input sources, workflows, and output formats.
+
+## Basic Syntax
+
+```bash
+fraim [GLOBAL_OPTIONS] WORKFLOW [WORKFLOW_OPTIONS]
+```
+
+## Quick Start Examples
+
+### Analyze a Git Repository
+```bash
+# Analyze with specific workflows
+fraim code --location https://github.com/username/repository-name
+```
+
+### Analyze Local Directory
+```bash
+# Analyze specific directory
+fraim code --location /path/to/your/project
+```
+
+## Workflows
+Specify which security analysis workflows to run.
+
+**Available workflows:**
+- `code` - Source code security analysis
+- `iac` - Infrastructure as Code analysis (in development)
+
+**Examples:**
+```bash
+fraim code --location .           # Run code analysis on the path
+fraim iac --location .            # Run IaC analysis on the path
+```
+
+## Command-Line Options
+
+### Input Sources
+
+#### `--location <URL>`
+Specify a Git repository URL to clone and analyze. Fraim will automatically clone the repository to a temporary directory and analyze its contents.
+
+**Examples:**
+```bash
+fraim code --location https://github.com/microsoft/typescript
+fraim code --location git@github.com:company/private-repo.git
+```
+
+#### `--location <DIRECTORY>`
+Analyze a local directory or file path. This is useful for analyzing code that's already on your local system.
+
+**Examples:**
+```bash
+fraim code --location .                    # Current directory
+fraim code --location /Users/dev/myproject # Absolute path
+fraim code --location ../sibling-project   # Relative path
+```
+
+### File Filtering
+
+#### `--globs <PATTERN_LIST>`
+Specify custom file patterns to include in the analysis. If not provided, Fraim uses default patterns based on the selected workflows.
+
+**Examples:**
+```bash
+# Only analyze Python files
+fraim code --location . --globs "*.py"
+
+# Analyze multiple file types
+fraim code --location . --globs "*.py" "*.js" "*.ts"
+
+# Include files in specific directories
+fraim code --location . --globs "src/**/*.py" "tests/**/*.py"
+```
+
+**Default patterns by workflow:**
+- **Code workflow**: `*.py`, `*.js`, `*.ts`, `*.java`, `*.cpp`, `*.c`, `*.go`, `*.rb`, `*.php`, `*.swift`, `*.rs`, `*.kt`, `*.scala`
+- **IAC workflow**: `*.tf`, `*.yml`, `*.yaml`, `*.json` (Terraform, Kubernetes, etc.)
+
+#### `--limit <NUMBER>`
+Limit the number of files to analyze. Useful for testing or when working with very large repositories.
+
+**Examples:**
+```bash
+fraim code --location . --limit 50        # Analyze only first 50 matching files
+```
+
+### AI Model Configuration
+
+#### `--model <MODEL_NAME>`
+Specify the AI model to use for analysis. Fraim supports multiple model providers through [LiteLLM](https://docs.litellm.ai/docs/providers).
+
+**Default:** `gemini/gemini-2.5-flash`
+
+**Examples:**
+```bash
+# Use Google Gemini (default)
+fraim --model gemini/gemini-2.5-flash code --location .
+
+# Use OpenAI GPT-4
+fraim --model gpt-4 code --location .
+
+# Use OpenAI GPT-3.5 Turbo
+fraim --model gpt-3.5-turbo code --location .
+
+# Use Claude
+fraim --model claude-3-sonnet-20240229 code --location .
+```
+
+### Performance Configuration
+
+#### `--chunk-size <NUMBER>`
+Set the number of lines per chunk when processing large files. Smaller chunks provide more granular analysis but may increase processing time.
+
+**Default:** `500`
+
+**Examples:**
+```bash
+fraim code --location . --chunk-size 250   # Smaller chunks, more detailed analysis
+fraim code --location . --chunk-size 1000  # Larger chunks, faster processing
+```
+
+**Guidelines:**
+- **Detailed analysis**: 100-300 lines
+- **Balanced**: 400-600 lines (default)
+- **Performance**: 800-1200 lines
+
+#### `--max-iterations <NUMBER>`
+Set the maximum number of tool calling iterations for vulnerability analysis. Higher values allow for more thorough analysis of complex issues.
+
+**Default:** `50`
+
+**Examples:**
+```bash
+fraim --max-iterations 25 code --location .   # Faster, less thorough
+fraim --max-iterations 100 code --location .  # Slower, more thorough
+```
+
+### Quality Control
+
+#### `--confidence <NUMBER>`
+Set the minimum confidence threshold (1-10) for filtering findings. Higher values reduce false positives but may miss some issues.
+
+**Default:** `7`
+
+**Examples:**
+```bash
+fraim --confidence 5 code --location .    # Include more potential issues
+fraim --confidence 9 code --location .    # Only high-confidence findings
+```
+
+**Guidelines:**
+- **1-3**: Include all potential findings (high false positive rate)
+- **4-6**: Include likely findings (moderate false positive rate)
+- **7-8**: Include probable findings (balanced - default range)
+- **9-10**: Include only very confident findings (low false positive rate)
+
+### Output Configuration
+
+#### `--output <PATH>`
+Specify a custom path for output files. If not provided, Fraim uses a default output directory.
+
+**Default:** `fraim_output/` in the project directory
+
+**Examples:**
+```bash
+fraim --output /tmp/fraim-results/ code --location .
+fraim --output ./security-reports/ code --location .
+```
+
+**Output files:**
+- `fraim_report_[repo]_[timestamp].sarif` - SARIF JSON report
+- `fraim_report_[repo]_[timestamp].html` - HTML report
+
+### Observability
+
+#### `--observability <BACKEND_LIST>`
+Enable LLM observability backends for monitoring and analyzing AI model usage.
+
+**Available backends:**
+- `langfuse` - [Langfuse](https://langfuse.com/) observability platform
+
+**Examples:**
+```bash
+fraim --observability langfuse code --location .
+```
+
+**Requirements:**
+- Langfuse: Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` environment variables
+
+**Instructions:**
+📖 For detailed setup instructions, see the [Observability Guide](observability.md).
+
+### Debugging
+
+#### `--debug`
+Enable debug logging for troubleshooting and development. This provides detailed information about the analysis process.
+
+**Example:**
+```bash
+fraim --debug code --location .
+```
+
+**Debug output includes:**
+- File discovery and filtering
+- Chunk processing progress
+- AI model interactions
+- Error details and stack traces
+
+## Environment Variables
+
+Fraim requires API keys for AI model providers. Set these in your environment or `.env` file:
+
+### Google Gemini
+```bash
+export GEMINI_API_KEY="your_api_key_here"
+```
+
+### OpenAI
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+```
+
+### Langfuse Observability
+```bash
+export LANGFUSE_PUBLIC_KEY="your_public_key"
+export LANGFUSE_SECRET_KEY="your_secret_key"
+export LANGFUSE_HOST="your_langfuse_host"
+```
+
+## Advanced Usage Examples
+
+### Comprehensive Analysis
+```bash
+# Code analysis with custom settings
+fraim --model gemini/gemini-2.5-flash \
+      --confidence 6 \
+      --max-iterations 75 \
+      --observability langfuse \
+      --debug \
+      code --location https://github.com/company/app \
+      --chunk-size 600
+```
+
+### CI/CD Integration
+```bash
+# Optimized for CI/CD pipelines
+fraim --confidence 8 \
+      --output ./security-reports/ \
+      code --location . \
+      --limit 500
+```
+
+### Large Codebase Analysis
+```bash
+# Settings for analyzing large repositories
+fraim --confidence 7 \
+      --max-iterations 30 \
+      code --location https://github.com/large/project \
+      --chunk-size 1000
+```
+
+### Specific File Analysis
+```bash
+# Focus on specific file types and directories
+fraim --confidence 6 \
+      --debug \
+      code --location . \
+      --globs "src/**/*.py" "api/**/*.py"
+```
+
+## Understanding Output
+
+Fraim generates two types of reports:
+
+### SARIF Report (.sarif)
+- Industry-standard format for security analysis results
+- Machine-readable JSON format
+- Compatible with security platforms and CI/CD tools
+- Contains detailed vulnerability information, locations, and metadata
+
+### HTML Report (.html)
+- Human-readable report with rich formatting
+- Interactive elements for browsing findings
+- Code snippets with highlighted vulnerabilities
+- Summary statistics and charts
+
+## Troubleshooting
+
+### Common Issues
+
+**"No input specified" error:**
+```bash
+# ❌ Missing input
+fraim code
+
+# ✅ Correct usage
+fraim code --location .
+```
+
+**"API key not found" error:**
+```bash
+# Set your API key
+export GEMINI_API_KEY="your_key_here"
+fraim code --location .
+```
+
+**Out of memory errors:**
+```bash
+# Reduce chunk size
+fraim code --location . --chunk-size 200
+```
+
+**No files found:**
+```bash
+# Check file patterns
+fraim --debug code --location . --globs "*.py"
+```
+
+### Performance Tips
+
+1. **Start small**: Use `--limit` to test on a subset of files first
+2. **Optimize chunks**: Adjust `--chunk-size` based on your system capabilities
+3. **Balance chunks**: Smaller `--chunk-size` for accuracy, larger for speed
+4. **Filter confidence**: Use higher `--confidence` to reduce processing time
+5. **Monitor resources**: Use system monitoring to optimize settings
+---
