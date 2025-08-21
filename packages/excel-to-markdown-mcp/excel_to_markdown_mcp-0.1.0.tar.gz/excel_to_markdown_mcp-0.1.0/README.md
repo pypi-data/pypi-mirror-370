@@ -1,0 +1,95 @@
+# Excel转Markdown
+
+这是一个基于Python的MCP (Model Context Protocol) 服务器，用于将Excel文件转换为Markdown格式。
+
+## 功能特性
+
+- 🚀 直接使用Python的`markitdown`库，支持Excel处理
+- 📊 支持多种Excel格式 (.xlsx, .xls)
+- 🗂️ 支持多工作表转换
+- 🔧 简单的API接口
+- 🛡️ 完整的错误处理
+
+## 安装和使用
+
+### 1. 安装依赖
+
+```bash
+cd /Users/fengjinchao/Desktop/mcp/skills/python/excel-to-markdown
+uv sync
+```
+
+### 2. Claude配置
+
+在Claude的MCP配置中添加：
+
+```json
+{
+  "excel-to-markdown-python": {
+    "name": "Excel转markdown(Python)",
+    "type": "stdio",
+    "description": "Python版本的Excel转markdown工具，支持多工作表",
+    "isActive": true,
+    "command": "uv",
+    "args": ["--directory", "/Users/fengjinchao/Desktop/mcp/skills/python/excel-to-markdown", "run", "excel-to-markdown-mcp"]
+  }
+}
+```
+
+### 3. 使用工具
+
+#### 基本用法
+```json
+{
+  "name": "xlsx-to-markdown",
+  "arguments": {
+    "filepath": "/path/to/your/spreadsheet.xlsx"
+  }
+}
+```
+
+#### 指定工作表
+```json
+{
+  "name": "xlsx-to-markdown", 
+  "arguments": {
+    "filepath": "/path/to/your/spreadsheet.xlsx",
+    "sheet_name": "Sheet1"
+  }
+}
+```
+
+## 支持的文件格式
+
+- `.xlsx` - Excel 2007+ 格式
+- `.xls` - Excel 97-2003 格式
+
+## Python版本的优势
+
+1. **更强大的Excel支持**: Python生态系统有更好的Excel处理库
+2. **更好的性能**: 避免了子进程调用的开销
+3. **更简洁的代码**: 直接API调用，无需复杂的进程管理
+4. **更好的错误处理**: Python异常处理机制更完善
+5. **扩展性更强**: 易于添加新功能（如工作表选择、格式选项等）
+
+## 代码结构
+
+```
+excel-to-markdown/
+├── pyproject.toml               # 项目配置
+├── README.md                   # 说明文档
+└── excel_to_markdown_mcp/      # 主要代码
+    ├── __init__.py            # 包初始化
+    └── server.py              # MCP服务器实现
+```
+
+## vs TypeScript 版本
+
+| 特性 | Python版本 | TypeScript版本 |
+|------|-----------|---------------|
+| 代码行数 | ~120行 | ~150+行 |
+| 依赖安装 | `uv sync` | `npm install + uv sync` |
+| 构建步骤 | 无需构建 | `npm run build` |
+| Excel支持 | 原生支持 | 通过子进程 |
+| 错误处理 | Python异常 | 复杂的进程错误处理 |
+| 维护性 | 更简单 | 更复杂 |
