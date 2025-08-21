@@ -1,0 +1,1 @@
+- Unit tests of the connection and authorization should be added
