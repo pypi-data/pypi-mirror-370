@@ -1,0 +1,2 @@
+# lcn
+Learning Compositional Negation
