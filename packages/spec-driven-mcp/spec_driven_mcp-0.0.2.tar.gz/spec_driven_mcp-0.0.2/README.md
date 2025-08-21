@@ -1,0 +1,142 @@
+# Spec-Driven MCP Server
+
+Your living source-of-truth for product & engineering specs — built for **VS Code + AI agents**.
+
+**Markdown specs → SQLite → dashboard → MCP tools.**
+
+---
+
+## Why use this?
+
+* Centralize **requirements**, **acceptance criteria**, and **non-functional** specs in one place.
+* Track verification with **pass/fail events**; roll-ups show what’s **VERIFIED / FAILING / PARTIAL / UNTESTED**.
+* Give AI agents safe MCP access to **read, search, edit, and record verification**.
+* Lightweight **HTML dashboard** (Tailwind + htmx/Alpine) for quick browsing and edits.
+
+---
+
+## Quick start
+
+### 1) Install the tool
+
+We recommend **pipx** so the CLI is on your PATH without virtualenv chores:
+
+```bash
+pipx install spec-driven-mcp
+```
+
+### 2) Add this to `.vscode/mcp.json`:
+
+```jsonc
+{
+  "servers": {
+    "specs-mcp": {
+      "type": "stdio",
+      "command": "spec-mcp"
+    }
+  }
+}
+```
+
+Open Copilot Chat → Agent mode, start the server from **MCP Servers** and use the tools/resources.
+
+---
+
+
+## Defaults that "just work"
+
+* **Database location:**
+  - **Project-local:** `<workspace-root>/.spec-mcp/specs.db` (when VS Code workspace detected)
+  - **Platform-native fallback:** Uses system user data directory when no workspace
+    - **Windows:** `%LOCALAPPDATA%\SpecMCP\spec-mcp\specs.db`
+    - **macOS:** `~/Library/Application Support/SpecMCP/spec-mcp/specs.db`
+    - **Linux:** `~/.local/state/spec-mcp/specs.db` (follows XDG spec)
+  
+  Add project-local path to `.gitignore`:
+  ```
+  # Spec MCP
+  .spec-mcp/
+  ```
+
+You can manage the server from VS Code’s MCP view (start/stop/restart).
+
+* **Zero configuration:** Works in any directory without setup files or environment variables.o** and includes a **one-click install** link. It also bakes in the DB path defaults you asked for.
+
+**Running outside a VS Code workspace?**
+If no workspace root is available, the server uses a per-user application data directory for `specs.db`.
+
+---
+
+## What you can do (MCP tools & resources)
+
+### Tools
+
+* `create_feature(feature_key, name)` — create a new feature
+* `create_spec(spec_id, feature_key, kind, statement, parent_id?)` — create requirements/ACs/NFRs
+* `record_verification(spec_id, outcome, source?, notes?)` — append pass/fail and update roll-ups
+* `update_spec(spec_id, fields…)` — edit title/statement/metadata
+* `search_specs(status?, kind?, feature?)` — filter list
+* `dashboard_status()` — check if dashboard is running
+* `start_dashboard(host?, port?)` — start/restart web dashboard
+
+### Resources
+
+* `spec://{id}` — full spec (current status + recent events)
+* `feature://{key}` — feature summary with roll-ups
+
+---
+
+## Accessing the Dashboard
+
+The web dashboard **starts automatically** when you run the MCP server! It's available at:
+**http://localhost:8765**
+
+You can also:
+- Check status: Ask Copilot "What's the dashboard status?" or use `dashboard_status()`
+- Restart it: Use `start_dashboard()` if needed
+
+---
+
+## Status (how we compute it)
+
+* **VERIFIED** — all leaves passed
+* **FAILING** — at least one failing leaf
+* **PARTIAL** — some passed, some untested
+* **UNTESTED** — no verification yet
+
+Leaves = ACs and NFRs; requirements roll up from their children.
+
+---
+
+## Integrating tests
+
+From your test runner (or CI), call the MCP tool after a check:
+
+```python
+# Pseudocode with your MCP client
+call_tool("record_verification", {
+  "spec_id": "AC-LOGIN-001",
+  "outcome": "PASSED",
+  "source": "pytest::test_login"
+})
+```
+
+---
+
+## Where data lives
+
+* **Project-local (default):** `./.spec-mcp/specs.db`
+* **User-level fallback (no workspace):** a platform-native per-user data directory
+
+---
+
+## Notes for VS Code users
+
+* You can add servers **per-workspace** (`.vscode/mcp.json`) or **globally** in your user profile.
+* VS Code supports **stdio**, **streamable HTTP**, and **SSE** transports. This server uses **stdio** by default.
+
+---
+
+## License
+
+MIT
