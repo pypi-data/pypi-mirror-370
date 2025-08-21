@@ -1,0 +1,101 @@
+# flake8: noqa
+
+# import all models into this package
+# if you have many models here with many references from one model to another this may
+# raise a RecursionError
+# to avoid this, import only the models that you directly need like:
+# from from eis.tenant.model.pet import Pet
+# or import this package, but before doing it, use:
+# import sys
+# sys.setrecursionlimit(n)
+
+from eis.tenant.model.assign_user_roles_request_dto import AssignUserRolesRequestDto
+from eis.tenant.model.assign_user_roles_response_class import AssignUserRolesResponseClass
+from eis.tenant.model.batch_delete_request_dto import BatchDeleteRequestDto
+from eis.tenant.model.batch_delete_response_class import BatchDeleteResponseClass
+from eis.tenant.model.create_custom_schema_request_dto import CreateCustomSchemaRequestDto
+from eis.tenant.model.create_custom_schema_response_class import CreateCustomSchemaResponseClass
+from eis.tenant.model.create_dashboard_group_request_dto import CreateDashboardGroupRequestDto
+from eis.tenant.model.create_dashboard_group_response_class import CreateDashboardGroupResponseClass
+from eis.tenant.model.create_dashboard_request_dto import CreateDashboardRequestDto
+from eis.tenant.model.create_dashboard_response_class import CreateDashboardResponseClass
+from eis.tenant.model.create_data_report_request_dto import CreateDataReportRequestDto
+from eis.tenant.model.create_data_report_response_class import CreateDataReportResponseClass
+from eis.tenant.model.create_organization_migration_request_dto import CreateOrganizationMigrationRequestDto
+from eis.tenant.model.create_organization_migration_response_class import CreateOrganizationMigrationResponseClass
+from eis.tenant.model.create_resources_migration_request_dto import CreateResourcesMigrationRequestDto
+from eis.tenant.model.create_tenant_request_dto import CreateTenantRequestDto
+from eis.tenant.model.custom_field_dto import CustomFieldDto
+from eis.tenant.model.custom_schema_class import CustomSchemaClass
+from eis.tenant.model.db_config_dto import DBConfigDto
+from eis.tenant.model.dashboard_class import DashboardClass
+from eis.tenant.model.dashboard_group_class import DashboardGroupClass
+from eis.tenant.model.data_report_class import DataReportClass
+from eis.tenant.model.data_report_filter_class import DataReportFilterClass
+from eis.tenant.model.data_report_filter_dto import DataReportFilterDto
+from eis.tenant.model.data_report_filter_single_value_dto import DataReportFilterSingleValueDto
+from eis.tenant.model.data_report_filter_value_dto import DataReportFilterValueDto
+from eis.tenant.model.delete_response_class import DeleteResponseClass
+from eis.tenant.model.disable_users_request_dto import DisableUsersRequestDto
+from eis.tenant.model.disable_users_response_class import DisableUsersResponseClass
+from eis.tenant.model.enable_users_request_dto import EnableUsersRequestDto
+from eis.tenant.model.enable_users_response_class import EnableUsersResponseClass
+from eis.tenant.model.format_tenant_settings_class import FormatTenantSettingsClass
+from eis.tenant.model.get_custom_schema_response_class import GetCustomSchemaResponseClass
+from eis.tenant.model.get_dashboard_group_response_class import GetDashboardGroupResponseClass
+from eis.tenant.model.get_dashboard_response_class import GetDashboardResponseClass
+from eis.tenant.model.get_data_report_response_class import GetDataReportResponseClass
+from eis.tenant.model.get_embedded_url_response_class import GetEmbeddedUrlResponseClass
+from eis.tenant.model.get_organization_migration_response_class import GetOrganizationMigrationResponseClass
+from eis.tenant.model.get_organization_response_class import GetOrganizationResponseClass
+from eis.tenant.model.get_settings_response_class import GetSettingsResponseClass
+from eis.tenant.model.get_user_response_class import GetUserResponseClass
+from eis.tenant.model.initial_tenant_config_class import InitialTenantConfigClass
+from eis.tenant.model.inline_response200 import InlineResponse200
+from eis.tenant.model.inline_response503 import InlineResponse503
+from eis.tenant.model.invite_class import InviteClass
+from eis.tenant.model.invite_org_request_dto_rest import InviteOrgRequestDtoRest
+from eis.tenant.model.invite_user_request_dto_rest import InviteUserRequestDtoRest
+from eis.tenant.model.invite_user_response_class import InviteUserResponseClass
+from eis.tenant.model.invite_users_request_dto_rest import InviteUsersRequestDtoRest
+from eis.tenant.model.invite_users_response_class import InviteUsersResponseClass
+from eis.tenant.model.link_user_with_partner_request_dto_rest import LinkUserWithPartnerRequestDtoRest
+from eis.tenant.model.link_user_with_partner_response_class import LinkUserWithPartnerResponseClass
+from eis.tenant.model.list_custom_schemas_response_class import ListCustomSchemasResponseClass
+from eis.tenant.model.list_dashboard_groups_response_class import ListDashboardGroupsResponseClass
+from eis.tenant.model.list_dashboards_response_class import ListDashboardsResponseClass
+from eis.tenant.model.list_data_reports_response_class import ListDataReportsResponseClass
+from eis.tenant.model.list_invites_response_class import ListInvitesResponseClass
+from eis.tenant.model.list_org_invitations_response_class import ListOrgInvitationsResponseClass
+from eis.tenant.model.list_organization_migrations_response_class import ListOrganizationMigrationsResponseClass
+from eis.tenant.model.list_organizations_response_class import ListOrganizationsResponseClass
+from eis.tenant.model.list_roles_response_class import ListRolesResponseClass
+from eis.tenant.model.list_users_response_class import ListUsersResponseClass
+from eis.tenant.model.org_invitation_class import OrgInvitationClass
+from eis.tenant.model.org_invitation_response_class import OrgInvitationResponseClass
+from eis.tenant.model.organization_class import OrganizationClass
+from eis.tenant.model.organization_migration_class import OrganizationMigrationClass
+from eis.tenant.model.permission_class import PermissionClass
+from eis.tenant.model.publish_dashboard_request_dto import PublishDashboardRequestDto
+from eis.tenant.model.re_invite_org_request_dto import ReInviteOrgRequestDto
+from eis.tenant.model.revert_analysis_request_dto import RevertAnalysisRequestDto
+from eis.tenant.model.revert_organization_migration_request_dto import RevertOrganizationMigrationRequestDto
+from eis.tenant.model.revert_organization_migration_response_class import RevertOrganizationMigrationResponseClass
+from eis.tenant.model.role_class import RoleClass
+from eis.tenant.model.run_data_report_request_dto import RunDataReportRequestDto
+from eis.tenant.model.run_data_report_response_class import RunDataReportResponseClass
+from eis.tenant.model.set_setting_request_dto import SetSettingRequestDto
+from eis.tenant.model.subscription_class import SubscriptionClass
+from eis.tenant.model.tenant_admin_user_dto import TenantAdminUserDto
+from eis.tenant.model.tenant_settings_class import TenantSettingsClass
+from eis.tenant.model.update_custom_schema_request_dto import UpdateCustomSchemaRequestDto
+from eis.tenant.model.update_custom_schema_response_class import UpdateCustomSchemaResponseClass
+from eis.tenant.model.update_dashboard_group_request_dto import UpdateDashboardGroupRequestDto
+from eis.tenant.model.update_dashboard_group_response_class import UpdateDashboardGroupResponseClass
+from eis.tenant.model.update_dashboard_request_dto import UpdateDashboardRequestDto
+from eis.tenant.model.update_dashboard_response_class import UpdateDashboardResponseClass
+from eis.tenant.model.update_data_report_request_dto import UpdateDataReportRequestDto
+from eis.tenant.model.update_data_report_response_class import UpdateDataReportResponseClass
+from eis.tenant.model.update_organization_request_dto_rest import UpdateOrganizationRequestDtoRest
+from eis.tenant.model.update_organization_response_class import UpdateOrganizationResponseClass
+from eis.tenant.model.user_class import UserClass
