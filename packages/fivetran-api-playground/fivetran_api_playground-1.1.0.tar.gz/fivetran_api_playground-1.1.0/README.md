@@ -1,0 +1,483 @@
+# Fivetran API Playground
+[![Downloads](https://static.pepy.tech/badge/fivetran-api-playground)](https://pepy.tech/project/fivetran-api-playground)
+
+The Fivetran API Playground enables you to explore various sample API endpoints on your local machine, helping you better understand the complexities of real-world APIs. It serves as a hands-on learning tool for building connectors, allowing you to write custom Python code within [Fivetran's](https://www.fivetran.com/) secure cloud environment. For more information, see our [Connector SDK documentation](https://fivetran.com/docs/connectors/connector-sdk).
+
+## **Install**
+
+    pip install fivetran-api-playground
+
+## **Requirements**
+- Python ≥3.9 and ≤3.12
+- Operating System:
+    - Windows 10 or later
+    - MacOS 13 (Ventura) or later
+    - Linux: Distributions such as Ubuntu 20.04 or later, Debian 10 or later, or Amazon Linux 2 or later
+
+## Usage
+To start the API, run the following command:
+
+```bash
+playground start  # starts the server on 5001 port by default
+
+playground start --port 
+# starts the server on the specified port
+```
+
+You will see a message like:
+```
+Starting Local API on port 5001 ...
+--------------------------------------------------------------------------------------------------------------------------------------------
+Pagination Type                | Endpoint                                          
+--------------------------------------------------------------------------------------------------------------------------------------------
+Next Page URL Pagination       | GET http://127.0.0.1:5001/pagination/next_page_url
+Page Number Pagination         | GET http://127.0.0.1:5001/pagination/page_number  
+Offset Pagination              | GET http://127.0.0.1:5001/pagination/offset       
+Keyset Pagination              | GET http://127.0.0.1:5001/pagination/keyset       
+--------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------
+API Endpoint Type              | Endpoint                                          
+--------------------------------------------------------------------------------------------------------------------------------------------
+Export with CSV                | GET http://127.0.0.1:5001/export/csv              
+--------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------
+Authentication Endpoint Type   | Endpoint                                           | Credentials                                       
+--------------------------------------------------------------------------------------------------------------------------------------------
+Http Basic Auth                | GET http://127.0.0.1:5001/auth/http_basic          | Username: 4779a@example.com Password: 673727a8    
+HTTP Bearer                    | GET http://127.0.0.1:5001/auth/http_bearer         | Bearer Token: 69574aad-4d3f-4fb5-9903-caba56ad9de1
+Auth API Key                   | GET http://127.0.0.1:5001/auth/api_key             | API Key: 3e4cdf4d-f81c-4ee8-8218-3fd0cb22aeae     
+Session Token Auth Login       | GET http://127.0.0.1:5001/auth/session_token/login | Username: e7ccb@example.com  Password: 3c89b9bb2a 
+Session Token Auth Data        | GET http://127.0.0.1:5001/auth/session_token/data  | Use Token Received from Login endpoint  
+--------------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------
+Cursor Endpoint Type           | Endpoint                                          
+--------------------------------------------------------------------------------------------------------------------------------------------
+Companies Cursor               | GET http://127.0.0.1:5001/cursors/companies       
+Departments by Company Cursor  | GET http://127.0.0.1:5001/cursors/<company_id>/departments          
+--------------------------------------------------------------------------------------------------------------------------------------------
+You can read about the API documentation for each endpoint on: 
+https://pypi.org/project/fivetran-api-playground/
+--------------------------------------------------------------------------------------------------------------------------------------------
+For your observability the API requests will be logged here!
+Keep this process up and running until you finish trying out the API.
+
+Press CTRL+C to quit
+```
+
+## API Endpoints
+There are four types of pagination available, allowing you to fetch up to 200 dynamically-generated records with dummy data each time the server is run locally using the `playground start` command.
+
+### 1. Next Page URL Pagination
+- **Endpoint:** `/pagination/next_page_url`
+- **Method:** `GET`
+- **Query Parameters:**
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `order_by`     | string   | No       | Parameter to order by. Allowed values: `createdAt`, `updatedAt`. Default: `updatedAt`. |
+  | `order_type`   | string   | No       | Sorting order. Allowed values: `asc`, `desc`. Default: `asc`. |
+  | `per_page`     | integer  | No       | Number of items per page (1-50). Default: `10`.       |
+  | `updated_since`| string   | No       | Return items updated since this timestamp. Format: `YYYY-MM-DDTHH:MM:SSZ`. |
+- **Response:**
+  - `data`: Array of items for the current page.
+  - `total_items`: Total number of items after filtering.
+  - `page`: Current page number.
+  - `per_page`: Number of items per page.
+  - `next_page_url`: URL for the next page, if available.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/pagination/next_page_url
+    ```
+- **Sample Response:**
+    ```
+    {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+      "total_items": 200,
+      "page": 1,
+      "per_page": 10,
+      "next_page_url": "http://127.0.0.1:5001/pagination/next_page_url?page=2&per_page=10&order_by=updatedAt&order_type=asc"
+    }
+    ```
+
+### 2. PAGE Number Pagination
+- **Endpoint:** `/pagination/page_number`
+- **Method:** `GET`
+- **Query Parameters:**
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `order_by`     | string   | No       | Parameter to order by. Allowed values: `createdAt`, `updatedAt`. Default: `updatedAt`. |
+  | `order_type`   | string   | No       | Sorting order. Allowed values: `asc`, `desc`. Default: `asc`. |
+  | `per_page`     | integer  | No       | Number of items per page (1-50). Default: `10`.       |
+  | `page`         | integer  | No       | Page number to retrieve (1 or higher). Default: `1`.   |
+  | `updated_since`| string   | No       | Return items updated since this timestamp. Format: `YYYY-MM-DDTHH:MM:SSZ`. |
+- **Response:**
+  - `data`: Array of items for the current page.
+  - `page`: Current page number.
+  - `page_size`: Number of items per page.
+  - `total_pages`: Total number of pages.
+  - `total_items`: Total number of items.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/pagination/page_number
+    ```
+- **Sample Response:**
+    ```
+    {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+      "page": 1,
+      "page_size": 10,
+      "total_pages": 20,
+      "total_items": 200
+    }
+    ```
+
+### 3. Offset Pagination
+- **Endpoint:** `/pagination/offset`
+- **Method:** `GET`
+- **Query Parameters:**
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `order_by`     | string   | No       | Parameter to order by. Allowed values: `createdAt`, `updatedAt`. Default: `updatedAt`. |
+  | `order_type`   | string   | No       | Sorting order. Allowed values: `asc`, `desc`. Default: `asc`. |
+  | `limit`        | integer  | No       | Number of items to return (1-50). Default: `10`.      |
+  | `offset`       | integer  | No       | Number of items to skip before starting to collect the result set. Default: `0`. |
+  | `updated_since`| string   | No       | Return items updated since this timestamp. Format: `YYYY-MM-DDTHH:MM:SSZ`. |
+- **Response:**
+  - `data`: Array of items retrieved based on limit and offset.
+  - `offset`: The offset used in the request.
+  - `limit`: The limit used in the request.
+  - `total`: Total number of items after filtering.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/pagination/offset
+    ```
+- **Sample Response:**
+    ```
+    {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+      "offset": 0,
+      "limit": 10,
+      "total": 200
+    }
+    ```
+
+### 4. Keyset Pagination
+- **Endpoint:** `/pagination/keyset`
+- **Method:** `GET`
+- **Query Parameters:**
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `scroll_param` | string   | No       | Base64 encoded timestamp to fetch items after this timestamp. |
+  | `updated_since`| string   | No       | Return items updated since this timestamp. Format: `YYYY-MM-DDTHH:MM:SSZ`. |
+- **Response:**
+  - `data`: Array of items retrieved based on keyset pagination.
+  - `total_count`: Total number of items after filtering.
+  - `scroll_param`: Base64 encoded parameter for the next page, if available.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/pagination/keyset
+    ```
+- **Sample Response:**
+    ```
+    {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+      "scroll_param": "MjAyNC0wOS0yNFQxNDozMTozN1o="
+    }
+    ```
+
+## Export Endpoints
+There is one type of export available, allowing you to fetch up to 200 dynamically-generated records with dummy data each time the server is run locally using the `playground start` command.
+### 1. Export CSV
+- **Endpoint:** `/export/csv`
+- **Method:** `GET`
+- **Response:**
+  - CSV file 
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/export/csv/
+    ```
+- **Sample Response:**
+    ```
+    CSV File
+    ```
+
+## Auth Endpoints
+There are following type of auth endpoints available, allowing you to fetch up to 20 dynamically-generated records with dummy data each time the server is run locally using the `playground start` command.
+>Note: The Auth credentials are dynamic and are displayed in the log message each time the server is run locally using the `playground start` command.
+
+### 1. Http Basic Auth
+- **Endpoint:** `/auth/http_basic`
+- **Method:** `GET`
+- **Request Headers:**
+  - `Authorization: Basic <Base64Encoded(YOUR_USERNAME:YOUR_PASSWORD)>`
+- **Response:**
+  - `data`: Array of items retrieved.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/auth/http_basic -H "Authorization: Basic DN45HBWEDN3ECSAET5VSDVSDVSDS32ECSDCASC="
+    ```
+- **Sample Response:**
+    ```
+        {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+    }
+    ```
+  
+### 2. Http Bearer Auth
+- **Endpoint:** `/auth/http_bearer`
+- **Method:** `GET`
+- **Request Headers:**
+  - `Authorization: Bearer <YOUR_BEARER_TOKEN>`
+- **Response:**
+  - `data`: Array of items retrieved.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/auth/http_bearer -H "Authorization: Bearer D4DV3RVSDVY5CSAETXBsZS5E3RFDSCSDCDSCFDE4="
+    ```
+- **Sample Response:**
+    ```
+        {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+    }
+    ```
+
+### 3. API Key Auth
+- **Endpoint:** `/auth/api_key`
+- **Method:** `GET`
+- **Request Headers:**
+  - `Authorization: apiKey <YOUR_API_KEY>`
+- **Response:**
+  - `data`: Array of items retrieved.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/auth/api_key -H "Authorization: apiKey D4CVE3MDlA23DCCSAETXBsZS5jb2063VERSCI4Y23RVSD="
+    ```
+- **Sample Response:**
+    ```
+        {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+    }
+    ```
+  
+### 4. Session Token Auth
+#### Login Endpoint
+- **Endpoint:** `/auth/session_token/login`
+- **Method:** `POST`
+- **Request Body Parameters:**
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `username` | string   | Yes       | Your username. |
+  | `password` | string   | Yes       | Your password |
+- **Response:**
+  - `token`: String token value
+- **Sample Request:**
+  ```
+  curl -X POST http://127.0.0.1:5001/auth/session_token/login -H "Content-Type: application/json" \
+   -d '{"username": "test_user", "password": "test_password"}'
+  ```
+- **Sample Response:**
+  ```
+  {
+    "token": "ZDE3MDlAZXhhbXBsZS5jb206YzYzZjI4Y2JiNQ=="
+  }
+  ```
+
+#### Data Endpoint
+- **Endpoint:** `/auth/session_token/data`
+- **Method:** `GET`
+- **Request Headers:**
+  - `Authorization: Token <YOUR_SESSION_TOKEN>`
+- **Response:**
+  - `data`: Array of items retrieved.
+- **Sample Request:**
+  ```
+  curl -X GET http://127.0.0.1:5001/auth/session_token/data -H "Authorization: Token ZDE3MDlAZXhhbXBsZS5jb206YzYzZjI4Y2JiNQ=="
+  ```
+- **Sample Response:**
+    ```
+        {
+      "data": [
+        {
+          "id": "1989d8f6-57a5-41bf-b21b-4d6de6db6de6",
+          "name": "XYZ",
+          "email": "xyz@example.net",
+          "address": "Some Random Address, AS 18073",
+          "company": "Nguyen, Nash and King",
+          "job": "Licensed conveyancer",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+    }
+    ```
+
+### 5. Cursor Endpoints
+#### Companies Cursor
+- **Endpoint:** `/cursors/companies`
+- **Method:** `GET`
+- **Query Parameters:**
+
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `order_by`     | string   | No       | Parameter to order by. Allowed values: `createdAt`, `updatedAt`. Default: `updatedAt`. |
+  | `order_type`   | string   | No       | Sorting order. Allowed values: `asc`, `desc`. Default: `asc`. |
+  | `updated_since`| string   | No       | Return items updated since this timestamp. Format: `YYYY-MM-DDTHH:MM:SSZ`. |
+
+- **Response:**
+  - `data`: Array of companies.
+  - `total_items`: Total number of companies after filtering.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/cursors/companies
+    ```
+- **Sample Response:**
+    ```
+    {
+      "data": [
+        {
+          "company_id": 1,
+          "company_name": "Johnson-Miller",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+      "total_items": 6
+    }
+    ```
+
+#### Departments by Company
+- **Endpoint:** `/cursors/<company_id>/departments`
+- **Method:** `GET`
+- **Path Parameters:**
+
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `company_id`   | integer  | Yes      | The ID of the company to get departments for.          |
+
+- **Query Parameters:**
+
+  | Parameter      | Type     | Required | Description                                             |
+  |----------------|----------|----------|---------------------------------------------------------|
+  | `order_by`     | string   | No       | Parameter to order by. Allowed values: `createdAt`, `updatedAt`. Default: `updatedAt`. |
+  | `order_type`   | string   | No       | Sorting order. Allowed values: `asc`, `desc`. Default: `asc`. |
+  | `updated_since`| string   | No       | Return items updated since this timestamp. Format: `YYYY-MM-DDTHH:MM:SSZ`. |
+
+- **Response:**
+  - `data`: Array of departments for the specified company.
+  - `total_items`: Total number of departments after filtering.
+- **Sample Request:**
+    ```
+    curl -X GET http://127.0.0.1:5001/cursors/1/departments
+    ```
+- **Sample Response:**
+    ```
+    {
+      "data": [
+        {
+          "department_id": 1,
+          "company_id": 1,
+          "department_name": "Engineering",
+          "createdAt": "2024-09-22T12:15:33Z",
+          "updatedAt": "2024-09-22T12:15:50Z"
+        },
+        ...
+      ],
+      "total_items": 4
+    }
+    ```
+
+## Error Responses
+- **400 Bad Request:** Returned for validation errors or unexpected query parameters.
+  - **Example:** `{"error": "Invalid value for 'order_by'. Use 'createdAt' or 'updatedAt'."}`
+
+- **404 Not Found:** Returned when the requested resource does not exist.
+  - **Example:** `{"error": "company_id '1' not found"}`
+
+
+## **Maintenance**
+This package is actively maintained by Fivetran Developers. Please reach out to our [Support team](https://support.fivetran.com/hc/en-us) for any inquiries.
