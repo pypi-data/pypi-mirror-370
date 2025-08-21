@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypha</title>
+    <!-- External Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/marked@2.1.3/lib/marked.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+    <script src="./assets/hypha-rpc-websocket.js"></script>
+    <!-- Favicon and Icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="./static/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./static/img/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./static/img/favicon-16x16.png">
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.3.0/github-markdown-light.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap">
+    <!-- Meta Tags -->
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#ffffff">
+    <style>
+        /* Navbar should occupy the full width of the page */
+        .navbar {
+            width: 100%;
+            left: 0;
+            top: 0;
+            position: fixed;
+            z-index: 1000;
+        }
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%; /* This ensures the dropdown starts directly below the icon */
+            background-color: #1f2937; /* Darker gray background */
+            min-width: 200px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            z-index: 1;
+            margin-top: 0; /* Remove any additional margin to prevent gaps */
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .dropdown-content a {
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+        }
+
+        .dropdown-content a:hover {
+            background-color: #4b5563; /* Darker shade of gray */
+        }
+    </style>
+</head>
+
+<body class="bg-black text-white font-poppins">
+    <div id="app"></div>
+
+    <!-- Render the App component -->
+    <script type="text/babel" data-presets="env,react" data-env-targets="defaults, safari >= 12">
+        const Navbar = ({ isLoggedIn, user, onLogin, onLogout, onAboutClick }) => {
+            // Generate initials from name or email
+            const getInitials = (name, email) => {
+                const displayName = name || email?.split('@')[0] || 'User';
+                return displayName.split(' ').map(word => word[0]).join('').substring(0, 2).toUpperCase();
+            };
+
+            // Generate background color based on email or name
+            const getAvatarColor = (email, name) => {
+                let hash = 0;
+                const str = email || name || '';
+                for (let i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const hue = Math.abs(hash) % 360;
+                return `hsl(${hue}, 70%, 50%)`;
+            };
+
+            return (
+                <nav className="navbar flex justify-between items-center p-4 bg-gray-900 shadow-lg">
+                    <div className="flex items-center space-x-4">
+                        <img src="./static/img/hypha-logo-black.svg" className="h-10 invert" alt="Hypha Logo" />
+                    </div>
+                    <div className="flex space-x-6">
+                        <a href="https://desktop.aicell.io" className="hover:text-gray-400 transition duration-300">Desktop</a>
+                        <a href="#" className="hover:text-gray-400 transition duration-300">Marketplace</a>
+                        <a href="https://docs.amun.ai/" target="_blank" className="hover:text-gray-400 transition duration-300">Documentation</a>
+                        <a href="#" className="hover:text-gray-400 transition duration-300" onClick={onAboutClick}>About</a>
+                        {isLoggedIn ? (
+                            <div className="dropdown">
+                                <button className="hover:text-gray-400 transition duration-300">
+                                    {user.picture ? (
+                                        <img src={user.picture} alt={user.name} className="inline-block h-10 w-10 rounded-full" />
+                                    ) : (
+                                        <div 
+                                            className="inline-flex items-center justify-center h-10 w-10 rounded-full text-white font-bold"
+                                            style={ {backgroundColor: getAvatarColor(user.email, user.name)} }
+                                        >
+                                            {getInitials(user.name, user.email)}
+                                        </div>
+                                    )}
+                                </button>
+                                <div className="dropdown-content">
+                                    <a href="./public/apps/hypha-login/profile">My Profile</a>
+                                    <a href={"./ws-user-" + user.sub}>My Workspace</a>
+                                    <a href="#" onClick={onLogout}>Logout</a>
+                                </div>
+                            </div>
+                        ) : (
+                            <button onClick={onLogin} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-full transition duration-300">
+                                Login
+                            </button>
+                        )}
+                    </div>
+                </nav>
+            );
+        };
+
+        const AboutModal = ({ isOpen, onClose, version }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75 z-50">
+                    <div className="bg-gray-900 p-6 rounded-lg shadow-lg text-center">
+                        <h2 className="text-2xl font-bold mb-4">About Hypha</h2>
+                        <p className="text-gray-400">Version: {version}</p>
+                        <p className="text-gray-400">Hypha is a collaborative workspace for data management and AI-powered data analysis.</p>
+                        <button
+                            className="mt-6 bg-gray-700 px-4 py-2 rounded hover:bg-gray-600 transition duration-300"
+                            onClick={onClose}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const FeatureBlock = ({ title, description, icon }) => {
+            return (
+                <div className="flex flex-col items-center p-6 bg-gray-800 rounded-lg shadow-lg mb-6">
+                    <i className={`${icon} fa-3x text-white mb-4`}></i>
+                    <div className="text-center">
+                        <h3 className="text-xl font-bold">{title}</h3>
+                        <p className="text-gray-400">{description}</p>
+                    </div>
+                </div>
+            );
+        };
+
+        const Footer = () => {
+            return (
+                <footer className="bg-gray-900 text-gray-400 py-6 mt-16">
+                    <div className="container mx-auto text-center">
+                        <p>Hypha is an open-source platform released under the MIT license.</p>
+                        <p>
+                            Visit our <a href="https://github.com/amun-ai/hypha" target="_blank" className="text-gray-300 hover:text-white">GitHub repository</a> for more information.
+                        </p>
+                    </div>
+                </footer>
+            );
+        };
+
+        const parseJwt = token => {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            return JSON.parse(jsonPayload);
+        };
+
+        const App = () => {
+            const [hyphaVersion, setHyphaVersion] = React.useState('');
+            const [isModalOpen, setIsModalOpen] = React.useState(false);
+            const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+            const [user, setUser] = React.useState(null);
+            const [loginError, setLoginError] = React.useState(null);
+            const [hyphaServer, setHyphaServer] = React.useState(null);
+            const [authNamespace, setAuthNamespace] = React.useState('https://amun.ai/'); // Default namespace
+
+            React.useEffect(() => {
+                const initialize = async () => {
+                    // Fetch config including auth namespace
+                    try {
+                        const response = await fetch('./assets/config.json');
+                        const configData = await response.json();
+                        setHyphaVersion(configData.hypha_version || '');
+                        // Get auth namespace from config if available
+                        if (configData.auth_namespace) {
+                            setAuthNamespace(configData.auth_namespace);
+                        }
+                    } catch (error) {
+                        console.error('Error fetching config:', error);
+                    }
+                    
+                    // Check if we have a stored token
+                    const storedToken = localStorage.getItem('hypha_token');
+                    if (storedToken) {
+                        try {
+                            // Parse the token to get user info
+                            const decodedToken = parseJwt(storedToken);
+                            if (decodedToken.exp * 1000 > Date.now()) {
+                                // Token is still valid
+                                const userId = decodedToken.id || decodedToken.sub;
+                                const userEmail = decodedToken.email || decodedToken[`${window.HYPHA_AUTH_NAMESPACE}email`];
+                                
+                                setUser({
+                                    sub: userId,
+                                    email: userEmail,
+                                    name: userId,
+                                });
+                                setIsLoggedIn(true);
+                                // Set cookie for server authentication
+                                const maxAge = decodedToken.exp - Math.floor(Date.now() / 1000);
+                                document.cookie = `access_token=${storedToken}; path=/; max-age=${maxAge}; samesite=lax`;
+                            } else {
+                                // Token expired, clear it
+                                localStorage.removeItem('hypha_token');
+                            }
+                        } catch (e) {
+                            console.error('Error parsing stored token:', e);
+                            localStorage.removeItem('hypha_token');
+                        }
+                    }
+                };
+
+                initialize();
+            }, []);
+
+            const onLogin = async () => {
+                // Clear any previous errors
+                setLoginError(null);
+                
+                try {
+                    // Use hypha-rpc login function which will use the configured authentication service
+                    const loginCallback = async (context) => {
+                        // Open login URL in a popup window
+                        const loginUrl = context.login_url;
+                        const popupWindow = window.open(loginUrl, '_blank', 'width=600,height=700');
+                        
+                        if (!popupWindow) {
+                            throw new Error('Unable to open login window. Please allow popups for this site.');
+                        }
+                        
+                        // The login service will handle the authentication flow
+                        // and the popup will close itself when done
+                    };
+                    
+                    // Connect to server first if not connected
+                    if (!hyphaServer) {
+                        const server = await hyphaWebsocketClient.connectToServer({
+                            server_url: window.location.origin
+                        });
+                        setHyphaServer(server);
+                    }
+                    
+                    // Use the login function from hypha-rpc
+                    const userProfile = await hyphaWebsocketClient.login({
+                        server_url: window.location.origin,
+                        login_callback: loginCallback,
+                        login_timeout: 180,  // 3 minutes timeout
+                        expires_in: 3600 * 24,  // 24 hours
+                        profile: true  // Get full profile information
+                    });
+                    
+                    if (userProfile && userProfile.token) {
+                        // Store token
+                        localStorage.setItem('hypha_token', userProfile.token);
+                        
+                        // Use profile information directly - no need to parse JWT
+                        setUser({
+                            sub: userProfile.user_id,
+                            email: userProfile.email,
+                            name: userProfile.name,
+                            nickname: userProfile.nickname,
+                            picture: userProfile.picture,
+                            email_verified: userProfile.email_verified
+                        });
+                        setIsLoggedIn(true);
+                        
+                        // Set cookie for server authentication
+                        const decodedToken = parseJwt(userProfile.token);
+                        const exp = decodedToken.exp;
+                        const maxAge = exp - Math.floor(Date.now() / 1000);
+                        document.cookie = `access_token=${userProfile.token}; path=/; max-age=${maxAge}; samesite=lax`;
+                        document.cookie = `hypha_version=${hyphaVersion}; path=/; max-age=${maxAge}; samesite=lax`;
+                    }
+                } catch (e) {
+                    console.error('Login failed:', e);
+                    setLoginError(e.message || 'Login failed. Please try again.');
+                }
+            };
+
+            const clearLoginState = async () => {
+                // Clear cookies
+                document.cookie = 'access_token=; path=/; max-age=0; samesite=lax';
+                document.cookie = 'hypha_version=; path=/; max-age=0; samesite=lax';
+                
+                // Clear localStorage token
+                localStorage.removeItem('hypha_token');
+                
+                // Clear React state
+                setIsLoggedIn(false);
+                setUser(null);
+            };
+
+            const onLogout = async () => {
+                // Clear cookies and localStorage
+                document.cookie = 'access_token=; path=/; max-age=0; samesite=lax';
+                document.cookie = 'hypha_version=; path=/; max-age=0; samesite=lax';
+                localStorage.removeItem('hypha_token');
+                
+                // Clear React state
+                setIsLoggedIn(false);
+                setUser(null);
+                
+                // Optionally disconnect from server
+                if (hyphaServer) {
+                    try {
+                        await hyphaServer.disconnect();
+                    } catch (e) {
+                        console.log("Error disconnecting from server:", e);
+                    }
+                    setHyphaServer(null);
+                }
+            };
+
+            const onAboutClick = () => {
+                setIsModalOpen(true);
+            };
+
+            return (
+                <div>
+                    <Navbar isLoggedIn={isLoggedIn} user={user} onLogin={onLogin} onLogout={onLogout} onAboutClick={onAboutClick} />
+                    <div className="container mx-auto mt-16 pt-20 text-center">
+                        <h1 className="text-4xl font-bold">Welcome to Hypha</h1>
+                        <p className="text-xl text-gray-400 mt-4">A collaborative workspace for data analysis</p>
+                        {loginError && (
+                            <div className="mt-4 max-w-lg mx-auto">
+                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                                    <span className="block sm:inline">{loginError}</span>
+                                    <div className="mt-3 flex justify-between items-center">
+                                        <button 
+                                            onClick={clearLoginState}
+                                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm"
+                                        >
+                                            Clear Login Info
+                                        </button>
+                                        <button 
+                                            className="text-red-500 hover:text-red-700 font-bold text-lg"
+                                            onClick={() => setLoginError(null)}
+                                        >
+                                            &times;
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="m-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <FeatureBlock
+                            title="Real-time Collaboration"
+                            description="Collaborate with your team in real-time using Hypha's seamless integration."
+                            icon="fas fa-users"
+                        />
+                        <FeatureBlock
+                            title="AI Model Serving"
+                            description="Serve and manage AI models at scale with Hypha's powerful infrastructure."
+                            icon="fas fa-robot"
+                        />
+                        <FeatureBlock
+                            title="Data Management"
+                            description="Manage large-scale data with ease using Hypha's intuitive platform."
+                            icon="fas fa-database"
+                        />
+                    </div>
+                    <div className="flex justify-center mt-12">
+                        <a href="https://docs.amun.ai/#/getting-started" target="_blank">
+                            <button className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-full transition duration-300">
+                                Get Started
+                            </button>
+                        </a>
+                    </div>
+                    <AboutModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} version={hyphaVersion} />
+                    <Footer />
+                </div>
+            );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('app'));
+    </script>
+</body>
+
+</html>
