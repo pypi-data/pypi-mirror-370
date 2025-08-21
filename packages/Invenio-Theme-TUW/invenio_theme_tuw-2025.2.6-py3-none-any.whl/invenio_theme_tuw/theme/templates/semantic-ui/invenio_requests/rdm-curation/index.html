@@ -1,0 +1,118 @@
+{# -*- coding: utf-8 -*-
+
+  Copyright (C) 2016-2023 CERN.
+  Copyright (C) 2024 Graz University of Technology.
+
+  Invenio-Curations is free software; you can redistribute it and/or modify it
+  under the terms of the MIT License; see LICENSE file for more details.
+#}
+
+{#
+  Renders the rdm-curation request details page.
+#}
+
+{%- extends "invenio_requests/details/index.html" %}
+{%- set is_curator = current_user.has_role(config["CURATIONS_MODERATION_ROLE"]) %}
+{%- set is_uploader = record and current_user.id|string == record_ui["parent"]["access"]["owned_by"]["user"]|string %}
+{%- set active_dashboard_menu_item = "curation-overview" if is_curator else "requests" %}
+
+{%- block request_header %}
+
+  {%- set back_button_url = url_for("invenio_curations.curation_requests_overview" if is_curator else "invenio_app_rdm_users.requests") %}
+  {%- from "invenio_requests/macros/request_header.html" import inclusion_request_header %}
+  {{ inclusion_request_header(
+      request=invenio_request,
+      accepted=False,
+      back_button_url=back_button_url,
+      back_button_text=_("Back to requests")
+    ) }}
+
+  {#- display some contextual info in the request's header #}
+  <div class="rel-mt-1">
+    <div class="ui fitted divider"></div>
+    <p class="rel-m-1">
+      {%- if is_curator and is_uploader %}
+        <i class="ui orange exclamation triangle icon"></i>
+        You are reviewing your own dataset!
+      {%- elif is_curator %}
+        <i class="ui blue info circle icon"></i>
+        When the request is accepted, the uploader will need to publish the dataset themselves.
+      {%- elif is_uploader %}
+        {%- if invenio_request.status == "accepted" %}
+          <i class="ui green check square icon"></i>
+          The record has been accepted &mdash; you can now publish it yourself on its <a href="{{ url_for("invenio_app_rdm_records.deposit_edit", pid_value=record_ui["id"]) }}">deposit page</a>! Edits before initial publication will reset the review.
+        {%- else %}
+          <i class="ui blue info circle icon"></i>
+          When the record gets accepted, you will be able to publish it yourself!
+        {%- endif %}
+      {%- else %}
+        <i class="ui yellow chess king icon"></i>
+        Are you an admin, or how did you get access to this request?
+      {%- endif %}
+      <div class="ui fitted divider"></div>
+    </p>
+  </div>
+{%- endblock request_header %}
+
+{%- block request_timeline %}
+<div
+    class="ui container rdm-tab-container fluid rel-pt-2 ml-0-mobile mr-0-mobile"
+    id="request-community-submission-tab-container"
+  >
+    {%- if record %}
+      <div
+        class="ui secondary pointing menu rdm-tab-menu"
+        id="request-community-submission-tab"
+      >
+        <a
+          class="active item"
+          data-tab="conversation"
+          role="tab"
+          aria-selected="true"
+          aria-controls="conversation-tab-panel"
+          id="conversation-tab"
+        >
+          {{ _("Conversation") }}
+        </a>
+
+
+        <a
+          role="tab"
+          class="item"
+          data-tab="record"
+          aria-selected="false"
+          aria-controls="record-tab-panel"
+          id="record-tab"
+        >
+          {{ _("Record") }}
+        </a>
+      </div>
+    {%- endif %}
+
+
+    <div
+      class="ui bottom attached tab segment active borderless p-0"
+      data-tab="conversation"
+      role="tabpanel"
+      aria-labelledby="conversation-tab"
+      id="conversation-tab-panel"
+    >
+      {{ super() }}
+    </div>
+
+    {%- if record %}
+      <div
+        class="ui bottom attached tab segment borderless"
+        data-tab="record"
+        role="tabpanel"
+        aria-labelledby="record-tab"
+        id="record-tab-panel"
+        hidden="hidden"
+      >
+        {%- set use_theme_basic_template = false %}
+        {%- set preview_submission_request = true %}
+        {%- include "invenio_app_rdm/records/detail.html" %}
+      </div>
+    {%- endif %}
+  </div>
+{%- endblock request_timeline %}

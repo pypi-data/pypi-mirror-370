@@ -1,0 +1,70 @@
+{# -*- coding: utf-8 -*-
+
+  Copyright (C) 2015-2021 CERN.
+  Copyright (C)      2021 Graz University of Technology.
+  Copyright (C) 2020-2022 TU Wien.
+
+  Invenio is free software; you can redistribute it and/or modify it
+  under the terms of the MIT License; see LICENSE file for more details.
+#}
+
+{#- base: invenio-oauthclient v5.2.0 #}
+{#- changes: conditional super() call, customized heading #}
+{#- TODO: this is horribly broken right now #}
+
+{%- extends config.OAUTHCLIENT_LOGIN_USER_TEMPLATE_PARENT %}
+
+{%- from "invenio_oauthclient/_macros.html" import oauth_button %}
+
+{#- change: header text, style, and element #}
+{%- block form_header %}
+  <h1 class="ui small login header">{{ _("Log in to %(site_name)s", site_name=config.THEME_SITENAME) }}</h1>
+{%- endblock -%}
+
+{%- block form_outer %}
+  {% if config.OAUTHCLIENT_REMOTE_APPS %}
+    <div class="ui form">
+      {%- for name, config in config.OAUTHCLIENT_REMOTE_APPS.items() if not config.hide %}
+        {{ oauth_button(name, next=request.args.get('next')) }}
+      {%- endfor %}
+    </div>
+
+    {#- if the local login is enabled, show it #}
+    {%- if config.ACCOUNTS_LOCAL_LOGIN_ENABLED %}
+      <div class="ui horizontal divider">
+        {{ _("OR") }}
+      </div>
+    {%- endif %}
+  {%- endif %}
+
+  {#- change: conditional super(), to prevent showing a 'login' button #}
+  {#-         if there is no other input #}
+  {%- if config.ACCOUNTS_LOCAL_LOGIN_ENABLED %}
+    {{ super() }}
+  {%- endif %}
+{%- endblock %}
+
+{%- block recoverable %}
+  {%- if security.recoverable or security.confirmable %}
+  <div class="ui one column centered grid">
+    {%- if security.recoverable %}
+    <div class="row">
+      <a class="ui inverted header tiny"
+          href="{{ url_for_security('forgot_password') }}">{{ _('Forgot password?') }}</a>
+    </div>
+    {%- endif %}
+    {%- if security.confirmable %}
+    <div class="row">
+      <a class="ui inverted header tiny"
+        href="{{url_for('security.send_confirmation')}}" class="text-muted">{{_('Resend confirmation email')}}</a>
+    </div>
+    {%- endif %}
+  </div>
+  {%- endif %}
+{%- endblock %}
+
+{#- change: add custom styling #}
+{%- block css %}
+  {{ super() }}
+  {{ webpack['invenio-theme-tuw-login.css'] }}
+{%- endblock %}
