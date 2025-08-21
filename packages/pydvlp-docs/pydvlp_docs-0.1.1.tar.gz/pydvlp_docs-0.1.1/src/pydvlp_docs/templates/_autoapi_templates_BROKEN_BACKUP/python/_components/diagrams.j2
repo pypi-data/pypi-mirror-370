@@ -1,0 +1,279 @@
+{#- diagrams.j2 - Intelligent diagram rendering with multiple extensions -#}
+
+{#- Macro for rendering class hierarchy diagrams -#}
+{%- macro render_class_hierarchy(obj) -%}
+{%- if has_mermaid %}
+.. container:: class-hierarchy
+
+   .. mermaid::
+      :caption: Class Hierarchy for {{ obj.name }}
+      :align: center
+      
+      classDiagram
+      {%- if obj.bases %}
+      {%- for base in obj.bases %}
+      {{ base.name }} <|-- {{ obj.name }}
+      {%- endfor %}
+      {%- endif %}
+      
+      {%- if obj.subclasses %}
+      {%- for sub in obj.subclasses %}
+      {{ obj.name }} <|-- {{ sub.name }}
+      {%- endfor %}
+      {%- endif %}
+      
+{# djlint:off H025 #}
+      class {{ obj.name }} {
+         {%- if obj.is_abstract %}
+         <<abstract>>
+         {%- elif obj.is_interface %}
+         <<interface>>
+         {%- endif %}
+{# djlint:on #}
+         {%- for attr in obj.attributes[:3] %}
+         +{{ attr.name }}{% if attr.annotation %}: {{ attr.annotation }}{% endif %}
+         {%- endfor %}
+         {%- if obj.attributes|length > 3 %}
+         ...
+         {%- endif %}
+         {%- for method in obj.methods[:3] %}
+         +{{ method.name }}(){% if method.returns %}: {{ method.returns }}{% endif %}
+         {%- endfor %}
+         {%- if obj.methods|length > 3 %}
+         ...
+         {%- endif %}
+      }
+      
+{# djlint:off H025,H026 #}
+      {%- for base in obj.bases %}
+      class {{ base.name }} {
+         <<base class>>
+      }
+{# djlint:on #}
+      {%- endfor %}
+      
+      style {{ obj.name }} fill:#f9f,stroke:#333,stroke-width:4px
+
+{%- elif has_graphviz %}
+.. graphviz::
+   :caption: Class Hierarchy for {{ obj.name }}
+   :align: center
+   
+   digraph inheritance {
+      rankdir=TB;
+      node [shape=box, style="rounded,filled", fillcolor=lightblue];
+      edge [arrowhead=empty];
+      
+      {%- for base in obj.bases %}
+      "{{ base.name }}" -> "{{ obj.name }}";
+      {%- endfor %}
+      
+      {%- for sub in obj.subclasses %}
+      "{{ obj.name }}" -> "{{ sub.name }}";
+      {%- endfor %}
+      
+      "{{ obj.name }}" [fillcolor=lightpink, penwidth=2];
+   }
+
+{%- elif has_inheritance %}
+.. inheritance-diagram:: {{ obj.id }}
+   :parts: 1
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering package structure -#}
+{%- macro render_package_structure(packages) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: Package Structure Overview
+   :align: center
+   
+   graph TB
+   subgraph "API Structure"
+      {%- for pkg in packages %}
+      {%- if '.' in pkg.name %}
+      {%- set parts = pkg.name.split('.') %}
+      {{ parts[-2] }} --> {{ parts[-1] }}
+      {%- endif %}
+      {%- endfor %}
+   end
+   
+   style API fill:#f0f0f0,stroke:#333
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering dependency graphs -#}
+{%- macro render_dependency_graph(obj) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: Module Dependencies
+   :align: center
+   
+   graph LR
+   subgraph "Imports"
+      {%- for imp in obj.imports[:10] %}
+      {{ obj.name }} --> {{ imp }}
+      {%- endfor %}
+      {%- if obj.imports|length > 10 %}
+      {{ obj.name }} --> "..."
+      {%- endif %}
+   end
+   
+   subgraph "Imported By"
+      {%- for imp in obj.imported_by[:10] %}
+      {{ imp }} --> {{ obj.name }}
+      {%- endfor %}
+      {%- if obj.imported_by|length > 10 %}
+      "..." --> {{ obj.name }}
+      {%- endif %}
+   end
+   
+   style {{ obj.name }} fill:#ff9,stroke:#333,stroke-width:3px
+
+{%- elif has_graphviz %}
+.. graphviz::
+   
+   digraph dependencies {
+      rankdir=LR;
+      node [shape=box];
+      
+      "{{ obj.name }}" [style=filled, fillcolor=yellow];
+      
+      {%- for imp in obj.imports %}
+      "{{ obj.name }}" -> "{{ imp }}";
+      {%- endfor %}
+      
+      {%- for imp in obj.imported_by %}
+      "{{ imp }}" -> "{{ obj.name }}";
+      {%- endfor %}
+   }
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering state diagrams -#}
+{%- macro render_state_diagram(states, transitions) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: State Diagram
+   :align: center
+   
+   stateDiagram-v2
+   {%- for state in states %}
+   {{ state.name }}{% if state.description %}: {{ state.description }}{% endif %}
+   {%- endfor %}
+   
+   {%- for trans in transitions %}
+   {{ trans.from }} --> {{ trans.to }}{% if trans.label %}: {{ trans.label }}{% endif %}
+   {%- endfor %}
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering sequence diagrams -#}
+{%- macro render_sequence_diagram(participants, messages) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: Sequence Diagram
+   :align: center
+   
+   sequenceDiagram
+   {%- for p in participants %}
+   participant {{ p }}
+   {%- endfor %}
+   
+   {%- for msg in messages %}
+   {{ msg.from }}->>{{ msg.arrow|default('+') }}{{ msg.to }}: {{ msg.text }}
+   {%- if msg.note %}
+   Note over {{ msg.over|default(msg.to) }}: {{ msg.note }}
+   {%- endif %}
+   {%- endfor %}
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering flowcharts -#}
+{%- macro render_flowchart(nodes, edges) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: Process Flow
+   :align: center
+   
+   flowchart TD
+   {%- for node in nodes %}
+   {{ node.id }}[{{ node.label }}]
+   {%- if node.shape %}
+   {{ node.id }}{{ node.shape }}
+   {%- endif %}
+   {%- endfor %}
+   
+   {%- for edge in edges %}
+   {{ edge.from }} --> {{ edge.to }}
+   {%- if edge.label %}
+   {{ edge.from }} -->|{{ edge.label }}| {{ edge.to }}
+   {%- endif %}
+   {%- endfor %}
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering ER diagrams for data models -#}
+{%- macro render_er_diagram(entities) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: Entity Relationship Diagram
+   :align: center
+   
+   erDiagram
+   {%- for entity in entities %}
+   {{ entity.name }} {
+      {%- for field in entity.fields %}
+      {{ field.type }} {{ field.name }}{% if field.key %} {{ field.key }}{% endif %}
+      {%- endfor %}
+   }
+   
+   {%- for rel in entity.relationships %}
+   {{ entity.name }} {{ rel.type }} {{ rel.to }} : {{ rel.label }}
+   {%- endfor %}
+   {%- endfor %}
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering Gantt charts for documentation -#}
+{%- macro render_gantt_chart(tasks) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: Timeline
+   :align: center
+   
+   gantt
+   title Development Timeline
+   dateFormat YYYY-MM-DD
+   
+   {%- for section in tasks %}
+   section {{ section.name }}
+   {%- for task in section.tasks %}
+   {{ task.name }} :{{ task.status|default('') }} {{ task.id }}, {{ task.start }}, {{ task.duration }}
+   {%- endfor %}
+   {%- endfor %}
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering pie charts for metrics -#}
+{%- macro render_pie_chart(data, title) -%}
+{%- if has_mermaid %}
+.. mermaid::
+   :caption: {{ title }}
+   :align: center
+   
+   pie title {{ title }}
+   {%- for item in data %}
+   "{{ item.label }}" : {{ item.value }}
+   {%- endfor %}
+
+{%- endif %}
+{%- endmacro -%}

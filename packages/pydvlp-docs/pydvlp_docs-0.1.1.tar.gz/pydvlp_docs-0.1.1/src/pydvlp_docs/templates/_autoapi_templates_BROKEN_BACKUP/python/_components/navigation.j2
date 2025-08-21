@@ -1,0 +1,208 @@
+{#- navigation.j2 - Navigation components with extension integration -#}
+
+{#- Macro for rendering module overview cards -#}
+{%- macro render_module_overview_cards(obj) -%}
+{%- if has_design %}
+.. grid:: 1 1 2 4
+   :gutter: 3
+   :margin: 0 0 4 0
+
+   {%- set stats = get_module_statistics(obj) -%}
+   
+   {{ render_stat_card('Classes', stats.classes, 'primary', '🏗️') }}
+   {{ render_stat_card('Functions', stats.functions, 'success', '⚡') }}
+   {{ render_stat_card('Submodules', stats.submodules, 'info', '📦') }}
+   {{ render_stat_card('Coverage', stats.coverage ~ '%', 'warning', '📊') }}
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering module navigation cards -#}
+{%- macro render_module_cards(obj) -%}
+{%- if has_design %}
+.. grid:: 1 1 2 3
+   :gutter: 3
+
+   {%- for child in obj.children|sort(attribute='name') %}
+   {%- if child.type == 'module' %}
+   .. grid-item-card:: :mod:`{{ child.name }}`
+      :link: {{ child.name }}
+      :link-type: doc
+      :class-card: module-card
+      
+      {%- if child.summary %}
+      {{ child.summary|truncate(150) }}
+      {%- endif %}
+      
+      {%- set child_stats = get_module_statistics(child) -%}
+      {%- if child_stats %}
+      
+      .. container:: stats
+         
+         {{ format_module_stats(child_stats) }}
+      {%- endif %}
+   {%- endif %}
+   {%- endfor %}
+
+{%- else %}
+{{ render_module_toc(obj) }}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering module table of contents -#}
+{%- macro render_module_toc(obj) -%}
+.. contents:: Module Contents
+   :local:
+   :depth: 2
+
+{%- if obj.submodules %}
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   {%- for submod in obj.submodules|sort(attribute='name') %}
+   {{ submod.name }}
+   {%- endfor %}
+{%- endif %}
+
+{%- if obj.classes %}
+
+Classes
+-------
+
+{%- for cls in obj.classes|sort(attribute='name') %}
+* :class:`{{ cls.name }}` - {{ cls.summary|default('Class implementation') }}
+{%- endfor %}
+{%- endif %}
+
+{%- if obj.functions %}
+
+Functions
+---------
+
+{%- for func in obj.functions|sort(attribute='name') %}
+* :func:`{{ func.name }}` - {{ func.summary|default('Function implementation') }}
+{%- endfor %}
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering breadcrumb navigation -#}
+{%- macro render_breadcrumb(obj) -%}
+{%- if obj.module and '.' in obj.module %}
+.. raw:: html
+
+   <nav aria-label="breadcrumb">
+     <ol class="breadcrumb">
+       <li class="breadcrumb-item"><a href="{{ '../' * (obj.module.count('.') + 1) }}index.html">API</a></li>
+       {%- set parts = obj.module.split('.') %}
+       {%- for part in parts %}
+       <li class="breadcrumb-item"><a href="{{ '../' * (parts|length - loop.index) }}{{ part }}.html">{{ part }}</a></li>
+       {%- endfor %}
+       <li class="breadcrumb-item active" aria-current="page">{{ obj.name }}</li>
+     </ol>
+   </nav>
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering sidebar navigation -#}
+{%- macro render_sidebar_nav(current_page, pages) -%}
+{%- if has_design %}
+.. sidebar:: Navigation
+
+   .. contents:: On this page
+      :local:
+      :depth: 2
+   
+   **Related Pages**
+   
+   {%- for page in pages if page.module == current_page.module and page != current_page %}
+   * :doc:`{{ page.name }}`
+   {%- endfor %}
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Macro for rendering search hints -#}
+{%- macro render_search_hints(obj) -%}
+{%- if has_tippy %}
+.. raw:: html
+
+   <div class="search-hints">
+     <span data-tippy-content="Search for '{{ obj.name }}' to find this {{ obj.type }}">🔍</span>
+     <span data-tippy-content="Use Ctrl+K for quick search">⌨️</span>
+   </div>
+
+{%- endif %}
+{%- endmacro -%}
+
+{#- Helper macros -#}
+{%- macro get_module_statistics(obj) -%}
+{%- set stats = {
+    'classes': 0,
+    'functions': 0,
+    'submodules': 0,
+    'coverage': 85
+} -%}
+
+{%- if obj.children -%}
+    {%- set stats.classes = obj.children|selectattr('type', 'equalto', 'class')|list|length -%}
+    {%- set stats.functions = obj.children|selectattr('type', 'equalto', 'function')|list|length -%}
+{%- endif -%}
+
+{%- if obj.submodules -%}
+    {%- set stats.submodules = obj.submodules|length -%}
+{%- endif -%}
+
+{{ stats }}
+{%- endmacro -%}
+
+{%- macro render_stat_card(title, value, color, icon) -%}
+.. grid-item-card:: {{ icon }} {{ title }}
+   :columns: 6 6 3 3
+   :class-header: bg-{{ color }} text-white
+   :class-body: text-center
+   
+   .. raw:: html
+      
+      <h2 class="stat-value">{{ value }}</h2>
+{%- endmacro -%}
+
+{%- macro format_module_stats(stats) -%}
+{%- set parts = [] -%}
+{%- if stats.classes > 0 %}{% set _ = parts.append(stats.classes ~ ' classes') %}{% endif -%}
+{%- if stats.functions > 0 %}{% set _ = parts.append(stats.functions ~ ' functions') %}{% endif -%}
+{%- if stats.submodules > 0 %}{% set _ = parts.append(stats.submodules ~ ' submodules') %}{% endif -%}
+{{ parts|join(' • ') }}
+{%- endmacro -%}
+
+{#- Macro for rendering alphabetical index -#}
+{%- macro render_alphabetical_index(items) -%}
+{%- set grouped = items|groupby('name.0')|list -%}
+
+{%- if has_tabs %}
+.. tab-set::
+
+   {%- for letter, group in grouped %}
+   .. tab-item:: {{ letter|upper }}
+      
+      {%- for item in group|sort(attribute='name') %}
+      * :{{ item.type }}:`{{ item.name }}` - {{ item.summary|truncate(60) }}
+      {%- endfor %}
+   {%- endfor %}
+
+{%- else %}
+{%- for letter, group in grouped %}
+
+{{ letter|upper }}
+~~~
+
+{%- for item in group|sort(attribute='name') %}
+* :{{ item.type }}:`{{ item.name }}` - {{ item.summary|truncate(60) }}
+{%- endfor %}
+{%- endfor %}
+{%- endif %}
+{%- endmacro -%}
