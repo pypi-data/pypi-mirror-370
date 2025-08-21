@@ -1,0 +1,112 @@
+{
+  "line_subst" : [
+    {"from" : "\$\{[^}]+\}\.LOGON" , "to":"--"},
+    {"from" : "collect \b.*" , "to":" "}
+  ],
+  "use_notebook_md" : 1,
+
+  "sparksql_wrapper": "spark.sql(f\"\"\"\n%SQL%\n\"\"\") ", //.show(truncate=False)
+
+
+  "pre_finalization_handler" : "::databricks_finalize_code",
+  "consolidate_nb_statements" : 1, //will consolidate variable declarations, simple assignments and comments into a single notebook command.  Comments above a statement will also be consolidated
+  "load_files" : ["teradata_source_hooks.pl"], //gets called from preprocess_routine
+  "CUSTOM_CONVERTER_MODULES" : ["teradata_source_hooks", "databricks_output_hooks"],
+  "COMBINED_CUSTOM_MODULES_LOAD" : 1,
+  "source_prescan_routine" : "::teradata_prescan",
+  "initialize_hooks_call" : "::init_databricks_hooks",
+  "preprocess_file" : 1,
+  "preprocess_routine" : "::preprocess_for_databricks",
+
+  "read_file" : "data_df = spark.read.format.(\"csv\").option(\"header\", \"true\").option(\"inferSchema\", \"true\").load(\"%PATH%\")",
+  "write_file" : "%DF%.write.format(\"csv\").option(\"header\", \"true\").save(\"%PATH%\")",
+  "set_var_from_df_template" : "%VARIABLE% = data_df.first()['%VARIABLE%']",
+
+
+
+  "macro_template": "def %MACRO_NAME%(%MACRO_PARMS%):~
+  --<indent++>~
+  spark.sql(\"\"\"~
+  %MACRO_SQL%~
+  \"\"\".format(~
+  %MACRO_FORMAT%~
+  )).show(verbose=True)~
+  --<indent-->",
+
+  "notebook_run_noparms_template": "~
+  # FIXME: databricks.migrations.task Adjust the sample_store_proc notebook location and max execution time below if required~
+  # import json~
+  _resultJ = dbutils.notebook.run(\"./%NOTEBOOK_NAME%\", 60)~
+  _result = json.loads(_resultJ)~
+  ",
+
+  "notebook_run_template": "~
+  # FIXME: databricks.migrations.task Adjust the sample_store_proc notebook location and max execution time below if required~
+  # import json~
+  _resultJ = dbutils.notebook.run(\"./%NOTEBOOK_NAME%\", 60, {~
+  --<indent++>~
+  %IN_PARMS_RESULTJ%~
+  --<indent-->~
+})~
+_result = json.loads(_resultJ)~
+%OUT_PARMS% = (_result[k] for k in [%IN_PARMS_RESULT%])~
+",
+
+"bteq_run_xsqlstmt": "# COMMAND ----------~
+~
+# MAGIC %md~
+# MAGIC **Note:**~
+# MAGIC - Following notebook inclusion is required for conditional flow execution in converted bteq scripts~
+# MAGIC - Download the \"dbm_sql_runtime_utils_xsqlstmt\" notebook from 'https:\/\/github.com/databricks-migrations/sql-runtime-utils/tree/main/notebooks' repo location and place it in Databricks workspace's shared folder '/Shared/databricks-migrations'~
+~
+# COMMAND ----------~
+~
+# MAGIC %run /Shared/databricks-migrations/dbm_sql_runtime_utils_xsqlstmt~
+",
+
+"python_header": "",     // "%python",
+
+
+
+
+"preprocess_subst" : [ // get rid of elements that are not needed, before normal file processing starts, multi line matching
+//	{"from": "(^|\n)\s*\.LOG(ON|OFF|TABLE|MECH)\b.*?(\n|$)", "to": "\n"},
+{"from": "\.REMARK\s+'(.*?)'",   "to": "print(\"$1\");"},   // REMARK '...'
+{"from": "\.REMARK\s+\"(.*?)\"", "to": "print(\"$1\");"},   // REMARK "..."
+
+{"from": "\.RUN\s+FILE\s*=?\s*['\"](.*?)['\"]",
+"to": "dbutils.notebook.run(\"$1\",0);"},
+// {"from": "\.RUN\s+FILE\s*=?\s*([^\s;]+)",
+//    "to": "<:nowrap:># FIXME databricks.migration.task update '$1' to required converted notebook path\ndbutils.notebook.run(\"$1\",0);"},
+{"from": "(^|\n)\s*\.IMPORT\s.*?;\n", "to": "\n__BTEQ_IMPORT_PLACEHOLDER__\n;"},
+{"from" : "\.BEGIN\s+IMPORT\s+MLOAD.*\.END\s+MLOAD;", "to" : "__MLOAD_PLACEHOLDER__"} // implement a hook to convert this using $MLOAD->{MLOAD_INFO} structure.
+],
+
+
+
+"stmt_categorization_patterns": [ // extend categories
+{"category": "CREATE_INDEX",          "patterns" : ["\b(CREATE\s+(UNIQUE\s+|JOIN\s+)?INDEX\s.*?\s(ON|AS)\s.*?;)"]},
+{"category": "MATERIALIZED_VIEW_DDL", "patterns" : ["CREATE\s+JOIN\s+INDEX","CREATE(\s?)MATERIALIZED(\s?)VIEW"]},
+
+{"category": "BEGIN_TRANSACTION", "patterns" : ["BEGIN_TRANSACTION"]},
+{"category": "END_TRANSACTION", "patterns" : ["END_TRANSACTION"]},
+{"category": "VAR_SIMPLE_ASSIGNMENT", "patterns" : ["SET\s*(\w*)\s*\="]},
+{"category": "PROC_DEF", "patterns" : ["__PROC_DEF_PLACEHOLDER__"]},
+{"category": "BTEQ_IMPORT", "patterns" : ["__BTEQ_IMPORT_PLACEHOLDER__"]},
+{"category": "BTEQ_EXPORT", "patterns" : ["__BTEQ_EXPORT_PLACEHOLDER__"]},
+{"category": "PROC_BEGIN"           , "patterns" : ["BEGIN"]}
+],
+
+
+"fragment_handling" : {
+"__DEFAULT_HANDLER__" : "::databricks_default_handler",
+"PROC_DEF"            : "::databricks_proc_arg_defs",
+"BTEQ_IMPORT"         : "::databricks_copy_into",
+"BTEQ_EXPORT"         : "::databricks_insert_overwrite",
+"USE_DIRECTIVE"       : "::convert_dml",
+//	"BEGIN_TRANSACTION"   : "::begin_transaction",
+//	"END_TRANSACTION"     : "::end_transaction",
+"xxxxxxxxxxxxxxxxxxx" : "xxxxxxxxxxxxxxxxxxx"
+}
+
+}

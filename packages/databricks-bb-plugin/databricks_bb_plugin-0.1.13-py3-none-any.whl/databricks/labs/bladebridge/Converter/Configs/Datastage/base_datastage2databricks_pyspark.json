@@ -1,0 +1,189 @@
+//this is a sample file for Datastage to PySpark conversion.  Use dbxconv DATASTAGE -M CodeGeneration::Pyspark switch
+//sequences are converted to databricks notebooks
+{
+	"code_generation_module" : "CodeGeneration::PySpark",
+	"inherit_from" : ["base_datastage2databricks.json"],
+	"config_variables" : {
+		"CLUSTER_ID" : "1234-567890-test", // this is client specific
+		"USER_NAME" : "name@domain.com"		
+	},
+	"script_extension" : "py",
+	"pre_node_line" : "# COMMAND ----------\n# Processing node %NODE_NAME%, type %NODE_TYPE%\n# COLUMN COUNT: %COLUMN_COUNT%\n# %ADDITIONAL_COMMENT%", //# COLUMNS %COLUMN_LIST%
+
+	"default_flatfile_delimiter" : ",",
+
+	"pre_post_sql_wrapper" : "#Processing %PRE_POST_FLAG% for node %NODE_NAME%\nspark.sql(f\"\"\"%INNER_SQL%\"\"\")",
+
+	"pre_post_sql_subst" : [
+		{"from" : ";", "to" : ""},
+		{"from" : "#(\w+?)#", "to" : "{$1}"},
+		{"from" : "\bSELECT\s+SYSDATE\s*-\s*([0-9]+)\s+FROM\s+DUAL\b", "to" : "SELECT CURRENT_DATE() - $1 "},
+		{"from" : "spark\.sql\(\"\"\"INSERT\s+INTO\s+getArgument\s*\(\s*\"(\w+)\"\s*\)", "to" : "spark.sql(\"\"\" Truncate \"+$1+\" \"\"\")\n\nspark.sql(\"\"\""}
+	],
+
+	"multiline_stmt_break" : " ",
+	"skip_rowid_generation" : "1",
+
+	"exclude_function_args_from_lit_wrapping" : [
+		"regexp_replace",
+		"orderBy",
+		"DateOffsetByComponents"
+	],
+
+	"random_value_expressions" : {
+		"DATE" : "CURRENT_DATE",
+		"DATETIME" : "CURRENT_TIMESTAMP",
+		"TIMESTAMP" : "CURRENT_TIMESTAMP",
+		"INT" : "100",
+		"STRING" : "'A'",
+		"DECIMAL" : "12345.67",
+		"DEFAULT" : "0"
+	},
+
+	"generate_variable_declaration" : 1,
+	"variable_declaration_template" : "dbutils.widgets.text(name = '%VARNAME%', defaultValue = %DEFAULT_VALUE%)\n%VARNAME% = dbutils.widgets.get(\"%VARNAME%\")\n",
+	"variable_declaration_pattern" : "dbutils\.widgets\.text", //this is used but SUBJOB handler to eliminate duplicate declarations
+	"variable_declaration_header" : "# COMMAND ----------\n# Variable_declaration_comment\n\n",
+	//"skip_variable_patterns" : [ "_DIR", "DSN", "PASSWORD", "USER" ], // skip vars that have these naming patterns, case insensitive
+	//"variable_assignment_template" : "%VARNAME% = spark.sql(\"\"\"SELECT %EXPRESSION% end as COL\"\"\")\n%VARNAME% = %VARNAME%.select(('COL')).first()[0]\n", // used by SET_VARIABLE handler in PySpark
+	"GET_ARGUMENT_IN_SET_VARIABLE" : false, //use this when we need to substitute args
+	//"header" : "# MAGIC %md~
+	//# MAGIC~
+	//# Folder %FOLDER%~
+	//# Job %JOBNAME%~
+	//# MAGIC~
+	//#~
+	//#~
+	//# COMMAND ----------~
+	//%run /Shared/DatalakeMigration/Converter/Otros/EndPointRutinas~
+	//# COMMAND ----------~
+	//%run /Shared/DatalakeMigration/Converter/Otros/EndPointConexiones",
+	"header": """# Databricks notebook source~
+# Code converted on %CONVERTER_TIMESTAMP%~
+import os
+import oracledb
+from pyspark.sql import *
+from pyspark.sql.functions import *
+from pyspark import SparkContext
+from pyspark.sql.functions import lit, to_timestamp, when, expr, col, explode, count, current_date
+
+""",
+"footer" : "",
+	//"footer": "quit()",
+
+	"default_indent" : {
+		"header" : "",
+		//"body" : "\t",
+		"footer" : ""
+	},
+
+	"body_wrap" : {
+		"before" : ""
+		//"after" : "\n\nexcept OSError:\n\tprint('Error Occurred')\n"
+	},
+
+	"operator_to_function_subst" : { //converting operators to functions
+		":" : "concat"
+	},
+	"concat_operator": ":",
+	// expression syntax handling using BB's standard parser
+
+	"convert_as_expr_pattens" : ["\bIF\b", "\bIIF\b", "\bDECODE\b"],
+	"generate_router_as_expr" : 1,
+	"generate_filter_as_expr" : 1,
+
+	"md5_call_template" : "sha2(concat_ws(__PIPE__,%EXPR%), __256__)",
+
+	"line_subst" : [
+		
+		{"from" : "(\b\w+)\s*\<\>\s*lit\(\'\'\)", "to" : "when(lit($1).isNotNull() & (lit($1)!= lit('')), lit(True)).otherwise(lit(False))"},
+		{"from" : "cast\s*\(\s*([\s\S]+)\s*as\s*(\w+)\s*\)", "to" : "$1.cast($2)"},
+		{"from" : "\s+IS\s+NULL", "to" : ".isNull()"},
+		{"from" : "\s+IS\s+not\s+NULL", "to" : ".isNotNull()"},
+		{"from" : "\.equals\s*\(\"(.*?)\"\s*\)", "to" : " == \"$1\""},
+		{"from" : "\.equals\s*\(lit\(\"(.*)\"\s*\)\)", "to" : " == lit(\"$1\")"},
+		//{"from" : "context.(\w+)\b", "to" : "os.environ['$1']"},
+		{"from" : ".INROWNUM", "to" : "monotonically_increasing_id()"},
+		{"from" : ".PARTITIONNUM", "to" : "monotonically_increasing_id()"},
+		{"from" : "\bIsNull\b", "to" : "isnull", "case_sensitive_match" : "1"},
+		
+		{"from" : "<>", "to" : "!="},
+		{"from" : "\bpsEDW\.\$(\w+)","to" : "lit($1)"},
+		{"from" : "\bor\b",  "to" : "|", "exclude_categories" : ["PYSPARK_FILTER"]},
+		{"from" : "\band\b",  "to" : "&", "exclude_categories" : ["PYSPARK_FILTER"]},
+		{"from" : "trim\s*\(\s*([\w|\.]*)\s*,\s*'(.*?)'", "to" : "trim($1, $2"} // get rid of single quotes in the 2nd arg of trim function. prepare for regexp_replace function_subst
+	],
+
+	"final_file_visual_substitution" : [
+		{"from" : "__JOBVAR_ENCLOSURE_OPEN__", "to" : ""}, //DS reader thing
+		{"from" : "__JOBVAR_ENCLOSURE_CLOSE__", "to" : ""}, //DS reader thing
+		{"from" : "(\bNot\s*\(|\bnot\s*\(|\bNOT\s*\()", "to" : "~("},
+		{"from" : "COALESCE\s*\(", "to" : "__coalesce_temp__("},
+		{"from" : "TRUNC\s*\(", "to" : "__trunc_temp__("},
+		{"from" : "__trunc_temp__", "to" : "trunc"},
+		{"from" : "__coalesce_temp__", "to" : "coalesce"},
+		{"from" : "__PIPE__", "to" : "'|'"},
+		{"from" : "__256__", "to" : "256"},
+		{"from" : "\~\s*\(", "to" : "not("},
+		{"from" : "\blit\s*\(\s*FALSE\s*\)", "to" : "lit(__False__)"},
+		{"from" : "\blit\s*\(\s*TRUE\s*\)", "to" : "lit(__True__)"},
+		{"from" : "__True__", "to" : "True"},
+		{"from" : "__False__", "to" : "False"},
+		{"from" : "col\(\w+\.(\w+)\)", "to" : "col('$1')"} //remove alias from column names enclosed by col() -> custom for spark API functions
+		//{"from" : "\blit\s*\(\s*\'\s*\|\s*\'\s*\)", "to" : "'|'"},
+		//{"from": "\bsha\s*\(([\s\S]+?)\)\s*\.alias\(", "to": "sha2($1, 256).alias("}
+	],
+
+	"function_subst" : [
+		{"from" : "IF", "to" : "IIF"},
+		{"from" : "StringHandling.TRIM", "to" : "trim"},
+		{"from" : "routines.DateConversion.julianToGregorian", "output_template" : "datetime.datetime.strptime($1, '%y%j').date().strftime('%Y-%m-%d')"},
+		{"from" : "CurrentDate", "to" : "current_date"},
+		{"from" : "DaysSinceFromDate", "output_template" : "datediff($1,$2)"},
+		{"from" : "TRIM", "arg_pattern" : {"3" : "L"},  "output_template" : "regexp_replace($1, r'^[$2]*', '')"},
+		{"from" : "TRIM", "to" : "trim"},
+		{"from" : "TRIMLEADINGTRAILING", "to" : "trim"},
+		{"from" : "generate", "output_template" : "monotonically_increasing_id()"},
+		{"from" : "NullToValue", "to" : "coalesce"},
+		{"from" : "NullToEmpty", "output_template": " coalesce($1, '')"},
+		{"from" : "NullToZero", "output_template": " coalesce($1, 0)"},
+		{"from" : "NullToValues", "output_template": " coalesce($1, $2)"},
+		{"from" : "left", "output_template" : "substr($1, 1, $2)"},
+		{"from" : "right", "output_template" : "substr($1, -1, $2)"},
+		{"from" : "len", "output_template" : "LENGTH(coalesce($1,''))"},
+		{"from" : "reccount", "output_template" : "count(\"*\")"},
+		{"from" : "DateOffsetByComponents", "output_template" : "add_months($1, $3)"}
+
+	],
+
+	"substitution_iter_limit" : 20000,
+	"pattern_match_while_iter_limit" : 20000,
+	"skip_expression_with_col_and_lit" : true,
+	"remove_start_end_braces_from_expression" : true,
+	
+	// embedded sql conversion
+	"etl_converter_config_file" : "base_datastage2pyspark.json",
+	"sql_converter_config_file" : "sql_conv.json", //place the base sql config filename for your respective source dialect
+	"expr_sql_converter_config_file" : "base_datastage2databricks_expr.json",
+	//"source_sql_converter_config_file" : "sql_conv_source.json",
+
+	"generate_individual_subjobs" : true,
+	//"subjob_run_statement" : true,
+	"place_subjob_body_into_workflow" : false,
+	"subjob_script_extension" : "py", // so we can search for it in the target folder.
+	"subjob_conversion_command" : "%EXE% %VM_PARAMS% %OPT_c% %OPT_d% %OPT_g% %OPT_o% %OPT_M% %OPT_u% %OPT_v% -f %SUBJOB_NAME%.xml", //%OPT_letter% means the original option
+	// "subjob_conversion_command" : "%EXE% %OPT_c% %OPT_d% %OPT_g% %OPT_o% %OPT_M% -u %CONFIG% %OPT_v% -f %SUBJOB_NAME%.xml", //%OPT_letter% means the original option
+	"subjob_config_file" : { //pattern based.  we want to execute a specific CONFIG for nested sequences, and default for everything else
+		"SEQ" : "ds2dbks_seq_markdown_parallel_nomarkdown.json",
+	 	"DEFAULT" : "ds2dbks_main_no_markdown.json"
+	},
+
+	//"use_generic_workflow_builder" : 1,
+
+	"SET_VARIABLE_SCRIPT_PATTERN_PER_VAR" : """# Populating variable %VARNAME%
+df = spark.sql("%VALUE%");
+data = df.collect()
+val = data[0][0]
+dbutils.jobs.taskValues.set(key = '%VARNAME%', value = val)
+	"""
+}

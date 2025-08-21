@@ -1,0 +1,79 @@
+{
+	"target_file_extension" : "sql",
+	"src_type" : "MSSQL",
+
+	"line_subst" : [
+		{"from" : "\[(.*?)\]", "to" : "`$1`"},
+		{"from" : "(as)\s+\"(.*?)\"", "to" : "$1 `$2`"},
+
+		{"from" : "\{(\w+)\}", "to" : "DOLLAR__$1}"},
+		{"from" : "DOLLAR__", "to" : "${"},
+		{"from" : "#(\w+)#", "to" : "${$1}"},
+		{"from" : "(?<!\.|\@)(\b\w+\s+)\=(.*?)\n", "to" : "$2 as $1\n", "statement_categories" : ["INSERT_TO_FROM"]},
+		{"from" : "\w+\s*\=", "to" : "", "statement_categories" : ["UPDATE_TABLE"]},
+		{"from" : "\bdatetime\b", "to" : "timestamp", "statement_categories" : ["TABLE_DDL", "TABLE_VAR_DECLARE"]},
+		{"from" : "\bfloat\b", "to" : "double", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		{"from" : "string\(([0-9]+)\)", "to" : "varchar($1)"},
+		{"from" : "string\(0\)", "to" : "string"},
+		{"from" : "varchar\(0\)", "to" : "string"},
+		{"from" : "nchar\(0\)", "to" : "string"},
+		{"from" : "char\(0\)", "to" : "string"},
+		{"from" : "\bbit\b", "to" : "int"},
+		{"from" : "NOT NULL", "to" : "NOT_NULL"},
+		{"from" : "\sNULL\b", "to" : "", "statement_categories" : ["TABLE_DDL"]},
+		{"from" : "NOT_NULL", "to" : "NOT NULL"},
+		{"from" : "\bEXEC\b", "to" : "CALL"},
+		{"from" : "\bdate\b", "to" : "string", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		{"from" : "DECLARE\s+\@(\w+)\s+TABLE", "to" : "CREATE OR REPLACE TABLE $1", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		{"from" : "CREATE\s+\#", "to" : "CREATE OR REPLACE TABLE TEMP_TABLE_", "statement_categories" : ["TABLE_DDL"]},
+		{"from" : "INTO\s+\#", "to" : "INTO TEMP_TABLE_"},
+		{"from" : "FROM\s+\#(\w+)\s", "to" : "FROM TEMP_TABLE_$1 "},
+		{"from" : "(DECLARE\s+)\@(\S+)\b.*", "to" : "# Declaration of variable $2", "statement_categories" : ["VAR_DECLARE"]},
+		{"from" : "INSERT\s+INTO\s+\@(\w+)", "to" : "INSERT INTO $1"},
+		{"from" : "\bGO\b", "to" : ""}, // remove the GO keyword
+		{"from" : "\bWITH\b\s*\(\s*\bnolock\b\s*\)", "to" : ""}, // remove the WITH (nolock)
+		{"from" : "\bas\s+bit\b", "to" : "as boolean"},
+		{"from" : "\bUPDATE\s+\#(.*)", "to" : "UPDATE TEMP_TABLE_$1"},
+		{"from" : "#(\w+)\.", "to" : "TEMP_TABLE_$1"},
+		{"from" : "#(\w+)\s", "to" : "TEMP_TABLE_$1 "},
+		{"from" : "#(\w+)#", "to" : "${$1}"},
+		{"from" : "\$\$\$\{", "to" : "${"},
+
+		{"from" : "SET\s+\@", "to" : "SET "},
+		{"from" : "DECLARE\s+\@(\w+) (\w+)", "to" : "-- DECLARE $1 $2"},
+		{"from" : "DROP TABLE \#(\w+)", "to" : "DROP TABLE TEMP_TABLE_$1"},
+		{"from" : "(\w+)\.\.\#(\w+)", "to" : "$1..TEMP_TABLE_$2"},
+		{"from" : "(\s*)=(\s*)\@(\w+)", "to" : "$1=$2$3"},
+		{"from" : "\@(\w+)(\s*)as", "to" : "$1$2as"},
+
+		{"from" : "\bDROP\s+TABLE\s+(?!IF\s)", "to" : "DROP TABLE IF EXISTS "},
+		{"from" : "\[(.*?)\]", "to" : "`$1`"},
+		{"from" : "(as)\s+\"(.*?)\"", "to" : "$1 `$2`"},
+		{"from" : "\b(\w+)\.\.(\w+)\b", "to" : "$1.$2"}
+	],
+
+	"block_subst" : [
+		{"from" : "SELECT\s+(.*?)INTO\s+(\w+)", "to" : "CREATE OR REPLACE TABLE $2 SELECT $1"}
+	],
+
+	"operator_to_function_subst" : { //converting operators to functions
+		":" : "concat"
+	},
+
+	"function_subst" : [
+		{"from" : "CONSTRAINT_CHECK", "to" : "__BLANK__"},
+		{"from" : "MONTHS_BETWEEN", "to" : "DATE_DIFF", "arg_placement" : { "1":"3||'MONTH'", "2":"2", "3":"1" } },
+		{"from" : "CONVERT", "output_template" : "CAST($2 AS TIMESTAMP)", "num_args" : "2", "arg_pattern" : {"1" : "^DATETIME$"}}, //cast as timestamp
+		{"from" : "CONVERT", "output_template" : "from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss\"),\"yyyy-MM-dd 00:00:00\")", "num_args" : "2", "arg_pattern" : {"1" : "^DATE$"}},
+		{"from" : "CONVERT", "output_template" : "replace(from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"yyyy-MM-dd\"),'-','')", "num_args" : "3", "arg_pattern" : {"3" : "^112$"}},
+		{"from" : "CONVERT", "output_template" : "from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"HH:mm:ss\")", "num_args" : "3", "arg_pattern" : {"3" : "^114$"}},
+		{"from" : "CONVERT", "output_template" : "replace(from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"yyyy-MM-dd\"),'-','')", "num_args" : "3"},
+		{"from" : "CONVERT", "output_template" : "CAST($2 AS $1)", "num_args" : "2"},
+		{"from" : "DATEADD", "arg_pattern" : {"1" : "(D|DD|DAY)"}, "output_template" : "date_add($3,$2)"},
+		{"from" : "ISNUMERIC", "output_template" : "CAST($1 AS double)", "num_args" : "1"},
+		{"from" : "ISDATE", "output_template" : "CAST($1 AS date)", "num_args" : "1"},
+		{"from" : "ISNULL", "to" : "NVL"},
+
+		{"from" : "GETDATE", "to" : "current_timestamp"}
+	]
+}

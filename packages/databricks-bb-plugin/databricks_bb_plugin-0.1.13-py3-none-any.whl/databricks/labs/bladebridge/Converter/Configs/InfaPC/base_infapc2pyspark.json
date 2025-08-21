@@ -1,0 +1,183 @@
+// language conversion between infaPC and pyspark
+{
+	"line_subst" : [
+		//functions that just need lower-casing:
+		{"from" : "\bUPPER\b", "to" : "upper", "case_sensitive_match" : 1},
+		{"from" : "\bLOWER\b", "to" : "lower", "case_sensitive_match" : 1},
+		{"from" : "\bRPAD\b", "to" : "rpad", "case_sensitive_match" : 1},
+		{"from" : "\bMD5\b", "to" : "md5", "case_sensitive_match" : 1},
+		{"from" : "\bLTRIM\b", "to":"ltrim", "case_sensitive_match" : 1},
+		{"from" : "\bRTRIM\b", "to":"rtrim", "case_sensitive_match" : 1},
+		{"from" : "\bRPAD\b", "to":"rpad", "case_sensitive_match" : 1},
+		{"from" : "\bLPAD\b", "to":"lpad", "case_sensitive_match" : 1},
+		{"from" : "\bTO_DATE\b", "to":"to_date", "case_sensitive_match" : 1},
+		{"from" : "\bCOUNT\b", "to":"count", "case_sensitive_match" : 1},
+		{"from" : "\bABS\b", "to":"abs", "case_sensitive_match" : 1},
+		{"from" : "\bCHR\b", "to":"chr", "case_sensitive_match" : 1},
+		{"from" : "\bSUM\b", "to":"sum", "case_sensitive_match" : 1},
+		{"from" : "\bTRUNC\b", "to":"trunc", "case_sensitive_match" : 1},
+		{"from" : "\bROUND\b", "to":"round", "case_sensitive_match" : 1},
+		{"from" : "\bINSTR\b", "to":"instr", "case_sensitive_match" : 1},
+		{"from" : "\bMAX\b", "to":"max", "case_sensitive_match" : 1},
+		{"from" : "\bLAST_DAY\b", "to":"last_day", "case_sensitive_match" : 1},
+		{"from" : "\bLAST\b", "to":"last", "case_sensitive_match" : 1},
+		{"from" : "\bFLOOR\b", "to":"floor", "case_sensitive_match" : 1},
+		{"from" : "\bMOD\b", "to":"mod", "case_sensitive_match" : 1},
+		{"from" : "\bLENGTH\b", "to":"length", "case_sensitive_match" : 1},
+		
+
+		//
+		{"from" : "\bISNULL", "to" : "TEMP_ISNULL"},
+		{"from" : "\bNULL\b", "to" : "lit(None)"},
+
+		{"from" : "REPLACESTR\s*\(\s*\d\s*," , "to" : "regexp_replace("},
+		{"from" : "SYSDATE" , "to" : "current_date()"},
+//		{"from" : "\$\$(\w+)", "to" : "os.environ.get('$1')"},
+//		{"from" : "\$(\w+)", "to" : "os.environ.get('$1')"},
+		{"from" : "\$\$(\w+)", "to" : "f'{$1}'"},
+		{"from" : "\$(\w+)", "to" : "f'{$1}'"},
+		{"from" : "true", "to": "True", "first_match":"1"},
+		{"from" : "\bor\b" , "to" : "|", "exclude_categories" : ["PYSPARK_FILTER"]},
+		{"from" : "\band\b" , "to" : "&", "exclude_categories" : ["PYSPARK_FILTER"]},
+
+		{"from" : "\=\s\=", "to" : "=="},
+		{"from" : "SYSTIMESTAMP", "to" : "current_timestamp()"},
+		{"from" : "SESSSTARTTIME", "to" : "(to_timestamp(lit(starttime)))"},
+		{"from" : "YYYY-MM-DD", "to" : "yyyy-MM-dd", "case_sensitive_match" : 1}, // case_sensitive_match does not support $-tokens
+		
+		//update strategy - assign numeric values.
+		{"from" : "DD_INSERT", "to" : "0"},
+		{"from" : "DD_UPDATE", "to" : "1"},
+		{"from" : "DD_DELETE", "to" : "2"},
+		{"from" : "DD_REJECT", "to" : "3"}
+	],
+
+	"keep_single_quote_in_strings" : 1, //deprecated
+	"skip_variable_token_prefixes" : 1, //infa specific, keep it on
+	
+	"operator_to_function_subst" : { //converting operators to functions
+		"||" : "concat"
+	},
+
+	"interpolated_patterns" : {
+		"os.environ.get\((.*?)\)" : "{os.env.get($1)}",
+		"os.env.get" : "os.environ.get"
+	},
+
+	"block_subst" :[
+		//{"from" : "\bdecode\((.*?)\)" , "extension_call" : "::convert_decode"}
+	],
+
+	"function_subst" : [
+// note: if we need to do any object oriented calls, like COL.cast(args), please use space __DOT__ space instead of a dot
+
+		{"from":  "ABORT", "to":  "raise_error"},
+		{"from" : "ABS", "to" : "abs"},
+		{"from" : "ASCII", "output_template" : "ascii($1)"},
+		{"from" : "ADD_TO_DATE", "output_template" : "date_add($1,$3)", "arg_pattern" : {"2":"'DD'"}},
+		{"from" : "ADD_TO_DATE", "output_template" : "add_months($1,$3)", "arg_pattern" : {"2":"'MM'"}},
+		{"from" : "ADD_TO_DATE", "output_template" : "add_months($1,$3)", "arg_pattern" : {"2":"'MM'"}},
+		{"from" : "ADD_TO_DATE", "output_template" : "add_months($1,$3*12)", "arg_pattern" : {"2":"'YY'"}},
+		// verify
+		{"from" : "AND", "to" : "and"},
+
+		//{"from" : "CHR", "output_template" : "chr($1)"},
+		{"from" : "CONCAT", "to" : "concat"},
+		{"from" : "COUNT", "to" : "count"},
+
+		{"from" : "DATE_DIFF", "output_template" : "datediff($1,$2)"},
+		{"from" : "DATE_DIFF", "output_template" : "datediff($1,$2)", "arg_pattern" : {"2":"'DD'"}},
+		{"from" : "DECODE", "extension_call" : "::convert_decode"},
+
+		// {"from" : "ERROR", "to" : ""},
+
+		{"from" : "FIRST", "to" : "first"},
+		{"from" : "FLOOR", "to" : "floor"},
+
+		{"from" : "GET_DATE_PART", "output_template" : "year($1)" ,"arg_pattern" : {"2":"'YY'" }},
+		{"from" : "GET_DATE_PART", "output_template" : "months($1)" ,"arg_pattern" : {"2":"'MM'" }},
+		{"from" : "GET_DATE_PART", "output_template" : "to_date($1)"},
+
+		{"from" :"IIF", "output_template": "when(($1),($2))", "num_args" : 2},
+		{"from" :"IIF", "output_template": "when(($1),($2)) __DOT__ otherwise($3)"},
+		// when(to_date(col("date_string"), 'yyyy-MM-dd').isNotNull(), True).otherwise(False))
+		{"from" : "IS_DATE", "output_template" : "when(to_date($1,'yyyy-MM-dd').isNotNull(), True) __DOT__ otherwise(False))"},
+		{"from" : "ISNULL", "output_template" : "isnull($1)"},
+		{"from" : "IS_NUMBER", "output_template" : "$1 __DOT__ cast('int').isNotNull()"},
+		{"from" : "IN", "arg_pattern" : {"1" : "'.*'"}, "output_template" : "$1 __DOT__ isin($2)"},
+		{"from" : "INSTR", "to" : "instr"},
+		// verify
+		{"from" : "IS_SPACES", "output_template" : "trim($1) = '' "},
+		// verify  INFA:  IS_NUMBER(column_name)
+		// pyspark: when(col("value").rlike('^[0-9]+$'), True).otherwise(False))
+		{"from" : "IS_NUMBER","output_template" : "when(col($1).rlike('^[0-9]+$'), True) __DOT__ otherwise(False))"},
+
+		{"from" : "LAST", "to" : "last"},
+		{"from" : "LAST_DAY", "to" : "last_day"},
+		{"from" : "LEAST", "to" : "least"},
+		{"from" : "LENGTH", "to" : "length"},
+		{"from" : "lpad", "num_args" : 2,"arg_pattern" : {"1" : "'.*'"}, "output_template" : "lpad_temp(lit($1),$2,' ')"},
+		{"from" : "lpad", "num_args" : 2, "output_template" : "lpad_temp($1,$2,' ')"},
+		{"from" : "lpad_temp", "to" : "lpad"},
+		{"from" : "LOWER", "to" : "lower"},
+		{"from" : "LTRIM", "to" : "ltrim"},
+
+		{"from" : "MAX", "to" : "max"},
+		{"from" : "MD5", "to" : "md5"},
+		{"from" : "MIN", "to" : "min"},
+
+		// {"from" : "LENGTH", "output_template" : "length($1)", "first_match":"1"},
+
+		{"from" : "POWER", "to" : "power"},
+
+		{"from" : "REG_EXTRACT", "to" : "regexp_extract"},
+		{"from" : "REG_MATCH", "output_template" : "$1 __DOT__ rlike($2)"},
+		{"from" : "REG_REPLACE", "to" : "regexp_replace"},
+		{"from" : "REPLACECHR", "output_template" : "regexp_replace($2,$3,$4)"},
+		{"from" : "REPLACESTR", "output_template" : "regexp_replace($2,$3,$4)"},
+
+		// verify
+		{"from" : "REVERSE", "to" : "reverse"},
+		{"from" : "ROUND", "to" : "round"},
+		{"from" : "rpad", "num_args" : 2,"arg_pattern" : {"1" : "'.*'"}, "output_template" : "rpad_temp(lit($1),$2,' ')"},
+		{"from" : "rpad", "num_args" : 2, "output_template" : "rpad_temp($1,$2,' ')"},
+		{"from" : "rpad_temp", "to" : "rpad"},
+		{"from" : "RTRIM", "to" : "rtrim"},
+
+		{"from" : "SUBSTR", "to" : "substring"},
+		{"from" : "SUM", "to" : "sum"},
+		{"from" : "SYSTIMESTAMP", "to" : "current_timestamp()"},
+		// {"from" : "SUBSTR", "output_template" : "$1.substring($2,$3)"},
+
+
+		{"from" : "TEMP_ISNULL", "output_template" : "$1 __DOT__ isNull()"},
+		{"from" : "TRUNC", "to" : "trunc"},
+		{"from" : "TO_BIGINT", "output_template" : "$1 __DOT__ cast('int')"},
+		{"from" : "TO_CHAR", "output_template" : "$1 __DOT__ cast(StringType())"},
+		{"from" : "TO_DATE", "to" : "to_date"},
+		{"from" : "TO_DECIMAL", "output_template" : "$1 __DOT__ cast('decimal(12,2)')"},
+		{"from" : "TO_FLOAT", "to" : "$1 __DOT__ cast(FloatType())"},
+		{"from" : "TO_INTEGER", "output_template" : "$1 __DOT__ cast(IntegerType())"},
+		{"from" : "TO_NUMBER", "output_template" : "$1 __DOT__ cast('int')"},
+
+		{"from" : "UPPER", "to" : "upper"}
+	],
+
+	"block_post_function_subst" : [
+		{"from" : "\s*__DOT__\s*", "to" : "."}
+	],
+
+	"filter_subst" : {
+		"LAST_N_DAYS" : { "expr" : "(((date_format(%TOKEN1%,'YYYY-MM-dd')==date_sub(date_format(current_timestamp(), 'YYYY-MM-dd'),%TOKEN2%))", "TOKEN1" : "(\w+)\s*=", "TOKEN2" : "\:(\d+)"},
+		" IN\s*\(" : {"expr" : "%TOKEN1%.isin%TOKEN2", "TOKEN1" : "(.+)\s+in", "TOKEN2" : "in\s+(.+)"},
+		" NOT IN\s*\(" : {"expr" : "%TOKEN1%.isin%TOKEN2 == False", "TOKEN1" : "(.+)\s+in", "TOKEN2" : "in\s+(.+)"}
+	},
+
+	//if threshold is met, introduce the registerTempTable code snippet
+	"target_special_handling" : {
+		"column_count_threshold" : "5000",
+		"temp_df_name" : "%DF%_OUTPUT",
+		"final_df_name" : "%DF%_FINAL",
+		"final_df_population" : "sqlContext.sql('select * from %DF%')"
+	}
+}

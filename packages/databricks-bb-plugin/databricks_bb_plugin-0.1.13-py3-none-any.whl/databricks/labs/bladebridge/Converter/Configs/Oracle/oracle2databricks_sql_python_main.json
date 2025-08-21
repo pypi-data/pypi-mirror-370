@@ -1,0 +1,201 @@
+{
+	"CUSTOM_CONVERTER_MODULES" : ["generic_sql_databricks_hooks_v2"],
+	"target_file_extension" : "py",
+	"post_process_header" : "# Databricks notebook source\nimport numpy as np\nimport datetime",
+	"substitution_iter_limit" : 20000,
+	"pattern_match_while_iter_limit" : 20000,
+	"preprocess_file" : "1",
+	"preprocess_routine": "::preprocess_generic_sql",
+	"initialize_hooks_call" : "::init_hooks", //initialize context, pass all relevant info
+	"pre_finalization_handler" : "::finalize_content",
+	"code_fragment_breakers": { "line_end": [";"] },
+	"keep_comments_in_place" : "1",
+
+	"proc_variable_default_widget_value" : "",
+	"proc_variable_declaration_template" : "dbutils.widgets.text(name = '%VARNAME%', defaultValue = '%DEFAULT_VALUE%')\n%VARNAME% = dbutils.widgets.get(\"%VARNAME%\")\n",
+	"proc_variable_declaration_header" : "# COMMAND ----------\n# Variable_declaration_comment",
+	"proc_variable_sql_wrapping" : "'{%VARNAME%}'",
+	"variable_assignment_from_select" : "query_1 = spark.sql(\"\"\"%QUERY%\"\"\")\n%VARIABLES_STRING% = query_1.first()%IS_SINGLE%",
+
+	"file_tabbing" : "\t",
+	"try_except_handling" : 1,
+
+	"stmt_categorization_patterns":
+	[
+		{"category": "MARKER", "patterns" : ["^[\s\n]*\bEND\b\s+IF[\s\n]*$", "^[\s\n]*\bEND\b\s+LOOP[\s\n]*$"]},
+		{"category": "TRY_EXCEPT", "patterns" : ["^\s*\bEND\b\s*$", "^\s*\bBEGIN\b\s*$", "^\s*\bEXCEPTION\b\s*$", "^\s*\bEND\b\s+\w+\s*$"]},
+		{"category": "DELETE", "patterns" : ["^[\s\n]*\bCOMMIT\b[\s\n]*$", "^[\s\n]*$"]},
+		{"category": "PYTHON_VARIABLE_ASSIGNMENT", "patterns" : ["^[\s\n]*\w+\s*:=", "^[\s\n]*\bBEGIN\b[\s\n]*\w+\s*:="]},
+		{"category": "PYTHON_VARIABLE_DECLARATION", "patterns" : [
+			"^[\s\n]*\w+\s+(\bDATE\b|\bNUMBER\b|\bINT\b|\bVARCHAR2\b|\bLONG\b|\bRAW\b|\bTIMESTAMP\b|\bINTERVAL\b)",
+			"^[\s\n]*\bBEGIN\b[\s\n]*\w+\s+(\bDATE\b|\bNUMBER\b|\bINT\b|\bVARCHAR\b|\bLONG\b|\bRAW\b|\bTIMESTAMP\b|\bINTERVAL\b)"
+		]},
+		{"category": "LOOP_FETCH", "patterns" : ["^[\s\n]*LOOP\s+FETCH"]},
+		{"category": "PYTHON_FOR_LOOP", "patterns" : ["^[\s\n]*FOR", "^[\s\n]*\bBEGIN\b[\s\n]+\bFOR\b"]},
+		{"category": "PYTHON_CONDITIONAL", "patterns" : ["^[\s\n]*(\bIF\b|\bELSIF\b|\bELSE\b)"]},
+		{"category": "CURSOR_DEF", "patterns" : ["^\s*CURSOR\s+"]},
+		{"category": "EXECUTE_IMMEDIATE", "patterns" : ["^\s*EXECUTE\s+IMMEDIATE\b"]},
+		{"category": "SELECT_INTO", "patterns" : ["^\s*SELECT\s+.*?\bINTO\b"]},
+
+		{"category": "SP_LOG", "patterns" : ["^\s*sp_log_oids_messages\s+"]},
+		{"category": "SP_LOG", "patterns" : ["^\s*sp_log_ods_errors\s+"]},
+		{"category": "SP_LOG", "patterns" : ["^\s*oids\.sp_log_oids_messages\s+"]},
+		{"category": "SP_LOG", "patterns" : ["^\s*oids\.sp_log_messages\s+"]}
+	],
+
+	"fragment_handling" :
+	{
+		"PYTHON_VARIABLE_DECLARATION": "::python_variable_declaration",
+		"PYTHON_VARIABLE_ASSIGNMENT": "::python_variable_assignment",
+		"PYTHON_CONDITIONAL": "::python_conditional",
+		"TRY_EXCEPT": "::try_except",
+		"PYTHON_FOR_LOOP": "::python_for_loop",
+		"LOOP_FETCH": "::python_loop_fetch",
+		"DELETE": "::delete_fragment",
+		"CURSOR_DEF": "::cursor_def",
+		"SP_LOG": "::sp_log",
+		"EXECUTE_IMMEDIATE" : "::execute_immediate_fragment",
+		"SELECT_INTO" : "::select_into_fragment",
+		"__DEFAULT_HANDLER__": "::default_handler"
+	},
+
+	// "between_sql_fragments" : "\n# COMMAND ----------\n",
+	"between_default_fragments" : "\n# COMMAND ----------\n",
+	"default_sql_wrapping": "%DF% = spark.sql(f\"\"\"\n%SQL%\n\"\"\")\nnum_count = %DF%.first()[0]\n",
+	"identify_procedure_headers" : [
+		"(CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE.*?\)\s*(__BB_COMMENT_[0-9]+__)*\s*(\bIS\b|\bAS\b))",
+		"(CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE.*?(\bIS\b|\bAS\b))",
+		"(CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+\w+\s+(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b)",
+		"(CREATE\s+OR\s+REPLACE\s+PROCEDURE.*?(\bIS\b|\bAS\b))",
+		"(CREATE\s+PROCEDURE\s+\w+\s+(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b)",
+		"(CREATE\s+PROCEDURE.*?(\bIS\b|\bAS\b))"
+	],
+
+	"pre_process_subst" : [
+		{"from": "CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE.*?\)\s*(__BB_COMMENT_[0-9]+__)*\s*(\bIS\b|\bAS\b)", "to": ""},
+		{"from": "CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE.*?(\bIS\b|\bAS\b)", "to": ""},
+		{"from": "CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+\w+\s+(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b", "to": "BEGIN"},
+		{"from": "CREATE\s+OR\s+REPLACE\s+PROCEDURE.*?(\bIS\b|\bAS\b)", "to": ""},
+		{"from": "CREATE\s+PROCEDURE\s+\w+\s+(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b", "to": "BEGIN"},
+		{"from": "CREATE\s+PROCEDURE.*?(\bIS\b|\bAS\b)", "to": ""},
+		{"from": "(\'|\")([^\'\"\n]+)\bEXCEPTION\b([^\'\"\n]+\1)", "to": "$1$2__PART_OF_STRING_EXCPT__$3"},
+		//{"from": "\s*\bsp_log_messages\b\s*\([\s\S]+?\)\s*\;",  "to" : ""}, //remove entire block
+		{"from": "\%TYPE\b", "to": ""},
+		{"from": "\bDBMS_UTILITY\.get_time\b", "to": "datetime.datetime.now()"}
+	],
+
+	"python_conditional_subst" : [
+		{"from": "\bIF\b(.*?)=(.*)", "to": "if $1 __equals__ $2"},
+		{"from": "\bELSIF\b(.*?)=(.*)", "to": "elif $1 __equals__ $2"},
+		{"from": "\bELSE\b(.*?)=(.*)", "to": "else $1 __equals__ $2"},
+		{"from": "\bIF\b(.*?)IN(.*)", "to": "if $1 __i_n__ $2"},
+		{"from": "\bELSIF\b(.*?)IN(.*)", "to": "elif $1 __i_n__ $2"},
+		{"from": "\bELSE\b(.*?)IN(.*)", "to": "else $1 __i_n__ $2"},
+		{"from": "__equals__", "to": "=="},
+		{"from": "__i_n__", "to": "in"},
+		{"from": "IF", "to": "__i_f__"},
+		{"from": "__i_f__", "to": "if"},
+		{"from": "ELSE", "to": "__el_se__"},
+		{"from": "__el_se__", "to": "else"},
+		{"from": "ELSIF", "to": "__el_sif__"},
+		{"from": "__el_sif__", "to": "elif"},
+		{"from": "(<|>)\s*==", "to": "$1="},
+		{"from": "null", "to": "None"},
+		{"from": "<>", "to": "!="}
+	],
+
+	"python_for_loop_subst" : [
+		{"from": "FOR\s+(\w+)\s+IN\s+(.*)", "to": "for $1 __in__ $2"},
+		{"from": "__in__", "to": "in"},
+		{"from": "([0-9]+)\s*\.\.\s*([0-9]+)", "to": "range($1, $2+1)"}
+
+		// further hook processing after this
+	],
+
+	"python_variable_declaration_subst" : [
+		{"from": "(\s*\w+)\s+(DATE|NUMBER|INT|VARCHAR|LONG|RAW|TIMESTAMP)\s*:=\s*(.*)", "to": "$1 = $3"},
+		{"from": "(\s*\w+)\s+NUMBER\s+DEFAULT\s+(datetime\.datetime\.now\(\)).*", "to": "$1 = $2"},
+		{"from": "(\s*\w+)\s+(DATE|NUMBER|INT|VARCHAR|LONG|RAW|TIMESTAMP|INTERVAL).*", "to": "$1 = None"}
+	],
+
+	"python_variable_assignment_subst" : [
+		{"from": "\s*:=\s*", "to": " = "},
+		{"from": "\bNULL\b", "to": "None"},
+		{"from": "\+\s*\n", "to": "+ \\n"}
+	],
+
+	"sp_log_subst" : [
+		{"from": "sp_log_oids_messages\s*\(([\s\S]+)\)\s*$",  "to" : "dbutils.notebook.run('path/sp_log_oids_messages.py',60,arguments={$1})"},
+		{"from": "sp_log_oids_errors*\(([\s\S]+)\)\s*$",  "to" : "dbutils.notebook.run('path/sp_log_oids_errors.py',60,arguments={$1})"},
+		{"from": "oids\.sp_log_oids_messages\s*\(([\s\S]+)\)\s*\;",  "to" : "dbutils.notebook.run('path/sp_log_oids_messages.py',60,arguments={$1})"},
+		{"from": "sp_log_messages\s*\(([\s\S]+)\)\s*\;",  "to" : "dbutils.notebook.run('path/sp_log_messages.py',60,arguments={$1})"},
+		{"from": "(\w+)\s*\=\>\s*([\s\S]+)?(\,|\})", "to": "\"$1\" : $2$3"},
+		{"from": "sp_log_ods_errors\s*\(([\s\S]+)\)\s*\;",  "to" : "dbutils.notebook.run('path/sp_log_ods_errors.py',60,arguments={$1})"}
+	],
+
+	"cursor_def_pre_subst" : [
+		{"from": "\s*CURSOR\s+", "to": "def "},
+		{"from": "\s*IN\s+[\w\.]+\s*[\%\w]", "to": ""}
+		//{"from": "\s*\bIS\b", "to": "__COLON__"}
+		// {"from": "__COLON__([\s\S]+)", "to": ":\n\tinner_query = spark.sql(f\"\"\"$1\"\"\")\n\treturn inner_query"}
+
+		// further hook processing after this
+	],
+
+	// reserved for visual changes only, this is the last step
+	"final_visual_subst" : [
+		{"from": "#__endif__", "to": ""},
+		{"from": "#__endloop__", "to": ""},
+		{"from": "#__ignored_except__", "to": ""},
+		{"from": "# COMMAND ----------\n# COMMAND ----------", "to": "# COMMAND ----------"},
+		{"from": "\n[\ \t]+# COMMAND ----------\n",  "to" : "\n"},
+		{"from": "\n# COMMAND ----------[\n\s]*$", "to": "\n"},
+		{"from": "#\"\"\"--", "to": "\"\"\"--"},
+		{"from": "\n(\s*)(\/\s*)\n", "to": "\n$1# $2\n"},
+		{"from": "\n(\s*)(\bGRANT\b.*)", "to": "\n$1# $2"},
+		{"from": "\n\s*\bRAISE\b\s*\n", "to": "\n\n"},
+		{"from": "\bexcept\b:", "to": "except Exception as ex:"},
+		{"from": "\bSQLERRM\b", "to": "str(ex)"},
+		{"from": ":=", "to": "="}
+	],
+
+	"line_subst" : [
+		{"from": "\bset\s+define\s+off\b",  "to" : ""},
+		{"from": "RRRRMMDD",  "to" : "yyyyMMdd"},
+		{"from": "RRRRMM",  "to" : "yyyyMM"},
+		//{"from": "YYYYMM",  "to" : "yyyyMM"},
+		{"from": "\bEXIT\s+WHEN\b.*",  "to" : ""},
+		{"from": "\bRAISE\b\;",  "to" : ""},
+		{"from": "(\bEND\s+IF\b)",  "to" : "#__endif__"}, //needed for hook processing
+		//{"from": "\bEXECUTE\s+IMMEDIATE\b",  "to" : "EXECUTE_IMMEDIATE"}, //needed for hook processing
+		
+		{"from": "(\bEND\s+LOOP\b)",  "to" : "#__endloop__"}, //needed for hook processing
+		{"from": "__PART_OF_STRING_EXCPT__",  "to" : "exception"} //needed for hook processing
+	],
+	// for default handler -- in this case sql fragments, comments (not python fragments)
+	"block_subst" : [
+		{"from": "\n\s*\n",  "to" : "\n"},
+		{"from": "(\bEND\s+IF\b)",  "to" : "#__endif__"}, //needed for hook processing
+		{"from": "\|\|", "to": "+"},
+		{"from": "(\bEND\s+LOOP\b)",  "to" : "#__endloop__"} //needed for hook processing
+	],
+
+	"function_subst" : [
+		{"from": "TRUNC", "to": "date_trunc", "arg_placement": { "1":"2||'DD'", "2":"1" } },
+		{"from": "SYSDATE",  "to" : "current_date()"},
+		{"from": "ISNULL",  "to" : "NVL"},
+		{"from": "TO_NUMBER", "to" : "INT"},
+		{"from": "TO_CHAR", "num_args" : 1, "output_template" : "date_format($1,'MM/dd/yyy')"},
+		//{"from": "DBMS_OUTPUT.put_line", "to" : "__BLANK__"},
+		//{"from": "ODS.SP_LOG_MESSAGES", "to" : "__BLANK__"},
+		{"from": "RAISE_APPLICATION_ERROR", "output_template" : "print($2)"},
+		//{"from": "SP_LOG_OIDS_MESSAGES", "to" : "__BLANK__"},
+		//{"from": "EXECUTE_IMMEDIATE", "to" : "spark.sql"},
+		{"from": "TO_CHAR", "to" : "date_format"},
+		//{"from": "ROUND", "to" : "round"},
+		{"from": "DBMS_OUTPUT.put_line", "to" : "print"},
+		{"from": "SUBSTR", "num_args" : 2, "output_template" : "$1[$2:]"},
+		{"from": "SUBSTR", "num_args" : 3, "output_template" : "$1[$2:$3]"}
+	]
+
+}

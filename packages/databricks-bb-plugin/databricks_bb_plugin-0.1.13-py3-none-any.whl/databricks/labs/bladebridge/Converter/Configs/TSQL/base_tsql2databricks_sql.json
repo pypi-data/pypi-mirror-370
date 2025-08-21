@@ -1,0 +1,284 @@
+{
+	"target_file_extension": "sql", // make sure this is in sync with code_generation_language setting.
+	"inherit_from":["final_master_dbx_sql_scripting.json"],
+    "use_mark_separators" : true,
+    "prefix_for_variable": "V_",
+	"suppress_lines_containing": ["\bDROP\s+PROCEDURE\b"],
+	"line_suppression_behavior": "ELIMINATE", //choices: COMMENT or ELIMINATE
+	"pattern_match_while_iter_limit" : 20000,
+	"restricted_characters_mapping_for_ddl": [
+		{" " : "_"},
+		{"\," : "_"},
+		{"\;" : "_"},
+		{"\{" : "_"},
+		{"\}" : "_"},
+		{"\(" : "_"},
+		{"\)" : "_"},
+		{"\=" : "_"}
+	],
+    "line_subst" : [
+        // remove parentheses for datatypes
+
+		{"from" : "\`\bnvarchar\b\`", "to" : "nvarchar"},
+		{"from" : "\`\bvarchar\b\`", "to" : "varchar"},
+		{"from" : "\`\bnchar\b\`", "to" : "nchar"},
+		{"from" : "\`\bchar\b\`", "to" : "char"},
+		{"from" : "\`\bdecimal\b\`", "to" : "decimal"},
+		{"from" : "\`\bint\b\`", "to" : "int"},
+		{"from" : "\`\bsmallint\b\`", "to" : "smallint"},
+		{"from" : "\`\btinyint\b\`", "to" : "tinyint"},
+		{"from" : "\`\bdatetime\b\`", "to" : "TIMESTAMP"},
+		{"from" : "\`\bdate\b\`", "to" : "TIMESTAMP"},
+		
+		{"from" : "\[\bnvarchar\b\]", "to" : "nvarchar"},
+		{"from" : "\[\bvarchar\b\]", "to" : "varchar"},
+		{"from" : "\[\bnchar\b\]", "to" : "nchar"},
+		{"from" : "\[\bchar\b\]", "to" : "char"},
+		{"from" : "\[\bdecimal\b\]", "to" : "decimal"},
+		{"from" : "\[\bint\b\]", "to" : "int"},
+		{"from" : "\[\bsmallint\b\]", "to" : "smallint"},
+		{"from" : "\[\btinyint\b\]", "to" : "tinyint"},
+		{"from" : "\[\bdatetime\b\]", "to" : "TIMESTAMP"},
+		{"from" : "\[\bdate\b\]", "to" : "TIMESTAMP"},
+
+		{"from" : "\[", "to" : "`"},
+		{"from" : "\]", "to" : "`"},
+
+		{"from" : "\bDROP\s+PROCEDURE\b.*", "to" : ""},
+		{"from" : "\bGO\b.*", "to" : ""},
+		{"from" : "SET\s+ANSI_NULLS\b.*", "to" : ""},
+		{"from" : "SET\s+QUOTED_IDENTIFIER\b.*", "to" : ""},
+		{"from" : "SET\s+NOCOUNT\b.*", "to" : ""},
+		{"from" : "\bWITH\s+NOWAIT\b", "to" : ""},
+		{"from" : "\bPRINT\b", "to" : "SELECT"},
+        {"from" : "\bformat\s*\(\s*([0-9]+)\.*[0-9]*\s*\,\s*\'N([0-9]+)\'\s*\)", "to" : "format_number($1, $2)"},
+        {"from" : "\bformat\s*\(\s*([\w.\(\)]+)\s*\,\s*\'N([0-9]+)\'\s*\)", "to" : "format_number($1, $2)"},
+
+        {"from" : "array\s*(\[)\s*([\w\,\'\s]*)(\])", "to": "array($2)"},
+
+		{"from" : "\bVARCHAR\b\s*\(.*?\)", "to" : "STRING"},
+		{"from" : "\bVARCHAR\b", "to" : "STRING"},
+		{"from" : "\bNVARCHAR\b\s*\(.*?\)", "to" : "STRING"},
+		{"from" : "\bNVARCHAR\b", "to" : "STRING"},
+		{"from" : "\bDATETIME2\s*__OPEN_PARENTHESIS__.*?__CLOSE_PARENTHESIS__", "to" : "TIMESTAMP"},
+		{"from" : "\bTIME\s*__OPEN_PARENTHESIS__.*?__CLOSE_PARENTHESIS__", "to" : "TIMESTAMP"},
+		{"from" : "\bCHAR\s*__OPEN_PARENTHESIS__.*?__CLOSE_PARENTHESIS__", "to" : "STRING","statement_categories" : ["TABLE_DDL"]},
+		{"from" : "\bNCHAR\s*__OPEN_PARENTHESIS__.*?__CLOSE_PARENTHESIS__", "to" : "STRING","statement_categories" : ["TABLE_DDL"]},
+		{"from" : "\bNCHAR\s*__OPEN_PARENTHESIS__(.*?)__CLOSE_PARENTHESIS__", "to" : "char($1)"},
+		{"from" : "\bTEXT\b", "to" : "STRING"},
+		{"from" : "\bNTEXT\b", "to" : "STRING"},
+		{"from" : "\bUNIQUEIDENTIFIER\b", "to" : "STRING"},
+		
+		{"from" : "\bFLOAT\b", "to" : "DOUBLE"},
+		{"from" : "\bREAL\b", "to" : "FLOAT"},
+		{"from": "\bNUMBER\b" , "to" : "BIGINT"},
+		{"from": "\bMONEY\b" , "to" : "DECIMAL(19,4)"},
+		{"from": "\bSMALLMONEY\b" , "to" : "DECIMAL(10,4)"},
+
+		{"from": "\bBIT\b" , "to" : "BOOLEAN"},
+		{"from": "\bIMAGE\b" , "to" : "BINARY"},
+
+		{"from": "\bDATETIME\b" , "to" : "TIMESTAMP"},
+		{"from": "\bSMALLDATETIME\b" , "to" : "TIMESTAMP"},
+		{"from": "\bTIME\b" , "to" : "TIMESTAMP"},
+
+		{"from" : "\bCREATE\s+TABLE\s+\#", "to" : "CREATE OR REPLACE TABLE temp_"},
+		{"from" : "(?<!\#)\#(\w+)", "to" : "temp_$1"},
+		{"from" : "\'\s*\+", "to" : "' ||"},
+		{"from" : "\+\s*\'", "to" : "|| '"},
+
+		{"from" : "\bSET\s+ANSI_PADDING\s+ON\b", "to" : ""},
+		{"from" : "\bPRIMARY\s+KEY\b", "to" : "", "statement_categories" : ["TABLE_DDL"]},
+        // handling double quotes
+        {"from": "\"([^\"]*?)\"", "to": "`$1`"},
+
+        // handling square brackets
+        //{"from": "\[([^\]]*?)\]", "to": "`$1`"},
+
+        {"from" : "(?:(?=.*\b(?:PATINDEX|LIKE)\b).*(*SKIP)(*FAIL))|\[([^]]+)\]", "to": "`$1`"},
+        {"from" : "\bAS\s+'(.*?)'", "to" : "AS `$1`", "debug_tag" : "single_quote_alias_replace"}, // replace single-quoted alias to backticks
+
+		{"from": "\bHASH\s+JOIN\b", "to": "JOIN"},
+        
+        //Add INTO after INSERT statement
+        {"from" : "\bINSERT\s+\`", "to": "INSERT INTO `"},
+        //removing NULL from column definition in Table DDL
+        {"from" : "\b(decimal\s*\(.*?\))\s+NULL\b", "to" : "$1", "statement_categories": ["TABLE_DDL"], "first_match" : "1"},
+        {"from" : "\bdecimal\s+null\b", "to" : "DECIMAL", "statement_categories": ["TABLE_DDL"], "first_match" : "1"},
+        {"from" : "\bstring\s+null\b", "to" : "STRING", "statement_categories": ["TABLE_DDL"], "first_match" : "1"},
+        {"from" : "\bbigint\s+null\b", "to" : "BIGINT", "statement_categories": ["TABLE_DDL"], "first_match" : "1"},
+        {"from" : "\bint\s+null\b", "to" : "INT", "statement_categories": ["TABLE_DDL"], "first_match" : "1"},
+        {"from" : "\bdouble\s+null\b", "to" : "DOUBLE", "statement_categories": ["TABLE_DDL"], "first_match" : "1"},
+        {"from" : "\bfloat\s+null\b", "to" : "FLOAT", "statement_categories": ["TABLE_DDL"], "first_match" : "1"},
+        {"from" : "\bSQL_VARIANT\b", "to": "VARIANT"},
+        {"from" : "\bSPARSE\b", "to": ""},
+        {"from" : "\bnot\s+null", "to" : "NOT_NULL", "statement_categories" : ["TABLE_DDL"]},
+        {"from" : "\bNULL\b", "to" : "", "statement_categories" : ["TABLE_DDL"]},
+        {"from" : "\bNOT_NULL\b", "to" : "NOT NULL", "statement_categories" : ["TABLE_DDL"]},
+        {"from" : "\bXML\b", "to" : "STRING", "statement_categories" : ["TABLE_DDL"]}
+
+    ],
+
+	"block_subst" : [
+		{"from" : ".*?\bDELETE\b.*\bJOIN\b", "extension_call" : "$self->convert_delete_to_merge"},
+		{"from" : "^UPDATE\b.*\bSET\b.*\bFROM\b", "extension_call" : "$self->convert_update_to_merge"},
+		{"from" : "\bSET\s+\w+\s+ON\b", "to" : ""},
+
+		{"from" : "\bCREATE\s+VIEW\b", "to" : "CREATE OR REPLACE VIEW"},
+        {"from" : "\bCREATE\s+OR\s+ALTER\+VIEW\b", "to" : "CREATE OR REPLACE VIEW"},
+        {"from" : "\bCREATE\s+TABLE\b", "to" : "CREATE OR REPLACE TABLE"},
+
+		// {"from" : "\bwith\s+\([\s\S]*\)", "to" : ""},
+
+		// type conversions
+		{"from" : "\bsysname\b", "to" : "string"},
+		{"from" : "\bvarchar\s*\([0-9\s\,\w]*\)", "to" : "string"},
+		{"from" : "\bnvarchar\s*\([0-9\s\,\w]*\)", "to" : "string"},
+        {"from" : "\bnvarchar\b", "to" : "string"},
+		{"from" : "\bvarchar\b", "to" : "string"},
+		{"from" : "\bnchar\s*__OPEN_PARENTHESIS__[0-9\s\,\w]*__CLOSE_PARENTHESIS__", "to" : "string","statement_categories" : ["TABLE_DDL"]},
+		{"from" : "\bnchar\s*__OPEN_PARENTHESIS__([0-9\s\,\w]*)__CLOSE_PARENTHESIS__", "to" : "char($1)"},
+		{"from" : "\bnchar\b", "to" : "string"},
+		{"from" : "\bdatetime[0-9]*\s*\([0-9\s\,\w]*\)", "to" : "timestamp"},
+		{"from" : "\bdatetime[0-9]*\b", "to" : "timestamp"},
+		{"from" : "\btimestamp[0-9]*\s*\([0-9\s\,\w]*\)", "to" : "timestamp"},
+		{"from" : "\btimestamp[0-9]+\b", "to" : "timestamp"},
+		{"from" : "\bbit\b", "to" : "boolean"},
+
+		// add semicolon at the end
+		{"from" : "(\))(\s*$)", "to" : "$1;$2"},
+
+		// remove CONSTRAINT
+		{"from" : "\bCONSTRAINT\b([\s\S]*?)(\,|\)\s*\;)", "to" : "$2"},
+
+		// remove multiple commas in a row
+		{"from" : "\,(\s*)(\,|\))", "to" : "$1$2"},
+
+        // {"from" : "\bIF\b\s+EXISTS", "to" : "IF_EXISTS"},
+        {"from" : "\bIF\b\s+\bNOT\b\s+EXISTS", "to" : "IF_NOT_EXISTS"},
+        {"from" : "(\bIF_NOT_EXISTS\b.*)", "to" : "_DONE_$1\n\t\tEND IF;"},
+        {"from" : "(\bIF_EXISTS\b.*)", "to" : "_DONE_$1\n\t\tEND IF;"},
+        {"from" : "as\s+CALLER\s+AS\s+THEN\s*\;", "to" : "AS BEGIN"},
+		{"from" : "\bEXEC\s+sp_executesql\b", "to" : "CALL"},
+		{"from" : "(?<!\@)EXEC\s*\(\s*(\w+)\s*\)", "to" : "EXECUTE IMMEADIATE $1"},
+        {"from" : "(?<!(?:\@|\w))EXEC\s+(\`*\w+\`*\.?\`*\w+\`*\.*\`*\w*\`*)(.*?)\;", "to" : "call $1($2);"},
+        {"from" : "\bIF\b(.*?V_V_VERSION.*)", "to" : "/*CONSIDER REWORK OF BELOW CONDITION NO EQUIVALENT OF @@VERSION IN DATABRIKS*/\n\t\t_DONE_IF$1"},
+        {"from" : "\bIF\b(.*?compatibility_level.*)", "to" : "/*CONSIDER REWORK OF BELOW CONDITION NO EQUIVALENT OF compatibility_level IN DATABRIKS*/\n\t\t_DONE_IF$1"},
+        {"from" : "\bSELECT\s+(V_\w+)(\s*\=.*)\;", "to" : "SET $1 = (SELECT $2 limit 1);"},
+        {"from" : "\bsys.schemas\s+WHERE\s+name\b", "to" : "system.information_schema.schemata WHERE schema_name"},
+        
+        {"from" : "\)\s*ON\s+\`?\bPRIMARY\b\`?", "to" : ")"},
+        {"from" : "\,\s*\bCONSTRAINT\b.*?(\bgo\b|\;|$)", "to" : ");"},
+        {"from" : "\bCREATE\s+UNIQUE\s+NONCLUSTERED\s+INDEX\b.*?(\bgo\b|\;|$)", "to" : ""},
+        {"from" : "DROP_TABLE_IF_EXISTS", "to" : "DROP TABLE IF EXISTS"},
+        {"from" : "\bWITH\b\s*\(\s*NOLOCK\s*\)", "to" : ""},
+        {"from" : "_DONE_", "to" : ""}
+	],
+
+	"function_subst" : [
+		{"from" : "CONVERT" , "output_template" : "CAST($2 AS $1)", "num_args" : 2},
+        //{"from" : "CONVERT", "arg_pattern" : {"3": 1}, "output_template" : "CAST($2 AS $1)"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 101}, "output_template" : "date_format($2, 'MM/dd/yyyy')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 102}, "output_template" : "date_format($2, 'yyyy.MM.dd')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 103}, "output_template" : "date_format($2, 'dd/MM/yyyy')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 104}, "output_template" : "date_format($2, 'dd.MM.yyyy')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 105}, "output_template" : "date_format($2, 'dd-MM-yyyy')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 106}, "output_template" : "date_format($2, 'dd MMM yyyy')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 107}, "output_template" : "date_format($2, 'MMM dd, yyyy')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 108}, "output_template" : "date_format($2, 'hh:mm:ss')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 109}, "output_template" : "date_format($2, 'MMM dd yyyy hh:mm:ss:SSS')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 110}, "output_template" : "date_format($2, 'MM-dd-yyyy')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 111}, "output_template" : "date_format($2, 'yyyy/MM/dd')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 112}, "output_template" : "date_format($2, 'yyyyMMdd')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 113}, "output_template" : "date_format($2, 'dd MMM yyyy hh:mm:ss:SSS')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 114}, "output_template" : "date_format($2, 'hh:mm:ss:SSS')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 120}, "output_template" : "date_format($2, 'yyyy-MM-dd hh:mm:ss')"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 121}, "output_template" : "date_format($2, 'yyyy-MM-dd hh:mm:ss:SSS"},
+        {"from" : "CONVERT", "arg_pattern" : {"3": 1}, "output_template" : "CAST($2 AS $1)"},
+		{"from" : "CONVERT","arg_pattern" : {"1" : "VARCHAR"}, "output_template" : "CAST($2 AS STRING)", "num_args": 2},
+		{"from" : "CONVERT","arg_pattern" : {"1" : "DECIMAL"}, "output_template" : "CAST($2 AS DECIMAL(10,2))", "num_args": 2},
+		{"from" : "CONVERT","arg_pattern" : {"1" : "DATETIME"}, "output_template" : "CAST($2 AS TIMESTAMP)", "num_args": 2},
+		{"from" : "CONVERT","arg_pattern" : {"1" : "CHAR"}, "output_template" : "CAST($2 AS CHAR(100))", "num_args": 2},
+		{"from" : "CONVERT", "output_template" : "CAST($2 AS $1)", "num_args": 2},
+		{"from" : "ISNULL", "to" : "COALESCE"},
+        {"from" : "getdate", "to": "current_timestamp"},
+        {"from" : "SYSDATETIME", "to": "current_timestamp"},
+        {"from" : "SYSDATETIMEOFFSET", "output_template": "to_timestamp(date_format(current_timestamp(), 'yyyy-MM-dd HH:mm:ss.SSSXXX Z'), 'yyyy-MM-dd HH:mm:ss.SSSXXX Z')"},
+        {"from" : "SYSUTCDATETIME", "to" : "current_timestamp"},
+
+        {"from": "DATEPART", "arg_pattern" : {"1": "DAYOFYEAR"}, "output_template" : "EXTRACT(DOY from $2)"},
+        {"from": "DATEPART", "arg_pattern" : {"1": "WEEKDAY"}, "output_template" : "EXTRACT(DOW from $2)"},
+        {"from": "DATEPART", "output_template" : "EXTRACT($1 from $2)"},
+        {"from" : "DATENAME", "arg_pattern" : {"1": "DAYOFYEAR"}, "output_template" : "cast(EXTRACT(DOY from $2) as string)"},
+        {"from" : "DATENAME", "arg_pattern" : {"1": "WEEKDAY"}, "output_template" : "cast(EXTRACT(DOW from $2) as string)"},
+	    {"from" : "DATENAME" ,"arg_pattern" : {"1" : "year"}, "output_template" : "DATE_FORMAT($2, 'yyy')"},
+		{"from" : "DATENAME" ,"arg_pattern" : {"1" : "MonthName"}, "output_template" : "DATE_FORMAT($2, 'MMMM')"},
+		{"from" : "DATENAME" ,"arg_pattern" : {"1" : "DayOfWeek"}, "output_template" : "DATE_FORMAT($2, 'EEEE')"},        
+        {"from" : "DATENAME", "output_template" : "cast(EXTRACT($1 from $2) as string)"},
+        // {"from": "DATEPART", "output_template" : "DATE_PART('$1', $2)"}
+        {"from" : "FORMAT", "output_template" : "date_format($1, $2)"},
+        {"from"  : "DATEFROMPARTS", "to" : "make_date"},
+        {"from" : "ISNUMERIC", "output_template" : "CASE WHEN $1 not rlike '[^0-9]' THEN 1 ELSE 0 END "},
+        {"from" : "NVARCHAR", "output_template" : "string"},
+        {"from" : "REPLICATE", "to" : "REPEAT"},
+        {"from": "datetime2", "output_template" : "TIMESTAMP"},
+        {"from" : "EOMONTH", "num_args" : 1, "output_template" : "LAST_DAY($1)"},
+        {"from" : "EOMONTH", "num_args" : 2, "output_template" : "LAST_DAY($1 + interval $2 month)"},
+        {"from" : "ISDATE", "output_template" : "case when try_cast($1 as date) is null then 0 else 1 end"},
+
+        {"from" : "PARSENAME", "arg_pattern" : {"2" : 1}, "output_template"  : "case when trim(split_part($1, '.', -1)) = '' or split_part($1, '.', -1) is null then null else split_part($1, '.', -1) end"},
+        {"from" : "PARSENAME", "arg_pattern" : {"2" : 2}, "output_template"  : "case when trim(split_part($1, '.', -2)) = '' or split_part($1, '.', -2) is null then null else split_part($1, '.', -2) end"},
+        {"from" : "PARSENAME", "arg_pattern" : {"2" : 3}, "output_template"  : "case when trim(split_part($1, '.', -3)) = '' or split_part($1, '.', -3) is null then null else split_part($1, '.', -3) end"},
+        {"from" : "PARSENAME", "arg_pattern" : {"2" : 4}, "output_template"  : "case when trim(split_part($1, '.', -4)) = '' or split_part($1, '.', -4) is null then null else split_part($1, '.', -4) end"},
+
+        {"from" : "STUFF", "output_template" : "CONCAT(substring($1, 1, $2 - 1), $4, substring($1, $2 + $3))"},
+        {"from" : "STRING_SPLIT", "output_template" : "EXPLODE(SPLIT($1, $2))"},
+        {"from" : "STRING_AGG", "output_template" : "ARRAY_JOIN(COLLECT_LIST($1), $2)"},
+
+        {"from" : "STR", "num_args" : 1, "output_template" : "string($1)"},
+        {"from" : "STR", "num_args" : 2, "output_template" : "case when length(string($1)) > $2 then '**' else lpad(string($1), $2, ' ') end"},
+        {"from" : "STR", "num_args" : 3, "output_template" : "case when length(format_number(round($1, $3), $3)) > $2 then '**' else lpad(format_number(round($1, $3), $3), $2, ' ') end"},
+
+        {"from": "NUMERIC", "to" : "DECIMAL"},
+        {"from": "COUNT_BIG", "output_template" : "cast(count($1) as bigint)"},
+        {"from" : "HASHBYTES", "output_template" : "cast(sha2($1, 256) as binary)"},
+       
+        {"from" : "ORIGINAL_LOGIN", "to" : "CURRENT_USER"},
+        {"from" : "APPLY", "to" : "LATERAL"},
+
+		{"from" : "TRY_CONVERT", "output_template" : "TRY_CAST($2 AS $1)"},
+
+
+	    {"from" : "PATINDEX", "output_template" : "REGEXP_INSTR($2, $1)"},
+	    {"from" : "DATETIME2", "to" : "TIMESTAMP"},
+	    {"from" : "BINARY", "output_template" : "BINARY"},
+	    {"from" : "VARBINARY", "output_template" : "BINARY"},
+	    {"from" : "CHARINDEX", "output_template" : "INSTR($2, $1)", "num_args": 2},
+		{"from" : "CHARINDEX", "output_template" : "INSTR(SUBSTRING($2, $3), $1)"},
+	    {"from" : "DATEDIFF", "arg_pattern" : {"1" : "YEAR"}, "output_template" : "CAST(DATEDIFF($3, $2) / 365 AS INT)"},
+		{"from" : "DATEDIFF", "arg_pattern" : {"1" : "MONTH"}, "output_template" : "CAST(MONTHS_BETWEEN($3, $2) AS INT)"},
+		{"from" : "DATEDIFF", "arg_pattern" : {"1" : "DAY"}, "output_template" : "DATEDIFF($3, $2)"},
+		{"from" : "RAISERROR", "output_template" : "SELECT raise_error(%ALL_ARGS%)"},
+		{"from" : "IDENTITY", "output_template" : "GENERATED ALWAYS AS IDENTITY"},
+		{"from" : "DB_NAME", "output_template" : "current_database()"},
+		{"from" : "NEWID", "to" : "UUID"},
+		{"from" : "IIF", "to" : "IF"},
+		{"from" : "WITH", "arg_pattern" : {"1": "NOLOCK"}, "to" : "__BLANK__"},
+		{"from" : "WITH", "arg_pattern" : {"1": "TABLOCKX"}, "to" : "__BLANK__"},
+		{"from" : "WITH", "arg_pattern" : {"1": "INDEX\(\s*[0-9]+\s*\)"}, "to" : "__BLANK__"},
+		
+		//{"from" : "EXEC", "output_template" : "\n\t\t\tSET v_temp_query = $1;\n\t\t\tEXECUTE IMMEDIATE v_temp_query"},
+		{"from" : "IF_EXISTS", "output_template" : "IF EXISTS ($1) THEN"},
+		{"from" : "IF_NOT_EXISTS", "output_template" : "IF NOT EXISTS ($1) THEN"},
+		{"from" : "UNICODE", "to" : "ASCII"},
+		{"from" : "DATETIMEOFFSET", "output_template" : "TIMESTAMP"},
+		{"from" : "DATETIME2", "output_template" : "TIMESTAMP"},
+
+		{"from" : "ERROR_NUMBER", "output_template" : "LINE_NUMBER"},
+		{"from" : "ERROR_MESSAGE", "output_template" : "MESSAGE_TEXT"},
+		{"from" : "ERROR_SEVERITY", "output_template" : ""},
+		{"from" : "ERROR_STATE", "output_template" : "RETURNED_SQLSTATE"}
+	
+    ]
+
+}

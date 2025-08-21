@@ -1,0 +1,527 @@
+//this is a sample file for Datastage to PySpark conversion.  Use dbxconv DATASTAGE -M CodeGeneration::Pyspark switch
+//sequences are converted to databricks notebooks
+{
+	"inherit_from" : ["ds2dbks_subjob_instructions.json"],
+	"config_variables" : {
+		"CLUSTER_ID" : "1234-567890-test", // this is client specific
+		"USER_NAME" : "venugopala.bade@energyq.com.au"		
+	},
+	"script_extension" : "py",
+	"pre_node_line" : "# COMMAND ----------\n# Processing node %NODE_NAME%, type %NODE_TYPE%\n# COLUMN COUNT: %COLUMN_COUNT%\n# %ADDITIONAL_COMMENT%", //# COLUMNS %COLUMN_LIST%
+
+	"default_flatfile_delimiter" : ",",
+
+	"pre_post_sql_wrapper" : "#Processing %PRE_POST_FLAG% for node %NODE_NAME%\nspark.sql(\"\"\"%INNER_SQL%\"\"\")",
+
+	"pre_post_sql_subst" : [
+		{"from" : ";", "to" : ""},
+		{"from" : "spark\.sql\(\"\"\"INSERT\s+INTO\s+getArgument\s*\(\s*\"(\w+)\"\s*\)", "to" : "spark.sql(\"\"\" Truncate \"+$1+\" \"\"\")\n\nspark.sql(\"\"\""}
+	],
+
+	"multiline_stmt_break" : " ",
+	"skip_rowid_generation" : "1",
+
+	"exclude_function_args_from_lit_wrapping" : [
+		"regexp_replace",
+		"orderBy"
+	],
+
+	"random_value_expressions" : {
+		"DATE" : "CURRENT_DATE",
+		"DATETIME" : "CURRENT_TIMESTAMP",
+		"TIMESTAMP" : "CURRENT_TIMESTAMP",
+		"INT" : "100",
+		"STRING" : "'A'",
+		"DECIMAL" : "12345.67",
+		"DEFAULT" : "0"
+	},
+
+	"generate_variable_declaration" : 1,
+	"variable_declaration_template" : "dbutils.widgets.text(name = '%VARNAME%', defaultValue = %DEFAULT_VALUE%)\n%VARNAME% = dbutils.widgets.get(\"%VARNAME%\")\n",
+	"variable_declaration_pattern" : "dbutils\.widgets\.text", //this is used but SUBJOB handler to eliminate duplicate declarations
+	"variable_declaration_header" : "# COMMAND ----------\n# Variable_declaration_comment\n\n",
+	//"skip_variable_patterns" : [ "_DIR", "DSN", "PASSWORD", "USER" ], // skip vars that have these naming patterns, case insensitive
+	//"variable_assignment_template" : "%VARNAME% = spark.sql(\"\"\"SELECT %EXPRESSION% end as COL\"\"\")\n%VARNAME% = %VARNAME%.select(('COL')).first()[0]\n", // used by SET_VARIABLE handler in PySpark
+	"GET_ARGUMENT_IN_SET_VARIABLE" : false, //use this when we need to substitute args
+	//"header" : "# MAGIC %md~
+	//# MAGIC~
+	//# Folder %FOLDER%~
+	//# Job %JOBNAME%~
+	//# MAGIC~
+	//#~
+	//#~
+	//# COMMAND ----------~
+	//%run /Shared/DatalakeMigration/Converter/Otros/EndPointRutinas~
+	//# COMMAND ----------~
+	//%run /Shared/DatalakeMigration/Converter/Otros/EndPointConexiones",
+	"header": """#Code converted on %CONVERTER_TIMESTAMP%
+import os
+import oracledb
+from pyspark.sql import *
+from pyspark.sql.functions import *
+from pyspark import SparkContext
+from pyspark.sql.functions import lit, to_timestamp, when, expr, col, explode
+MIN_DATE_TIME = '1900-01-01 00:00:00'
+MAX_DATE_TIME = '9999-12-31 23:59:59'
+
+dbutils.widgets.text(name = 'sql_host_key', defaultValue = '') 
+sql_host_key = dbutils.widgets.get("sql_host_key")
+dbutils.widgets.text(name = 'sql_port_key', defaultValue = '') 
+sql_port_key = dbutils.widgets.get("sql_port_key")
+dbutils.widgets.text(name = 'sql_username_key', defaultValue = '') 
+sql_username_key = dbutils.widgets.get("sql_username_key")
+dbutils.widgets.text(name = 'sql_password_key', defaultValue = '') 
+sql_password_key = dbutils.widgets.get("sql_password_key")
+dbutils.widgets.text(name = 'sql_service_name_key', defaultValue = '') 
+sql_service_name_key = dbutils.widgets.get('sql_service_name_key')
+
+edw_oracle_host = dbutils.secrets.get(scope="LDPR_SCOPE", key=sql_host_key)
+edw_oracle_port = dbutils.secrets.get(scope="LDPR_SCOPE", key=sql_port_key)
+edw_oracle_stg_username = dbutils.secrets.get(scope="LDPR_SCOPE", key=sql_username_key)
+edw_oracle_stg_password = dbutils.secrets.get(scope="LDPR_SCOPE", key=sql_password_key)
+edw_oracle_service_name = dbutils.secrets.get(scope="LDPR_SCOPE", key=sql_service_name_key)
+edw_oracle_admin_username = dbutils.secrets.get(scope="LDPR_SCOPE", key='edw_oracle_admin_username')
+edw_oracle_admin_password = dbutils.secrets.get(scope="LDPR_SCOPE", key='edw_oracle_admin_password')
+
+""",
+"footer" : "# Enable thick mode~
+oracledb.init_oracle_client()~
+~
+# Define the connection details~
+dsn_tns = oracledb.makedsn(edw_oracle_host, edw_oracle_port, service_name=edw_oracle_service_name)~
+connection = oracledb.connect(user=edw_oracle_stg_username,~
+                              password=edw_oracle_stg_password,~
+                              dsn=dsn_tns,~
+                              mode=oracledb.AUTH_MODE_DEFAULT)~
+~
+# Create a cursor~
+cursor = connection.cursor()~
+~
+# Define the update query~
+update_query = f\"truncate table {Schema}.{INTRIM_TABLE}\"~
+~
+# Execute the update query~
+cursor.execute(update_query)~
+~
+# Commit the transaction~
+connection.commit()~
+~
+# Close the cursor and connection~
+cursor.close()~
+connection.close()~
+~
+# Define Oracle database connection properties~
+oracle_url = f\"jdbc:oracle:thin:@\/\/{edw_oracle_host}:{edw_oracle_port}/{edw_oracle_service_name}\"~
+oracle_properties = {~
+	\"user\": edw_oracle_stg_username,~
+	\"password\": edw_oracle_stg_password,~
+	\"driver\": \"oracle.jdbc.driver.OracleDriver\"~
+}~
+~
+combined_df.write.jdbc(url=oracle_url, table=f\"{Schema}.{INTRIM_TABLE}\", mode=\"append\", properties=oracle_properties)",
+	//"footer": "quit()",
+
+	"default_indent" : {
+		"header" : "",
+		//"body" : "\t",
+		"footer" : ""
+	},
+
+	"body_wrap" : {
+		"before" : ""
+		//"after" : "\n\nexcept OSError:\n\tprint('Error Occurred')\n"
+	},
+
+	"operator_to_function_subst" : { //converting operators to functions
+		":" : "concat"
+	},
+	"concat_operator": ":",
+	// expression syntax handling using BB's standard parser
+
+	"convert_as_expr_pattens" : ["\bIF\b", "\bIIF\b", "\bDECODE\b"],
+	"generate_router_as_expr" : 1,
+	"generate_filter_as_expr" : 1,
+
+	"md5_call_template" : "sha2(concat_ws(__PIPE__,%EXPR%), __256__)",
+
+	"line_subst" : [
+		
+		{"from" : "(\b\w+)\s*\<\>\s*lit\(\'\'\)", "to" : "when(lit($1).isNotNull() & (lit($1)!= lit('')), lit(True)).otherwise(lit(False))"},
+		{"from" : "cast\s*\(\s*([\s\S]+)\s*as\s*(\w+)\s*\)", "to" : "$1.cast($2)"},
+		{"from" : "\s+IS\s+NULL", "to" : ".isNull()"},
+		{"from" : "\s+IS\s+not\s+NULL", "to" : ".isNotNull()"},
+		{"from" : "\.equals\s*\(\"(.*?)\"\s*\)", "to" : " == \"$1\""},
+		{"from" : "\.equals\s*\(lit\(\"(.*)\"\s*\)\)", "to" : " == lit(\"$1\")"},
+		//{"from" : "context.(\w+)\b", "to" : "os.environ['$1']"},
+		{"from" : ".INROWNUM", "to" : "monotonically_increasing_id()"},
+		{"from" : ".PARTITIONNUM", "to" : "monotonically_increasing_id()"},
+		{"from" : "\bIsNull\b", "to" : "isnull", "case_sensitive_match" : "1"},
+		
+		{"from" : "<>", "to" : "!="},
+		{"from" : "\bpsEDW\.\$(\w+)","to" : "lit($1)"},
+		{"from" : "\bor\b",  "to" : "|", "exclude_categories" : ["PYSPARK_FILTER"]},
+		{"from" : "\band\b",  "to" : "&", "exclude_categories" : ["PYSPARK_FILTER"]},
+		{"from" : "trim\s*\(\s*([\w|\.]*)\s*,\s*'(.*?)'", "to" : "trim($1, $2"} // get rid of single quotes in the 2nd arg of trim function. prepare for regexp_replace function_subst
+	],
+
+	"final_file_visual_substitution" : [
+		{"from" : "__JOBVAR_ENCLOSURE_OPEN__", "to" : "{"}, //DS reader thing
+		{"from" : "__JOBVAR_ENCLOSURE_CLOSE__", "to" : "}"}, //DS reader thing
+		{"from" : "(\bNot\s*\(|\bnot\s*\(|\bNOT\s*\()", "to" : "~("},
+		{"from" : "COALESCE\s*\(", "to" : "__coalesce_temp__("},
+		{"from" : "TRUNC\s*\(", "to" : "__trunc_temp__("},
+		{"from" : "__trunc_temp__", "to" : "trunc"},
+		{"from" : "__coalesce_temp__", "to" : "coalesce"},
+		{"from" : "__PIPE__", "to" : "'|'"},
+		{"from" : "__256__", "to" : "256"},
+		{"from" : "\~\s*\(", "to" : "not("},
+		{"from" : "\blit\s*\(\s*FALSE\s*\)", "to" : "lit(__False__)"},
+		{"from" : "\blit\s*\(\s*TRUE\s*\)", "to" : "lit(__True__)"},
+		{"from" : "__True__", "to" : "True"},
+		{"from" : "__False__", "to" : "False"}
+		//{"from" : "\blit\s*\(\s*\'\s*\|\s*\'\s*\)", "to" : "'|'"},
+		//{"from": "\bsha\s*\(([\s\S]+?)\)\s*\.alias\(", "to": "sha2($1, 256).alias("}
+	],
+
+	"function_subst" : [
+		{"from" : "IF", "to" : "IIF"},
+		{"from" : "StringHandling.TRIM", "to" : "trim"},
+		{"from" : "routines.DateConversion.julianToGregorian", "output_template" : "datetime.datetime.strptime($1, '%y%j').date().strftime('%Y-%m-%d')"},
+		{"from" : "CurrentDate", "to" : "current_date"},
+		{"from" : "DaysSinceFromDate", "output_template" : "datediff($1,$2)"},
+		{"from" : "TRIM", "arg_pattern" : {"3" : "L"},  "output_template" : "regexp_replace($1, r'^[$2]*', '')"},
+		{"from" : "TRIM", "to" : "trim"},
+		{"from" : "TRIMLEADINGTRAILING", "to" : "trim"},
+		{"from" : "generate", "output_template" : "monotonically_increasing_id()"},
+		{"from" : "NullToValue", "to" : "coalesce"},
+		{"from" : "NullToEmpty", "output_template": " coalesce($1, '')"},
+		{"from" : "NullToZero", "output_template": " coalesce($1, 0)"},
+		{"from" : "NullToValues", "output_template": " coalesce($1, $2)"},
+		{"from" : "left", "output_template" : "substr($1, 1, $2)"},
+		{"from" : "right", "output_template" : "substr($1, -1, $2)"},
+		{"from" : "len", "output_template" : "LENGTH(coalesce($1,''))"}
+	],
+
+	"substitution_iter_limit" : 20000,
+	"pattern_match_while_iter_limit" : 20000,
+
+	// embedded sql conversion
+	//,"sql_converter_config_file" : "!BB_CONFIG_CONVERTER!/db22.databricks.json"
+	"etl_converter_config_file" : "ds2dbks_datastage2deltalake.json",
+	"sql_converter_config_file" : "sql_conv.json",
+	"expr_sql_converter_config_file" : "ds2dbks_expr.json",
+	"source_sql_converter_config_file" : "sql_conv_source.json",
+
+	"generate_individual_subjobs" : true,
+	//"subjob_run_statement" : true,
+	"place_subjob_body_into_workflow" : false,
+	"subjob_script_extension" : "py", // so we can search for it in the target folder.
+	"subjob_conversion_command" : "%EXE% DATASTAGE %VM_PARAMS% %OPT_c% %OPT_d% %OPT_g% %OPT_o% %OPT_M% %OPT_u% %OPT_v% -f %SUBJOB_NAME%.xml", //%OPT_letter% means the original option
+	// "subjob_conversion_command" : "%EXE% %OPT_c% %OPT_d% %OPT_g% %OPT_o% %OPT_M% -u %CONFIG% %OPT_v% -f %SUBJOB_NAME%.xml", //%OPT_letter% means the original option
+	"subjob_config_file" : { //pattern based.  we want to execute a specific CONFIG for nested sequences, and default for everything else
+		"SEQ" : "ds2dbks_seq_markdown_parallel_nomarkdown.json",
+	 	"DEFAULT" : "ds2dbks_main_no_markdown.json"
+	},
+
+	//"use_generic_workflow_builder" : 1,
+
+	"SET_VARIABLE_SCRIPT_PATTERN_PER_VAR" : """# Populating variable %VARNAME%
+df = spark.sql("%VALUE%");
+data = df.collect()
+val = data[0][0]
+dbutils.jobs.taskValues.set(key = '%VARNAME%', value = val)
+	""",
+
+	"workflow_specs" : { // will kick in only if use_generic_workflow_builder is on
+		"workflow_class" : "CodeGeneration::DatabricksJobs",
+		// any other attributes on the job level (tags)
+		"workflow_component_mapping" : {
+			"SESSION" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"min_retry_interval_millis" : 2000,
+				"retry_on_timeout" : false,
+				"max_retries" : 3,
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/adarsh.remeshan@energyq.com.au/30_STAGING/10_EXTRACT/%MAPPING_NAME%",
+        			"source": "WORKSPACE"
+			 	}
+			},
+			"SUBJOB" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"min_retry_interval_millis" : 2000,
+				"retry_on_timeout" : false,
+				"max_retries" : 3,
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/adarsh.remeshan@energyq.com.au/30_STAGING/10_EXTRACT/%MAPPING_NAME%",
+        			"source": "WORKSPACE"
+			 	}
+			},
+			"SET_VARIABLE" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"min_retry_interval_millis" : 2000,
+				"retry_on_timeout" : false,
+				"max_retries" : 3,
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%JOB_NAME%_%COMPONENT_NAME%",
+        			"source": "WORKSPACE"
+			 	}
+			},
+			//"NESTED_CONDITION" : {
+			//	"task_key" : "%COMPONENT_NAME%",
+			//	"condition_task": {
+			//		"op": "%OP%",
+			//		"left": "%LEFT_OP%",
+			//		"right": "%RIGHT_OP%"
+			//	}
+			//},
+			"NESTED_CONDITION" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%JOB_NAME%_%COMPONENT_NAME%"
+			 	}
+			},
+			"SUB_NESTED_CONDITION" : {
+				"task_key" : "Condition_%COMPONENT_NAME%",
+				"condition_task": {
+					"op": "EQUAL_TO",
+					"left": "{{tasks.%COMPONENT_NAME%.values.is_true}}",
+					"right": "true"
+				}
+			},
+			"LOOP_START" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%JOB_NAME%_%COMPONENT_NAME%",
+					"base_parameters": {
+					  "iteration": "%ITERATION%"
+					}
+			 	}
+			},
+			"SUB_LOOP_START" : {
+				"task_key" : "Continue_%COMPONENT_NAME%",
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%JOB_NAME%_%COMPONENT_NAME%",
+					"base_parameters": {
+					  "iteration": "{{tasks.%COMPONENT_NAME%.values.iteration}}"
+					}
+			 	},
+				"condition_task": {
+					"op": "NOT_EQUAL",
+					"left": "{{tasks.%COMPONENT_NAME%.values.iteration}}",
+					"right": "{{tasks.%COMPONENT_NAME%.values.max_iteration}}"
+				}
+			},
+			"LOOP_END" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"spark_python_task" : {
+			 		//"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"SUBJOB__SEQUENCE__" : {
+				"task_key": "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"run_job_task" : {
+					"job_id" : 642451309197759
+				}
+			},
+//			"COMMAND" : {
+//				"task_key" : "%COMPONENT_NAME%",
+//				"description" : "%DESCRIPTION%",
+//				"spark_python_task" : {
+//			 		"python_file" : "somePath/%COMPONENT_NAME%.py"
+//			 	}
+//			},
+//			"SET_VARIABLE" : {
+//				"task_key" : "%COMPONENT_NAME%",
+//				"description" : "%DESCRIPTION%",
+//				"spark_python_task" : {
+//			 		"python_file" : "somePath/%COMPONENT_NAME%.py"
+//			 	}
+//			},
+			"DIE" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"spark_python_task" : {
+			 		//"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"SYNCHRONIZE" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		//"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"EXCEPTION_HANDLER" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		//"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"EMAIL" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		//"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"SHELL_COMMAND" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		//"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/Users/%JOB_NAME%_%COMPONENT_NAME%"
+			 	}
+			}
+//			"CONTROL" : {
+//				"task_key" : "%COMPONENT_NAME%",
+//				"description" : "%DESCRIPTION%",
+//				"spark_python_task" : {
+//			 		"python_file" : "somePath/%COMPONENT_NAME%.py"
+//			 	}
+//			},
+//			"DECISION" : {
+//				"task_key" : "%COMPONENT_NAME%",
+//				"description" : "%DESCRIPTION%",
+//				"spark_python_task" : {
+//			 		"python_file" : "somePath/%COMPONENT_NAME%.py"
+//			 	}
+//			},
+//			"ASSIGNMENT" : {
+//				"task_key" : "%COMPONENT_NAME%",
+//				"description" : "%DESCRIPTION%",
+//				"spark_python_task" : {
+//			 		"python_file" : "somePath/%COMPONENT_NAME%.py"
+//			 	}
+//			}
+		},
+
+		"default_workflow_attr" : {
+			"tags" : {
+				"cost-center": "engineering",
+				"team": "jobs"
+			},
+			"job_clusters" : [
+				{
+					"job_cluster_key": "auto_scaling_cluster",
+					"new_cluster": {
+					   "spark_version": "13.3.x-scala2.12",
+					   "node_type_id": "r3.xlarge",
+					   "num_workers": 2
+					}
+				}
+			],
+			"email_notifications" :  {
+				"on_start": [
+					"user.name@databricks.com",
+					"adarsh.remeshan@energyq.com.au"
+				],
+				"on_success": [
+					"user.name@databricks.com",
+					"adarsh.remeshan@energyq.com.au"
+				],
+				"on_failure": [
+					"user.name@databricks.com",
+					"adarsh.remeshan@energyq.com.au"
+				],
+				"no_alert_for_skipped_runs": false
+			},
+			"timeout_seconds" : 86400,
+			"notification_settings": {
+				"no_alert_for_canceled_runs": false,
+				"no_alert_for_skipped_runs": false
+			},
+			"run_as": {
+				"user_name": "%USER_NAME%"
+			},
+			"schedule" : {
+				"quartz_cron_expression": "20 30 12 * * ?",
+				"timezone_id": "Europe/London",
+				"pause_status": "PAUSED"
+			},
+			"max_concurrent_runs" : 10,
+			"format" : "MULTI_TASK"
+		},
+
+		"default_task_attr" : {
+			//"run_if": "ALL_SUCCESS",
+			//"timeout_seconds" : 86400,
+			//"email_notifications": {},
+			"notification_settings": {
+				"no_alert_for_skipped_runs": false,
+				"no_alert_for_canceled_runs": false,
+				"alert_on_last_attempt": false
+			}
+		},
+
+		"nested_conditional_operation_mapping" : {
+			"=" : "EQUAL_TO",
+			"==" : "EQUAL_TO",
+			"<>" : "NOT_EQUAL",
+			"!=" : "NOT_EQUAL",
+			"<" : "LESS_THAN",
+			">" : "GREATER_THAN",
+			"<=" : "LESS_THAN_OR_EQUAL",
+			">=" : "GREATER_THAN_OR_EQUAL"
+		},
+
+//		"keep_numbers_as_numbers" : 1, // not strings
+//		"keep_booleans_case" : 1, // instead of uppercase True or False
+//		"keep_none_case" : 1, // instead of uppercase None
+
+		"output_workflow_filename_template" : "%JOB_NAME%.py",
+		//"script_header" : "#this is a standard header for workflow %WORKFLOW_NAME%\n\ttry:", // can also provide "script_header_template" instead
+		"script_header_template" : "pyspark_airflow_workflow_header.py",
+		//"script_footer" : "\texcept:\n\t\tprint('An exception occurred')", // can also provide "script_footer_template" instead
+		//"code_indent" : "            ", //code indent for workflow code - 12 spaces
+		//"skip_component_name_patterns" : ["audit"],
+		//"skip_component_types" : ["email", "start"],
+
+		"workflow_component_template_START" : "START_template.py",
+		"workflow_component_template_SESSION" : "pyspark_airflow_SESSION.py",
+		"workflow_component_template_COMMAND" : "databricksJobs_template_COMMAND.py",
+		"workflow_component_template_SET_VARIABLE" : "databricksJobs_template_SET_VARIABLE.py",
+		"workflow_component_template_DIE" : "databricksJobs_template_DIE.py",
+		"workflow_component_template_SYNCHRONIZE" : "databricksJobs_template_SYNCHRONIZE.py",
+		"workflow_component_template_EMAIL" : "EMAIL_template.py",
+		"workflow_component_template_ASSIGNMENT" : "ASSIGNMENT_template.py",
+		"workflow_component_template_CONTROL" : "CONTROL_template.py",
+		"workflow_component_template_DECISION" : "DECISION_template.py",
+		"workflow_component_template_EXCEPTION_HANDLER" : "databricksJobs_template_EXCEPTION_HANDLER.py",
+		"workflow_component_template_NESTED_CONDITION" : "databricksJobs_template_NESTED_CONDITION.py",
+		"workflow_component_template_LOOP_START" : "databricksJobs_template_LOOP_START.py",
+		"workflow_component_template_SHELL_COMMAND" : "databricksJobs_template_SHELL_COMMAND.py",
+		
+
+		"flow_start" : "\n########### Flow definition ###########\n",
+		"dependency_instruction_template" : "%COMPONENT_NAME% << %UPSTREAM_COMPONENT_LIST%",
+
+		"component_list_spec" : {
+			"list_enclosure" : "[,]", //specify start character sequence before comma and closing char sequence after comma
+			"single_item_use_enclosure_flag" : "0"
+		}
+		//parameter passing.
+		//"single_entry_template_COMMAND" : "#Command label %TOKEN1%\nos.system('%TOKEN2%')",
+		//"single_entry_template_ASSIGNMENT" : "%TOKEN1% = %TOKEN2%"
+	}
+}

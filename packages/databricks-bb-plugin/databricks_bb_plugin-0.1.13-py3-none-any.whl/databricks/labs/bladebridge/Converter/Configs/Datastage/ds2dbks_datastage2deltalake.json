@@ -1,0 +1,118 @@
+{
+	"target_sql" : "DATABRICKS",
+	"inherit_from":["general_sql_specs.json"],
+
+	"line_subst" : [
+
+		{"from" : "\bDSJOBNAME\b", "to" : "'curr_dsjobname'"}, // FIXME - REPLACE WITH PROPER TRANSLATION
+		{"from" : "DSJobStartDate", "to" : "current_timestamp"},
+		{"from" : "currentimestamp", "to" : "current_timestamp"},
+		{"from" : "%YYYY", "to" : "YYYY"},
+		{"from" : "%MM", "to" : "MM"},
+		{"from" : "%DD", "to" : "DD"},
+		{"from" : "\@(\w+)", "to" : "lit($1)"},
+		{"from" : "\bCOUNT\b", "to":"count", "case_sensitive_match" : 1},
+		{"from" : "\bINDEX\b", "to":"index", "case_sensitive_match" : 1},
+
+		//do etl variable expression substitutions first, since they are limited to ETL_VARIABLE category
+		{"from" : "if\s*@INROWNUM\s*=\s*1\s*then\s*DSGetJobInfo\s*\(.*USERSTATUS.*\s*\)\s*else.*\s+", "to" : "0 /* USERSTATUS */"}, //replace job status with 0
+		{"from" : "if\s*\(\s*@INROWNUM\s*=\s*1\s*,\s*DSGetJobInfo\s*\(.*USERSTATUS.*\s*\)\s*,\s*.*__VARNAME__.*", "to" : "0 /* USERSTATUS */"},
+
+		{"from" : "#(\w+)#", "to" : "${$1}"},
+		//{"from" : "#(\w+)#", "to" : "{$1}"},
+		{"from" : "__JOBVAR_ENCLOSURE_OPEN__", "to" : ""}, //DS reader thing
+		{"from" : "__JOBVAR_ENCLOSURE_CLOSE__", "to" : ""}, //DS reader thing
+		{"from" : "\"", "to" : "'"},
+		{"from" : "\s:\s", "to" : " || "},
+		{"from" : "#(\w+)#\.#(\w+)#", "to" : "$PARAM1.$PARAM2"}, // #PS1#.#VAR1# => $PS1.$VAR1
+		{"from" : "@PARTITIONNUM.*@NUMPARTITIONS.*\+\s+1", "to" : "row_number() over (order by 1)"},
+		{"from" : "@NULL\b", "to" : "NULL"},
+		{"from" : ".INROWNUM", "to" : "row_number() over (order by 1)"},
+		{"from" : ".PARTITIONNUM", "to" : "row_number() over (order by 1)"},
+		{"from" : "DSJobStartTimestamp", "to" : "'{starttime}'"},
+		{"from" : "oconv.*@date.*oconv\s*\(\s*@time(.*?)\)", "to" : "current_timestamp"}, // this is a concat of date and time, convert to timestamp for data type compatibility purposes
+		{"from": "IsValidDecimal\s*\(\s*([\s\S]+?)\s*\)\s*=\s*0", "to": "case when try_cast($1 AS INT) is NULL then 0 else 1 end"}, //may need modification
+		{"from" : "DSJobStartTimestamp", "to" : "'{starttime}'"},
+		{"from" : "\bCurrentTS\b", "to" : "current_timestamp()"},
+		
+		// subjob parameter subst
+		{"from": ":", "to" : " + ", "statement_categories" : ["SUBJOB_PARAM_EXPR"]},
+		{"from": "\$(\w+)", "to" : "$1", "statement_categories" : ["SUBJOB_PARAM_EXPR"]}
+	],
+
+	"function_subst" : [
+		{"from" : "NullToEmpty", "output_template": " COALESCE($1, '')"},
+		{"from" : "NullToValue", "to" : "coalesce"},
+		{"from": "STRINGTOTIMESTAMP", "to" : "to_timestamp"},
+		{"from": "TIMESTAMPTODATE", "to" : "to_date"},
+//		{"from": "StringToDate", "arg_pattern" : {"2" : "'YYYYMMDD'"},  "output_template": "DATE_FORMAT($1,'yyyyMMdd')"},
+//		{"from": "StringToDate", "num_args" : "1", "output_template": "TO_DATE($1)"},
+		{"from": "StringToDate", "output_template": "cast($1 as date)"},
+		{"from": "IsValidDate", "output_template": "cast($1 as date)"},
+		{"from" : "DownCase", "to" : "LOWER"},
+		{"from" : "Num", "output_template":"TRY_CAST($1 AS NUMERIC) IS NOT NULL"},
+		{"from" : "UpCase", "to" : "UPPER"},
+		//{"from" : "ISNULL", "output_template" : "$1 IS NULL"},
+		{"from" : "ISNULL", "output_template" : "$1 __DOT__isNull()"},
+		//{"from" : "IF", "output_template" : "CASE WHEN $1 THEN $2 ELSE $3 END"},
+		{"from" : "IF", "to" : "IFF"},
+		{"from" : "is_date", "output_template" : "$1.rlike('\\d.*\\/.*\\d.*\\/.*\\d'))"},
+//		{"from" : "LEN", "to" : "length"},
+		//{"from" : "Char",     "output_template" : "decode(unhex(hex($1)), 'US-ASCII')"}, // stays as is
+		{"from" : "SETNULL", "output_template" : "NULL"},
+		{"from" : "AsInteger", "output_template" : "CAST($1 as int)"},
+		{"from" : "DFLOATTODECIMAL", "output_template" : "CAST($1 as DECIMAL(10, 2))"},
+		{"from" : "StringToDecimal", "output_template" : "CAST($1 as numeric)"},
+		{"from" : "to_int", "output_template" : "CAST($1 as int)"},
+		{"from" : "string_trim", "to" : "TRIM"},
+		{"from" : "CONVERT", "output_template" : "TRANSLATE($3,$1,$2)"},
+		{"from" : "CurrentDate", "output_template" : "CURRENT_DATE"},
+		{"from" : "DaysSinceFromDate", "output_template" : "DATEDIFF($1, $2)"},
+		{"from" : "Field", "output_template" : "split($1, $2)[$3-1]"},
+		{"from" : "GenerateKey", "output_template" : "row_number() over (order by 1)"},
+		{"from" : "TRIM", "arg_pattern" : {"3" : "L"},  "output_template" : "regexp_replace($1, r'^[$2]*', '')"},
+		{"from" : "TRIM", "arg_pattern" : {"3" : "A"},  "output_template" : "replace($1, $2, '')"},
+		{"from" : "TRIM", "to" : "trim"},
+		{"from" : "TRIMLEADINGTRAILING", "to" : "trim"},
+		{"from" : "RecCount", "output_template" : "count(1)"},
+		{"from" : "OutPatientServiceTypeLogic", "output_template" : "'OutPatientServiceTypeLogic_call'"},  // temp solution
+		{"from" : "UtilityAbortToLog", "to" : "raise_error"},
+		{"from" : "Oconv", "arg_pattern" : {"1" : "@DATE"}, "output_template" : "date_format(current_timestamp,'y-MM-dd')"},
+		{"from" : "Oconv", "arg_pattern" : {"1" : "@TIME"}, "output_template" : "date_format(current_timestamp,'HH-mm-ss')"},
+		{"from" : "DECIMALTODECIMAL", "output_template" : "CAST($1 AS decimal(10, 2))"},
+		{"from" : "DECIMALTOSTRING", "output_template" : "CAST($1 AS STRING)"},
+		{"from" : "DATETOSTRING", "output_template" : "date_format($1, $2)", "num_args" : 2},
+		{"from" : "DATETOSTRING", "output_template" : "date_format(current_timestamp,'yyyymmdd')", "num_args" : 1}, // FIXME - 
+		{"from" : "MONTHFROMDATE", "output_template" : "datediff(month,$1,CURRENT_DATE)"},
+		{"from" : "YEARFROMDATE", "output_template" : "datediff(year,$1,CURRENT_DATE)"},
+		{"from" : "|", "TO" : "OR"},
+		{"from" : "TRIMB", "TO" : "rtrim"},
+		{"from" : "TRIMF", "TO" : "ltrim"},
+		{"from": "IsNotNull", "output_template": "$1 IS NOT NULL"},
+		{"from" : "generate", "output_template": "1"}
+		//{"from" : "NOT", "TO" : "__NOT__TEST__"}
+	],
+
+
+	"block_subst" : [
+		{"from" : "(?<!\{)\brun_type\b(?!\})", "to" : "'${RUN_TYPE}'"}, 
+		{"from" : "(?<!\{)\bstart_dt(?!\})", "to" : "'${START_DT}'"},
+		{"from" : "(?<!\{)\bend_dt(?!\})", "to" : "'${END_DT}'"},
+		{"from" : "(?<!\{)\bpaid_dt(?!\})", "to" : "'${PAID_DT}'"}
+	],
+
+	"block_post_function_subst" : [
+		{"from" : "cast\s*\(\s*cast\s*\(\s*([\s\S]+?)\)\s*as\s+date\s*\)\s*as\s+date\s*\)", "to" : "cast($1 as date)"}
+	],
+
+	"random_value_expressions" : {
+		"DATE" : "CURRENT_DATE",
+		"DATETIME" : "CURRENT_TIMESTAMP",
+		"TIMESTAMP" : "CURRENT_TIMESTAMP",
+		"INT" : "100",
+		"BIGINT" : "100",
+		"STRING" : "'A'",
+		"DECIMAL" : "12345.67",
+		"DEFAULT" : "0"
+	}
+}

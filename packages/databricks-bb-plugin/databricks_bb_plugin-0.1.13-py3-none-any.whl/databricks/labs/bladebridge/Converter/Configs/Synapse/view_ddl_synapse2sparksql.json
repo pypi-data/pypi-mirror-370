@@ -1,0 +1,52 @@
+// table ddl conversion from synapse to sparksql
+{
+	//"target_sql_file_header": "-- File converted at %CONVERTER_TIMESTAMP%\n\n",
+
+	"substitution_iter_limit" : 20000,
+	"pattern_match_while_iter_limit" : 20000,
+
+	"block_subst" : [
+		{"from" : "\bSET\s+\w+\s+ON\b", "to" : ""},
+		{"from" : "(\w+)\&(\w+)", "to" : "$1_AND_$2"},
+
+		{"from" : "\bCREATE\s+VIEW\b", "to" : "CREATE OR REPLACE VIEW"},
+
+		// convert column names with spaces to underscores
+		{"from" : "(\[+[\w\_]+)(\s+)([\w\_\s]+\]+)", "to" : "$1_$3"},
+
+		{"from" : "\[+([\w\s]+)\]+", "to" : "$1"},
+		{"from" : "\bwith\s+\([\s\S]*\)", "to" : ""},
+
+		// remove nulls
+		{"from" : "\bNOT\s+NULL\b(\s*)(\,|\))", "to" : "__NOTN__$1$2"},
+		{"from" : "\s+\bNULL\b(\s*)(\,|\))", "to" : "$1$2"},
+		{"from" : "__NOTN__", "to" : "NOT NULL"},
+
+		// type conversions
+		{"from" : "\bsysname\b", "to" : "string"},
+		{"from" : "\bvarchar\s*\([0-9\s\,\w]*\)", "to" : "string"},
+		{"from" : "\bnvarchar\s*\([0-9\s\,\w]*\)", "to" : "string"},
+		{"from" : "\bvarchar\b", "to" : "string"},
+		{"from" : "\bnchar\s*\([0-9\s\,\w]*\)", "to" : "string"},
+		{"from" : "\bnchar\b", "to" : "string"},
+		{"from" : "\bdatetime[0-9]*\s*\([0-9\s\,\w]*\)", "to" : "timestamp"},
+		{"from" : "\bdatetime[0-9]*\b", "to" : "timestamp"},
+		{"from" : "\btimestamp[0-9]*\s*\([0-9\s\,\w]*\)", "to" : "timestamp"},
+		{"from" : "\btimestamp[0-9]+\b", "to" : "timestamp"},
+		{"from" : "\bbit\b", "to" : "boolean"},
+        {"from" : "\bGO\b", "to" : ""},
+		// add semicolon at the end
+		{"from" : "(\))(\s*$)", "to" : "$1;$2"},
+
+		// remove CONSTRAINT
+		{"from" : "\bCONSTRAINT\b([\s\S]*?)(\,|\)\s*\;)", "to" : "$2"},
+
+		// remove multiple commas in a row
+		{"from" : "\,(\s*)(\,|\))", "to" : "$1$2"}
+	],
+
+	"function_subst" : [
+		{"from" : "CONVERT" , "output_template" : "CAST($2 AS $1)", "num_args" : 2},
+		{"from": "ISNULL", "to" : "COALESCE"}
+	]
+}

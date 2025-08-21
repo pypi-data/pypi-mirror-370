@@ -1,0 +1,65 @@
+{
+	"inherit_from" : ["base_datastage2databricks.json"],
+//	"generate_individual_subjobs" : true,
+	//"subjob_run_statement" : "%run %RELATIVE_PATH%/%SUBJOB_NAME% %PARAMS%", // %ABSOLUTE_PATH% can be used as well
+	"subjob_run_statement" : "dbutils.notebook.run(\".%RELATIVE_PATH%/%SUBJOB_NAME%\", 600, {%PARAMS%})", // %ABSOLUTE_PATH% can be used as well
+	"routine_run_statement" : "%ROUTINE_NAME%(%PARAMS%)",
+//	"command_run_statement" : "os.system('%COMMAND% %PARAMS%')",
+	"command_run_statement" : "%NODE_NAME%_ux_cmd_sts = os.system(\"%COMMAND% %PARAMS%\")\n%NODE_NAME%_ux_cmd_outp_pre = subprocess.check_output(\"%COMMAND% %PARAMS%\", shell=True)\n%NODE_NAME%_ux_cmd_outp = %NODE_NAME%_ux_cmd_outp_pre.decode(\"utf-8\").replace('\__BLANK__n__BLANK__','')\n\nif (%NODE_NAME%_ux_cmd_sts != 0 ):\n\texit()",
+	//"pre_node_line" : "#Component %COMPONENT%, Type %TYPE% %ADDITIONAL_COMMENT%",
+	"pre_node_line" : "# Processing node %NODE_NAME%, type %NODE_TYPE% %ADDITIONAL_COMMENT%",
+	"replicate_folder_stricture" : true,
+	"place_subjob_body_into_workflow" : true,
+	"dataframe_prefix_with_column" : true,
+	"target_file_extension" : "py",
+	"subjob_script_extension" : "py", // so we can search for it in the target folder.
+	"subjob_conversion_command" : "%EXE% DATASTAGE %LEVEL% %OPT_c% %OPT_d% %OPT_g% %OPT_o% %OPT_M% -u %CONFIG% %OPT_v% -f %SUBJOB_NAME%.xml", //%OPT_letter% means the original option
+	"subjob_config_file" : { //pattern based.  we want to execute a specific CONFIG for nested sequences, and default for everything else
+		"SEQ" : "ds2dbks_seq_markdown_parallel_nomarkdown.json",
+		"DEFAULT" : "ds2dbks_main_no_markdown.json"
+	},
+	
+	"command_attributes": {
+		"READER_FILE_FIXED_WIDTH" : {"skip_assignment" : true, "source_node_name" : "raw_%NODE_NAME%"} // do not assign the df name, it is built into the template above
+	},
+
+	"python_nested_condition_substitution" : [
+		{"from" : "=", "to" : "=="},
+		{"from" : "<>", "to" : "!="},
+		{"from" : "Trim\(", "to" : "trim("},
+		{"from" : "Int\(", "to" : "int("}
+	],
+
+	"expression_line_subst" : 1,
+	"line_subst" : [
+		{"from" : "IFF\s*\(\s*([\s\S]+)\s*,\s*([\s\S]+)\s*,\s*([\s\S]+)\s*\)", "to": "when(($1),($2)).otherwise($3)"},
+		{"from" : "when\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*\)", "to" : "when($1, $2).otherwise($3)"},
+		{"from" : " IS\s+NULL", "to" : " == None", "case_sensitive_match" : "1"},
+		{"from" : " IS\s+not\s+NULL", "to" : " == not None", "case_sensitive_match" : "1"}
+	],
+
+	"skip_component_types" : ["DIE", "SYNCHRONIZE", "EXCEPTION_HANDLER", "ROUTINE"], // list of conformed component types
+
+	"SET_VARIABLE_conversion_method" : "python",
+	"variable_assignment_template" : "%VARNAME% = %EXPRESSION%",
+	"python_conversion" : {
+		"line_subst" : [
+			{"from" : " = ", "to" : " == "},
+			{"from" : "<>", "to" : "!="},
+			{"from" : " AND ", "to" : " and ", "case_sensitive_match" : "1"},
+			{"from" : "(\w+)\.\$(\w+)", "to" : "$1.$2"},
+			{"from" : "([\s\S]+)\s*:\s*([\s\S]+)", "to" : "$1 + $2"},
+			{"from" : "DSJobStartTimestamp", "to" : "datetime.today()"}
+		],
+		"function_subst" : [
+			{"from" : "Trim", "output_template" : "$1.strip()"},
+			{"from" : "DownCase", "output_template" : "$1.lower()"},
+			{"from" : "SUBSTRING", "output_template" : "$1[$2:$3]"},
+			{"from" : "ISNULL", "output_template" : "$1 is None"},
+			{"from" : "IF", "output_template" : "if $1:\n\t%VARNAME% = $2\nelse:\n\t%VARNAME% = $3"}
+		],
+		"block_post_function_subst" : [
+			{"from" : "else:\n\s*%VARNAME%\s*=\s*if", "to" : "elif"}
+		]
+	}
+}

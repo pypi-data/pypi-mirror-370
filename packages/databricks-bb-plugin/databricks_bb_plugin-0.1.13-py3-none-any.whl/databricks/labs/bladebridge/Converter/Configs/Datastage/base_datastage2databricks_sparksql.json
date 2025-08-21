@@ -1,0 +1,163 @@
+// this file is to be called with CodeGenerator::SQL option
+{
+	"code_generation_module" : "CodeGeneration::SQL",
+	"inherit_from" : ["base_datastage2databricks.json"],
+	// ******** Databricks output options *******
+	"target_file_extension" : "py", // make sure this is in sync with code_generation_language setting.
+	"use_notebook_md" : 1, //indicate if databricks notebook markdowns should be used on the output or if we are generating a plain SQL or PYTHON file
+	"md_section_start" : "#", //start the markdowns with the pound character
+
+	"force_pyspark_output_by_node_types" : ["SOURCE|FLATFILE", "TARGET|FLATFILE", "INSERT|FLATFILE"], // tells the generator to use pyspark writer for these nodes.
+
+	// These are PySpark writer specs.  Converter invokes pyspark writer for specific component types.
+	"pyspark_config" : {
+		"commands" : {
+			"READER_FILE_DELIMITED": "spark.read.format('csv').option('header', '%HEADER%').load(f'''%PATH%''')",
+			"READER_FILE_DELIMITED_EXTERNAL": "%NODE_NAME%_External = spark.read.format('csv').option('header', '%HEADER%').load(%PATH%)",
+			"READER_FILE_FIXED_WIDTH" : "raw_%NODE_NAME% = spark.read.text(f\"%PATH%\")\n%NODE_NAME% = raw_%NODE_NAME%.select(%SUBSTRING_SPEC%)",
+			"READER_RELATIONAL": "%NODE_NAME% = %SQL%\n%NODE_NAME% = spark.sql(%NODE_NAME%)",
+			"WRITER_FILE_DELIMITED": "%DF%.write.format('csv').option('header','%HEADER%').mode('overwrite').option('sep','%DELIMITER%').csv(f'''%PATH%''')",
+			"WRITER_RELATIONAL": "my_end_point.write_to_db(%DF%, \"%TABLE_NAME%\", username=\"%LOGIN%\", password=\"%PASSWORD%\")"
+		},
+
+		"system_type_class" : {
+			"ORACLE" : "RELATIONAL",
+			"MySQL" : "RELATIONAL",
+			"HIVE" : "RELATIONAL",
+			"DB2" : "RELATIONAL",
+			"TERADATA" : "RELATIONAL",
+			"REDSHIFT" : "RELATIONAL",
+			"Salesforce" : "SALEFORCE",
+			"TOOLKIT" : "RELATIONAL",
+			"FLATFILE" : "FILE_DELIMITED",
+			"FLAT FILE":"FILE",
+			"FLAT_FILE":"FILE",
+			"DEFAULT" : "FILE_DELIMITED"
+		},
+		"conform_source_columns" : "1",
+		"force_conform_source_columns" : "1", //Added for conforming field names for File source
+		"conform_columns_call_template" : "%DF%_conformed_cols = [%COLUMN_LIST%]\n%DF% = DatabricksConversionSupplements.conform_df_columns(%DF%,%DF%_conformed_cols)\n",
+		"enabled_datatype_casting_components" : ["SOURCE"],
+		"datatype_cast_mapping" : { //tells converter what string to use during casting. tokens %LENGTH% and %SCALE% will be replaced at conversion time
+			"decimal" : ".cast('decimal(%LENGTH%,%SCALE%)')",
+			"string" : ".cast(StringType())",
+			"char" : ".cast(StringType())",
+			"varchar" : ".cast(StringType())",
+			"numeric" : ".cast(LongType())",
+			"timestamp" : ".cast(TimestampType())",
+			"integer" : ".cast(LongType())",
+			"date" : ".cast(DateType())"
+		}
+	},
+	// End of Pyspark specs
+	"output_title" : 1,
+	"title_template" : "Folder %FOLDERNAME%, Job %JOBNAME%",
+	"output_description" : 1,
+	"consolidate_nb_statements" : 1, // for ETL source, will group variables, pre/post sql, prerequisites (unconnected lookups)
+
+	"sql_statement_wrapper" : {
+		"TRUNCATE_TABLE" : "spark.sql(f\"\"\"%INNER_SQL%\"\"\")",
+		"Pre SQL" : "spark.sql(f\"\"\"%INNER_SQL%\"\"\")",
+		"Post SQL" : "spark.sql(f\"\"\"%INNER_SQL%\"\"\")"
+	},
+
+	"script_header": """# Databricks notebook source~
+# Code converted on %CONVERTER_TIMESTAMP%~
+import os\nfrom pyspark.sql import *
+from pyspark.sql.functions import *
+from pyspark import SparkContext
+from pyspark.sql.functions import lit, to_timestamp, when, expr, col, explode
+from databricks_conversion_supplements import DatabricksConversionSupplements~
+
+
+# COMMAND ----------""", // instruct the converter to generate this header and make it the default db.  Can be changed to anything else
+ 
+	//"not_a_widget_list" : ["starttime"], //tell the writer that thwse are not widgets, but rather pytho vars that do not need to be included into 'format' clause
+
+	"generate_variable_declaration" : 1,
+	"variable_declaration_template" : "dbutils.widgets.text(name = '%VARNAME%', defaultValue = '%DEFAULT_VALUE%')\n%VARNAME% = dbutils.widgets.get(\"%VARNAME%\")\n",
+	"variable_declaration_comment" : "Variable declaration section",
+	//"skip_variable_patterns" : [ "_DIR", "DSN", "PASSWORD", "USER" ], // skip vars that have these naming patterns, case insensitive
+
+	// ******** DBSQL Generation Options *******
+	//"dataset_creation_method" : "CTE",
+	"dataset_creation_method" : "TABLE",
+	"table_creation_statement" : "%TABLE_NAME% = spark.sql(f\"\"\"\n%INNER_SQL%\"\"\")\n%TABLE_NAME%.createOrReplaceTempView(\"%TABLE_NAME%\")", //ensure there are %TABLE_NAME% and %INNER_SQL% tokens present in this spec
+	"pyspark_table_creation_statement" : "%INNER_SQL%\n%TABLE_NAME%.createOrReplaceTempView(\"%TABLE_NAME%\")", // this kicks in if 'force_pyspark_output_by_node_types' entry is set for a particular node type/system type
+	
+	//"target_table_creation_statement" : "%TABLE_NAME% = spark.sql(\"\"\"\n%INNER_SQL%\"\"\"%FORMAT_SPEC%)\n%TABLE_NAME%.write.mode('overwrite').format(\"delta\").saveAsTable(\"%OBJECT_NAME%\")", //ensure there are %TABLE_NAME% and %INNER_SQL% tokens present in this spec
+
+	"wrap_ddl_statements" : "1",
+	"ddl_statement_wrap" : "spark.sql(f\"\"\"%INNER_SQL%\"\"\")",
+
+	// "pre_post_node_injection" : {
+	// 	"TARGET|TERADATA" : {
+	// 		//"pre_node" : "%sql\n", //sql spec
+	// 		//"comment_style" : "SQL",
+	// 		//"component_header_comment" : "/* Component %COMPONENT%, Type %TYPE% %ADDITIONAL_COMMENT% */" //SQL style override
+	// 	},
+	// 	"TARGET|FLATFILE" : { // routing flat file inserts into tables, so need to generate %sql tag
+	// 		//"pre_node" : "%sql\n", //sql spec
+	// 		//"comment_style" : "SQL",
+	// 		//"component_header_comment" : "/* Component %COMPONENT%, Type %TYPE% %ADDITIONAL_COMMENT% */" //SQL style override
+	// 	}
+	// },
+
+	"apply_format_instruction" : 1, // will replace %FORMAT% token in table_creation_statement.  Will look for query parameters using {\w+} pattern by default
+	"format_spec" : "%PARAM_NAME%=dbutils.widgets.get('%PARAM_NAME%')",
+
+	"sql_statement_separator" : "\n",
+	"component_header_comment" : "# COMMAND ----------\n# Component %COMPONENT%, Type %TYPE% %ADDITIONAL_COMMENT%",
+
+	//"sql_converter_config_file" : "teradata2databricks.json", // TO ENABLE SQL TRANSLATIONS, INHERIT FROM THIS FILE AND ENABLE THIS INSTRUCTION
+	"etl_converter_config_file" : "datastage2deltalake.json",
+	"source_sql_converter_config_file" : "datastage2deltalake.json",
+	
+	"generate_statement_for_source_dataset" : 1, //datastage specific.
+
+	//"create_target_ddl" : "1",
+	//"create_source_ddl" : "1",
+	//"ddl_filename_template" : "DDL_%OBJECT_NAME%.sql",
+	//"ddl_eliminate_extensions" : ["txt","dat","ds"],
+	"transformer_vars_use_cte_flag" : "1", //tells SQL writer to use CTEs when there are variables in tranformer components
+	"concat_operator" : "||",
+	//"write_to_target_files_as_tables" : 1,
+
+	"KEEP_UNUSED_TARGET_FIELDS" : "1",
+
+	"ignore_connection_profiles" : 0, //if ON, will blank out %CONNECTION_PROFILE%. prefixes coming from agnostic layer
+	"connection_profile_prefix_mapping_OLD" : {
+		"#EDW_DSN#" : "PRODSERV_S"
+	},
+
+	"cast_functions" : { //used by random value generator for ROW_GENERATOR component
+		"DATE" : "TO_DATE",
+		"DATETIME" : "TO_TIMESTAMP"
+	},
+
+	"random_value_expressions" : {
+		"DATE" : "CURRENT_DATE",
+		"DATETIME" : "CURRENT_TIMESTAMP",
+		"TIMESTAMP" : "CURRENT_TIMESTAMP",
+		"INT" : "100",
+		"STRING" : "'A'",
+		"DECIMAL" : "12345.67",
+		"DEFAULT" : "0"
+	},
+
+	// System settings.
+
+	//"SYS_TYPE_CONF" : {"FLAT FILE" : "FLATFILE", "TERADATA" : "Teradata", "ORACLE" : "ORACLE","Oracle" : "ORACLE"}, // add more if needed
+
+	"write_to_target_files_as_tables" : true,
+	"ddl_eliminate_extensions" : ["txt","dat","ds", "csv", "load"],
+	//"skip_insert_clause" : true,
+	"file_write_seq_file_template" : "ds_write_target_as_table.py",
+	
+	"SET_VARIABLE_SCRIPT_PATTERN_PER_VAR" : """# Populating variable %VARNAME%
+df = spark.sql("%VALUE%");
+data = df.collect()
+val = data[0][0]
+dbutils.jobs.taskValues.set(key = '%VARNAME%', value = val)
+	"""
+}

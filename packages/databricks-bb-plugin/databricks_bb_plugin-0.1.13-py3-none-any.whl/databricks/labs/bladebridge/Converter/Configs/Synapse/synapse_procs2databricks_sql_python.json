@@ -1,0 +1,594 @@
+{
+	"CUSTOM_CONVERTER_MODULES" : ["synapse_hooks"],
+
+	"file_rename" : {"^(\w+)\." : "$1_"}, // format: rename_from : rename_to
+
+	"target_file_extension" : "py",
+	//"post_process_header" : "# Databricks notebook source\nimport os\nimport sys\n\n# Define config variables\ndbutils.widgets.text(name = 'config_path', defaultValue='')\ndbutils.widgets.text(name = 'env', defaultValue='')\ndbutils.widgets.text(name = 'catalog', defaultValue='')\n\n# set config path\nif dbutils.widgets.get('config_path') != '' : sys.path.append(dbutils.widgets.get('config_path'))\n\n# import config\nfrom config import setup\n\n# Get environment variables\nenv = os.environ.get('env') if dbutils.widgets.get('env') == '' else dbutils.widgets.get('env')\ncatalog = os.environ.get('catalog') if dbutils.widgets.get('catalog') == '' else dbutils.widgets.get('catalog')\n\n# set catalog\nspark.sql(f\"use catalog {catalog}\")\n\nnotebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()\nprint(\"Notebook Path : \" , notebook_path)\nnotebook_dir = os.path.dirname(notebook_path)\nprint(\"Notebook Dir : \" ,  notebook_dir)\nnotebook_name = os.path.basename(notebook_path)\nprint(f\"Notebook Name: \", notebook_name)\n",
+	//"post_process_footer" : "\texcept Exception as e:\n\t\tprint(f'{type(e).__name__} at line {e.__traceback__.tb_lineno} of {__file__}: {e}')\n",
+
+	"post_process_header1" : """
+import os
+import sys
+
+def %DEF_CALL_SIGNATURE%:
+
+    # Get environment variables,
+    env = config["env"] if dbutils.widgets.get('env') == '' else dbutils.widgets.get('env')
+    catalog = config["catalog"] if dbutils.widgets.get('catalog') == '' else dbutils.widgets.get('catalog')
+    print("Env is : ", config["env"])
+    print("Catalog is : ", config["catalog"])
+
+    # catalog = "data_quality_dev"
+    # set catalog
+    spark.sql(f"use catalog {catalog}")
+
+    notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    print("Notebook Path : " , notebook_path)
+    notebook_dir = os.path.dirname(notebook_path)
+    print("Notebook Dir : " ,  notebook_dir)
+    notebook_name = os.path.basename(notebook_path)
+    print(f"Notebook Name: ", notebook_name)
+	# end header
+	""",
+
+	"post_process_footer1" : """
+# begin footer
+\t\t__RAIS__
+
+# main
+if __name__ == "__main__":
+    print("Executing %PROC_NAME%.py as a standalone script")
+
+    # Define widgets for config
+    dbutils.widgets.text(name = 'config_file', defaultValue='/Workspace/Users/vn44f8i@delhaize.com/synapse-converted-objects/config/synapse-config-J.json')
+    dbutils.widgets.text(name = 'env', defaultValue='dev')
+    dbutils.widgets.text(name = 'catalog', defaultValue='data_quality_dev')
+
+    # read config file  and add to sys path
+    config_file = dbutils.widgets.get('config_file')
+    # env = dbutils.widgets.get('env')
+    config_dir = os.path.dirname( dbutils.widgets.get('config_file') )
+    sys.path.append(config_dir)
+    print(sys.path)
+
+    import setup_J
+    config = setup_J.load_config(config_file)
+
+    # call proc
+	\t%DEF_CALLED_SIGNATURE%
+	""",
+
+	"python_function_signature" : "%PROC_NAME%(spark, dbutils, config%PARAMS%)", // for %DEF_SIGNATURE% variable
+	"python_function_call" : "print(\"Running proc : %PROC_NAME%\")__NL__import %PROC_NAME% as %PROC_NAME%_CALL__NL__%PROC_NAME%_CALL.%PROC_NAME%(spark, dbutils, config%PARAMS%)", // for EXEC function calls
+	"substitution_iter_limit" : 20000,
+	"pattern_match_while_iter_limit" : 20000,
+	"preprocess_file" : "1",
+	"preprocess_routine": "::synapse_preprocess",
+	"initialize_hooks_call" : "::init_hooks", //initialize context, pass all relevant info
+	"pre_finalization_handler" : "::pre_finalization_handler_spark_sql",
+	"code_fragment_breakers": { "line_end": [";"] },
+	// "keep_comments_in_place" : "1",
+	"skip_procedure_parsing" : "1",
+
+	"custom_tab_back_regex" : "=\s*\@\'{V_TMP}\';",
+	"custom_tab_forward_regex" : "\bIF\s*\(\@V_COUNT\s*\>\s*0\)",
+
+	"fragment_split_regex" : "(?=\bEXEC\b|\bCREATE\b|\bDECLARE\b|\bFETCH\b|\bWHILE\b|\bCLOSE\b|\bDEALLOCATE\b|\bINSERT\s+INTO\b|\bELSE\s+IF\b|\bIF\b|\bEND\b|\bPRINT\b|\bUPDATE\b|\;\s*\bSET\b)",
+
+	"proc_variable_default_widget_value" : "",
+	"proc_variable_declaration_template" : "# dbutils.widgets.text(name = '%VARNAME%', defaultValue = '%DEFAULT_VALUE%')\n# %VARNAME% = dbutils.widgets.get(\"%VARNAME%\") if dbutils.widgets.get(\"%VARNAME%\") != '' else %VARNAME%\n",
+	"proc_variable_declaration_header" : "# Define procedure variables",
+	"proc_variable_sql_wrapping" : "'{%VARNAME%}'",
+	"variable_assignment_from_select" : "query_1 = spark.sql(\"\"\"%QUERY%\"\"\")\n%VARIABLES_STRING% = query_1.first()%IS_SINGLE%",
+
+	"file_tabbing" : "\t",
+	//"try_except_handling" : 1,
+
+	"try_catch_split" : 1,
+
+	"comment_quote_replacement" : 1,
+
+	"process_square_bracket_columns" : 1,
+	"save_normal_end_statement" : "1",
+
+	"return_backup_merge_sql_if_no_match" : "1",
+	//"use_statement_end_in_generated_merge" : "1",
+	"use_unique_using_values_merge" : "1",
+
+	"insert_table_exceptions" : ["MTDT.ERROR_TABLE"],
+
+	"stmt_categorization_patterns": [
+		{"category": "UPDATE_FROM", "patterns" : ["UPDATE\s+\w+\.*\w*\.?\w*\s+SET\b.*?\bFROM\b"]},
+		{"category": "UPDATE_TABLE", "patterns" : ["UPDATE\s+\w+\.*\w*\.?\w*\s+SET\b"]},
+		{"category": "INSERT_TO_FROM", "patterns" : ["insert[\s\S]*?FROM"]},
+		{"category": "PROC_START", "patterns" : ["PROC_START"]},
+		{"category": "TABLE_VAR_DECLARE", "patterns" : ["DECLARE\s+\@\w+\s+TABLE\b"]},
+		{"category": "VAR_DECLARE", "patterns" : ["DECLARE\s+\@\w+\s+\b"]}, //this has to be after TABLE_VAR_DECLARE definition
+		{"category": "VAR_ASSIGNMENT", "patterns" : ["SELECT\s+\@\w+\s*\="]},
+		{"category": "WRITE_DML", "patterns" : ["^\s*UPSERT(\s?)","^\s*INSERT\s","^\s*MERGE(\s?)","^\s*DELETE(\s?)","^\s*DEL(\s?)", "\s*CALL\s","INSERT OVERWRITE TABLE"]},
+		{"category": "READ_DML", "patterns" : ["SELECT(\s?)", "\bSEL(\s?)"]},
+		{"category": "READ_WITH", "patterns" : ["\bWITH\b\s+.*?\s+\bAS\b\s+\("]},
+		{"category": "LEFTOVER_COMMENT_CLOSURE", "patterns" : ["^\s*\*\/\s*\;\s*$"]},
+		{"category": "NOCOUNT", "patterns" : ["SET\s+NOCOUNT.*"]},
+		{"category": "IF_EXISTS", "patterns" : ["IF\s+EXISTS\s+[\s\S]+\;"]},
+		{"category": "IF_NOT_EXISTS", "patterns" : ["IF\s+NOT\s+EXISTS\s+[\s\S]+\;"]},
+		{"category": "IF_END", "patterns" : ["COND_END"]}, //custom pattern set by sub mark_separators
+		{"category": "ELSE_START", "patterns" : ["COND_ELSE"]}, //custom pattern set by sub mark_separators
+		//{"category": "IF_START", "patterns" : ["IF\s+\@\w+\s+<|>|<=|>=+\s+\@\w"]},
+		{"category": "IF_START", "patterns" : ["IF\s+[\s\S]+[<|>|<=|>=|=|IS]+[\s\S]+\;"]},
+		{"category": "WHILE_START", "patterns" : ["WHILE\s+[\s\S]+[<|>|<=|>=|=]+[\s\S]+\;"]},
+		{"category": "IF_EXISTS", "patterns" : ["IF\s+EXISTS\s*\(.*\)\s*\;"]},
+		{"category": "SEMICOLON", "patterns" : ["^\s*\;\s*$"]},
+		{"category": "SEMICOLON", "patterns" : ["^\s*\;\s*$"]},
+		{"category": "PRINT", "patterns" : ["^\s*PRINT"]},
+		{"category": "PROC_FINISH", "patterns" : ["^\s*PROC_FINISH\s*$"]},
+		{"category": "BEGIN_KW", "patterns" : ["^\s*BEGIN\s*$", "^\s*BEGIN\s*\;\s*$"]},
+		{"category": "DROP_TABLE", "patterns" : ["^\s*drop\s+table\b\s+"]},
+		{"category": "DROP_TEMP_TABLE", "patterns" : ["if\s+object_id.*drop\s+table\s+#\w+"]},
+		{"category": "EXECUTE_SQL", "patterns" : ["^\s*EXECUTE\s+", "^\s*EXEC\s+"]},
+		{"category": "TRUNCATE_TABLE", "patterns" : ["^\s*TRUNCATE\s+TABLE\s+"]},
+		{"category": "ALTER_TABLE", "patterns" : ["^\s*ALTER\s+TABLE\s+"]},
+		{"category": "TABLE_DDL", "patterns" : ["CREATE\s+TABLE","CREATE\s+SET.*\s+TABLE","CREATE\s+MULTISET.*\s+TABLE","CREATE\s+VOLATILE.*\s+TABLE","CREATE\s+TEMPORARY*\s+TABLE"]}
+
+		//,{"category": "MULTY_DECLARE", "patterns" : ["(DECLARE\s+)\@(\S+)\b.*"]}
+],
+
+"return_backup_merge_sql_if_no_match" : "1",
+//"use_statement_end_in_generated_merge" : "1",
+"use_unique_using_values_merge" : "1",
+
+"fragment_handling" : {
+//	"INSERT_TO_FROM" : "::update_table",
+	"INSERT_TO_FROM" : "::convert_dml",
+	"COMMENT" : "::convert_comment",
+	"PROC_START" : "::process_PROC_START",
+	"WRITE_DML" : "::convert_dml",
+	"TRUNCATE_TABLE" : "::convert_dml",
+	"PRINT" : "::convert_print",
+	//"IF_EXISTS" : "::convert_exists",
+	"IF_NOT_EXISTS" : "::convert_exists",
+	"EXECUTE_SQL" : "::convert_execute",
+	"TABLE_VAR_DECLARE" : "::convert_table_var_declare",
+	"VAR_DECLARE" : "::convert_var_declare", // this does not add any wrapping around the SQL
+	"VAR_ASSIGNMENT" : "::convert_var_assignment",
+	"READ_DML" : "::read_dml",
+	"READ_WITH" : "::convert_with",
+	"LEFTOVER_COMMENT_CLOSURE" : "::remove_leftover_comment_closure",
+	"NOCOUNT" : "::blank",
+	"SEMICOLON" : "::blank",
+	"IF_START" : "::convert_if_start",
+	"IF_END" : "::convert_end_if",
+	"ELSE_START" : "::convert_else_start",
+	"WHILE_START" : "::convert_start_while",
+	"IF_EXISTS" : "::convert_if_exists",
+	"UPDATE_FROM" : "::convert_update_from",
+	"UPDATE_TABLE" : "::convert_update_table",
+	"BEGIN_KW" : "::blank",
+	"PROC_FINISH" : "::blank",
+	"DROP_TEMP_TABLE" : "::blank",
+	"DROP_TABLE": "::convert_drop_table",
+	"ALTER_TABLE": "::convert_alter_table"
+
+	//,"MULTY_DECLARE" : "::remove_multy_declare"
+},
+
+	// "between_sql_fragments" : "\n# COMMAND ----------\n",
+	"between_default_fragments" : "\n\n",
+	"default_sql_wrapping": "%DF% = spark.sql(f\"\"\"\n%SQL%\n\"\"\")\n",
+
+	"identify_procedure_headers" : [
+		"(CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE.*?\)\s*(__BB_COMMENT_[0-9]+__)*\s*(\bIS\b|\bAS\b))",
+		"(CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE.*\s*(\bIS\b|\bAS\b))",
+		"(CREATE\s+OR\s+REPLACE\s+PROCEDURE\s+\w+\s+(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b)",
+		"(CREATE\s+OR\s+REPLACE\s+PROCEDURE.*?(\bIS\b|\bAS\b))",
+		"(CREATE\s+PROCEDURE\s+\w+\s+(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b)",
+		"(CREATE\s+PROCEDURE.*?(\bIS\b|\bAS\b))",
+		"(CREATE\s+PROC.*?(\bIS\b|\bAS\b))"
+	],
+
+	"post_fragment_subst" : [
+		{"from": "\;\s*\bSET\b", "to": "SET"}
+	],
+
+	"pre_process_subst" : [
+
+		{"from": "\bCREATE\s+STATISTICS\s+(\w+)\s+ON\b.*?;", "to": "-- removed create statistics $1 command"},
+		{"from": "\bSET\s+\w+\s+ON\s+GO\b", "to": ""},
+		// {"from": "\bDROP\s+TABLE\s+.*?\bCREATE\s+TABLE\b", "to": "CREATE OR REPLACE TABLE"},
+
+		{"from": "(__BB_COMMENT_[0-9]+__)([\n\s]*\bAS\b)", "to": "$2\n$1"},
+
+//		{"from": "CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE\s*([\w\.\[\]\\]+)\s*(.*?)([\w\.\[\]\\]+)\s+\)\s*(__BB_COMMENT_[0-9]+__)*\s*(\bIS\b|\bAS\b)", "to": "def $1(spark,\n$2):\n__TAB_ADD__try:"},
+//		{"from": "CREATE\s+OR\s+REPLACE\s+EDITIONABLE\s+PROCEDURE\s*([\w\.\[\]\\]+)\s*(.*?)([\w\.\[\]\\]+)\s+\s*(\bIS\b|\bAS\b)", "to": "def $1(spark,\n$2):\n__TAB_ADD__try:"},
+//		{"from": "CREATE\s+OR\s+REPLACE\s+PROCEDURE\s*([\w\.\[\]\\]+)\s*(.*?)(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b", "to": "def $1(spark,\n$2):\n__TAB_ADD__try:"},
+//		{"from": "CREATE\s+OR\s+REPLACE\s+PROCEDURE\s*([\w\.\[\]\\]+)\s*(.*?)(\bIS\b|\bAS\b)", "to": "def $1(spark,\n$2):\n__TAB_ADD__try:"},
+//		{"from": "CREATE\s+PROCEDURE\s*([\w\.\[\]\\]+)\s*(.*?)(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b", "to": "def $1(spark,\n$2):\n__TAB_ADD__try:\n__TAB_ADD__"},
+//		{"from": "CREATE\s+PROCEDURE\s*([\w\.\[\]\\]+)\s*(.*?)(\bIS\s*\n|\bAS\s*\n)", "to": "def $1(spark,\n$2):\n__TAB_ADD__try:\n__TAB_ADD__"},
+
+//		{"from": "CREATE\s+PROC\s*([\w\.\[\]\\]+)\s*(.*?)(\bIS\b|\bAS\b)\s+[\w\;\s]+\s+\bBEGIN\b", "to": ""},
+		{"from": "CREATE\s+PROC\s*([\w\.\[\]\\]+)\s*(.*?)(\bIS\s*\n|\bAS\s*\n)", "to": ""},
+
+		{"from": "\bdef [\w\[\]\\\/]+\.([\w\[\]\\\/]+)\(spark", "to": "def $1(spark"},
+		{"from": "\bdef \[([\w\\\/]+)\]\s*\(spark", "to": "def $1(spark"},
+		{"from": "\bdef ([\w\\\/]+)\s*\(spark\,\s*\((.*?)\)\s*\)\:", "to": "def $1(spark, $2):"},
+
+		{"from": "\bAS\s+(DATETIME|VARCHAR|INT)(\s*\(\s*[0-9]+\s*\)|)\s*\=", "to": "="},
+		{"from": "\bAS\s+(DATETIME|VARCHAR|INT)(\s*\(\s*[0-9]+\s*\)|)\s*\=", "to": "="},
+
+		{"from": "(\bdef [\w\\\/]+\s*\(spark\,[\-\s\w\@\,\{\}]*)\b(AS|INT|VARCHAR|DATETIME|VARCHAR\s*\(.*?\))\s*(\,|\)\:)", "to": "$1$3"},
+		{"from": "(\bdef [\w\\\/]+\s*\(spark\,[\-\s\w\,\{\}]*)\@(\w+)", "to": "$1$2"},
+		{"from": "(\bdef [\w\\\/]+\s*\(spark)\,\s*(\)\:)", "to": "$1$2"},
+
+		{"from": "(\'|\")([^\'\"\n]+)\bEXCEPTION\b([^\'\"\n]+\1)", "to": "$1$2__PART_OF_STRING_EXCPT__$3"},
+		{"from": "\s*\bsp_log_messages\b\s*\([\s\S]+?\)\s*\;",  "to" : ""}, //remove entire block
+		{"from": "\%TYPE\b", "to": ""},
+		{"from": "\bDBMS_UTILITY\.get_time\b", "to": "datetime.datetime.now()"},
+
+		{"from": "\bBEGIN\s+TRANSACTION\s*;", "to": ""},
+		{"from": "\bCOMMIT\s*;", "to": ""},
+
+		{"from": "\bSET\s+\w+\s+(\bON\b|\bOFF\b)\s*(\;|)", "to": ""},
+		{"from": "(\bPRINT\s*\'[\s\w]*)\bSTART\b([\s\w]*\')", "to": "$1__STRT__$2"},
+		{"from": "(\bPRINT\s*\'[\s\w]*)\bEND\b([\s\w]*\')", "to": "$1__ED__$2"},
+
+		{"from": "\bUPDATE\s+STATISTICS\s+(\w+\.\w+)\s*(\;|)", "to": ""},
+
+		{"from": "\bBEGIN(\s*)\;", "to": "BEGIN$1"},
+		{"from": "\/UPDATE\b", "to": "__UPD_CONV__"},
+
+		{"from": "\bIF\s+IT\s+IS\b", "to": "__I_F__ IT IS"},
+
+		{"from": "SET\s+\@\w+\s*\=\s*\bN'IF\s+OBJECT_ID\b[\s\(\'\+\@\,\)\w]+IS\s+(\bNOT\b|)\s+NULL\s+DROP\s+TABLE\s*'\s*\+\s*\@\w+(\s*\;|)\s*\bEXECUTE\s+SP_EXECUTESQL\s+[\@\w]+(\s*\;|)", "to": "# removed dropped table syntax"}
+
+	],
+
+	"declare_subst" : [
+		{"from": "DECLARE", "to": ""},
+		{"from": ",", "to": "\n"},
+		{"from": "(\s*\w+)\s+(DATE|NUMBER|VARCHAR|LONG|RAW|TIMESTAMP)", "to": "$1 = ''"},
+		{"from": "(\s*\w+)\s+(INT|BIGINT|SMALLINT)", "to": "$1 = 1"},
+		{"from": "\=\s*\'\'(\w+|)\s*\=", "to": "="},
+		{"from": "CONVERT\s*\(\s*DATE\s+([\s\S]+?)\s*\)", "to": "$1"},
+		{"from": "GETDATE\s*\(\s*\)", "to": "spark.sql(\"select current_timestamp\").collect()[0][0]"}, // will get updated by variables later
+		{"from": "SET\s+\w+\s+(OFF|ON)\s*(\;|)", "to": ""},
+		// {"from": "\=\s*([0-9]+)", "to": "= '$1'"},
+
+		{"from": "(\s*\w+)\s+NVARCHAR(\s*\(\s*\w+\s*\)|)", "to": "$1 = ''"},
+		{"from": "\=\s*\'\'[\w\(\)]+\;", "to": "= '';"},
+		{"from": "\=\s*\'\'\s*\=", "to": "="},
+		{"from": "\[\w+\]\([0-9]+\)\s*\=", "to": "="},
+		{"from": "(\=\s*[0-9]+\s*)\=\s*[0-9]+", "to": "$1"}
+
+		//convert to dbutil widget
+		//{"from": "(\w+)\s*\=\s*([\s\S]+?)\;", "to" : "dbutils.widgets.text(name = '$1', defaultValue = $2)\n$1 = dbutils.widgets.get(\"$1\")\n"}
+	],
+
+	"set_sql_subst" : [
+		{"from": "dateadd\s*\(\s*(\w+)\s*\,\s*([\-0-9]+)\s*\,\s*(\w+\s*\(\s*\))\s*\)", "to": "date_add($3, $2)"},
+		{"from": "GETDATE\s*\(\s*\)", "to": "current_timestamp()"},
+		{"from": "\bSET\s+([\@\$\w]+)\s+\=\s*([\s\S]+?)\s*\;", "to": "$1 = spark.sql(f\"\"\"SELECT $2\"\"\").collect()[0][0]"},
+
+		{"from": "\bSET\s+", "to": ""}
+	],
+
+	"python_conditional_subst" : [
+		{"from": "\bIF\b(.*?)=(.*)", "to": "if $1 __equals__ $2"},
+		{"from": "\bELSIF\b(.*?)=(.*)", "to": "elif $1 __equals__ $2"},
+		{"from": "\bELSE\b(.*?)=(.*)", "to": "else $1 __equals__ $2"},
+		{"from": "\bIF\b(.*?)\bIN\b(.*)", "to": "if $1 __i_n__ $2"},
+		{"from": "\bELSIF\b(.*?)\bIN\b(.*)", "to": "elif $1 __i_n__ $2"},
+		{"from": "\bELSE\b(.*?)\bIN\b(.*)", "to": "else $1 __i_n__ $2"},
+		{"from": "__equals__", "to": "=="},
+		{"from": "__i_n__", "to": "in"},
+		{"from": "IF", "to": "__i_f__"},
+		{"from": "__i_f__", "to": "if"},
+		{"from": "ELSE", "to": "__el_se__"},
+		{"from": "__el_se__", "to": "else"},
+		{"from": "ELSIF", "to": "__el_sif__"},
+		{"from": "__el_sif__", "to": "elif"},
+		{"from": "(<|>)\s*==", "to": "$1="},
+		{"from": "null", "to": "None"},
+		{"from": "<>", "to": "!="},
+		{"from": "\bIS\s+NOT\b", "to": "NOT"},
+		{"from": "NOT", "to": "__n_o_t__"},
+		{"from": "__n_o_t__", "to": "not"},
+		{"from": "\bIS\b", "to": "__i_s__"},
+		{"from": "__i_s__", "to": "is"},
+		{"from": "\bAND\b", "to": "__a_n_d__"},
+		{"from": "__a_n_d__", "to": "and"},
+		{"from": "\bOR\b", "to": "__o_r__"},
+		{"from": "__o_r__", "to": "or"},
+
+		{"from": "if\s+OBJECT_ID\s*\([\w\.\'\,\s\.\_]+\)\s+not\s+None[\s\S]+?DROP\s+TABLE\s+\w+\.\w+(\s*|\s*\bin\s+\w+\s*)(\;|)(\s*\:|)", "to": "# removed dropped table syntax"}
+	],
+
+	"python_for_loop_subst" : [
+		{"from": "FOR\s+(\w+)\s+IN\s+(.*)", "to": "for $1 __in__ $2"},
+		{"from": "__in__", "to": "in"},
+		{"from": "([0-9]+)\s*\.\.\s*([0-9]+)", "to": "range($1, $2+1)"}
+
+		// further hook processing after this
+	],
+
+	"python_variable_declaration_subst" : [
+		{"from": "(\s*\w+)\s+(DATE|NUMBER|INT|VARCHAR|LONG|RAW|TIMESTAMP)\s*:=\s*(.*)", "to": "$1 = $3"},
+		{"from": "(\s*\w+)\s+NUMBER\s+DEFAULT\s+(datetime\.datetime\.now\(\)).*", "to": "$1 = $2"},
+		{"from": "(\s*\w+)\s+(DATE|NUMBER|INT|VARCHAR|LONG|RAW|TIMESTAMP|INTERVAL).*", "to": "$1 = None"}
+	],
+
+	"python_print_subst" : [
+		{"from": "\bPRINT\s+(\'|\")([\s\S]+?)\1", "to": "print(f\"\"\"$2\"\"\")"},
+		{"from": "\"\"\"\)\s*\+\s*CAST\s*\(\s*([\@\w]+)\s*AS\s*[\w\(\)]+?\s*\)\s*$", "to": "\"\"\" + str($1))"}
+	],
+
+	"python_variable_assignment_subst" : [
+		{"from": "\s*:=\s*", "to": " = "},
+		{"from": "\bNULL\b", "to": "None"},
+		{"from": "\+\s*\n", "to": "+ \\n"}
+	],
+
+//	"sp_log_subst" : [
+//		{"from": "sp_log_oids_messages\s*\(([\s\S]+)\)\s*$",  "to" : "dbutils.notebook.run('path/sp_log_oids_messages.py',arguments={$1})"},
+//		{"from": "(\w+)\s*\=\>\s*([\s\S]+)?(\,|\})", "to": "\"$1\" : $2$3"}
+//	],
+
+	"cursor_def_pre_subst" : [
+		{"from": "\s*CURSOR\s+", "to": "def "},
+		{"from": "\s*IN\s+[\w\.]+\s*[\%\w]", "to": ""}
+		//{"from": "\s*\bIS\b", "to": "__COLON__"}
+		// {"from": "__COLON__([\s\S]+)", "to": ":\n\tinner_query = spark.sql(f\"\"\"$1\"\"\")\n\treturn inner_query"}
+
+		// further hook processing after this
+	],
+
+	"cursor_for_loop_pre_subst" : [
+		{"from": "(^\s*)DECLARE\s+(\w+)\s+CURSOR\s+FOR\s(.*?)(\bOPEN\s*\w+)", "to": "$1$2 = spark.sql(\"\"\"$3\"\"\")\n$4"},
+		{"from": "(^\s*)DECLARE\s+(\w+)\s+CURSOR\s+FOR\s(.*)", "to": "$1$2 = spark.sql(\"\"\"$3\"\"\")"},
+		{"from": "\bOPEN\s+(\w+)", "to": "for row in $1.collect():"},
+		{"from": "\bFETCH\s+NEXT\s+FROM\s+(\w+)\s+INTO\s+([\@\w]+)", "to": "$2 = row[0][0]"}
+		//{"from": "\bFETCH\s+NEXT\s+FROM\s+(\w+)\s+INTO\s+([\@\w]+)\s+WHILE\s+[\@\w+]+\s*\=\s*[0-9]+", "to": "$1 = row[0][0]"}
+	],
+
+	"function_call_subst" : [
+		{"from": "\bexec\s+(\w+)\s+([\@\w]+)", "to": "$1($2)"}
+	],
+
+	"try_except_subst" : [
+		{"from": "#TRY", "to": "# TRY"},
+		{"from": "#CATCH", "to": "# CATCH"},
+		{"from": "# TRY", "to": "try:"},
+		{"from": "# CATCH", "to": "except:"}
+	],
+
+	"default_sql_subst" : [
+		{"from" : "\[(\w+?)\]", "to" : "$1"},
+		{"from" : "\[(.*?)\]", "to" : "`$1`"},
+
+		{"from" : "\@(\w+)", "to" : "{$1}"},
+
+		{"from": "^([^\"]+?)\bSELECT\b([\s\S]+?)into\b\s+([\w\#\$\.]+)", "to": "$1CREATE OR REPLACE TEMP VIEW $3 AS __SEL__ $2"},
+		{"from": "(\bWITH\s+\w+\s+AS\s+\(\s*\b)CREATE OR REPLACE TEMP VIEW \w+\.\w+ AS __SEL__", "to": "$1 SELECT"},
+		{"from": "__SEL__", "to": "SELECT"},
+		{"from": "\bDELETE\s+\w+\s+FROM\s+([\w\.\#\$\s]+?)(\bINNER|\bOUTER)\s+JOIN\s+([\w\.\#\$\s]+?)ON\s([\s\S]+)", "to": "DELETE FROM $1 WHERE EXISTS (\nSELECT * FROM $3 WHERE $4\n)"},
+		{"from": "\bUPDATE\s+STATISTICS\s+(\w+\.\w+)", "to": "ANALYZE TABLE $1 COMPUTE STATISTICS"},
+		{"from": "'\s*\;\s*EXECUTE\s+SP_EXECUTESQL\s+[\{\}\@\'\w]+", "to": ""}
+		//{"from": "\+", "to": "||"}
+	],
+
+	"set_execute_subst" :[
+		{"from": "\bV_SQL\s*\=", "to": "__VSQL_EQ__"},
+		{"from": "([\@\w]+)\s*\=\s*([\s\S]+?)(\,|\bFROM\b)", "to": "$2 as $1 $3"},
+		{"from": "\@(\w+)", "to": "{$1}"},
+		{"from": "\'\+\'\_\'\+\{", "to": "_{"},
+		{"from": "__VSQL_EQ__", "to": "V_SQL = "},
+		{"from": "\bas\s+\{(\w+)\}", "to": "as $1"}
+	],
+
+	"final_visual_subst" : [
+		{"from": "#__endif__", "to": ""},
+		{"from": "#__endloop__", "to": ""},
+		{"from": "#__ignored_except__", "to": ""},
+		{"from": "#BEGIN __TRY_EXCEPT__", "to": ""},
+		{"from": "__TRY_EXCEPT__", "to": "$1"},
+		{"from": "# COMMAND ----------\n# COMMAND ----------", "to": "# COMMAND ----------"},
+		{"from": "\n[\ \t]+# COMMAND ----------\n",  "to" : "\n"},
+		{"from": "\n# COMMAND ----------[\n\s]*$", "to": "\n"},
+		{"from": "#\"\"\"--", "to": "\"\"\"--"},
+		{"from": "\n(\s*)(\/\s*)\n", "to": "\n$1# $2\n"},
+		{"from": "\n(\s*)(\bGRANT\b.*)", "to": "\n$1# $2"},
+		{"from": "\n\s*\bRAISE\b\s*\n", "to": "\n\n"},
+		{"from": "\bexcept\b:", "to": "except Exception as ex:"},
+		{"from": "\bSQLERRM\b", "to": "str(ex)"},
+		{"from": ":=", "to": "="},
+		{"from": "\belse\:\s+if\b", "to": "elif"},
+		{"from": "([\s\(])\@(\w+)", "to": "$1$2"},
+		//{"from": "([\s\(])\#(\w+)", "to": "$1cat.TempDb.$2"},
+		{"from": "\.\.\#(\w+)", "to": ".$1"},
+		{"from": "# TRY", "to": ""},
+		{"from": "# CATCH", "to": ""},
+		{"from": "\bWHILE\s+[\@\w]+\s*\=\s*[0-9]+", "to": ""},
+		{"from": "\bWHILE\s+\(\s*[\@\w]+\s*\=\s*[0-9]+\s*\)", "to": ""},
+		{"from": "\bCLOSE\s+\w+", "to": ""},
+		{"from": "\bDEALLOCATE\s+\w+", "to": ""},
+		{"from": "ERROR_MESSAGE\s*\(\s*\)", "to": "{ex}"},
+		{"from": "\"\"\"\)\s*\:",  "to" : "\"\"\")"},
+		{"from": "\bGO\s*?($|\#\s*begin\s*footer\b)",  "to" : "$1"},
+		{"from": "\#(\w+)", "to": "TEMP_TABLE_$1"},
+		{"from": "{\@(\w+)}", "to": "{$1}"},
+		{"from": "\@'{(\w+)}'", "to": "'{$1}'"},
+		{"from": "\bGETDATE\(\)", "to": "current_timestamp()"},
+
+		// Ahold specific changes
+		{"from": "if '[\w\.]+' in spark\.catalog\.listTables\(\) not None:([\s\S]+?DROP\s+TABLE\s+\w+\s*\"\"\"\))", "to": "# removed dropped table syntax"},
+		{"from": "(try):", "to": "$1 :\n\t# get version info \n\tinsert_tables = %INSERT_TABLES%\n\tprev_version_tables = []\n\tfor t in insert_tables:\n\t\tprev_version = spark.sql(f\" desc history {t} \").orderBy('version', ascending=False).first()[\"version\"]\n\t\tprint(f\"Current version of {t} is : \" , prev_version)\n\t\tprev_version_tables.append(prev_version)"},
+		{"from": "\btry :", "to": "try:"},
+		{"from": "\bquery_[0-9]+\s+\=", "to": "latest_query ="},
+		{"from": "\bif\s+\@\@TRANCOUNT\s*\>\s*0:\s*ROLLBACK\;\s*(print\(\"\"\"ROLLBACK COMPLETE\"\"\"\)|)", "to": "\n\tshould_rollback = 0\n\ttable_count = 0\n\tfor t in insert_tables:\n\t\tnew_version = spark.sql(f\" desc history {t} \").orderBy('version', ascending=False).first()[\"version\"]\n\t\tif (prev_version_tables[table_count] != new_version):\n\t\t\tshould_rollback = 1\n\t\t\tbreak\n\t\ttable_count += 1\n\tif should_rollback:\n\t\ttable_count = 0\n\t\tfor t in insert_tables:\n\t\t\tspark.sql(f\"RESTORE TABLE {t} to version as of {prev_version_tables[table_count]} \")\n\t\t\ttable_count += 1\n\t\tprint(\"\"\"ROLLBACK COMPLETE\"\"\")\n\n\t# Capture error \n\texc_type, exc_obj, exc_tb = sys.exc_info()\n\terr = str(e).replace(\"'\",\"''\")"},
+		{"from": "\bERROR_NUMBER\(\)", "to": "'{exc_tb.tb_lineno}'"},
+		{"from": "(\bERROR_SEVERITY\(\)|\bERROR_STATE\(\))", "to": "NULL"},
+		{"from": "\bERROR_PROCEDURE\(\)", "to": "'{notebook_path}'"}, //{ex} AS
+		{"from": "\{ex\}\s+AS", "to": "'{err}' AS"},
+
+		// from previous Ahold config
+		{"from" : "\bTHROW\b(\s*$|\s*\"\"\"\s*\))", "to" : "$1"},
+		{"from" : "\bWHEN\s+([\w\.]+)\s+\=\s+\'NULL\'\s+THEN\nWHEN\s+\1\s+IS\s+NOT\s+NULL\b", "to" : "WHEN $1 = 'NULL'"},
+		{"from" : "\bIS\s+NULL\s+OR\s+\'\'", "to" : "= ''"},
+		{"from" : "\bAS\s+\w+\s+ELSE\b", "to" : "ELSE"},
+		{"from" : "\n\s+(\"\"\")(\-\-|\/\*)", "to" : "\n$1$2"},
+		{"from" : "\bAS(\s+)DATETIME\b", "to" : "AS$1TIMESTAMP"},
+		{"from": "\bDATEPART\s*\(\s*YEAR\b", "to": "DATE_PART('Y'"},
+		{"from": "\bDATEPART\s*\(\s*HH\b", "to": "DATE_PART('H'"},
+		{"from": "\bDATEPART\s*\(\s*MI\b", "to": "DATE_PART('M'"},
+		{"from": "\bDATEDIFF\s*\(\s*MI\b", "to": "DATEDIFF(M_INUTE"},
+		{"from": "M_INUTE", "to": "MINUTE"},
+		{"from" : "\bnvarchar\s*\([0-9\s\,\w]*\)", "to" : "string"},
+		{"from": "latest_query(\s*\=\s*spark\.sql\(f\"\"\"\s*\bINSERT\s+INTO\s+MTDT\.ERROR_TABLE\s+SELECT)", "to": "last_query$1\n\t'{V_JOB_RUN_ID}' AS JOB_ID,"},
+
+		{"from": "\bexcept Exception as (ex|e)\:[\;\s\#]*?($|\#\s*begin\s*footer\b)",  "to" : "$2"},
+		//{"from": "\bexcept Exception as ex\:", "to": "\tv_trancount = latest_query.first()[\"num_affected_rows\"]\nexcept Exception as e:"},
+		{"from": "\bexcept Exception as ex\:", "to": "except Exception as e:"},
+		{"from": "\bWITH\s+\(\s*DISTRIBUTION\b[\s\,\w\=]+\bHEAP\s*\)",  "to" : ""},
+		{"from": "\bWITH\s+\(\s*DISTRIBUTION\b[\s\,\w\=]+\([\w\s]+\)[\,\s\w]*\)", "to" : ""},
+		{"from": "# removed dropped table syntax:",  "to" : "# removed dropped table syntax"},
+		{"from": "if\s+(\w+)(\s+is\s+)(not|)(\s+None\s+)(\>|\<\=)", "to": "if $1$2$3$4and $1 $5"},
+		{"from": "\"\"\"\)\s*\+\s*CAST\s*\(\s*(\w+)\s+AS\s+\w+\s*\)", "to": "{$1}\"\"\")"},
+		{"from": "\bSET\s+\'\{(\w+)\}\'\s*(\=|\>|\<)\s*\'\{(\w+)\}\'", "to": "$1 $2 $3"},
+
+		{"from": "(\bSELECT\s+)\'(\{\w+\})\'(\s*\+\s*DENSE_RANK\(\))", "to": "$1A.$2$3"},
+		{"from": "\bCREATE\s+TABLE\s+(\w+\.\w+)", "to": "CREATE OR REPLACE TABLE $1"},
+		{"from": "(\berr = str\(e\)\.replace\(\"'\",\"''\"\))(print\(f\"\"\"ROLLBACK COMPLETE\"\"\"\))", "to": "$1\n\t$2"},
+
+		{"from": "\bVARCHAR\b", "to": "STRING"},
+		{"from": "__STRT__", "to": "START"},
+		{"from": "__ED__", "to": "END"},
+
+		{"from": "__RAIS__", "to": "raise"},
+		{"from": "__NL__", "to": "\n\t"},
+		{"from": "__UPD_CONV__", "to": "\\UPDATE"},
+
+		{"from": "\bOPTION(\s*\(\s*LABEL\s*\=\s*)(\'|\")([\w\s]+)(\'|\")(\s*\))", "to": "--__OPT__$1$2$3$4$5"},
+		{"from" : "__OPT__", "to" : "OPTION"},
+
+		{"from": "\bSET '{(\w+)}'\s*=\s*([\s\S]+?)\"\"\"\)", "to": "\"\"\")\n\n\t$1 = spark.sql(f\"\"\"$2\"\"\").collect()[0][0]"},
+
+		{"from" : "\bstring\s*\(\s*\w+\s*\)", "to" : "string"},
+		{"from": "MAX\s*\(\s*\[(\s*\w+\s*)]\s*\)", "to": "MAX($1)"},
+
+		//{"from": "\\\)", "to": "\)"},
+
+		// from data team
+		//{"from": "\<\>\s*'(\w+)'", "to": "IS NOT $1"},
+		{"from": "\<\>\s*'(\w+)'", "to": "!= '$1'"},
+		{"from": "{{(\w+)}}", "to": "{$1}"},
+
+		// for data team to assess
+		{"from": "(print\(f\"\"\"MAX DIMENSION KEY VALUE:)( {V_CURR_KEY}\"\"\"\))", "to": "\n\t# for data team\n\tV_CURR_KEY = 0 if V_CURR_KEY is None else V_CURR_KEY\n\t$1 $2"},
+		//{"from": "\bif (V_TMP is not None and V_TMP)", "to": "# for data team\n\tif V_CURR_KEY == 0 or $1"},
+		//{"from": "(\blatest_query = spark\.sql\(f\"\"\"\s*UPDATE\s+MTDT\.KEY_VALUE SET CURR_VAL = )\'\{V_CURR_KEY\}\'", "to": "# for data team, was CURR_VAL = {V_CURR_KEY}\n\t$1CURR_VAL"}
+
+		{"from": "('{V_JOB_RUN_ID}'\s+AS\s+JOB_ID,\s*)('{V_JOB_ID}' JOB_ID,)", "to": "$1--$2"},
+
+		{"from": "__TR__", "to": "try"},
+		{"from": "__EXCP__", "to": "except"},
+//		{"from": "\'\s*\+\s+(CAST\([\s\S]+?\))\s*\+\s*\'", "to": "$1"},
+//		{"from": "\'\s*\+\s+(CAST\()", "to": "$1"},
+
+		{"from": "\w+\s*=\s+N'\s*(\n\s*\blatest_query\b)", "to": "$1"},
+		{"from": "=\s*\b\N'", "to": "= '"},
+		{"from": "\bSET\s+\'\{(\w+)\}\'\s+\=", "to": "$1 ="},
+
+		{"from": "\bPRINT\s+(\'|\")([\s\S]+?)\1", "to": "print(f\"\"\"$2\"\"\")"},
+		{"from": "\bEXECUTE\s+SP_EXECUTESQL\s+['\w\{\}]+(\s*\;|)", "to": ""},
+
+		{"from": "<>", "to": "!="},
+
+		{"from": "\bTRUNCATE\s+TABLE\s+\[(\w+)\]\.\[(\w+)\]\s*\;\s*\:", "to": "latest_query = spark.sql(f\"\"\"TRUNCATE TABLE $1.$2\"\"\")"},
+
+		{"from": "\bTRUNCATE\s+TABLE\s+(\w+\.\w+)\s*\;\s*\:", "to": "latest_query = spark.sql(f\"\"\"TRUNCATE TABLE $1\"\"\")"},
+
+		{"from": "__BG_QUOTE__", "to": "\""},
+		{"from": "__QUOTE__", "to": "\'"},
+
+		{"from": "__I_F__", "to": "IF"},
+
+		// specific patterns
+		{"from": "\bif\s*OBJECT_ID\s*\(\s*'[\w\.]+\'\s*\)\s+not\s+Nones*\:\s+[\"\s\/\*\w\=\.\(\)]+?DROP\s+TABLE\s+\w+\s*\"\"\"\s*\)", "to": "# removed dropped table syntax"},
+		{"from": "StartRunDate\s*\=\s*CAST\(DATEADD\(DD, -1, current_timestamp\(\)\) AS DATE\)", "to": "StartRunDate = spark.sql(f\"\"\"CAST(DATEADD(DD, -1, current_timestamp()) AS DATE)\"\"\").collect()[0][0]"},
+		{"from": "\bTHEN\s+\{(\w+)\}\s+else\b", "to": "THEN '{$1}' else"},
+		{"from": "\bSTG_PRC_ABC_JOB_START_CALL.STG_PRC_ABC_JOB_START\(", "to": "(V_PRCS_RUN_ID, V_JOB_RUN_ID, V_PRCS_ID, V_JOB_ID) = STG_PRC_ABC_JOB_START_CALL.STG_PRC_ABC_JOB_START ("},
+
+		// '\s*\+\sCHAR\(10\)\s\+\s*'
+
+		// convert column names with spaces to underscores
+		//{"from" : "(\[+[\w\_\(\)\+\\\/]+)([\s\)\(\+\\\/])([\w\_\s\(\)\+\\\/]+\]+)", "to" : "$1_$3"},
+
+		{"from": "\;\)", "to": ")"} // generally no need for semicolons in databricks
+	],
+
+	"line_subst" : [
+		{"from": "\bset\s+define\s+off\b",  "to" : ""},
+		{"from": "\bEXIT\s+WHEN\b.*",  "to" : ""},
+		{"from": "\bRAISE\b\;",  "to" : ""},
+		{"from": "(\bEND\s+TRY\b)",  "to" : "#__endloop__"}, //needed for hook processing
+		{"from": "(\bEND\s+CATCH\b)",  "to" : "#__endif__"}, //needed for hook processing
+		{"from": "(\bBEGIN\s+TRY\b)",  "to" : "try:"}, //needed for hook processing
+
+		{"from": "(\bEND\s+IF\b)",  "to" : "#__endif__"}, //needed for hook processing
+		//{"from": "\bEXECUTE\s+IMMEDIATE\b",  "to" : "EXECUTE_IMMEDIATE"}, //needed for hook processing
+		
+		{"from": "(\bEND\s+LOOP\b)",  "to" : "#__endloop__"}, //needed for hook processing
+		{"from": "__PART_OF_STRING_EXCPT__",  "to" : "exception"} //needed for hook processing
+	],
+
+	// for default handler -- in this case sql fragments, comments (not python fragments)
+	"block_subst" : [
+		{"from": "\n\s*\n",  "to" : "\n"},
+		{"from": "(\bEND\s+IF\b)",  "to" : "#__endif__"}, //needed for hook processing
+		{"from": "(\bEND\s*\;)",  "to" : "#__endif__"}, //needed for hook processing
+		{"from": "(\bEND\b)",  "to" : "#__endif__"}, //needed for hook processing
+		{"from": "\#__NORMAL_END__",  "to" : "END"}, //needed for hook processing
+
+		//{"from": "\|\|", "to": "+"},
+		{"from": "(\bEND\s+LOOP\b)",  "to" : "#__endloop__"}, //needed for hook processing
+		{"from": "(\bquery_[0-9]+ \= spark\.sql\(f\"\"\"\s*)(#__endif__)",  "to" : "$2\n$1"} //needed for hook processing
+	],
+
+	"function_subst" : [
+		{"from": "TRUNC", "to": "date_trunc", "arg_placement": { "1":"2||'DD'", "2":"1" } },
+		{"from": "SYSDATE",  "to" : "current_date()"},
+		{"from": "ISNULL",  "to" : "NVL"},
+		{"from": "RAISERROR",  "output_template" : "print(f\"\"\"$1\"\"\")"},
+		{"from": "TO_NUMBER", "to" : "INT"},
+		{"from": "HASHBYTES", "num_args" : 2, "output_template" : "md5($2)"},
+		{"from": "TO_CHAR", "num_args" : 1, "output_template" : "date_format($1,'MM/dd/yyy')"},
+		//{"from": "DBMS_OUTPUT.put_line", "to" : "__BLANK__"},
+		{"from": "ODS.SP_LOG_MESSAGES", "to" : "__BLANK__"},
+		{"from": "RAISE_APPLICATION_ERROR", "output_template" : "print($2)"},
+		//{"from": "SP_LOG_OIDS_MESSAGES", "to" : "__BLANK__"},
+		//{"from": "EXECUTE_IMMEDIATE", "to" : "spark.sql"},
+		{"from": "TO_CHAR", "to" : "date_format"},
+		{"from": "ROUND", "to" : "np.round"},
+		{"from": "COUNT_BIG", "to" : "COUNT"},
+		{"from": "ISNone", "output_template" : "$1 is not None"},
+		// {"from": "Object_ID", "output_template" : "$1 in spark.catalog.listTables()"},
+		{"from": "DBMS_OUTPUT.put_line", "to" : "print"},
+		{"from": "SUBSTR", "num_args" : 2, "output_template" : "$1[$2:]"},
+		{"from": "SUBSTR", "num_args" : 3, "output_template" : "$1[$2:$3]"},
+		{"from" : "STR", "output_template" : "CAST($1 AS string)"},
+		//{"from" : "DATENAME",   "output_template" : "date_part($1,$2)"},
+		{"from" : "ISNUMERIC", "output_template" : "CAST($1 AS double)", "num_args" : "1"},
+		//{"from" : "CONVERT", "output_template" : "CAST($2 AS TIMESTAMP)", "num_args" : "2", "arg_pattern" : {"1" : "^DATETIME$"}}, //cast as timestamp
+		//{"from" : "CONVERT", "output_template" : "from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss\"),\"yyyy-MM-dd 00:00:00\")", "num_args" : "2", "arg_pattern" : {"1" : "^DATE$"}},
+		//{"from" : "CONVERT", "output_template" : "replace(from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"yyyy-MM-dd\"),'-','')", "num_args" : "3", "arg_pattern" : {"3" : "^112$"}},
+		//{"from" : "CONVERT", "output_template" : "from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"HH:mm:ss\")", "num_args" : "3", "arg_pattern" : {"3" : "^114$"}},
+		//{"from" : "CONVERT", "output_template" : "replace(from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"yyyy-MM-dd\"),'-','')", "num_args" : "3"},
+		{"from" : "CONVERT", "output_template" : "CAST($2 AS $1)", "num_args" : "2"},
+		{"from" : "CONVERT", "output_template" : "CAST($2 AS $1) --for data team\nAS", "num_args" : "3"},  // for data team
+		{"from" : "datediff","num_args" : "3","output_template" : "DATEDIFF(DAY, $2, $3)","arg_pattern" : {"1" : "(DD|\bD\b|'DAY')"}},
+		{"from" : "datediff","num_args" : "3","output_template" : "DATEDIFF(SECOND, $2, $3)","arg_pattern" : {"1" : "(SS|\bS\b)"}},
+		{"from" : "datediff","num_args" : "3","output_template" : "DATEDIFF(MONTH, $2, $3)","arg_pattern" : {"1" : "'MONTH'"}}
+		//{"from" : "datediff","num_args" : "3","output_template" : "DATEDIFF(MINUTE, $2, $3)","arg_pattern" : {"1" : "MI"}}
+	]
+
+}

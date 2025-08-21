@@ -1,0 +1,67 @@
+// this is the main dbx sql converter config file
+// it enables all the main hooks necessary to process any source sql dialects
+{
+	"inherit_from" : ["general_sql_specs.json"],
+	"CUSTOM_CONVERTER_MODULES" : ["final_master_dbx_sql_scripting"],
+	"prescan_and_collect_info_hook" : "::handler_master_dbx_sql_scripting_prescan",
+	"initialize_hooks_call" : "::handler_master_dbx_init_hooks",
+	"preprocess_file" : 1,
+	"preprocess_routine" : "::handler_master_dbx_preprocess_file",
+
+	"procedure_header" : """CREATE OR REPLACE PROCEDURE %PROCEDURE_NAME%(
+%PARAMETERS%)
+LANGUAGE SQL
+SQL SECURITY INVOKER
+AS
+""",
+
+	"defined_function_header" : """CREATE OR REPLACE FUNCTION %FUNCTION_NAME%(
+%PARAMETERS%)
+RETURNS %RETURN_TYPE%
+""",
+
+"try_catch_template": """DECLARE EXIT HANDLER FOR SQLEXCEPTION
+BEGIN
+GET DIAGNOSTICS CONDITION 1
+%CATCH_BODY%
+END;
+%TRY_BODY%
+""",
+
+ "code_fragment_breakers": {
+ 	"line_end": ["\;"]
+ },
+"skip_code_fragment_on_begin_end_blocks" : 1,
+"stmt_categorization_patterns":[
+	{"category": "CONTINUE", "patterns" : [".*CONTINUE\;"]},
+	{"category": "EXIT", "patterns" : [".*EXIT\;"]},
+	{"category": "END_FOR_LOOP", "patterns" : [".*\w+\s+END FOR\;"]}
+],
+
+"fragment_handling" : {
+	"MERGE" : "::convert_merge_into",
+	"CTE_TABLE": "::with_handler",
+	"VAR_DECLARE" : "::var_declare",
+	"SELECT_INTO" : "::convert_select_into",
+	"READ_DML_INTO_VAR" : "::select_into_var",
+	"SELECT_VAR_ASSIGNMENT" : "::set_in_select",
+	"FOR_LOOP" : "::start_for_loop",
+	"CONTINUE" : "::continue_for_loop",
+	"EXIT" : "::exit_for_loop",
+	"END_FOR_LOOP" : "::end_for_loop"
+	// ,"__DEFAULT_HANDLER__" : "::var_declare"
+
+},
+"fix_me_on" : true,
+// "fix_me_section" :
+// [
+// 	"\bLATERAL\s+VIEW\s+explode\b",
+// 	"\bBEGIN\s+TRY\b",
+// 	"\bEND\s+TRY\b",
+// 	"\bBEGIN\s+CATCH\b",
+// 	"\bEND\s+CATCH\b"
+// ],
+
+"pre_finalization_handler" : "::finalize_content"
+
+}

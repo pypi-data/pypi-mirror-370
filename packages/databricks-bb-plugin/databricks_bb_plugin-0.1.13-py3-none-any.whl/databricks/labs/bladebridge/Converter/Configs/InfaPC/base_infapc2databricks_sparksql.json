@@ -1,0 +1,173 @@
+// this is a config file to produce SparkSQL out of InfaPC metadata
+{
+	"code_generation_module" : "CodeGeneration::SQL",
+	"inherit_from" : ["base_infapc2databricks.json"],
+	"target_file_extension" : "py", // make sure this is in sync with code_generation_language setting.
+	"use_notebook_md" : 1, //indicate if databricks notebook markdowns should be used on the output or if we are generating a plain SQL or PYTHON file
+	"md_section_start" : "#", //start the markdowns with the pound character
+
+	"output_title" : 1,
+	"title_template" : "Folder %FOLDERNAME%, Job %JOBNAME%",
+	"output_description" : 1,
+	"consolidate_nb_statements" : 1, // for ETL source, will group variables, pre/post sql, prerequisites (unconnected lookups)
+
+	"script_header" : "# Databricks notebook source~
+# Code converted on %CONVERTER_TIMESTAMP%~
+import os\nfrom pyspark.sql import *~
+from pyspark.sql.functions import *~
+from pyspark.sql.window import Window~
+from pyspark.sql.types import *~
+from datetime import datetime~
+from pyspark.dbutils import DBUtils~
+from delta.tables import DeltaTable~
+from databricks_conversion_supplements import DatabricksConversionSupplements~
+~
+%MAPPLET_IMPORT%~
+~
+# COMMAND ----------~
+~
+# Set global variables~
+starttime = datetime.now() #start timestamp of the script",
+
+	"comment_start" : "#",
+	"rowid_column_wrap" : "nvl(%COLUMN_NAME%,'__%COLUMN_NAME%__')", // this needs to be kept here, and not in the base file
+	"rowid_expression" : "xxhash64(%DELIMITED_COLUMN_LIST%) as %ROWID_COL_NAME%",
+	// These are PySpark writer specs.  Converter invokes pyspark writer for specific component types.
+	"force_pyspark_output_by_node_types" : ["SOURCE|FLATFILE", "TARGET|File Writer"], // tells the generator to use pyspark writer for these nodes.
+	"pyspark_user_original_node_name" : true,
+	"pyspark_config" : {
+		"commands" : {
+			"READER_FILE_DELIMITED": "spark.read.format('csv').option('header', 'true').load(rf'''%PATH%''')",
+			"READER_FILE_DELIMITED_EXTERNAL": "%NODE_NAME%_External = spark.read.format('csv').option('header', 'true').load(%PATH%)",
+			"READER_FILE_FIXED_WIDTH" : "raw_%NODE_NAME% = spark.read.text(f\"%PATH%\")\n%NODE_NAME% = raw_%NODE_NAME%.select(%SUBSTRING_SPEC%)",
+			"READER_RELATIONAL": "%NODE_NAME% = %SQL%\n%NODE_NAME% = spark.sql(%NODE_NAME%)",
+			//"WRITER_FILE_DELIMITED": "spark.sql('drop table if exists %DF%')\nSA_CUSTOMER_DS.write.saveAsTable(%DF%)",
+			"WRITER_FILE_DELIMITED": "%DF%.write.format('csv').option('header','%HEADER%').mode('overwrite').option('sep','%DELIMITER%').csv('%PATH%')",
+			"WRITER_RELATIONAL": "my_end_point.write_to_db(%DF%, \"%TABLE_NAME%\", username=\"%LOGIN%\", password=\"%PASSWORD%\")"
+		},
+
+		"system_type_class" : {
+			"ORACLE" : "RELATIONAL",
+			"MySQL" : "RELATIONAL",
+			"HIVE" : "RELATIONAL",
+			"DB2" : "RELATIONAL",
+			"TERADATA" : "RELATIONAL",
+			"REDSHIFT" : "RELATIONAL",
+			"Salesforce" : "SALEFORCE",
+			"TOOLKIT" : "RELATIONAL",
+			"FLATFILE" : "FILE_DELIMITED",
+			"FLAT FILE":"FILE",
+			"FLAT_FILE":"FILE",
+			"FILE WRITER":"FILE",
+			"DEFAULT" : "FILE_DELIMITED"
+		},
+		"conform_source_columns" : "1",
+		"force_conform_source_columns" : "1", //Added for conforming field names for File source
+		"conform_columns_call_template" : "%DF%_conformed_cols = [%COLUMN_LIST%]\n%DF% = DatabricksConversionSupplements.conform_df_columns(%DF%,%DF%_conformed_cols)\n",
+		"enabled_datatype_casting_components" : ["SOURCE"],
+		//"rowid_column_wrap" : "nvl(%COLUMN_NAME%,'__%COLUMN_NAME%__')",
+		"rowid_expression" : ".withColumn('%ROWID_COL_NAME%',xxhash64(concat_ws('||', %DELIMITED_COLUMN_LIST%)))", //"xxhash64(%DELIMITED_COLUMN_LIST%) as %ROWID_COL_NAME%",
+		"rowid_column_name" : "sys_row_id",
+		"rowid_column_name" : "source_record_id",
+		"rowid_expression_use_pk_when_possible" : 1,
+		"datatype_cast_mapping" : { //tells converter what string to use during casting. tokens %LENGTH% and %SCALE% will be replaced at conversion time
+			"decimal" : ".cast('decimal(%LENGTH%,%SCALE%)')",
+			"string" : ".cast(StringType())",
+			"char" : ".cast(StringType())",
+			"varchar" : ".cast(StringType())",
+			"numeric" : ".cast(LongType())",
+			"timestamp" : ".cast(TimestampType())",
+			"integer" : ".cast(LongType())",
+			"date" : ".cast(DateType())"
+		}
+	},
+	// End of Pyspark specs
+
+
+	//"not_a_widget_list" : ["starttime"], //tell the writer that thwse are not widgets, but rather pytho vars that do not need to be included into 'format' clause
+
+	"multistatement_separator" : ";[\s\n]*",
+
+	"generate_variable_declaration" : 1,
+	"variable_declaration_template" : "dbutils.widgets.text(name = \"%VARNAME%\", defaultValue = \"%DEFAULT_VALUE%\")\n%VARNAME% = dbutils.widgets.get(\"%VARNAME%\")\n",
+	"variable_declaration_comment" : "Variable declaration section",
+//	"skip_variable_patterns" : [ "_DIR", "DSN", "PASSWORD", "USER" ], // skip vars that have these naming patterns, case insensitive
+
+	// ******** DBSQL Generation Options *******
+	//"dataset_creation_method" : "CTE",
+	"dataset_creation_method" : "TABLE",
+	"table_creation_statement" : "%TABLE_NAME% = spark.sql(rf\"\"\"\n%INNER_SQL%\"\"\"%FORMAT_SPEC%)\n%TABLE_NAME%.createOrReplaceTempView(\"`%TABLE_NAME%`\")", //ensure there are %TABLE_NAME% and %INNER_SQL% tokens present in this spec
+	"pyspark_table_creation_statement" : "%INNER_SQL%\n%TABLE_NAME%.createOrReplaceTempView(\"`%TABLE_NAME%`\")", // this kicks in if 'force_pyspark_output_by_node_types' entry is set for a particular node type/system type
+	//"target_table_creation_statement" : "%TABLE_NAME% = spark.sql(\"\"\"\n%INNER_SQL%\"\"\"%FORMAT_SPEC%)\n%TABLE_NAME%.write.mode('overwrite').format(\"delta\").saveAsTable(\"%OBJECT_NAME%\")", //ensure there are %TABLE_NAME% and %INNER_SQL% tokens present in this spec
+	"conditional_target_write_statement" : "%ADDITIONAL_COMMENT%\nspark.sql(f\"\"\"%INNER_SQL%\"\"\")",
+	//"target_table_truncation_statement" : "DELETE FROM %TABLE_NAME% WHERE 1=1", //ensure there is %TABLE_NAME% token present in this spec
+	"target_table_truncation_statement" : "TRUNCATE TABLE %TABLE_NAME%",
+
+	"force_wrap_type_table" : { "ROUTER" :  1 },
+
+	"wrap_ddl_statements" : "1",
+	"ddl_statement_wrap" : "spark.sql(f\"\"\"%INNER_SQL%\"\"\"%FORMAT_SPEC%).display()",
+	"sql_statement_wrapper" : {
+		"TRUNCATE_TABLE" : "spark.sql(rf\"\"\"%INNER_SQL%\"\"\")",
+		"Pre SQL" : "spark.sql(rf\"\"\"%INNER_SQL%\"\"\")"
+	},
+	//"ddl_statement_wrap" : "# DDL placeholder",
+	"comment_template" : "# %COMMENT%", // used for target processing currently to plug in python-style comments
+
+	// "pre_post_node_injection" : {
+	// 	"TARGET|TERADATA" : {
+	// 		//"pre_node" : "%sql\n", //sql spec
+	// 		//"comment_style" : "SQL",
+	// 		//"component_header_comment" : "/* Component %COMPONENT%, Type %TYPE% %ADDITIONAL_COMMENT% */" //SQL style override
+	// 	},
+	// 	"TARGET|FLATFILE" : { // routing flat file inserts into tables, so need to generate %sql tag
+	// 		//"pre_node" : "%sql\n", //sql spec
+	// 		//"comment_style" : "SQL",
+	// 		//"component_header_comment" : "/* Component %COMPONENT%, Type %TYPE% %ADDITIONAL_COMMENT% */" //SQL style override
+	// 	}
+	// },
+
+	"apply_format_instruction" : 1, // will replace %FORMAT% token in table_creation_statement.  Will look for query parameters using {\w+} pattern by default
+	"format_spec" : "%PARAM_NAME%=dbutils.widgets.get(\"%PARAM_NAME%\")",
+
+	"sql_statement_separator" : "\n",
+	"component_header_comment" : "# COMMAND ----------\n# Component %COMPONENT%, Type %TYPE% %ADDITIONAL_COMMENT%",
+
+	"etl_converter_config_file" : "infa2databricks.json",
+
+	"generate_statement_for_source_dataset" : 1, //datastage specific.
+
+	"pre_post_sql_wrapper" : "# COMMAND ----------\n# Processing %PRE_POST_FLAG% for node %NODE_NAME%, STMT #%STMT_NUMBER% \nspark.sql(f\"\"\"%INNER_SQL%\"\"\")",
+	"spark.sql_template" : "spark.sql(rf\"\"\"%INNER_SQL%\"\"\")",
+
+	//"create_target_ddl" : "1",
+	//"create_source_ddl" : "1",
+	"ddl_filename_template" : "DDL_%OBJECT_NAME%.sql",
+	"ddl_eliminate_extensions" : ["txt","dat","ds"],
+	"transformer_vars_use_cte_flag" : "1", //tells SQL writer to use CTEs when there are variables in tranformer components
+	"concat_operator" : "||",
+	//"write_to_target_files_as_tables" : 1,
+
+	"KEEP_UNUSED_TARGET_FIELDS" : "1",
+	"keep_unmapped_fields_target" : "1",
+
+	"ignore_connection_profiles" : 1, //if ON, will blank out %CONNECTION_PROFILE%. prefixes coming from agnostic layer
+
+	"variable_declaration_header" : "# COMMAND ----------\n# Variable_declaration_comment"
+
+}
+
+/*LOADABLE_CODE
+use strict;
+
+my $CONVERTER;
+
+sub main::init_hooks
+{
+	my ($params) = @_;
+	$CONVERTER = $params->{CONVERTER} unless $CONVERTER;
+	main::init_run(@_);
+	main::init_column_insert_hook(@_);
+}
+
+LOADABLE_CODE*/

@@ -1,0 +1,384 @@
+{
+    "inherit_from" : ["ic2dws.json"],
+    // "header": "#Code converted on %CONVERTER_TIMESTAMP%\nimport os\nfrom pyspark.sql import *\nfrom pyspark.sql.functions import *\nfrom pyspark import SparkContext;\nfrom pyspark.sql import SQLContext \nfrom pyspark.sql.session import SparkSession\nsc = SparkContext.getOrCreate()\nspark = SparkSession(sc)",
+    
+    "code_generation_module" : "CodeGeneration::PySpark",
+    
+        "header": "# Databricks notebook source~
+# Code converted on %CONVERTER_TIMESTAMP%~
+import os\nfrom pyspark.sql import *~
+from pyspark.sql.functions import *~
+from pyspark.sql.window import Window~
+from pyspark.sql.types import *~
+from datetime import datetime~
+from pyspark.dbutils import DBUtils~
+from delta.tables import DeltaTable~
+from databricks_conversion_supplements import DatabricksConversionSupplements~
+~
+# COMMAND ----------~
+~
+# Set global variables~
+starttime = datetime.now() #start timestamp of the script",
+
+// dbutils.widgets.text(name = 'library', defaultValue = 'LXFPDN')~
+// library = dbutils.widgets.get('library')~
+// (connection_string,username,password) = get_lx_conn(env)~
+
+// if env == 'dev':
+//     catalog = f'{catalog}_{env}'
+// dbutils.widgets.text(name = 'source', defaultValue = 'lx_bronze')~
+// source = dbutils.widgets.get('source')~
+// uc_source = f'{catalog}.{source}'~
+// (connection_string,username,password) = get_lx_conn(env)~
+// dbutils.widgets.text(name = 'source', defaultValue = 'lx_bronze')~
+// source = dbutils.widgets.get('source')~
+// uc_source = f'{catalog}.{source}'~
+// dbutils.widgets.text(name = 'library', defaultValue = 'PRCBIBRF')~
+// library = dbutils.widgets.get('library')~
+// csv_path = get_trnsp_path(env)~
+
+
+// (username,password,connection_string) = sqlserver_db_read(env)~
+
+    // "footer": "quit()",
+    // "add_environmental_vars": "connection_string = 'jdbc:sqlserver:\/\/localhost:1433'\nuser_name = 'sa'\npassword = '123'",
+    //"add_read_data_from_source": "\tdef read_data_from_source(connection_string , user_name , password, table_name):\n\t\ttry:\n\t\t\t df = spark.read.format('jdbc').option('url',connection_string).option('user', user_name).option('password', password).option('dbtable', '(SELECT * FROM' + table_name + ') t').load()\n\t\t\t return df\n\t\texcept Exception as e:\n\t\tprint(e)\n\t\t\t sys.exit('Error while reading the data , Please investigate.')\n\n\tdef read_data_from_query(connection_string , user_name , password, query):\n\t\ttry:\n\t\t\t df = spark.read.format('jdbc').option('url',connection_string).option('user', user_name).option('password', password).option('dbtable', query).load()\n\t\t\t return df\n\t\texcept Exception as e:\n\t\tprint(e)\n\t\t\t sys.exit('Error while reading the data , Please investigate.')\n\n\n",
+    // "add_read_data_from_source": "\tdef read_data_from_query(connection_string , user_name , password, query):\n\t\ttry:\n\t\t\t df = spark.read.format('jdbc').option('url',connection_string).option('user', user_name).option('password', password).option('dbtable', query).load()\n\t\t\t return df\n\t\texcept Exception as e:\n\t\tprint(e)\n\t\t\t sys.exit('Error while reading the data , Please investigate.')\n\n\n",
+    "script_extension": "py",
+    //"pre_node_line" : "# Processing node %NODE_NAME%, type %NODE_TYPE%\n# COLUMNS: %COLUMN_LIST%",
+    "pre_node_line" : "# COMMAND ----------\n# Processing node %NODE_NAME%, type %NODE_TYPE%\n# COLUMN COUNT: %COLUMN_COUNT%\n", //# COLUMNS %COLUMN_LIST%
+    "post_node_line" : "",
+    "explicit_aliasing" : "1",
+    "skip_rowid_generation" : "1", // omits generation of sys_row_id
+    //"additional_trailing_fields" : ["load_cntl_no"],
+    "column_aliasing_df_naming_pattern" : "PRE_%DF%", // in case column aliases are used, like prefixes and suffixes, create an additional dataframe with this name
+    "implied_target_fields_enable_alpha_sort" : "1",
+    //"force_multi_source_join_type" : "left_join",
+    // use SelectExpr instead of pyspark
+    // "use_selectExpr" : 1,
+    // "remove_expression_comments" : "1", // removes inline comments in expressions before converting them
+
+    // hook to convert target nodes to lowercase
+    "CUSTOM_CONVERTER_MODULES" : ["target_lowercase_hook"],
+    "initialize_hooks_call" : "::init_run",
+
+    "component_handling" : {
+        "TARGET" : "::special_handle_TARGET"
+        //"JOINER" : "::special_handle_JOINER"
+    },
+
+    //use a template file.  this overrides any header/footer specs and the wrap specs below
+    //"template_file" : "C:/Work/pyspark_template_v1.0.py",
+    //"source_df_read_template" : "\t\t\t\t%DF% = dfs[%ZERO_BASED_SOURCE_INDEX%]",
+    //"target_df_write_template" : "\t\t\t\t\ttrasfomedDF.append(%DF%)",
+    //"source_target_exclude_from_body" : "1", //telling converter to exclude source and target code from the main body - because we need to have these statements placed separately in the pyspark code
+    "field_rename_df_pattern" : "%DF%_TMP",
+    "field_rename_df_comment" : "#Conforming layout of Hive to InfaCloud for %DF%",
+    //"datatype_casting_catalog" : "C:/Users/Beso/Desktop/Gamma/datatype_casting_catalog.txt",
+    //"object_path_catalog" : "C:/Users/Beso/Desktop/Gamma/object_path_catalog.txt",
+    // "datatype_casting_catalog" : "C:/bladebridge/datatype_casting_catalog.txt",
+    // "object_path_catalog" : "C:/bladebridge/object_path_catalog.txt",
+
+    //"load_func":"def null_if(param1,param2):\n\tif param1 == param2:\n\t\treturn None\n\telse:\n\t\treturn param1",
+
+    // Change filter to expr filter
+    "convert_as_expr_pattens" : ["\bIF\b", "\bIIF\b", "\bDECODE\b"],
+    "generate_router_as_expr" : "1",
+    "generate_filter_as_expr" : "1",
+
+    "sql_converter_config_file" : "mssql2sparksql.json",
+    "etl_converter_config_file" : "base_infapc2pyspark.json",
+    "expr_sql_converter_config_file" : "base_infa2databricks_expr.json",
+
+
+    "expr_sql_converter_config_file" : "infa2databricks_expr.json",
+
+	// "convert_as_expr_pattens" : ["\bIIF\b", "\bDECODE\b"],
+
+
+    "exclude_from_lit_wrapping" : [
+        "YYYY-MM-DD",
+        "MM\/DD\/YYYY",
+        "MM-DD-YYYY",
+        "SYSDATE"
+    ],
+
+    "exclude_function_args_from_lit_wrapping" : [
+        "REPLACESTR",
+        "RPAD"
+    ],
+
+    "default_indent" : {
+        "header" : "",
+        "add_environmental_vars" : "",
+        // "body" : "    ",
+        "body" : "",
+        "footer" : ""
+    },
+    
+    // "body_wrap" : {
+    //     "before" : "try:\n\n",
+    //     "after" : "\n\nexcept Exception as e:\n\tprint(f'{type(e).__name__} at line {e.__traceback__.tb_lineno} of {dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()}: {e}')\n"
+    // },
+    
+    // "multiline_stmt_break" : " \ ",
+    "null_assignment" : "lit(None).cast(NullType())",
+    "sort_function" : "sort", //goes into the sorter node
+
+    "expression_line_subst" : "1",
+    
+    "filter_subst" : {
+        "LAST_N_DAYS" : { "expr" : "(((date_format(%TOKEN1%,'YYYY-MM-dd')==date_sub(date_format(current_timestamp(), 'YYYY-MM-dd'),%TOKEN2%))", "TOKEN1" : "(\w+)\s*=", "TOKEN2" : "\:(\d+)"},
+        " IN\s*\(" : {"expr" : "%TOKEN1%.isin%TOKEN2", "TOKEN1" : "(.+)\s+in", "TOKEN2" : "in\s+(.+)"},
+        " NOT IN\s*\(" : {"expr" : "%TOKEN1%.isin%TOKEN2 == False", "TOKEN1" : "(.+)\s+in", "TOKEN2" : "in\s+(.+)"}
+    },
+
+    //if threshold is met, introduce the registerTempTable code snippet
+    "target_special_handling" : {
+        "column_count_threshold" : "5000",
+        "temp_df_name" : "%DF%_OUTPUT",
+        "final_df_name" : "%DF%_FINAL",
+        "final_df_population" : "sqlContext.sql('select * from %DF%')"
+    },
+
+    "default_flatfile_delimiter" : ",",
+
+    "commands" : {
+        // "READER_FILE_DELIMITED": "spark.read.csv('%PATH%', sep='%DELIMITER%', header='%HEADER%')",
+        "READER_FILE_DELIMITED": "spark.read.csv(f'{csv_path}/inbound/%TABLE_NAME%', sep='%DELIMITER%', header='%HEADER%')",
+        // "READER_FILE": "spark.read.csv('%PATH%', sep='%DELIMITER%', header='%HEADER%')",
+        "READER_FILE": "spark.read.csv(f'{csv_path}/inbound/file.csv', sep='%DELIMITER%', header='%HEADER%')",
+        // "READER_RELATIONAL": "spark.sql(f\"\"\"%SQL_NO_TABLE_PREFIXES%\"\"\")",        
+        //"READER_RELATIONAL": "spark.read.jdbc(%CONNECT_STRING%, \"\"\"%TABLE_NAME%\"\"\", properties={'user': %LOGIN%, 'password': %PASSWORD%, 'driver': %DRIVER%})",
+        //"READER_RELATIONAL": "spark.read.format('jdbc').option('url', CONN1_CONNECT_STRING).option('user', CONN1_LOGIN).option('password', CONN1_PASSWORD).option('dbtable', '(SELECT * FROM %TABLE_NAME%) t').load()",
+        // "READER_RELATIONAL": "read_data_from_source(connection_string , user_name , password, %TABLE_NAME%)",
+        // "READER_RELATIONAL": "jdbcSqlServerReader(connection_string , username , password, '(\"\"\"%TABLE_NAME%\"\"\") as src')",
+        // "READER_RELATIONAL": "jdbcSqlServerConnection(connection_string , username , password,  '%TABLE_NAME%')",
+        // "READER_RELATIONAL": "jdbcDB2Reader(connection_string , username , password,  f'{library}.%TABLE_NAME%')",
+        // "READER_RELATIONAL": "jdbcDB2Reader(connection_string , username , password,  \"\"\"(%TABLE_NAME%) as src\"\"\")",
+        "READER_RELATIONAL": "spark.read.table(f\"\"\"{uc_source}.%TABLE_NAME%\"\"\")",
+        "READER_FROM_OBJECT" : "spark.read.table(f\"\"\"{uc_source}.%TABLE_NAME%\"\"\")",
+        // "READER_RELATIONAL": "jdbcDb2Connection(connection_string , username , password, \"\"\"%TABLE_NAME%\"\"\")",
+        // "READER_RELATIONAL": "jdbcDb2Connection(connection_string , username , password, '%TABLE_NAME%')",
+        // "READER_RELATIONAL": "jdbcOracleConnection(connection_string , username , password, '%TABLE_NAME%')",
+        "READER_DATABRICKS": "spark.table(f'%TABLE_NAME%')",
+        //"READER_RELATIONAL_NEST": "spark.read.format('jdbc').option('url', CONN1_CONNECT_STRING).option('user', CONN1_LOGIN).option('password', CONN1_PASSWORD).option('dbtable', '(%TABLE_NAME%) t').load()",
+        "READER_RELATIONAL_NEST": "read_data_from_query(connection_string , user_name , password, '%TABLE_NAME%')",
+        "READER_SALEFORCE": "spark.read.salesforce(%CONNECT_STRING%, \"\"\"%TABLE_NAME%\"\"\", properties={'user': %LOGIN%, 'password': %PASSWORD%, 'driver': %DRIVER%})",
+        "WRITER_FILE_DELIMITED": "%DF%.write.format('csv').option('header','%HEADER%').mode('overwrite').option('sep','%DELIMITER%').csv(f'{csv_path}/outbound\/%TABLE_NAME%')",
+        // "WRITER_FILE_DELIMITED": "%DF%.write.format('csv').option('header','%HEADER%').mode('overwrite').option('sep','%DELIMITER%').csv('%PATH%\/%TABLE_NAME%')",
+        // "WRITER_FILE": "%DF%.write.format('csv').option('header','%HEADER%').mode('overwrite').option('sep','%DELIMITER%').csv('%PATH%\/%TABLE_NAME%')\n(username ,password, connection_string) = sftp_host_write()\nwrite_sftp_data(username ,password,connection_string,  '%PATH%\/%TABLE_NAME%')",
+        "WRITER_FILE": "%DF%.write.format('csv').option('header','%HEADER%').mode('overwrite').option('sep','%DELIMITER%').csv(f'{csv_path}/outbound/file.csv')",
+        //"WRITER_RELATIONAL": "%DF%.write.mode('append').jdbc(%CONNECT_STRING%, \"\"\"%TABLE_NAME%\"\"\", properties={'user': %LOGIN%, 'password': %PASSWORD%, 'driver': %DRIVER%})",
+        // "WRITER_RELATIONAL": ".write.mode('append').jdbc(os.environ['CONN1_CONNECT_STRING'], '%TABLE_NAME%', properties={'user': os.environ['CONN1_LOGIN'], 'password': os.environ['CONN1_PASSWORD'])",
+        "WRITER_RELATIONAL": "%DF%.write.saveAsTable(f'{uc_target}.%TABLE_NAME%', mode = 'overwrite')",
+        "WRITER_SALEFORCE": "SomeArray.Append(%DF%)"
+    },
+
+    "rowid_ref_expr_substitution" : "xxhash64('*')",
+
+    "function_translation": { // inside pyspark select translate function name
+        "UPPER" : "upper",
+        "LOWER" : "lower",
+        "RPAD" : "rpad" ,
+        "LPAD" : "lpad" ,
+        "RTRIM" : "rtrim" ,
+        "Rtrim" : "rtrim" ,
+        "RTrim" : "rtrim" ,
+        "LTRIM" : "ltrim" ,
+        "Ltrim" : "ltrim" ,
+        "LTrim" : "ltrim" ,
+        // "MAX" : "max" ,
+        "SYSDATE" : "current_date" //this doesn't do anything
+    },
+    // TO_DATE(SUBSTR(SYSDATE,1,10),'MM-DD-YYYY')
+    //TO_DATE(SUBSTR(SYSDATE , lit(1) , lit(10)) , lit('MM-DD-YYYY'))
+    // TO_DATE(SUBSTR(lit(SYSDATE) , lit(1) , lit(10)) , 'MM-DD-YYYY')
+    "final_file_visual_substitution" : [
+        {"from" : "\bSYSDATE\.\w+\b", "to" : "(current_timestamp())"},
+        // {"from" : "TO_DATE\(SUBSTR\(SYSDATE , lit\(1\) , lit\(10\)\) , lit\('MM-DD-YYYY'\)\)", "to" : "current_date"},
+        // {"from" : "TO_DATE\(SUBSTR\(lit\(SYSDATE\) , lit\(1\) , lit\(10\)\) , 'MM-DD-YYYY'\)", "to" : "current_timestamp"}, worked
+        {"from" : "YYYY-MM-DD HH24", "to" : "yyyy-MM-dd HH"},
+        {"from" : "lit\(sysdate\)", "to" : "current_timestamp()"},
+        {"from" : "\s*__DOT__\s*", "to" : "."}
+    ],
+
+
+    // "df_naming_template" : "%JOB_NAME%_%NODE_NAME%", //when not specified, the converter will use NODE_NAME
+    "env_var_extraction": "os.environ.get('%VAR%')",
+    "system_type_class" : {
+        "ODBC" : "RELATIONAL",
+        "Microsoft SQL Server" : "RELATIONAL",
+        "SqlServer" : "RELATIONAL",
+        // "Microsoft SQL Server" : "DATABRICKS",
+        // "SqlServer" : "DATABRICKS",
+        "MySQL" : "RELATIONAL",
+        "Salesforce" : "SALEFORCE",
+        "TOOLKIT" : "RELATIONAL",
+        "DEFAULT" : "RELATIONAL",
+        "FlatFile" : "FILE_DELIMITED",
+        "FLATFILE" : "FILE_DELIMITED",
+        "CSVFile" : "FILE_DELIMITED" , 
+        "Oracle" : "RELATIONAL" ,
+        "FTP"  : "FILE"  
+        // "DEFAULT" : "FILE_DELIMITED"
+    },
+    "connection_code_translations" : {
+        "Sample Salesforce Connection" : "SALESFORCE"
+    },
+    "SYS_TYPE_CONF" : {
+        "ORACLE" : "ORACLE",
+        "Oracle" : "ORACLE",
+        "DB2" : "DB2",
+        "Flat File" : "FLATFILE",
+        "FLAT FILE" : "FLATFILE",
+        "MSSQL" : "MSSQL",
+        "Microsoft SQL Server" : "MSSQL",
+        "SqlServer" : "MSSQL",
+        "ODBC" : "ODBC"
+        // "NETEZZA" : "NETEZZA",
+        // "Netezza" : "NETEZZA"
+    },
+    "cast_templates" : {
+        "binary" : "%EXPR%.cast('binary')",
+        "boolean" : "%EXPR%.cast('boolean')",
+        "tinyint" : "%EXPR%.cast('tinyint')",
+        "date" : "%EXPR%.cast('date')",
+        "double" : "%EXPR%.cast('double')",
+        "float" : "%EXPR%.cast('float')",
+        "int" : "%EXPR%.cast('int')",
+        "bigint" : "%EXPR%.cast('bigint')",
+        "smallint" : "%EXPR%.cast('smallint')",
+        "string" : "%EXPR%.cast('string')",
+        "timestamp" : "%EXPR%.cast('timestamp')"
+    }, // using selectExpr
+    "datatype_cast_mapping": {
+       "decimal": "CAST(%COLUMN% AS DECIMAL(%LENGTH%, %SCALE%))",
+       "string": "CAST(%COLUMN% AS STRING)",
+       "char": "CAST(%COLUMN% AS CHAR)",
+       "nchar": "CAST(%COLUMN% AS CHAR)",
+       "varchar": "CAST(%COLUMN% AS STRING)",
+        "nvarchar": "CAST(%COLUMN% AS STRING)",
+    //"numeric": "CAST(%COLUMN% AS BIGINT)",
+       "numeric": "CAST(%COLUMN% AS DECIMAL(%LENGTH%,%SCALE%))",
+       "timestamp": "CAST(%COLUMN% AS TIMESTAMP)",
+       "integer": "CAST(%COLUMN% AS BIGINT)",
+       "date": "CAST(%COLUMN% AS DATE)"
+    },    
+    "use_generic_workflow_builder" : "1",
+    "workflow_specs" : { // will kick in only if use_generic_workflow_builder is on
+        "workflow_class" : "CodeGeneration::DatabricksJobs",
+        // any other attributes on the job level (tags)
+        "workflow_component_mapping" : {
+            "SESSION" : {
+                "task_key" : "%COMPONENT_NAME%",
+                "description" : "%DESCRIPTION%",
+                "notebook_task" : {
+                    "notebook_path" : "notebookTestPath/%MAPPING_NAME%.py"
+                }
+            },
+            "WORKLET" : {
+                "task_key" : "%COMPONENT_NAME%",
+                "description" : "%DESCRIPTION%",
+                "spark_python_task" : {
+                    "python_file" : "somePath/%COMPONENT_NAME%.py"
+                }
+            },
+            "COMMAND" : {
+                "task_key" : "%COMPONENT_NAME%",
+                "description" : "%DESCRIPTION%",
+                "spark_python_task" : {
+                    "python_file" : "somePath/%COMPONENT_NAME%.py"
+                }
+            },
+            "CONTROL" : {
+                "task_key" : "%COMPONENT_NAME%",
+                "description" : "%DESCRIPTION%",
+                "spark_python_task" : {
+                    "python_file" : "somePath/%COMPONENT_NAME%.py"
+                }
+            },
+            "DECISION" : {
+                "task_key" : "%COMPONENT_NAME%",
+                "description" : "%DESCRIPTION%",
+                "spark_python_task" : {
+                    "python_file" : "somePath/%COMPONENT_NAME%.py"
+                }
+            },
+            "ASSIGNMENT" : {
+                "task_key" : "%COMPONENT_NAME%",
+                "description" : "%DESCRIPTION%",
+                "spark_python_task" : {
+                    "python_file" : "somePath/%COMPONENT_NAME%.py"
+                }
+            }
+        },
+
+        "default_workflow_attr" : {
+            "tags" : {
+                "cost-center": "engineering",
+                "team": "jobs"
+            },
+            "job_clusters" : [
+                {
+                    "job_cluster_key": "auto_scaling_cluster",
+                    "new_cluster": {}
+                }
+            ],
+            "email_notifications" :  {
+                "on_start": [
+                    "user.name@databricks.com"
+                ],
+                "on_success": [
+                    "user.name@databricks.com"
+                ],
+                "on_failure": [
+                    "user.name@databricks.com"
+                ],
+                "no_alert_for_skipped_runs": false
+            },
+            "timeout_seconds" : "86400",
+            "schedule" : {
+                "quartz_cron_expression": "20 30 * * * ?",
+                "timezone_id": "Europe/London",
+                "pause_status": "PAUSED"
+            },
+            "max_concurrent_runs" : "10",
+            "git_source" : null,
+            "format" : "MULTI_TASK",
+            "access_control_list" : [
+                {
+                    "user_name": "jsmith@example.com",
+                    "permission_level": "CAN_MANAGE"
+                }
+            ]
+        },
+
+        "default_task_attr" : {
+            "timeout_seconds" : "86400",
+            "max_retries" : "3",
+            "min_retry_interval_millis" : "2000",
+            "retry_on_timeout" : false
+        },
+        
+        "output_workflow_filename_template" : "%JOB_NAME%.py",
+        "skip_component_types" : ["email", "start"],
+
+        "flow_start" : "\n########### Flow definition ###########\n",
+        "dependency_instruction_template" : "%COMPONENT_NAME% << %UPSTREAM_COMPONENT_LIST%",
+
+        "component_list_spec" : {
+            "list_enclosure" : "[,]", //specify start character sequence before comma and closing char sequence after comma
+            "single_item_use_enclosure_flag" : "0"
+        },
+        // parameter passing.
+        "single_entry_template_COMMAND" : "#Command label %TOKEN1%\nos.system('%TOKEN2%')",
+        "single_entry_template_ASSIGNMENT" : "%TOKEN1% = %TOKEN2%"
+        
+    }
+    // ,
+    // "final_file_visual_substitution" : [
+    // {"from" : "\.alias\((\'\w+\')\)", "to" : ".alias($1.lower())"}
+// ]    
+
+}

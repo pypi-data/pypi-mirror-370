@@ -1,0 +1,187 @@
+{
+	//"inherit_from":["general_sql_specs.json"],
+	//"tag_override_list" : ["stmt_categorization_patterns"], // !!!!!!!!!!!! IMPORTANT !!!!!!!!!!! ignoring these sections from the ancestor file!
+	
+	"target_sql" : "SQLSPARK",
+
+	"script_header" : "from pyspark.sql import Sparksession\nfrom pyspark import StorageLevel\nimport sys\n\nspark = SparkSession \\n    .builder \\n    .appName(\"target_table_name\") \\n    .enableHiveSupport() \\n    .config(\"hive.exec.dynamic.partition\", \"true\") \\n    .config(\"hive.exec.dynamic.partition.mode\", \"nonstrict\") \\n    .config(\"spark.sql.hive.convertMetastoreParquet\", \"false\") \\n    .config(\"spark.sql.crossJoin.enabled\", \"true\") \\n    .config(\"hive.auto.convert.join\", \"false\") \\n    .config(\"spark.executor.memory\", \"8g\") \\n    .config(\"spark.driver.memory\", \"8g\") \\n    .config(\"spark.executor.instances\", \"5\") \\n    .config(\"spark.sql.autoBroadcastJoinThreshold\", \"-1\") \\n    .getOrCreate()\n",
+
+	"insert_header" : "df1 = spark.sql(\"\"\"\nselect * from (select current_timestamp() as processdate, '%TASK_NAME%' as task\nwhere '%TASK_NAME%' not in (select task from work_schema.util_task))\"\"\")\n\ndf1.createOrReplaceTempView(\"tmp_target_table_task\")\n\nspark.sql(\"\"\"\ninsert into work_schema.util_task partition (task)\nselect * from tmp_target_table_task\"\"\")\n\nspark.sql(\"\"\"insert overwrite table work_schema.util_task partition(task='%TASK_NAME%')\nselect current_timestamp() from work_schema.util_task where task='%TASK_NAME%'\"\"\")\n\n",
+	"update_header" : "spark.sql(\"\"\"insert overwrite table work_schema.util_task partition(task='%TASK_NAME%')\nselect substring({0},1,4) || '-' || substring({0},5,2) || '-' || substring({0},7,2) from work_schema.util_task where task='%TASK_NAME%'\"\"\").format(max)\n\n",
+
+	"enable_comments" : false,
+
+	"target_file_extension" : "py",
+	"from_after_delete" : "1",
+	"CUSTOM_CONVERTER_MODULES" : ["mssql_hooks"],
+	//"object_catalog" : "C:\Work\Clients_and_Partners\Partner_1\20210906_TSQL_SPARK\Catalog.json",
+
+	"initialize_hooks_call" : "::init_hooks", //initialize context, pass all relevant info
+//	"prescan_and_collect_info_hook" : "::prescan_code_mssql", //this goes off before preprocess_routine, so we have a chance to collect info in the file
+	"preprocess_file" : "1",
+	"preprocess_routine" : "::mssql_preprocess",
+	//"separate_begin_keyword" : "1",
+	//"skip_code_fragment_on_begin_end_blocks" : "1", // keep it commented out
+
+	"code_fragment_breakers": {
+		//"line_start": ["\.[a-zA-Z]"], //BTEQ's dot commands
+		"line_end": [";"]
+	},
+	
+	"create_table_suffix" : " using delta",
+	
+	//"statement_end" : ";",
+	"code_indent" : "\t",
+	"stmt_categorization_patterns": [
+			//{"category": "UPDATE_TABLE", "patterns" : ["UPDATE\s+\w+\b\s+SET\b.*?\bFROM\b"]},
+			{"category": "INSERT_TO_FROM", "patterns" : ["insert[\s\S]*?FROM"]},
+			{"category": "PROC_START", "patterns" : ["PROC_START"]},
+			{"category": "TABLE_VAR_DECLARE", "patterns" : ["DECLARE\s+\@\w+\s+TABLE\b"]},
+			{"category": "VAR_DECLARE", "patterns" : ["DECLARE\s+\@\w+\s+\b"]}, //this has to be after TABLE_VAR_DECLARE definition
+			{"category": "VAR_ASSIGNMENT", "patterns" : ["SELECT\s+\@\w+\s*\="]},
+			{"category": "WRITE_DML", "patterns" : ["^\s*UPSERT(\s?)","^\s*INSERT\s","^\s*MERGE(\s?)","^\s*UPDATE(\s?)","^\s*DELETE(\s?)","^\s*DEL(\s?)", "\s*CALL\s","INSERT OVERWRITE TABLE"]},
+			{"category": "READ_DML", "patterns" : ["SELECT(\s?)", "\bSEL(\s?)"]},
+			{"category": "READ_WITH", "patterns" : ["\bWITH\b\s+.*?\s+\bAS\b\s+\("]},
+			{"category": "LEFTOVER_COMMENT_CLOSURE", "patterns" : ["^\s*\*\/\s*\;\s*$"]},
+			{"category": "NOCOUNT", "patterns" : ["SET\s+NOCOUNT.*"]},
+			{"category": "IF_END", "patterns" : ["COND_END"]}, //custom pattern set by sub mark_separators
+			{"category": "IF_START", "patterns" : ["IF\s+\@\w+\s+<|>|<=|>=+\s+\@\w"]},
+			{"category": "SEMICOLON", "patterns" : ["^\s*\;\s*$"]},
+			{"category": "SEMICOLON", "patterns" : ["^\s*\;\s*$"]},
+			{"category": "PROC_FINISH", "patterns" : ["^\s*PROC_FINISH\s*$"]},
+			{"category": "BEGIN_KW", "patterns" : ["^\s*BEGIN\s*$", "^\s*BEGIN\s*\;\s*$"]},
+			{"category": "DROP_TEMP_TABLE", "patterns" : ["if\s+object_id.*drop\s+table\s+#\w+"]},
+			{"category": "EXECUTE_SQL", "patterns" : ["^\s*EXECUTE\s+", "^\s*EXEC\s+"]},
+			{"category": "TRUNCATE_TABLE", "patterns" : ["^\s*TRUNCATE\s+TABLE\s+"]},
+			{"category": "TABLE_DDL", "patterns" : ["CREATE\s+TABLE","CREATE\s+SET.*\s+TABLE","CREATE\s+MULTISET.*\s+TABLE","CREATE\s+VOLATILE.*\s+TABLE","CREATE\s+TEMPORARY*\s+TABLE"]}
+
+			//,{"category": "MULTY_DECLARE", "patterns" : ["(DECLARE\s+)\@(\S+)\b.*"]}
+	],
+
+	"fragment_handling" : {
+	//	"INSERT_TO_FROM" : "::update_table",
+		"INSERT_TO_FROM" : "::convert_dml",
+		"COMMENT" : "::convert_comment",
+		"PROC_START" : "::process_PROC_START",
+		"WRITE_DML" : "::convert_dml",
+		"TRUNCATE_TABLE" : "::convert_dml",
+		"EXECUTE_SQL" : "::convert_dml",
+		"TABLE_VAR_DECLARE" : "::convert_table_var_declare",
+		"VAR_DECLARE" : "::blank", // this does not add any wrapping around the SQL
+		"VAR_ASSIGNMENT" : "::convert_var_assignment",
+		"READ_DML" : "::read_dml",
+		"READ_WITH" : "::convert_with",
+		"LEFTOVER_COMMENT_CLOSURE" : "::remove_leftover_comment_closure",
+		"NOCOUNT" : "::blank",
+		"SEMICOLON" : "::blank",
+		"IF_START" : "::convert_start_if",
+		"IF_END" : "::convert_end_if",
+		"BEGIN_KW" : "::blank",
+		"PROC_FINISH" : "::blank",
+		"DROP_TEMP_TABLE" : "::blank"
+
+		//,"MULTY_DECLARE" : "::remove_multy_declare"
+	},
+
+//		"__DEFAULT_HANDLER__" : "::mssql_default_statement_handler"
+
+	"line_subst" : [
+
+		{"from" : "\+", "to" : "||"},
+		{"from" : "\-\-.*\n", "to" : ""},
+		{"from" : "\{(\w+)\}", "to" : "DOLLAR__$1}"},
+		{"from" : "DOLLAR__", "to" : "${"},
+		{"from" : "#(\w+)#", "to" : "${$1}"},
+		{"from" : "(?<!\.|\@)(\b\w+\s+)\=(.*?)\n", "to" : "$2 as $1\n","statement_categories" : ["INSERT_TO_FROM"]},
+	//	{"from" : "(?<!\.)(^\s*\b\w+\s+)\=(.*\))", "to" : "$2 as $1","statement_categories" : ["SELECT_FROM"]},
+		{"from" : "\w+\s*\=", "to" : "","statement_categories" : ["UPDATE_TABLE"]},
+		{"from" : "\bdatetime\b", "to" : "timestamp", "statement_categories" : ["TABLE_DDL", "TABLE_VAR_DECLARE"]},
+		{"from" : "\bfloat\b", "to" : "double", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		//{"from" : "nvarchar\(\d+\)", "to" : "string", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		//{"from" : "varchar\(\d+\)", "to" : "string", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		{"from" : "string\(([0-9]+)\)", "to" : "varchar($1)"},
+		{"from" : "string\(0\)", "to" : "string"},
+		{"from" : "varchar\(0\)", "to" : "string"},
+		{"from" : "nchar\(0\)", "to" : "string"},
+		{"from" : "char\(0\)", "to" : "string"},
+		{"from" : "\bbit\b", "to" : "int"},
+		{"from" : "NOT NULL", "to" : "NOT_NULL"},
+		{"from" : "\sNULL\b", "to" : ""},
+		{"from" : "NOT_NULL", "to" : "NOT NULL"},
+		{"from" : "\bEXEC\b", "to" : "CALL"},
+		{"from" : "\bdate\b", "to" : "string", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		{"from" : "DECLARE\s+\@(\w+)\s+TABLE", "to" : "CREATE OR REPLACE TABLE $1", "statement_categories" : ["TABLE_VAR_DECLARE"]},
+		{"from" : "CREATE\s+\#", "to" : "CREATE OR REPLACE TABLE TEMP_TABLE_", "statement_categories" : ["TABLE_DDL"]},
+		{"from" : "INTO\s+\#", "to" : "INTO TEMP_TABLE_"},
+		{"from" : "FROM\s+\#(\w+)\s", "to" : "FROM TEMP_TABLE_$1 "},
+		{"from" : "\[(\w+)\.(\w+)\]", "to" : "$1_$2"}, //column names may have dots.  convert these dots into underscores
+		{"from" : "\[", "to" : ""},
+		{"from" : "\]", "to" : ""},
+		{"from" : "PASADATAMART\.DIM\.Date", "to" : "DIM.Date"},
+
+		{"from" : "(DECLARE\s+)\@(\S+)\b.*", "to" : "# Declaration of variable $2", "statement_categories" : ["VAR_DECLARE"]},
+		{"from" : "INSERT\s+INTO\s+\@(\w+)", "to" : "INSERT INTO $1"},
+		{"from" : "\bGO\b", "to" : ""}, // remove the GO keyword
+		{"from" : "\bWITH\b\s*\(\s*\bnolock\b\s*\)", "to" : ""}, // remove the WITH (nolock)
+		{"from" : "\bas\s+bit\b", "to" : "as boolean"},
+		{"from" : "option\s+\(maxrecursion\s+[0-9]+\)", "to" : ""},
+		{"from" : "Casetypeid\s*=\s*\(([\S\s]+)END\)", "to" : "$1END AS Casetypeid"},
+		{"from" : "\bUPDATE\s+\#(.*)", "to" : "UPDATE TEMP_TABLE_$1"},
+		//{"from" : "\#", "to" : "TEMP_TABLE_"},
+		{"from" : "#(\w+)\.", "to" : "TEMP_TABLE_$1"},
+		{"from" : "#(\w+)\s", "to" : "TEMP_TABLE_$1 "},
+		{"from" : "#(\w+)#", "to" : "${$1}"},
+		{"from" : "\$\$\$\{", "to" : "${"}
+		//{"from" : "\bUPDATE\b", "to" : "INSERT OVERWRITE TABLE","statement_categories" : ["UPDATE_TABLE"]},
+		//{"from" : "\bSET\b", "to" : "SELECT","statement_categories" : ["UPDATE_TABLE"]}
+//		{"from" : ".format(.*=.*)", "to" : ".format()"}
+	],
+
+	"block_subst" : [
+		{"from" : "\@ProcDte\s*(?! \=|\=|  \=)([\s\S]*?FROM)", "to" : "pd.processdate$1 (select work_schema.task_utils  where task='%TASK_NAME%')pd,\n","first_match":1},
+		{"from" : "\@ProcDte", "to" : "pd.processdate"},
+		//{"from" : "\(\s*\bSELECT\b\s+\bTOP\b\s+1\s*(.*?)\)", "to" : "(SELECT $1 limit 1)"}
+		{"from" : "SELECT TOP 1\s(.+)", "to" : "SELECT $1 LIMIT 1", "extension_call" : "::top_x_to_limit"},
+		{"from" : "SET\s+ANSI_NULLS.*", "to" : ""},
+		{"from" : "SET\s+QUOTED_IDENTIFIER.*", "to" : ""},
+		{"from" : "^USE[\S\s]*", "to" : ""},
+		{"from" : "^CREATE\s+PROC[\S\s]*", "to" : ""}
+		//{"from" : "float", "to" : "double"}
+		//{"from" : "^\s*BEGIN\s(.*)END;\s*$", "to" : "$1", "statement_categories" : ["VAR_ASSIGNMENT"]} //get rid of begin/end blocks on var assignments
+		//{"from" : "BEGIN\s+(\w+)PKG\.", "to" : "BEGIN; CALL $1PKG.", "statement_categories_NOT_NEEDED" : ["VAR_ASSIGNMENT","READ_DML"]}, //calling a procedure that was a part of package
+		//{"from" : "BEGIN\s+(\w+)WORK\.", "to" : "BEGIN; CALL $1WORK.", "statement_categories_NOT_NEEDED" : ["VAR_ASSIGNMENT","READ_DML"]} //calling a procedure that was a part of package
+	],
+
+	"function_subst" : [
+		{"from": "CONSTRAINT_CHECK", "to": "__BLANK__"},
+		{"from": "MONTHS_BETWEEN", "to": "DATE_DIFF", "arg_placement" : { "1":"3||'MONTH'", "2":"2", "3":"1" } },
+	//	{"from" : "ISNULL", "to" : "NVL"},
+		{"from" : "CONVERT", "output_template" : "CAST($2 AS TIMESTAMP)", "num_args" : "2", "arg_pattern" : {"1" : "^DATETIME$"}}, //cast as timestamp
+		{"from" : "CONVERT", "output_template" : "from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss\"),\"yyyy-MM-dd 00:00:00\")", "num_args" : "2", "arg_pattern" : {"1" : "^DATE$"}},
+		{"from" : "CONVERT", "output_template" : "replace(from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"yyyy-MM-dd\"),'-','')", "num_args" : "3", "arg_pattern" : {"3" : "^112$"}},
+		{"from" : "CONVERT", "output_template" : "from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"HH:mm:ss\")", "num_args" : "3", "arg_pattern" : {"3" : "^114$"}},
+		{"from" : "CONVERT", "output_template" : "replace(from_unixtime(unix_timestamp($2,\"yyyy-MM-dd'T'HH:mm:ss.SSS\"),\"yyyy-MM-dd\"),'-','')", "num_args" : "3"},
+		{"from" : "CONVERT", "output_template" : "CAST($2 AS $1)", "num_args" : "2"},
+		{"from" : "DATEADD", "arg_pattern" : {"1" : "(D|DD|DAY)"}, "output_template" : "date_add($3,$2)"},
+		{"from" : "ISNUMERIC", "output_template" : "CAST($1 AS double)", "num_args" : "1"},
+		{"from" : "ISDATE", "output_template" : "CAST($1 AS date)", "num_args" : "1"},
+		{"from" : "ISNULL", "to" : "NVL"}
+	],
+	"operator_to_function_subst" : //converting operators to functions
+	{
+		":" : "concat"
+    },
+
+	"pre_finalization_handler"        : "::pre_finalization_handler_spark_sql",
+	"post_conversion_adjustment_hook" : "::post_conversion_adjustment_spark_sql",
+
+	"commands" : {
+		// "select_into_table_template" : "CREATE OR REPLACE TABLE tbl_%TABLE_NAME% AS \n",
+		"select_into_table_template" : "\n",
+		// "select_into_pound_table_template" : "CREATE OR REPLACE TABLE %TABLE_NAME% AS \n"
+		"select_into_pound_table_template" : "\n",
+		"select_into_pound_table_suffix_template" : ".createOrReplaceTempView"
+	},
+	
+	"temp_table_prefix": "temp_"
+}

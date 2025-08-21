@@ -1,0 +1,366 @@
+// general ETL configs, applicable to all ETL sources
+// includes defs for workflows, system types, mapplets
+// applicable to SQL, DBSQL and PySpark outputs
+{
+	"workflow_param_declaration_template" : "dbutils.widgets.text(name = '%VARNAME%', defaultValue = '')\ndbutils.jobs.taskValues.set(key = '%VARNAME%', value = dbutils.widgets.get(\"%VARNAME%\"))\n\n",
+
+	"notebook_cell_separator" : "# COMMAND ----------",
+	
+	"commands" : {
+		"READER_FILE_DELIMITED_LOOKUP": "spark.read.csv('%PATH%%DELIMITED_FILE%', sep='%DELIMITER%', header='%HEADER%')",
+		"READER_FILE_DELIMITED": "spark.read.csv('%FILENAME%', sep='%DELIMITER%', header='%HEADER%')",
+		"READER_RELATIONAL" : "spark.sql(f\"\"\"%TABLE_NAME%\"\"\")",
+		"READER_RELATIONAL_LOOKUP_SOURCE" : "spark.sql(f\"\"\"%TABLE_NAME%\"\"\")",
+		"WRITER_FILE_DELIMITED": "%DF%.write.format('csv').option('header','%HEADER%').mode('overwrite').option(sep,'%DELIMITER%').csv('%PATH%')",
+		"WRITER_RELATIONAL": "%DF%.write.saveAsTable('%TABLE_NAME%', mode = 'append')",
+		"READER_SOURCE_PROGRAM" : """%NODE_NAME%_command = '%SOURCE_PROGRAM%'
+%NODE_NAME%_result = subprocess.run(%NODE_NAME%_command, shell=True, capture_output=True, text=True)
+%NODE_NAME%_output_lines = %NODE_NAME%_result.stdout.splitlines()
+%NODE_NAME%_data = [Row(line) for line in %NODE_NAME%_output_lines]
+%NODE_NAME% = spark.createDataFrame(%NODE_NAME%_data)
+%NODE_NAME% = df.withColumnRenamed(df.columns[0], '%FIRST_COLUMN%')"""
+	},
+	"system_type_class" : {
+		"ORACLE" : "RELATIONAL",
+		"MySQL" : "RELATIONAL",
+		"HIVE" : "RELATIONAL",
+		"DB2" : "RELATIONAL",
+		"TERADATA" : "RELATIONAL",
+		"NETEZZA" : "RELATIONAL",
+		"REDSHIFT" : "RELATIONAL",
+		"Salesforce" : "SALEFORCE",
+		"TOOLKIT" : "RELATIONAL",
+		"DEFAULT" : "RELATIONAL",
+		"MSSQL" : "RELATIONAL",
+        "ODBC" : "RELATIONAL",
+        "Microsoft SQL Server" : "RELATIONAL",
+		"File Writer" : "FILE",
+		"FlatFile" : "FILE",
+		"FLATFILE" : "FILE"
+	},
+
+	"SYS_TYPE_CONF" : {
+		"ORACLE" : "ORACLE",
+		"Oracle" : "ORACLE",
+		"DB2" : "DB2",
+		"Flat File" : "FLATFILE",
+		"FLAT FILE" : "FLATFILE",
+		"MSSQL" : "MSSQL",
+        "Microsoft SQL Server" : "MSSQL",
+        "ODBC" : "MSSQL"
+	},
+
+	"default_flatfile_delimiter" : ",",
+	"random_value_expressions" : {
+		"DATE" : "CURRENT_DATE",
+		"DATETIME" : "CURRENT_TIMESTAMP",
+		"TIMESTAMP" : "CURRENT_TIMESTAMP",
+		"INT" : "100",
+		"STRING" : "'A'",
+		"DECIMAL" : "12345.67",
+		"DEFAULT" : "0"
+	},
+
+	"copy_files_to_output_folder" : ["DatabricksConversionSupplements.py"], // list of supplemental files to be copied to the root output folder along with the generated files
+
+	"skip_sql_blocks" : ["^\s*commit\s*$", "^\s*commit\s*;\s*$"], // these are blocks to be skipped in pre/post sql.  Sometimes pre/post sql will contain commits, we do not need them.
+
+	"conform_columns_call_template" : "%DF%_conformed_cols = [%COLUMN_LIST%]\n%DF% = DatabricksConversionSupplements.conform_df_columns(%DF%,%DF%_conformed_cols)\n",
+
+	//////////////// MAPPLETS ////////////////
+	"mapplet_class_name" : "mapplets",
+	"mapplet_function_name" : "%MAPPLET_NAME%",
+	//"mapplet_func_declaration_code_indent" : "    ", //function declaration code indent for mapplets
+	"mapplet_code_indent" : "    ", //mapplet general code indent - 4 spaces
+	"mapplet_pyspark_code_indent" : "    ", //additional indents for multiline sql statements within mapplets. 4 spaces
+	//"mapplet_header_template" : "python_mapplet_header_template.py",
+	"mapplet_input_declaration" : "def %MAPPLET_NAME%(%INPUT%):", //specifying python function declaration.  But could be javascript in other cases
+	"mapplet_conclusion" : "    #Implementation %MAPPLET_NAME% concluded\n\n",
+	"mapplet_object_var_inject_format" : "\"\"\" + %OBJECT_NAME% + \"\"\"", // use """ + OBJECT_NAME + """.
+	"mapplet_function_invocation" : "%MAPPLET_NAME%(%INPUT%)",
+	"mapplet_subfolder_path" : "shared_functions", // subfolder under the root output folder
+	"mapplet_import_statement_python" : "from .shared_functions.%MAPPLET_NAME% import %MAPPLET_NAME%",
+	"mapplet_generation_folder" : "shared_functions", // relative to the root output folder
+	"mapplet_instance_prefixes" : ["sc_"], // specifies potential prefixes for mapplets.  This is needed when the converter generates the mapplet code and tries to grab the connection info
+
+	"workflow_specs" : {
+		"workflow_class" : "CodeGeneration::DatabricksJobs",
+		"workflow_component_mapping" : { // this hash contain the list of orchestration components coming from various ETL tools.
+			"SESSION" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"existing_cluster_id" : "%CLUSTER_ID%",
+				"min_retry_interval_millis" : 2000,
+				"retry_on_timeout" : false,
+				"max_retries" : 3,
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%MAPPING_NAME%",
+        			"source": "WORKSPACE"
+			 	}
+			},
+			"SUBJOB" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"existing_cluster_id" : "%CLUSTER_ID%",
+				"min_retry_interval_millis" : 2000,
+				"retry_on_timeout" : false,
+				"max_retries" : 3,
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%MAPPING_NAME%",
+        			"source": "WORKSPACE"
+			 	}
+			},
+			"LOAD_PARAMETERS" : {
+				"job_cluster_key": "auto_scaling_cluster",
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%MAPPING_NAME%_params.py"
+			 	}
+			},
+			"WORKLET" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+				"python_file" : "somePath/%COMPONENT_NAME%.py"
+				},
+				"job_cluster_key": "WORKFLOW_NAME_CLUSTER"
+			},
+			"SET_VARIABLE" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"existing_cluster_id" : "%CLUSTER_ID%",
+				"min_retry_interval_millis" : 2000,
+				"retry_on_timeout" : false,
+				"max_retries" : 3,
+				"notebook_task" : {
+			 		"notebook_path" : "/Workspace/Users/%JOB_NAME%_%COMPONENT_NAME%",
+        			"source": "WORKSPACE"
+			 	}
+			},
+			"NESTED_CONDITION" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"condition_task": {
+					"op": "%OP%",
+					"left": "%LEFT_OP%",
+					"right": "%RIGHT_OP%"
+				},
+				"spark_python_task" : {
+			 		"python_file" : "/Workspace/Users/%JOB_NAME%_%COMPONENT_NAME%_%USER_TYPE%.py"
+			 	}
+			},
+			"SUBJOB__SEQUENCE__" : {
+				"task_key": "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"run_job_task" : {
+					"job_id" : 1234567890
+				}
+			},
+			"DIE" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"existing_cluster_id" : "%CLUSTER_ID%",
+				"spark_python_task" : {
+			 		//"python_file" : "%TASK_PATH%/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"SYNCHRONIZE" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"existing_cluster_id" : "%CLUSTER_ID%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		//"python_file" : "%TASK_PATH%/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"EXCEPTION_HANDLER" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"existing_cluster_id" : "%CLUSTER_ID%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		//"python_file" : "%TASK_PATH%/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"EMAIL" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"existing_cluster_id" : "%CLUSTER_ID%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		//"python_file" : "%TASK_PATH%/%COMPONENT_NAME%.py"
+			 		"python_file" : "/Workspace/runTest.py"
+			 	}
+			},
+			"SHELL_COMMAND" : { // this is a shell command
+				"job_cluster_key": "auto_scaling_cluster",
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		"python_file" : "/%TASK_PATH%/%JOB_NAME%_%COMPONENT_NAME%_%USER_TYPE%.py"
+				}
+			},
+			"SQL" : { // this is a SQL command
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		"python_file" : "/%TASK_PATH%/%JOB_NAME%_%COMPONENT_NAME%_%USER_TYPE%.py"
+			 	}
+			},
+			"FORK" : { // this is a SQL command
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		"python_file" : "/%TASK_PATH%/generic_FORK.py"
+			 	}
+			},
+			"JOIN" : { // this is a SQL command
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		"python_file" : "/%TASK_PATH%/generic_JOIN.py"
+			 	}
+			},
+			"WAIT_COMMAND" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"spark_python_task" : {
+					"python_file" : "/%TASK_PATH%/%JOB_NAME%_%COMPONENT_NAME%.py"
+				}
+			},
+			"EMPTY_COMMAND" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"job_cluster_key": "auto_scaling_cluster",
+				"spark_python_task" : {
+					"python_file" : "/%TASK_PATH%/%JOB_NAME%_%COMPONENT_NAME%.py"
+				}
+			},
+			"COMMAND" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 	},
+				"job_cluster_key": "WORKFLOW_NAME_CLUSTER"
+			},
+			"CONTROL" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+			 		"python_file" : "somePath/%COMPONENT_NAME%.py"
+			 	},
+				"job_cluster_key": "WORKFLOW_NAME_CLUSTER"
+			},
+			"DECISION" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+					"python_file" : "somePath/%COMPONENT_NAME%.py"
+				},
+				"job_cluster_key": "WORKFLOW_NAME_CLUSTER"
+			},
+			"ASSIGNMENT" : {
+				"task_key" : "%COMPONENT_NAME%",
+				"description" : "%DESCRIPTION%",
+				"spark_python_task" : {
+					"python_file" : "somePath/%COMPONENT_NAME%.py"
+				},
+				"job_cluster_key": "WORKFLOW_NAME_CLUSTER"
+			}
+		},
+
+		"default_workflow_attr" : {
+			"tags" : {
+				"cost-center": "engineering",
+				"team": "jobs"
+			},
+			"email_notifications" :  {
+				"on_start": [
+					"user.name@databricks.com",
+					"%EMAIL_ADDRESS%"
+				],
+				"on_success": [
+					"%SUCCESS_EMAIL_ADDRESS%"
+				],
+				"on_failure": [
+					"%FAILURE_EMAIL_ADDRESS%"
+				],
+				"no_alert_for_skipped_runs": false
+			},
+			"timeout_seconds" : 86400,
+			"notification_settings": {
+				"no_alert_for_canceled_runs": false,
+				"no_alert_for_skipped_runs": false
+			},
+			"run_as": {
+				"user_name": "%USER_NAME%"
+			},
+			"schedule" : {
+				"quartz_cron_expression": "20 30 * * * ?",
+				"timezone_id": "Europe/London",
+				"pause_status": "PAUSED"
+			},
+			"max_concurrent_runs" : 10,
+			"webhook_notifications": {
+    		}
+		},
+
+		"default_task_attr" : {
+			//"run_if": "ALL_SUCCESS",
+			//"timeout_seconds" : 86400,
+			"email_notifications": {},
+			"notification_settings": {
+				"no_alert_for_skipped_runs": false,
+				"no_alert_for_canceled_runs": false,
+				"alert_on_last_attempt": false
+			},
+			"webhook_notifications": {}
+		},
+
+		"nested_conditional_operation_mapping" : {
+			"=" : "EQUAL_TO",
+			"==" : "EQUAL_TO",
+			"<>" : "NOT_EQUAL",
+			"!=" : "NOT_EQUAL",
+			"<" : "LESS_THAN",
+			">" : "GREATER_THAN",
+			"<=" : "LESS_THAN_OR_EQUAL",
+			">=" : "GREATER_THAN_OR_EQUAL"
+		},
+
+		"skip_component_types" : ["email", "start"],
+		
+		"output_workflow_filename_template" : "%JOB_NAME%.py",
+		"script_header_template" : "pyspark_airflow_workflow_header.py",
+
+		"workflow_component_template_START" : "START_template.py",
+		"workflow_component_template_SESSION" : "pyspark_airflow_SESSION.py",
+		"workflow_component_template_COMMAND" : "databricksJobs_template_COMMAND.py",
+		"workflow_component_template_SET_VARIABLE" : "databricksJobs_template_SET_VARIABLE.py",
+		"workflow_component_template_DIE" : "databricksJobs_template_DIE.py",
+		"workflow_component_template_SYNCHRONIZE" : "databricksJobs_template_SYNCHRONIZE.py",
+		"workflow_component_template_EMAIL" : "EMAIL_template.py",
+		"workflow_component_template_ASSIGNMENT" : "ASSIGNMENT_template.py",
+		"workflow_component_template_CONTROL" : "CONTROL_template.py",
+		"workflow_component_template_DECISION" : "DECISION_template.py",
+		"workflow_component_template_EXCEPTION_HANDLER" : "databricksJobs_template_EXCEPTION_HANDLER.py",
+		"workflow_component_template_SHELL_COMMAND" : "databricksJobs_template_COMMAND.py",
+		"workflow_component_template_SQL" : "databricksJobs_template_SPARKSQL.py",
+		"workflow_component_template_FORK" : "databricksJobs_template_FORK.py",
+		"workflow_component_template_JOIN" : "databricksJobs_template_JOIN.py",
+		"workflow_component_template_NESTED_CONDITION" : "databricksJobs_template_NESTED_CONDITION.py",
+		"workflow_component_template_WAIT_COMMAND" : "databricksJobs_template_WAIT_COMMAND.py",
+		"workflow_component_template_EMPTY_COMMAND" : "databricksJobs_template_EMPTY_COMMAND.py",
+
+		"flow_start" : "\n########### Flow definition ###########\n",
+		"dependency_instruction_template" : "%COMPONENT_NAME% << %UPSTREAM_COMPONENT_LIST%",
+
+		"component_list_spec" : {
+			"list_enclosure" : "[,]", //specify start character sequence before comma and closing char sequence after comma
+			"single_item_use_enclosure_flag" : "0"
+		}
+	}
+}

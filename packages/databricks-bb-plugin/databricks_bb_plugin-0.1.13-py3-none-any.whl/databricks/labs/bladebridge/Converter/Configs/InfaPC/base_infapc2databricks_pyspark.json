@@ -1,0 +1,185 @@
+{
+	"config_variables" : {
+		"ROOT_DELTA_DIR" : "/root/delta"
+	},
+
+	"code_generation_module" : "CodeGeneration::PySpark",
+	"inherit_from" : ["base_infapc2databricks.json"],
+	
+	"header": "# Databricks notebook source~
+# Code converted on %CONVERTER_TIMESTAMP%~
+import os\nfrom pyspark.sql import *~
+from pyspark.sql.functions import *~
+from pyspark.sql.window import Window~
+from pyspark.sql.types import *~
+from datetime import datetime~
+from pyspark.dbutils import DBUtils~
+from delta.tables import DeltaTable~
+from databricks_conversion_supplements import DatabricksConversionSupplements~
+~
+%MAPPLET_IMPORT%~
+~
+# COMMAND ----------~
+~
+# Set global variables~
+starttime = datetime.now() #start timestamp of the script",
+
+	"footer": "quit()",
+	"multiline_stmt_break" : " \ ",
+	"script_extension": "py",
+	//"pre_post_sql_wrapper" : "#Processing %PRE_POST_FLAG% for node %NODE_NAME%\nspark.sql('''%INNER_SQL%''')",
+	//"pre_node_line" : "# Processing node %NODE_NAME%, type %NODE_TYPE%\n# COLUMNS: %COLUMN_LIST%",
+	"pre_node_line" : "# COMMAND ----------\n# Processing node %NODE_NAME%, type %NODE_TYPE% %ADDITIONAL_COMMENT%\n# COLUMN COUNT: %COLUMN_COUNT%", //# COLUMNS %COLUMN_LIST%
+	"post_node_line" : "",
+	"explicit_aliasing" : "0",
+	"skip_rowid_generation" : "0", // omits generation of sys_row_id
+	"rowid_expression" : ".withColumn('%ROWID_COL_NAME%',xxhash64(concat_ws('||', %DELIMITED_COLUMN_LIST%)))", //"xxhash64(%DELIMITED_COLUMN_LIST%) as %ROWID_COL_NAME%",
+	"rowid_column_name" : "sys_row_id",
+	//"rowid_column_wrap" : "%COLUMN_NAME%",
+	//"additional_trailing_fields" : ["load_cntl_no"],
+	"column_aliasing_df_naming_pattern" : "PRE_%DF%", // in case column aliases are used, like prefixes and suffixes, create an additional dataframe with this name
+	"implied_target_fields_enable_alpha_sort" : "1",
+
+	//"infa_rename_col_snippets" : "1",
+	//"force_multi_source_join_type" : "left_join",
+	"CUSTOM_CONVERTER_MODULES" : ["infa2pyspark_ext"],
+
+	//"initialize_hooks_call" : "::init_variable_hook",
+	//"pre_finalization_handler_etl" : "::finalize_variable_content",
+
+	"field_rename_df_pattern" : "%DF%_TMP",
+	"field_rename_df_comment" : "#Conforming layout of Hive to InfaCloud for %DF%",
+	"ignore_connection_profiles" : "1", //if ON, will blank out %CONNECTION_PROFILE%. prefixes coming from agnostic layer
+
+	//"sql_converter_config_file" : "base_greenplum2databricks_sql.json",
+	"etl_converter_config_file" : "base_infapc2pyspark.json",
+	"expr_sql_converter_config_file" : "base_infa2databricks_expr.json",
+
+	//"create_target_ddl" : "1",
+	//"create_source_ddl" : "1",
+	//"ddl_filename_template" : "DDL_%OBJECT_NAME%.sql",
+
+	"convert_as_expr_pattens" : ["\bIF\b", "\bIIF\b", "\bDECODE\b"],
+	"generate_router_as_expr" : 1,
+	"generate_filter_as_expr" : 1,
+
+	"target_merge_specs" : {
+		"pre_merge_stmt" : "%NODE_NAME% = DeltaTable.forPath(spark, '%ROOT_DELTA_DIR%/%TABLE_NAME%')"
+	},
+
+	//"use_selectExpr" : 1,
+	//"disable_selectExpr_with_router" : 1,
+
+	"pre_post_sql_wrapper" : "# COMMAND ----------\n# Processing %PRE_POST_FLAG% for node %NODE_NAME%\nspark.sql(f\"\"\"%INNER_SQL%\"\"\")",
+	"spark.sql_template" : "spark.sql(rf\"\"\"%INNER_SQL%\"\"\")",
+	"target_table_truncation_statement" : "TRUNCATE TABLE %TABLE_NAME%",
+
+	"pre_post_sql_subst" : [
+		{"from" : ";", "to" : ""},
+		{"from" : "spark\.sql\(\"\"\"INSERT\s+INTO\s+getArgument\s*\(\s*\"(\w+)\"\s*\)", "to" : "spark.sql(\"\"\" Truncate \"+$1+\" \"\"\")\n\nspark.sql(\"\"\""}
+	],
+
+	"remove_expression_comments" : "1", // removes inline comments in expressions before converting them
+
+	"exclude_from_lit_wrapping" : [ //these tokens will be excluded from lit wrapping
+		"YYYY-MM-DD",
+		"MM\/DD\/YYYY",
+		"dd-mm-yyyy"
+	],
+
+	"exclude_regex_match_from_lit_wrap" : [
+		"to_date\s*\(.*,\s*-?\s*[0-9]+\s*\)",
+		"\bf\'\{\w+\}\'"
+	],
+
+	"regex_match_from_token_modification" : [
+		{"from" : "(\w+)\.rlike", "to" : "__QUALIFIED_NAME__. rlike"},
+		{"from" : "^(r\"[\s\S]+?\")$", "to" : " $1 "},  //keep the same
+		{"from" : "(\w+)\.cast", "to" : "__QUALIFIED_NAME__. cast"}
+	],
+	"final_subst" : [
+		{"from" : "\. rlike", "to" : ".rlike"},
+		{"from" : "\. cast", "to" : ".cast"},
+		{"from" : "\(\s+(r\"[\s\S]+?\")\s+\)", "to" : "($1)"},
+		{"from" : "NOT\s+ISNULL\s*\(\s*(col\s*\([\'\"a-zA-Z_\.0-9]+\s*\)\s*\.\s*cast\(StringType\(\)\))\s*\)", "to" : "$1.IsNotNull()"},
+		{"from" : "ISNULL\s*\(\s*(col\s*\([\'\"a-zA-Z_\.0-9]+\s*\)\s*\.\s*cast\(StringType\(\)\))\s*\)", "to" : "$1.IsNull()"},
+		{"from" : "NOT\s+ISNULL\s*\(\s*([\'\"a-zA-Z_\.0-9]+\s*\.\s*cast\(StringType\(\)\))\s*\)", "to" : "$1.IsNotNull()"},
+		{"from" : "ISNULL\s*\(\s*([\'\"a-zA-Z_\.0-9]+\s*\.\s*cast\(StringType\(\)\))\s*\)", "to" : "$1.IsNull()"}
+	],
+
+	"exclude_function_args_from_lit_wrapping" : [ //prevents wrapping of constants into lit for these functions
+		"REPLACESTR",
+		"RPAD",
+		"LPAD",
+		"ROUND",
+		"SUBSTR",
+		"INSTR",
+		"decimal"
+	],
+
+	"functions_to_exclude_from_lit" : [
+		"\bdecimal\b\s*\("
+	],
+
+	"force_lit_wrapping" : [
+		"starttime" // this is a variable declared at the beginning of script
+	],
+
+	"default_indent" : {
+		"header" : "",
+		"body" : "",
+		"footer" : ""
+	},
+
+	// tell converter which component types to enable casting on
+	// used in conjunction with "datatype_cast_mapping" spec below
+	"enabled_datatype_casting_components" : ["normalizer", "target"],
+
+	"datatype_cast_mapping" : { //tells converter what string to use during casting. tokens %LENGTH% and %SCALE% will be replaced at conversion time
+		"decimal" : ".cast('decimal(%LENGTH%,%SCALE%)')",
+		"string" : ".cast(StringType())",
+		"char" : ".cast(StringType())",
+		"varchar" : ".cast(StringType())",
+		"numeric" : ".cast(LongType())",
+		"timestamp" : ".cast(TimestampType())",
+		"integer" : ".cast(LongType())",
+		"date" : ".cast(DateType())"
+	},
+
+	"body_wrap" : {
+		// "before" : "try:\n\n",
+		// "after" : "\n\nexcept OSError:\n\tprint('Error Occurred')\n"
+	},
+
+	"code_indent" : "            ", //general code indent - 12 spaces
+	"null_assignment" : "lit(None)",
+	"sort_function" : "sort", //goes into the sorter node
+
+	"generate_variable_declaration" : 1,
+	"variable_declaration_template" : "dbutils.widgets.text(name = \"%VARNAME%\", defaultValue = %DEFAULT_VALUE%)\n%VARNAME% = dbutils.widgets.get(\"%VARNAME%\")\n",
+	"variable_declaration_header" : "# COMMAND ----------\n# Variable_declaration_comment",
+	"variable_declaration_header_regex" : "# COMMAND ----------",
+
+	// creates a set of withColumnRenamed commands to adjust columns names coming from sources.
+	// reason could be the database engine changing column case, or no column aliasing provided (e.g. count(xyz) without column name)
+	"conform_source_columns" : 1, //this will only kick in if the SQ does not generate column list in the SELECT clause, e.g. column list is overridden in Infa
+	"force_conform_source_columns" : 1, //Added for conforming field names for File source
+
+	"df_naming_template" : "%NODE_NAME%", //when not specified, the converter will use NODE_NAME
+	"env_var_extraction": "os.environ.get('%VAR%')",
+	"system_type_class" : {
+		"MySQL" : "RELATIONAL",
+		"MSSQL" : "RELATIONAL",
+        "ODBC" : "RELATIONAL",
+        "Microsoft SQL Server" : "RELATIONAL",
+		"Salesforce" : "SALEFORCE",
+		"TOOLKIT" : "RELATIONAL",
+		"ORACLE" : "RELATIONAL",
+		"DEFAULT" : "RELATIONAL",
+		"File Writer" : "FILE",
+		"FlatFile" : "FILE",
+		"FLATFILE" : "FILE",
+		"FlatFile" : "FILE_DELIMITED",
+		"FLATFILE" : "FILE_DELIMITED"
+	}
+}
