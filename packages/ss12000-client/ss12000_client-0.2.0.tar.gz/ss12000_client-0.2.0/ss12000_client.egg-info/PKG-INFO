@@ -1,0 +1,308 @@
+Metadata-Version: 2.4
+Name: ss12000-client
+Version: 0.2.0
+Summary: A Python client library for the SS12000 API.
+Home-page: https://github.com/Delph1/python-ss12000client/
+Author: Andreas Galistel
+Author-email: Andreas Galistel <andreas.galistel@gmail.com>
+Project-URL: Homepage, https://github.com/Delph1/python-ss12000client/
+Project-URL: Bug Tracker, https://github.com/Delph1/python-ss12000client//issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Education
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests>=2.25.1
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
+# **SS12000 Python Client Library**
+
+This is a Python client library designed to simplify interaction with the SS12000 API, a standard for information exchange between school administration processes based on OpenAPI 3. The library handles HTTP requests and Bearer Token authentication, providing a structured approach to interact with **all** the API's defined endpoints.
+
+You can download your own personal copy of the SS12000 standard for free from here: [sis.se](https://www.sis.se/standarder/kpenstandard/forkopta-standarder/informationshantering-inom-utbildningssektorn/).
+
+### **Important**
+
+The SS12000 does not require the server to support all of the endpoints. You need to actually look at the server documentation to see which endpoints that are actually available with each service. Adding some sort of discovery service is beyond the scope of this small library in my humble opinion.
+
+All dates are in the RFC 3339 format, we're not cavemen here. 
+
+## **Table of Contents**
+
+- [**SS12000 Python Client Library**](#ss12000-python-client-library)
+    - [**Important**](#important)
+  - [**Table of Contents**](#table-of-contents)
+  - [**Installation**](#installation)
+  - [**Usage**](#usage)
+    - [**Initializing the Client**](#initializing-the-client)
+    - [**Fetching Organizations**](#fetching-organizations)
+    - [**Fetching Persons**](#fetching-persons)
+    - [**Fetch ...**](#fetch-)
+    - [**Webhooks (Subscriptions)**](#webhooks-subscriptions)
+  - [**API Reference**](#api-reference)
+  - [**Webhook Receiver (FastAPI Example)**](#webhook-receiver-fastapi-example)
+  - [**Contributing**](#contributing)
+  - [**License**](#license)
+
+## **Installation**
+
+1. **Save the Client:** Save the code from ss12000_client.py in your project directory, or:
+```
+pip install ss12000client
+```
+2. **(Optional) Install Dependencies:** If you just downloaded the file instead of using the pip command you might need to install some additional dependencies. This library uses requests for making HTTP calls. If you plan to use the webhook receiver example, you will also need fastapi and uvicorn.  
+```
+pip install requests
+```
+3. If you plan to use the webhook receiver example, you will also need fastapi and uvicorn.  
+```
+pip install fastapi uvicorn
+```
+## **Usage**
+
+### **Initializing the Client**
+
+To start using the client, import it and create an instance with your API base URL and your JWT Bearer Token.  
+```
+from ss12000client import SS12000Client
+
+base_url = "https://some.server.se/v2.0" # Replace with your test server URL  
+auth_token = "YOUR_JWT_TOKEN_HERE" # Replace with your actual JWT token
+
+client = SS12000Client(base_url, auth_token)
+```
+### **Fetching Organizations**
+
+You can retrieve a list of organizations or a specific organization by its ID.  
+```
+async def get_organization_data():  
+    try:  
+        print("Fetching organizations...")  
+        organizations = client.get_organisations(limit=2)  
+        print("Fetched organizations:", json.dumps(organizations, indent=2))
+
+        if organizations and organizations.get('data'):  
+            first_org_id = organizations['data'][0]['id']  
+            print(f"\nFetching organization with ID: {first_org_id}...")  
+            org_by_id = client.get_organisation_by_id(first_org_id, expand_reference_names=True)  
+            print("Fetched organization by ID:", json.dumps(org_by_id, indent=2))  
+    except Exception as e:  
+        print(f"Error fetching organization data: {e}")
+```
+
+### **Fetching Persons**
+
+Similarly, you can fetch persons and expand related data such as duties.  
+```
+async def get_person_data():  
+    try:  
+        print("\nFetching persons...")  
+        persons = client.get_persons(limit=2, expand=['duties'])  
+        print("Fetched persons:", json.dumps(persons, indent=2))
+
+        if persons and persons.get('data'):  
+            first_person_id = persons['data'][0]['id']  
+            print(f"\nFetching person with ID: {first_person_id}...")  
+            person_by_id = client.get_person_by_id(first_person_id, expand=['duties', 'responsibleFor'], expand_reference_names=True)  
+            print("Fetched person by ID:", json.dumps(person_by_id, indent=2))  
+    except Exception as e:  
+        print(f"Error fetching person data: {e}")
+```
+### **Fetch ...**
+
+Check the API reference below to see all available nodes. 
+
+### **Webhooks (Subscriptions)**
+
+The client provides methods to manage subscriptions (webhooks).  
+```
+async def manage_subscriptions():  
+    try:  
+        print("\nFetching subscriptions...")  
+        subscriptions = client.get_subscriptions()  
+        print("Fetched subscriptions:", json.dumps(subscriptions, indent=2))
+
+        # Example: Create a subscription (requires a publicly accessible webhook URL)  
+        # print("\nCreating a subscription...")  
+        # new_subscription = client.create_subscription(  
+        #     name="My Python Test Subscription",  
+        #     target="http://your-public-webhook-url.com/ss12000-webhook", # Replace with your public URL  
+        #     resource_types=["Person", "Activity"]  
+        # )  
+        # print("Created subscription:", json.dumps(new_subscription, indent=2))
+
+        # Example: Delete a subscription  
+        # if subscriptions and subscriptions.get('data'):  
+        #     sub_to_delete_id = subscriptions['data'][0]['id']  
+        #     print(f"\nDeleting subscription with ID: {sub_to_delete_id}...")  
+        #     client.delete_subscription(sub_to_delete_id)  
+        #     print("Subscription deleted successfully.")
+
+    except Exception as e:  
+        print(f"Error managing subscriptions: {e}")
+```
+
+## **API Reference**
+
+The SS12000Client class is designed to expose methods for all SS12000 API endpoints. Here is a list of the primary resource paths defined in the OpenAPI specification, along with their corresponding client methods:
+
+* /organisations
+  * get_organisations(**params)
+  * lookup_organisations(ids, school_unit_codes, organisation_codes, expand_reference_names)
+  * get_organisation_by_id(org_id, expand_reference_names)
+* /persons
+  * get_persons(**params)
+  * lookup_persons(ids, civic_nos, expand, expand_reference_names)
+  * get_person_by_id(person_id, expand, expand_reference_names)
+* /placements
+  * get_placements(**params)
+  * lookup_placements(ids, expand, expand_reference_names)
+  * get_placement_by_id(placement_id, expand, expand_reference_names)
+* /duties
+  * get_duties(**params)
+  * lookup_duties(ids, expand, expand_reference_names)
+  * get_duty_by_id(duty_id, expand, expand_reference_names)
+* /groups
+  * get_groups(**params)
+  * lookup_groups(ids, expand, expand_reference_names)
+  * get_group_by_id(group_id, expand, expand_reference_names)
+* /programmes
+  * get_programmes(**params)
+  * lookup_programmes(ids, expand, expand_reference_names)
+  * get_programme_by_id(programme_id, expand, expand_reference_names)
+* /studyplans
+  * get_study_plans(**params)
+  * lookup_study_plans(ids, expand, expand_reference_names)
+  * get_study_plan_by_id(study_plan_id, expand, expand_reference_names)
+* /syllabuses
+  * get_syllabuses(**params)
+  * lookup_syllabuses(ids, expand_reference_names)
+  * get_syllabus_by_id(syllabus_id, expand_reference_names)
+* /schoolUnitOfferings
+  * get_school_unit_offerings(**params)
+  * lookup_school_unit_offerings(ids, expand, expand_reference_names)
+  * get_school_unit_offering_by_id(offering_id, expand, expand_reference_names)
+* /activities
+  * get_activities(**params)
+  * lookup_activities(ids, expand, expand_reference_names)
+  * get_activity_by_id(activity_id, expand, expand_reference_names)
+* /calendarEvents
+  * get_calendar_events(**params)
+  * lookup_calendar_events(ids, expand, expand_reference_names)
+  * get_calendar_event_by_id(event_id, expand, expand_reference_names)
+* /attendances
+  * get_attendances(**params): GET list of Attendance resources.
+  * create_attendance(attendance: dict)
+  * lookup_attendances(ids, expand, expand_reference_names)
+  * get_attendance_by_id(attendance_id, expand, expand_reference_names)
+  * delete_attendance(attendance_id)
+* /attendanceEvents
+  * get_attendance_events(**params)
+  * create_attendance_event(attendance_event: dict)
+  * lookup_attendance_events(ids, expand, expand_reference_names)
+  * get_attendance_event_by_id(event_id, expand, expand_reference_names)
+  * delete_attendance_event(event_id)
+* /attendanceSchedules
+  * get_attendance_schedules(**params)
+  * create_attendance_schedule(attendance_schedule: dict)
+  * lookup_attendance_schedules(ids, expand, expand_reference_names)
+  * get_attendance_schedule_by_id(schedule_id, expand, expand_reference_names)
+  * delete_attendance_schedule(schedule_id)
+* /grades
+  * get_grades(**params)
+  * lookup_grades(ids, expand, expand_reference_names)
+  * get_grade_by_id(grade_id, expand, expand_reference_names)
+* /aggregatedAttendance
+  * get_aggregated_attendances(**params)
+* /resources
+  * get_resources(**params)
+  * lookup_resources(ids, expand_reference_names)
+  * get_resource_by_id(resource_id, expand_reference_names)
+* /rooms
+  * get_rooms(**params)
+  * lookup_rooms(ids, expand_reference_names)
+  * get_room_by_id(room_id, expand_reference_names)
+* /subscriptions
+  * get_subscriptions(**params)
+  * create_subscription(name, target, resource_types)
+  * delete_subscription(subscription_id)
+  * get_subscription_by_id(subscription_id)
+  * update_subscription(subscription_id, expires)
+* /deletedEntities
+  * get_deleted_entities(entities, meta_modified_after)
+* /log
+  * create_log_entry(body: dict)
+* /statistics
+  * create_statistics_entry(body: dict)
+
+Each method accepts parameters corresponding to the API's query parameters and request bodies, as defined in the OpenAPI specification. Detailed information on available parameters can be found in the docstrings within ss12000_client.py.
+
+The .yaml file can be downloaded from the SS12000 site over at [sis.se](https://www.sis.se/standardutveckling/tksidor/tk400499/sistk450/ss-12000/). 
+
+## **Webhook Receiver (FastAPI Example)**
+
+A separate FastAPI server can be used to receive notifications from the SS12000 API.This is just an example and is not part of the client library. It just shows how you could implement a receiver server for the webhooks. The code below is not production ready code, it's just a thought experiment that will point you in a direction toward a simple solution. 
+```
+Save this in a separate file, e.g., 'webhook_server.py'  
+from fastapi import FastAPI, Request, HTTPException  
+import uvicorn  
+import json
+
+webhook_app = FastAPI()
+
+@webhook_app.post("/ss12000-webhook")  
+async def ss12000_webhook(request: Request):  
+     """  
+     Webhook endpoint for SS12000 notifications.  
+     """  
+     print("Received a webhook from SS12000!")  
+     print("Headers:", request.headers)
+
+     try:  
+         body = await request.json()  
+         print("Body:", json.dumps(body, indent=2))
+
+         # Implement your logic to handle the webhook message here.  
+         # E.g., save the information to a database, trigger an update, etc.
+
+         if body and body.get('modifiedEntites'):  
+             for resource_type in body['modifiedEntites']:  
+                 print(f"Changes for resource type: {resource_type}")  
+                 # You can call the SS12000Client here to fetch updated information  
+                 # depending on the resource type.  
+                 # Example: if resource_type == 'Person': client.get_persons(...)  
+         if body and body.get('deletedEntities'):  
+             print("There are deleted entities to fetch from /deletedEntities.")  
+             # Call client.get_deleted_entities(...) to fetch the deleted IDs.
+
+         return {"message": "Webhook received successfully!"}  
+     except json.JSONDecodeError:  
+         raise HTTPException(status_code=400, detail="Invalid JSON body")  
+     except Exception as e:  
+         print(f"Error processing webhook: {e}")  
+         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+
+# To run the FastAPI webhook server:  
+# Save the above code as e.g., 'webhook_server.py'  
+# Then run from your terminal: 'uvicorn webhook_server:webhook_app --host 0.0.0.0 --port 3001'
+```
+To run the FastAPI webhook server, save the code above in a file (e.g., webhook_server.py) and execute it using:
+
+```uvicorn webhook_server:webhook_app --host 0.0.0.0 --port 3001``` 
+
+Remember that your webhook URL must be publicly accessible for the SS12000 API to send notifications to it.
+
+## **Contributing**
+
+Contributions are welcome! If you want to add, improve, optimize or just change things just send in a pull request and I will have a look. Found a bug and don't know how to fix it? Create an issue!
+
+## **License**
+
+This project is licensed under the MIT Licence.
