@@ -1,0 +1,13 @@
+DECK_COUNT: int = 12
+DECK_NUMBERS = [i + 1 for i in range(DECK_COUNT)]
+
+LID_HOLDER_COUNT: int = 4
+LID_HOLDER_NUMBERS = [i + 1 for i in range(LID_HOLDER_COUNT)]
+
+CHIP_HOLDER_COUNT: int = 8
+CHIP_HOLDER_NUMBERS = [i + 1 for i in range(CHIP_HOLDER_COUNT)]
+
+RESERVOIR_COUNT: int = 2
+RESERVOIR_NUMBERS = [i + 1 for i in range(RESERVOIR_COUNT)]
+
+CHIP_WELL_COUNT: int = 192
