@@ -1,0 +1,53 @@
+---
+# deny install driver：
+# 1. 驱动版本不对
+# 2. mthreads-gmi 失败
+
+# 1. 查询 musa 包
+- name: Query musa package status & version
+  ansible.builtin.shell: |
+    dpkg-query -W -f='${Status} ${Version}\n' musa 2>/dev/null || true
+  register: musa_pkg
+  changed_when: false
+
+- name: Extract musa_version fact (empty if not installed)
+  ansible.builtin.set_fact:
+    musa_version: >-
+      {{ (musa_pkg.stdout.split() | last)
+         if ('install ok installed' in musa_pkg.stdout) else '' }}
+
+# 3. 已安装且版本匹配时探测 mthreads‑gmi
+- name: Probe mthreads-gmi
+  ansible.builtin.shell: mthreads-gmi
+  register: gmi_probe
+  ignore_errors: yes
+  changed_when: false
+  no_log: true  # 不显示在输出中
+
+- name: Set output variable
+  ansible.builtin.set_fact:
+    gmi_output: |
+      {% if gmi_probe.stderr and not gmi_probe.stdout %}
+        {{ gmi_probe.stderr }}
+      {% else %}
+        {{ gmi_probe.stdout | default('') }}
+      {% endif %}
+  no_log: true  # 不显示在输出中
+
+
+# 4‑1. 版本不符 → 中止
+- name: driver version unsupported
+  ansible.builtin.fail:
+    msg: |
+      Deployment aborted: The current driver {{ musa_version }} ≠ expected {{ target_driver_version }}. Please add the '--force' option.
+
+  when: musa_pkg.stdout != '' and musa_version != target_driver_version
+
+# # 4‑2. mthreads-gmi 失败 → 中止
+# musa-deploy 如果检测到 mthreads-gmi 运行失败，即便加上-f ,也不会更新驱动，待解决
+- name: mthreads-gmi probe failed
+  ansible.builtin.fail:
+    msg: |
+      Deployment aborted: The command 'mthreads-gmi' failed. Please log in to each node, run: sudo musa-deploy -u driver, then rerun: sudo musa-deploy --demo vllm_musa.
+
+  when: musa_version == target_driver_version and (gmi_probe.rc is not defined or gmi_probe.rc != 0)

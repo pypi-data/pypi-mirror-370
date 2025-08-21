@@ -1,0 +1,99 @@
+---
+- name: Initialize Docker Swarm Cluster
+  hosts: all
+  gather_facts: no
+  become: yes
+  vars:
+    docker_packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    swarm_primary_address: "{{ hostvars[groups['manager_nodes'][0]]['ansible_default_ipv4']['address'] }}"
+    swarm_advertise_addr: "{{ ansible_default_ipv4.address }}"
+
+  tasks:
+  #  #- name: Install Docker dependencies
+  #  #  apt:
+  #  #    name: "{{ docker_packages }}"
+  #  #    state: present
+  #  #    update_cache: yes
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+- name: Configure Swarm Manager Nodes
+  hosts: leader
+  gather_facts: no
+  become: yes
+  vars:
+    swarm_primary_manager_ip: "{{ hostvars['leader']['ansible_host'] }}"
+
+  tasks:
+    - name: Check Swarm status
+      command: docker info --format '{{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}'
+      register: swarm_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Initialize Swarm (Primary Manager)
+      command:
+        docker swarm init --advertise-addr {{ swarm_primary_manager_ip }}
+      when:
+        - "'inactive' in swarm_status.stdout"
+
+    - name: Get worker join token
+      command: docker swarm join-token -q worker
+      register: worker_token
+      delegate_to: "leader"
+      run_once: yes
+      # 关键修改：将令牌存入全局可访问的变量
+      vars:
+        cluster_worker_token: "{{ worker_token.stdout }}"
+      when: inventory_hostname == "leader"
+
+    # 新增独立任务：存储令牌到全局变量
+    - name: Save worker token globally
+      set_fact:
+        global_worker_token: "{{ worker_token.stdout }}"
+      when:
+        - worker_token is defined
+        - inventory_hostname == "leader"
+
+    - name: install musa-deploy
+      command:
+        cmd: sudo pip install musa-deploy -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+
+
+
+- name: Configure Swarm Worker Nodes
+  hosts: 'worker*'
+  gather_facts: no
+  become: yes
+  vars:
+    swarm_manager_ip: "{{ hostvars['leader']['ansible_host'] }}"
+    swarm_join_token: "{{ hostvars['leader'].global_worker_token }}"
+
+  tasks:
+    - name: Check Swarm status
+      command: docker info --format '{{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}'
+      register: swarm_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Join worker nodes
+      command: >
+        docker swarm join
+        --token {{ swarm_join_token }}
+        {{ swarm_manager_ip }}:2377
+      #when:
+      #  - "'active' not in swarm_status.stdout"
+      #  - swarm_join_token is defined  # 安全检测
+
+    - name: install musa-deploy
+      command:
+        cmd: sudo pip install musa-deploy

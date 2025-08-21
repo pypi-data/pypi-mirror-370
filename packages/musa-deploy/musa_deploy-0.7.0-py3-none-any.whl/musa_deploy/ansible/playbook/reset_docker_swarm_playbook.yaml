@@ -1,0 +1,18 @@
+- name: Clean Docker Swarm Cluster Status
+  hosts: all  # 匹配 inventory.ini 中的所有主机
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Check current swarm status
+      command: docker info --format '{{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}'
+      register: swarm_state
+      changed_when: false
+      ignore_errors: yes  # 忽略未安装 docker 的情况
+
+    - name: Force leave swarm cluster
+      command: docker swarm leave --force
+      when:
+        - swarm_state.stdout == "active"  # 仅在已加入集群时执行
+        - swarm_state.rc == 0  # 确保 docker 命令可用
+      ignore_errors: yes  # 强制清理即使出现错误

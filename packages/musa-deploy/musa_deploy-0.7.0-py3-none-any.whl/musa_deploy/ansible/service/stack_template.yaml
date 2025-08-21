@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  task1:
+    image: registry.mthreads.com/mcconline/vllm-musa-qy2-py310:v0.7.3
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["service ssh start && sleep infinity"]
+    networks:
+      - host_net
+    environment:
+      - HOST_IP=${HOST_IP}
+      - MODEL_PATH=${MODEL_PATH}
+
+    deploy:
+      replicas: ${WORKER_NUM}
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - node.role == worker    # 约束条件：仅在工作节点运行
+
+  task2:
+    image: registry.mthreads.com/mcconline/vllm-musa-qy2-py310:v0.7.3
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["service ssh start && sleep 5 && bash /tmp/run_deepseek_671b_r1.sh $${TP_SIZE} $${PP_SIZE} $${MODEL_PATH} $${PP_LAYER_PARTITION} "]
+    networks:
+      - host_net
+    environment:
+      - HOST_IP=${HOST_IP}
+      - MODEL_PATH=${MODEL_PATH}
+      - TP_SIZE=${TP_SIZE}
+      - PP_SIZE=${PP_SIZE}
+      - PP_LAYER_PARTITION=${PP_LAYER_PARTITION}
+      - MODEL_NAME=${MODEL_NAME}
+      - MAX_MODEL_LEN=${MAX_MODEL_LEN}
+
+
+    deploy:
+      replicas: 1                  # 根据工作节点数量调整
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - node.role == manager   # 约束条件：仅在管理节点运行
+
+  task3:
+    image: registry.mthreads.com/mcconline/kuae-chat:1.0
+    networks:
+      - host_net
+    volumes:
+      - type: bind
+        source: /tmp/kuae-chat-public/
+        target: /app/public/models/
+
+
+
+    deploy:
+      replicas: 1                  # 根据工作节点数量调整
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - node.role == manager   # 约束条件：仅在管理节点运行
+
+networks:
+  host_net:
+    external: true
+    name: host  # 显式声明使用主机网络

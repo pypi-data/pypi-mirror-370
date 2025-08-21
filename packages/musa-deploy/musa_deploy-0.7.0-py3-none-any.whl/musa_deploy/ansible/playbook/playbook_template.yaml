@@ -1,0 +1,70 @@
+- name: My first play
+  hosts: myhosts
+  become: yes
+  gather_facts: no
+  vars:
+    connection_timeout: 3000  # 等待重连的总超时时间（秒）
+    retry_delay: 15          # 重试间隔时间（秒）
+
+  tasks:
+
+    # 阶段1：获取当前启动时间
+    - name: Capture pre-execution boot time
+      shell: "awk '/btime/ {print $2}' /proc/stat"
+      register: pre_boot
+      changed_when: false
+      args:
+        warn: false  # 避免不必要警告
+
+    - name: Remove gdm3 if present
+      ansible.builtin.apt:
+        name: gdm3
+        state: absent
+      ignore_errors: yes  # 如果 gdm3 不存在也不报错
+
+    - name: Preselect lightdm in debconf
+      ansible.builtin.debconf:
+        name: lightdm
+        question: shared/default-x-display-manager
+        value: lightdm
+        vtype: select
+
+    - name: install musa-deploy
+      ansible.builtin.pip:
+        name: musa-deploy
+        extra_args: -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+        executable: pip  # 或者 /usr/bin/pip3 看你系统环境
+
+    # 检测节点驱动状态，版本不匹配 则退出
+    - name: check driver status
+      include_role:
+        name: check_and_deny_deploy_demo
+      when: not force_install_driver | bool
+
+    - name: vllm_musa demo
+      ansible.builtin.shell:
+        cmd: "{musa_deploy_command}"
+      register: command_output
+      ignore_unreachable: yes
+      become: yes
+
+    - name: Wait for the server to become reachable again
+      wait_for_connection:
+        delay: "{{ retry_delay }}"  # 重启后等待30秒再开始检测
+        timeout: "{{ connection_timeout }}"  # 最大等待时间3000秒（50分钟）
+
+    # 阶段4：检测是否发生实际重启
+    - name: Capture post-reboot boot time
+      shell: "awk '/btime/ {print $2}' /proc/stat"
+      register: post_boot
+      changed_when: false
+      args:
+        warn: false
+
+    # 阶段5：条件执行重启后命令
+    - name: Execute post-reboot command if needed
+      ansible.builtin.shell:
+        cmd: "{musa_deploy_command}"
+      when:
+        - post_boot.stdout != pre_boot.stdout  # 确认启动时间戳变化
+      become: yes
