@@ -1,0 +1,185 @@
+---
+- job:
+    name: osc-tox-unit-tips
+    parent: openstack-tox
+    description: |
+      Run unit tests for OpenStackClient with master branch of important libs.
+
+      Takes advantage of the base tox job's install-siblings feature.
+    irrelevant-files: &common-irrelevant-files
+      - ^.*\.rst$
+      - ^doc/.*$
+      - ^releasenotes/.*$
+      - ^\.pre-commit-config\.yaml$
+    required-projects:
+      - openstack/cliff
+      - openstack/keystoneauth
+      - openstack/openstacksdk
+      - openstack/osc-lib
+      - openstack/python-openstackclient
+    vars:
+      # Set work dir to openstackclient so that if it's triggered by one of the
+      # other repos the tests will run in the same place
+      zuul_work_dir: src/opendev.org/openstack/python-openstackclient
+
+- job:
+    name: osc-tox-py310-tips
+    parent: openstack-tox-py310
+    description: |
+      Run unit tests for OpenStackClient with master branch of important libs.
+
+      Takes advantage of the base tox job's install-siblings feature.
+    # The job only tests the latest and shouldn't be run on the stable branches
+    branches: ^master$
+    required-projects:
+      - openstack/cliff
+      - openstack/keystoneauth
+      - openstack/openstacksdk
+      - openstack/osc-lib
+      - openstack/python-openstackclient
+    vars:
+      # Set work dir to openstackclient so that if it's triggered by one of the
+      # other repos the tests will run in the same place
+      zuul_work_dir: src/opendev.org/openstack/python-openstackclient
+
+- job:
+    name: osc-tox-py313-tips
+    parent: openstack-tox-py313
+    description: |
+      Run unit tests for OpenStackClient with master branch of important libs.
+
+      Takes advantage of the base tox job's install-siblings feature.
+    # The job only tests the latest and shouldn't be run on the stable branches
+    branches: ^master$
+    required-projects:
+      - openstack/cliff
+      - openstack/keystoneauth
+      - openstack/openstacksdk
+      - openstack/osc-lib
+      - openstack/python-openstackclient
+    vars:
+      # Set work dir to openstackclient so that if it's triggered by one of the
+      # other repos the tests will run in the same place
+      zuul_work_dir: src/opendev.org/openstack/python-openstackclient
+
+- job:
+    name: osc-functional-devstack
+    parent: devstack-tox-functional
+    description: |
+      Run functional tests for OpenStackClient.
+    timeout: 7800
+    irrelevant-files:
+      - ^.*\.rst$
+      - ^doc/.*$
+      - ^releasenotes/.*$
+    required-projects:
+      - openstack/python-openstackclient
+    vars:
+      devstack_localrc:
+        LIBS_FROM_GIT: python-openstackclient
+        # NOTE(dtroyer): Functional tests need a bit more volume headroom
+        VOLUME_BACKING_FILE_SIZE: 20G
+        Q_AGENT: openvswitch
+        Q_ML2_TENANT_NETWORK_TYPE: vxlan
+        Q_ML2_PLUGIN_MECHANISM_DRIVERS: openvswitch
+      devstack_plugins:
+        # NOTE(amotoki): Some neutron features are enabled by devstack plugin
+        neutron: https://opendev.org/openstack/neutron
+      devstack_services:
+        s-account: true
+        s-container: true
+        s-object: true
+        s-proxy: true
+        # Disable OVN services
+        br-ex-tcpdump: false
+        br-int-flows: false
+        ovn-controller: false
+        ovn-northd: false
+        ovs-vswitchd: false
+        ovsdb-server: false
+        q-ovn-metadata-agent: false
+        # Neutron services
+        q-agt: true
+        q-dhcp: true
+        q-l3: true
+        q-meta: true
+        neutron-network-segment-range: true
+        neutron-segments: true
+        q-metering: true
+        q-qos: true
+        neutron-tag-ports-during-bulk-creation: true
+        neutron-conntrack-helper: true
+        neutron-ndp-proxy: true
+        q-trunk: true
+      osc_environment:
+        PYTHONUNBUFFERED: 'true'
+        OS_CLOUD: devstack-admin
+      tox_envlist: functional
+      zuul_work_dir: src/opendev.org/openstack/python-openstackclient
+
+- job:
+    name: osc-functional-devstack-tips
+    parent: osc-functional-devstack
+    description: |
+      Run functional tests for OpenStackClient with master branch of important libs.
+
+      Takes advantage of the base tox job's install-siblings feature.
+    timeout: 7800
+    required-projects:
+      - openstack/cliff
+      - openstack/keystoneauth
+      - openstack/openstacksdk
+      - openstack/osc-lib
+      - openstack/python-openstackclient
+    vars:
+      devstack_localrc:
+        LIBS_FROM_GIT: python-openstackclient,openstacksdk,osc-lib,cliff
+      tox_envlist: functional
+      tox_install_siblings: true
+
+- job:
+    name: osc-build-image
+    parent: opendev-build-docker-image
+    description: Build Docker images.
+    allowed-projects: openstack/python-openstackclient
+    requires:
+      - python-builder-3.11-bookworm-container-image
+      - python-base-3.11-bookworm-container-image
+    provides: osc-container-image
+    vars:
+      docker_images:
+        - context: .
+          tags: []
+
+- project-template:
+    name: osc-tox-unit-tips
+    check:
+      jobs:
+        - osc-tox-py310-tips
+        - osc-tox-py313-tips
+    gate:
+      jobs:
+        - osc-tox-py310-tips
+        - osc-tox-py313-tips
+
+- project:
+    templates:
+      - openstackclient-plugin-jobs
+      - osc-tox-unit-tips
+      - openstack-cover-jobs
+      - openstack-python3-jobs
+      - publish-openstack-docs-pti
+      - check-requirements
+      - release-notes-jobs-python3
+    check:
+      jobs:
+        - osc-build-image:
+            voting: false
+        - osc-functional-devstack
+        - osc-functional-devstack-tips:
+            # The functional-tips job only tests the latest and shouldn't be run
+            # on the stable branches
+            branches: ^master$
+    gate:
+      jobs:
+        - osc-functional-devstack
