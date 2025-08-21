@@ -1,0 +1,2 @@
+class DebugToolsException(Exception):
+    pass
