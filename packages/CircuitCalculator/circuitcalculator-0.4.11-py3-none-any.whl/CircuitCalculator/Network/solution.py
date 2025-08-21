@@ -1,0 +1,13 @@
+from .network import Network
+from typing import Callable, Protocol, Any
+
+class NetworkSolution(Protocol):
+    def get_voltage(self, branch_id: str) -> Any: ...
+
+    def get_current(self, branch_id: str) -> Any: ...
+
+    def get_potential(self, node_id: str) -> Any: ...
+
+    def get_power(self, branch_id: str) -> Any: ...
+
+NetworkSolver = Callable[[Network], NetworkSolution]
