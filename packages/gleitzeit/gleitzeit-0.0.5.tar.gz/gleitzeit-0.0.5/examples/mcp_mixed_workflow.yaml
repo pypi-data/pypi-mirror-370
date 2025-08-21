@@ -1,0 +1,100 @@
+# Mixed Provider Workflow with MCP
+# Shows how MCP tools integrate with other Gleitzeit providers
+# NOTE: Requires MCP servers to be configured in ~/.gleitzeit/config.yaml
+
+name: "Mixed Provider Integration"
+description: "Combines MCP, LLM, and Python providers in one workflow"
+
+tasks:
+  # Start with reading a file (requires filesystem MCP server)
+  - id: "read_input"
+    name: "Read Input File"
+    method: "mcp/tool.fs.read"
+    parameters:
+      path: "./data/input.json"
+  
+  # Generate data with Python
+  - id: "generate_data"
+    name: "Generate Sample Data"
+    method: "python/execute"
+    parameters:
+      code: |
+        import json
+        import random
+        
+        # Generate sample data
+        data = {
+            "values": [random.randint(1, 100) for _ in range(10)],
+            "labels": [f"Item_{i}" for i in range(10)]
+        }
+        
+        print(json.dumps(data))
+  
+  # Process data with Python (removed MCP sum since no built-in tools)
+  - id: "process_data"
+    name: "Process Data"
+    method: "python/execute"
+    dependencies: ["generate_data"]
+    parameters:
+      code: |
+        import json
+        data = json.loads('${generate_data}')
+        result = {
+            "sum": sum(data["values"][:2]),
+            "avg": sum(data["values"]) / len(data["values"]),
+            "max": max(data["values"])
+        }
+        print(json.dumps(result))
+  
+  # Analyze with LLM
+  - id: "analyze_data"
+    name: "Analyze Data Pattern"
+    method: "llm/chat"
+    dependencies: ["generate_data", "process_data"]
+    parameters:
+      model: "llama3.2"
+      messages:
+        - role: "user"
+          content: |
+            Analyze this data and identify patterns:
+            Data: ${generate_data}
+            
+            Statistics: ${process_data}
+            
+            Provide insights in 2-3 sentences.
+  
+  # Process analysis with Python
+  - id: "format_report"
+    name: "Format Final Report"
+    method: "python/execute"
+    dependencies: ["analyze_data"]
+    parameters:
+      code: |
+        analysis = '''${analyze_data.response}'''
+        
+        report = {
+            "timestamp": __import__('datetime').datetime.now().isoformat(),
+            "analysis": analysis,
+            "word_count": len(analysis.split()),
+            "status": "completed"
+        }
+        
+        print(__import__('json').dumps(report, indent=2))
+  
+  # Save the report using MCP (requires filesystem server)
+  - id: "save_report"
+    name: "Save Report"
+    method: "mcp/tool.fs.write"
+    dependencies: ["format_report"]
+    parameters:
+      path: "./output/analysis_report.json"
+      content: "${format_report}"
+  
+  # Final status
+  - id: "completion"
+    name: "Completion Status"
+    method: "python/execute"
+    dependencies: ["save_report"]
+    parameters:
+      code: |
+        print("Analysis complete - report saved to output/analysis_report.json")

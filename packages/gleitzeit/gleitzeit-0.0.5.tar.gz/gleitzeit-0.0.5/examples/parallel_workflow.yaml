@@ -1,0 +1,51 @@
+# Parallel Execution Workflow Example
+# Demonstrates tasks that can run in parallel
+
+name: "Parallel Execution Workflow"
+description: "Shows how independent tasks run in parallel for better performance"
+version: "1.0"
+
+# Workflow configuration
+timeout: 90
+wait_for_completion: true
+
+# Independent tasks that can run in parallel
+tasks:
+  - id: "analyze_sentiment"
+    method: "llm/chat"
+    priority: 2
+    parameters:
+      model: "llama3.2"
+      messages:
+        - role: "user"
+          content: "Analyze the sentiment of this text: 'I love working with modern workflow systems! They make automation so much easier.' Reply with just: positive, negative, or neutral."
+
+  - id: "count_words"
+    method: "python/execute"
+    priority: 2
+    parameters:
+      file: "examples/scripts/count_words.py"
+
+  - id: "generate_summary"
+    method: "llm/chat"
+    priority: 2
+    parameters:
+      model: "llama3.2"
+      messages:
+        - role: "user"
+          content: "Write a one-sentence summary about workflow automation benefits."
+
+  # This task depends on all previous tasks
+  - id: "combine_results"
+    method: "llm/chat"
+    priority: 1
+    dependencies: ["analyze_sentiment", "count_words", "generate_summary"]
+    parameters:
+      model: "llama3.2"
+      messages:
+        - role: "user"
+          content: |
+            Combine these analysis results into a brief report:
+            Sentiment: ${analyze_sentiment.response}
+            Word Analysis: ${count_words.result}
+            Summary: ${generate_summary.response}
