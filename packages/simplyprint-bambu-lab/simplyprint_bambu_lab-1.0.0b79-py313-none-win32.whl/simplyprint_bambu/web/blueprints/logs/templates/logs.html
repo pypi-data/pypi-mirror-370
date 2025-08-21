@@ -1,0 +1,156 @@
+{% extends "layout.html" %}
+
+{% block scripts %}
+    <script>
+        function selectAll() {
+            var select_all = document.getElementById('select_all');
+            var printers = document.getElementsByName('selected_clients');
+            var files = document.getElementsByName('selected_files');
+
+
+            for (var i = 0; i < printers.length; i++) {
+                printers[i].checked = select_all.checked;
+            }
+
+            for (var i = 0; i < files.length; i++) {
+                files[i].checked = select_all.checked;
+            }
+        }
+
+        // On any checkbox interaction, enable or disable the download button
+        document.addEventListener('change', function (event) {
+            var download_all = document.getElementById('download-all');
+            var delete_all = document.getElementById('delete-all');
+
+            var printers = document.getElementsByName('selected_clients');
+            var files = document.getElementsByName('selected_files');
+
+            var any_checked = false;
+
+            for (var i = 0; i < printers.length; i++) {
+                if (printers[i].checked) {
+                    any_checked = true;
+                    break;
+                }
+            }
+
+            if (!any_checked) {
+                for (var i = 0; i < files.length; i++) {
+                    if (files[i].checked) {
+                        any_checked = true;
+                        break;
+                    }
+                }
+            }
+
+            download_all.disabled = !any_checked;
+            delete_all.disabled = !any_checked;
+        });
+
+    </script>
+{% endblock %}
+
+{% block content %}
+    <h3><strong>Logs</strong></h3>
+    <hr>
+
+    <div>
+        <form class="m-2" method="post" hx-post="{{ url_for('logs.action') }}" hx-target="#response"
+              hx-swap="outerHTML">
+
+            <div id="response"></div>
+
+            <div class="row">
+                <div id="actions" class="mb-2 col-md-12">
+                    <button id="download-all" disabled type="submit" class="btn btn-info" name="action"
+                            value="download_zip">Download Selected as ZIP
+                    </button>
+                    <button id="delete-all" type="submit" disabled class="btn btn-danger" name="action" value="delete">
+                        Delete Selected
+                    </button>
+                </div>
+            </div>
+
+            {% if parent %}
+                <a hx-boost="false" href="/logs" class="btn btn-primary">
+                    Back
+                </a>
+
+                <input type="hidden" name="parent" value="{{ parent }}">
+            {% endif %}
+
+            <table class="table">
+                <!-- Select all button -->
+                <thead>
+                <tr>
+                    <th scope="col">
+
+                        <input type="checkbox" id="select_all" onclick="selectAll()">
+
+                        <label for="select_all" class="visually-hidden">
+                            <strong>Select All</strong>
+                        </label>
+                    </th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Size</th>
+                    <th scope="col">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+
+
+                {% for client in clients %}
+                    <tr>
+                        <th scope="row"><input type="checkbox" name="selected_clients" value="{{ client.unique_id }}">
+                        </th>
+                        <td>
+                            <img src="{{ client.product_image }}"
+                                 class="img-fluid mb-2"
+                                 width="20"
+                                 height="20"
+                                 draggable="false">
+                            {{ client.name }}
+                        </td>
+                        <td>{{ client.count }} files</td>
+                        <td>
+                            <a hx-boost="false" href="/logs/{{ client.unique_id }}" class="btn btn-primary">
+                                See logs
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+
+                {% for file in files %}
+                    <tr>
+                        <th scope="row"><input type="checkbox" name="selected_files" value="{{ file.name }}"></th>
+                        <td>{{ file.name }}</td>
+                        <td>{{ file.size }} bytes</td>
+                        <td>
+                            {% if file.parent %}
+                                <a hx-boost="false" href="/logs/{{ file.parent }}/f/{{ file.name }}"
+                                   class="btn btn-primary btn-sm">
+                                    {{ macros.faDownload() }}
+                                </a>
+
+                                <button type="button" class="btn btn-danger btn-sm"
+                                        hx-delete="/logs/{{ file.parent }}/f/{{ file.name }}"
+                                > {{ macros.faTrashcan() }}
+                                </button>
+                            {% else %}
+                                <a hx-boost="false" href="/logs/f/{{ file.name }}" class="btn btn-primary btn-sm">
+                                    {{ macros.faDownload() }}
+                                </a>
+
+                                <button type="button" class="btn btn-danger btn-sm"
+                                        hx-delete="/logs/f/{{ file.name }}"> {{ macros.faTrashcan() }}
+                                </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+        </form>
+    </div>
+{% endblock %}
