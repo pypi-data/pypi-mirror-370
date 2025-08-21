@@ -1,0 +1,63 @@
+name: Create release
+
+on:
+  push:
+    tags:
+      - 'v[0-9].[0-9]+.[0-9]+'
+      - 'v[0-9].[0-9]+.[0-9]+.dev[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  build_release:
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          pipx install hatch
+      - name: Build release
+        run: |
+          hatch build
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/
+
+  publish_pypi:
+    needs:
+      - build_release
+    runs-on: ubuntu-latest
+    environment: "PyPI publishing"
+    permissions:
+      id-token: write
+    steps:
+      - name: Retrieve release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/
+      - name: Publish release to PyPI
+        uses: pypa/gh-action-pypi-publish@67339c736fd9354cd4f8cb0b744f2b82a74b5c70 # v1.12.3
+
+  publish_github:
+    needs:
+      - publish_pypi
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          generate_release_notes: true

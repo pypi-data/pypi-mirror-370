@@ -1,0 +1,94 @@
+name: Code quality
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  declare_variables:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - id: read_mise_toml
+        run: python3 -c "import json ; import tomllib; print(f'PYTHON_VERSION={ json.dumps(tomllib.loads(open('.mise.toml').read())['tools']['python'])}')" >> "$GITHUB_OUTPUT"
+    outputs:
+      python_versions: ${{ steps.read_mise_toml.outputs.PYTHON_VERSION }}
+
+  nox:
+    needs: declare_variables
+    strategy:
+      matrix:
+        python_version: ${{ fromJson(needs.declare_variables.outputs.python_versions) }}
+        nox_session: [tests, examples]
+        os: [ubuntu-24.04, macos-15]
+        nox_env_manager: ["virtualenv", "uv"]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Test with nox
+        run: |
+          mise use python@${{ matrix.python_version }}
+          mise x -- python3 -m pip install --upgrade pip
+          mise x -- pip install nox
+          if [ ${{ matrix.nox_env_manager }} = "uv" ]; then
+            mise x -- pip install uv
+          fi
+          mise x -- nox -P ${{ matrix.python_version }} --session ${{ matrix.nox_session }} -db ${{ matrix.nox_env_manager }}
+
+  mypy_pyright_ruff:
+    needs: declare_variables
+    strategy:
+      matrix:
+        python_version: ${{ fromJson(needs.declare_variables.outputs.python_versions) }}
+      fail-fast: false
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Install dependencies
+        run: |
+          mise use python@${{ matrix.python_version }}
+          mise x -- python3 -m venv .venv
+          .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Ruff
+        run: ".venv/bin/ruff check src/ tests/ examples/"
+      - name: Type check with Pyright
+        run: |
+          . .venv/bin/activate
+          pyright src/ tests/
+
+          # Some examples use Rich in their virtual environments, so install this for Pyright to stay
+          # calm. Errors with regards to use of this dependency will be detected by nox.
+          pip install rich
+          pyright examples/
+      - name: Type check with mypy
+        run: |
+          .venv/bin/pip install -e .
+          .venv/bin/python3 mypy.py
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install
+        run: ./bootstrap.py
+      - uses: pypa/gh-action-pip-audit@v1.0.8
+        with:
+          virtual-environment: .venv/
+          inputs: requirements.txt requirements-dev.txt
+          require-hashes: true
