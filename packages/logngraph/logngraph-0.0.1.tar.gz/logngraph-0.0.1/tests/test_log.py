@@ -1,0 +1,22 @@
+from logngraph.log import Logger
+from logngraph.log.levels import *
+from time import sleep
+
+logger = Logger(__name__, 'test.log', TRACE)
+
+logger.trace("Hello, World!")
+sleep(0.2)
+logger.debug("Hello, World!")
+sleep(0.2)
+logger.info("Hello, World!")
+sleep(0.2)
+logger.warn("Hello, World!")
+sleep(0.2)
+logger.error("Hello, World!")
+sleep(0.2)
+logger.fatal("Hello, World!")
+logger.set_level(INFO)
+sleep(0.2)
+logger.trace("Hello, World!")
+sleep(0.2)
+
