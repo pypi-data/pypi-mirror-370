@@ -1,0 +1,75 @@
+{% macro digitalmarketplaceHeader(params) %}
+{%- from 'govuk_frontend_jinja/components/header/macro.html' import govukHeader -%}
+{%- from "govuk_frontend_jinja/components/service-navigation/macro.html" import govukServiceNavigation -%}
+
+{% set user_logged_in = true if params.role else false %}
+{% set users_role = params.role | default(none) %}
+
+{% set isAdmin = params.isAdmin | default(false) %}
+
+{% if isAdmin %}
+  {% set adminAppClass = 'dm-admin-header govuk-header--full-width-border' %}
+  {% set adminServiceNavigationClass = 'dm-admin-service-navigation' %}
+  {% set productName = 'Digital Marketplace Admin' %}
+{% else %}
+  {% set adminAppClass = 'govuk-header--full-width-border' %}
+  {% set adminServiceNavigationClass = '' %}
+  {% set productName = 'Digital Marketplace' %}
+{% endif %}
+
+{% if user_logged_in %}
+  {% if users_role in['buyer', 'supplier'] %}
+    {% set serviceNavigation = [
+      {
+        'text': 'Guidance',
+        'href': 'https://www.gov.uk/guidance/buying-and-selling-on-the-digital-marketplace'
+      },
+      {
+        'text': 'View your account',
+        'href': url_for('external.' + users_role + '_dashboard'),
+        'active': params.active == url_for('external.' + users_role + '_dashboard')
+      },
+      {
+        'text': 'Log out',
+        'href': url_for('external.user_logout'),
+        'active': params.active == url_for('external.user_logout')
+      }
+    ]%}
+  {% else %}
+    {# Any other role #}
+    {% set serviceNavigation = [
+      {
+        'text': 'Guidance',
+        'href': 'https://www.gov.uk/guidance/buying-and-selling-on-the-digital-marketplace'
+      },
+      {
+        'text': 'Log out',
+        'href': url_for('external.user_logout'),
+        'active': params.active == url_for('external.user_logout')
+      }
+    ]%}
+  {% endif %}
+{% else %}
+  {% set serviceNavigation = [
+    {
+      'text': 'Guidance',
+      'href': 'https://www.gov.uk/guidance/buying-and-selling-on-the-digital-marketplace'
+    },
+    {
+      'text': 'Log in',
+      'href': url_for('external.render_login'),
+      'active': params.active == url_for('external.render_login')
+    }
+  ]%}
+{% endif %}
+{{ govukHeader({
+  'assetsPath': '/static/images',
+  'classes': adminAppClass
+}) }}
+{{ govukServiceNavigation({
+  'navigation': serviceNavigation,
+  'serviceName': productName,
+  'serviceUrl': '/',
+  'classes': adminServiceNavigationClass
+}) }}
+{% endmacro %}
