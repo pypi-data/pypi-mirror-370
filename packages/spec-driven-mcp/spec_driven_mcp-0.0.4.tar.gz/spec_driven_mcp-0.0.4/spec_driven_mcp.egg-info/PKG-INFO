@@ -1,0 +1,230 @@
+Metadata-Version: 2.4
+Name: spec-driven-mcp
+Version: 0.0.4
+Summary: MCP server for specification-driven development: manage feature specs, requirements, acceptance criteria, test linkage and status.
+Author: Tiago Melo
+License: MIT
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: mcp[cli]
+Requires-Dist: pydantic>=2.7
+Requires-Dist: uvicorn
+Requires-Dist: typer
+Requires-Dist: rich
+Requires-Dist: sqlite-utils>=3.36
+Requires-Dist: platformdirs
+
+# Spec-Driven MCP Server
+
+Your living source-of-truth for product & engineering specs — built for **VS Code + AI agents**.
+
+**Markdown specs → SQLite → dashboard → MCP tools.**
+
+---
+
+## Why use this?
+
+* Centralize **requirements**, **acceptance criteria**, and **non-functional** specs in one place.
+* Track verification with **pass/fail events**; roll-ups show what's **VERIFIED / FAILING / PARTIAL / UNTESTED**.
+* Give AI agents safe MCP access to **read, search, edit, and record verification**.
+* **Auto-launching dashboard** provides instant web UI access from VS Code.
+* Lightweight **HTML dashboard** (Tailwind + htmx/Alpine) for quick browsing and edits.
+
+---
+
+## Quick start
+
+### 1) Install the tool
+
+We recommend **pipx** so the CLI is on your PATH without virtualenv chores:
+
+```bash
+pipx install spec-driven-mcp
+```
+
+Or with pip:
+```bash
+pip install spec-driven-mcp
+```
+
+### 2) Add this to `.vscode/mcp.json`:
+
+```jsonc
+{
+  "servers": {
+    "specs-mcp": {
+      "type": "stdio",
+      "command": "spec-mcp-stdio"
+    }
+  }
+}
+```
+
+Open Copilot Chat → Agent mode, start the server from **MCP Servers** and use the tools/resources.
+
+**🚀 Dashboard Auto-Start:** The MCP server automatically starts the web dashboard in the background at **http://localhost:8765** when launched from VS Code. No separate dashboard command needed!
+
+---
+
+## Defaults that "just work"
+
+* **Database location:** Always uses **project-local** `<workspace-root>/.spec-mcp/specs.db` when running in a VS Code workspace
+* **Zero configuration:** Works in any directory without setup files or environment variables
+* **Automatic schema:** Database and tables are created automatically on first use
+
+
+You can manage the server from VS Code's MCP view (start/stop/restart).
+
+**Running outside a VS Code workspace?**
+The server falls back to platform-native user data directories:
+- **Windows:** `%LOCALAPPDATA%\SpecMCP\spec-mcp\specs.db`
+- **macOS:** `~/Library/Application Support/SpecMCP/spec-mcp/specs.db`  
+- **Linux:** `~/.local/state/spec-mcp/specs.db` (follows XDG spec)
+
+---
+
+## What you can do (MCP tools & resources)
+
+### Tools
+
+* `create_feature(feature_key, name)` — create a new feature
+* `create_spec(spec_id, feature_key, kind, description, parent_id?)` — create requirements/ACs/NFRs
+* `record_verification(spec_id, outcome, source?, notes?)` — append pass/fail and update roll-ups
+* `update_spec(spec_id, fields…)` — edit description and metadata
+* `search_specs(status?, kind?, feature?)` — filter list
+* `dashboard_status()` — check if the web dashboard is running
+
+### Resources
+
+* `dashboard://status` — dashboard status and URL information
+
+---
+
+## CLI Commands
+
+All commands work from any directory:
+
+```bash
+# Check database location
+spec-mcp db-path
+
+# Create features and specs
+spec-mcp create-feature user-auth "User Authentication System"
+spec-mcp create-spec REQ-AUTH-001 user-auth REQUIREMENT --description "System shall provide secure authentication"
+spec-mcp create-spec AC-AUTH-001 user-auth AC --description "User can log in with email/password" --parent-id REQ-AUTH-001
+
+# Record verification events
+spec-mcp record-event AC-AUTH-001 PASSED --source "pytest::test_login" --notes "Login test passed"
+
+# View all data
+spec-mcp dump
+
+# Start web dashboard
+spec-mcp dashboard
+
+# Start MCP server (for development/testing)
+spec-mcp dev
+
+# Reset database (destructive)
+spec-mcp reset-db
+```
+
+For detailed help on any command: `spec-mcp <command> --help`
+
+---
+
+## Accessing the Dashboard
+
+**Automatic Start (VS Code):** When you start the MCP server from VS Code, the dashboard automatically launches at **http://localhost:8765**.
+
+**Manual Start (CLI):** You can also start the dashboard manually:
+
+```bash
+spec-mcp dashboard --port 8765
+```
+
+The dashboard provides:
+- Browse features, requirements, and acceptance criteria
+- View verification status and trends  
+- Edit specs inline with modern web forms
+- See roll-up status from leaf ACs to requirements to features
+- Clickable navigation between related specs
+- Responsive design with intuitive status indicators
+- Real-time updates when specs are modified
+
+---
+
+## Status (how we compute it)
+
+* **VERIFIED** — all leaves passed
+* **FAILING** — at least one failing leaf
+* **PARTIAL** — some passed, some untested
+* **UNTESTED** — no verification yet
+
+Leaves = ACs and NFRs; requirements roll up from their children.
+
+---
+
+## Integrating tests
+
+From your test runner (or CI), call the MCP tool after a check:
+
+```python
+# Pseudocode with your MCP client
+call_tool("record_verification", {
+  "spec_id": "AC-LOGIN-001",
+  "outcome": "PASSED", 
+  "source": "pytest::test_login"
+})
+```
+
+---
+
+## Architecture & Status
+
+**Current Status: ✅ Production Ready**
+
+- **Unified Package:** All functionality consolidated in `spec_mcp/` 
+- **Dual Entry Points:** 
+  - `spec-mcp` - Full-featured CLI with all commands
+  - `spec-mcp-stdio` - MCP server for VS Code integration (auto-starts dashboard)
+- **Simplified Schema:** Specs now use a single `description` field (migrated from title/statement)
+- **Integrated Dashboard:** Web UI automatically starts with MCP server and runs in background
+- **Centralized Database Logic:** All DB operations in `spec_mcp/db.py`
+- **Modern Web Dashboard:** Built with Starlette, Tailwind CSS, htmx, and Alpine.js
+- **Type Safety:** Full type hints throughout codebase
+- **Tested:** Comprehensive smoke tests verify core functionality
+
+**Key Components:**
+- `db.py` - SQLite database layer and MCP helpers
+- `mcp_server.py` - FastMCP server with tools and resources  
+- `mcp_main.py` - MCP server entry point with dashboard auto-start
+- `cli.py` - Typer-based command line interface
+- `dashboard.py` - Web UI for browsing and editing specs
+- `verification.py` - Shared verification event recording logic
+
+---
+
+## Development
+
+```bash
+# Clone and install in development mode
+git clone <repo-url>
+cd spec-driven-mcp
+pip install -e .
+
+# Run tests
+python tests/test_basic.py
+
+# Start MCP server for testing (auto-starts dashboard at localhost:8765)
+spec-mcp-stdio
+
+# Start dashboard manually (if needed)
+spec-mcp dashboard
+```
+
+---
+
+## License
+
+MIT
