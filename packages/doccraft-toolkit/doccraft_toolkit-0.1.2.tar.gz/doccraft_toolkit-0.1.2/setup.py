@@ -1,0 +1,95 @@
+from setuptools import setup, find_packages
+
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
+with open("requirements.txt", "r", encoding="utf-8") as fh:
+    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+
+setup(
+    name='doccraft-toolkit',
+    version='0.1.2',
+    author='Simon Wu',
+    author_email='simon.wu@rwth-aachen.de',
+    description='A comprehensive document processing and question-answering toolkit',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url='https://github.com/WuSimon/DocCraft',
+    package_dir={'': 'src'},
+    packages=find_packages(where='src'),
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Topic :: Scientific/Engineering :: Artificial Intelligence',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+    ],
+    python_requires='>=3.8',
+    install_requires=[
+        'numpy>=1.21.0',
+        'Pillow>=8.0.0',
+        'PyMuPDF>=1.18.0',
+        'pdfplumber>=0.7.0',
+        'pytesseract>=0.3.8',
+        'opencv-python>=4.5.0',
+        'scipy>=1.7.0',
+        'pandas>=1.3.0',
+        'openpyxl>=3.0.0',
+        'psutil>=5.8.0',
+        'paddlepaddle>=2.4.0',
+        'paddleocr>=2.6.0',
+    ],
+    extras_require={
+        'ai': [
+            'transformers>=4.30.0',
+            'torch>=2.0.0',
+            'torchvision>=0.15.0',
+            'matplotlib>=3.3.0',
+            'transformers_stream_generator>=0.0.5',
+            'num2words>=0.5.10',
+            'inflect>=6.0.0',
+        ],
+        'dev': [
+            'pytest>=6.0.0',
+            'pytest-cov>=2.12.0',
+            'black>=22.3.0',
+            'flake8>=4.0.1',
+            'mypy>=0.910',
+            'python-Levenshtein>=0.12.2',
+            'munkres>=1.1.4',
+            'num2words>=0.5.10',
+            'inflect>=6.0.0',
+        ],
+        'all': [
+            'transformers>=4.30.0',
+            'torch>=2.0.0',
+            'torchvision>=0.15.0',
+            'matplotlib>=3.3.0',
+            'transformers_stream_generator>=0.0.5',
+            'pytest>=6.0.0',
+            'pytest-cov>=2.12.0',
+            'black>=22.3.0',
+            'flake8>=4.0.1',
+            'mypy>=0.910',
+            'python-Levenshtein>=0.12.2',
+            'munkres>=1.1.4',
+            'num2words>=0.5.10',
+            'inflect>=6.0.0',
+        ],
+    },
+    entry_points={
+        'console_scripts': [
+            'doccraft=doccraft.cli:main',
+        ],
+    },
+    include_package_data=True,
+    zip_safe=False,
+) 
