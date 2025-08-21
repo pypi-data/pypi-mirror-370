@@ -1,0 +1,11 @@
+import os
+from ..exceptions import InvalidEnvironmentVariable
+
+MIN_START_TOKEN_LENGTH: int = int(os.getenv('MIN_START_TOKEN_LENGTH', 3))
+if MIN_START_TOKEN_LENGTH <= 0:
+    raise InvalidEnvironmentVariable('MIN_START_TOKEN_LENGTH', MIN_START_TOKEN_LENGTH, '> 0')
+
+DEFAULT_QUERY_TRANSFORMATION_PRICE: float = float(os.getenv('DEFAULT_QUERY_TRANSFORMATION_PRICE', .4))
+
+if DEFAULT_QUERY_TRANSFORMATION_PRICE < 0:
+    raise InvalidEnvironmentVariable('DEFAULT_QUERY_TRANSFORMATION_PRICE', DEFAULT_QUERY_TRANSFORMATION_PRICE, '> 0')
