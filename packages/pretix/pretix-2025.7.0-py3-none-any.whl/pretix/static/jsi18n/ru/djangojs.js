@@ -1,0 +1,228 @@
+
+
+'use strict';
+{
+  const globals = this;
+  const django = globals.django || (globals.django = {});
+
+  
+  django.pluralidx = function(n) {
+    const v = n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;
+    if (typeof v === 'boolean') {
+      return v ? 1 : 0;
+    } else {
+      return v;
+    }
+  };
+  
+
+  /* gettext library */
+
+  django.catalog = django.catalog || {};
+  
+  const newcatalog = {
+    "All": "\u0412\u0441\u0435",
+    "An error has occurred.": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430.",
+    "An error of type {code} occurred.": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430 \u0442\u0438\u043f\u0430 {code}.",
+    "April": "\u0430\u043f\u0440\u0435\u043b\u044c",
+    "August": "\u0430\u0432\u0433\u0443\u0441\u0442",
+    "Barcode area": "\u041e\u0431\u043b\u0430\u0441\u0442\u044c \u0448\u0442\u0440\u0438\u0445-\u043a\u043e\u0434\u0430",
+    "Calculating default price\u2026": "\u0420\u0430\u0441\u0441\u0447\u0438\u0442\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u0446\u0435\u043d\u0430 \u043f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e \u2026",
+    "Cart expired": "\u0421\u0440\u043e\u043a \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043a\u043e\u0440\u0437\u0438\u043d\u044b \u0438\u0441\u0442\u0451\u043a",
+    "Check-in QR": "QR-\u043a\u043e\u0434 \u0434\u043b\u044f \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u0438",
+    "Click to close": "\u041d\u0430\u0436\u043c\u0438\u0442\u0435, \u0447\u0442\u043e\u0431\u044b \u0437\u0430\u043a\u0440\u044b\u0442\u044c",
+    "Close message": "\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435",
+    "Comment:": "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:",
+    "Confirming your payment \u2026": "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442\u0441\u044f \u0432\u0430\u0448 \u043f\u043b\u0430\u0442\u0451\u0436\u2026",
+    "Contacting Stripe \u2026": "\u0418\u0434\u0451\u0442 \u043e\u0431\u0440\u0430\u0449\u0435\u043d\u0438\u0435 \u043a Stripe\u2026",
+    "Contacting your bank \u2026": "\u0418\u0434\u0451\u0442 \u043e\u0431\u0440\u0430\u0449\u0435\u043d\u0438\u0435 \u043a \u0432\u0430\u0448\u0435\u043c\u0443 \u0431\u0430\u043d\u043a\u0443\u2026",
+    "Copied!": "\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u043e!",
+    "Count": "\u041f\u043e\u0434\u0441\u0447\u0438\u0442\u0430\u0442\u044c",
+    "December": "\u0434\u0435\u043a\u0430\u0431\u0440\u044c",
+    "Do you really want to leave the editor without saving your changes?": "\u0412\u044b \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0442\u0435\u043b\u044c\u043d\u043e \u0445\u043e\u0442\u0438\u0442\u0435 \u0432\u044b\u0439\u0442\u0438 \u0438\u0437 \u0440\u0435\u0434\u0430\u043a\u0442\u043e\u0440\u0430 \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439?",
+    "Error while uploading your PDF file, please try again.": "\u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0435 \u0444\u0430\u0439\u043b\u0430 PDF, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437.",
+    "February": "\u0444\u0435\u0432\u0440\u0430\u043b\u044c",
+    "Fr": "\u041f\u0442",
+    "Generating messages \u2026": "\u0421\u043e\u0437\u0434\u0430\u044e\u0442\u0441\u044f \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u044f\u2026",
+    "Group of objects": "\u0413\u0440\u0443\u043f\u043f\u0430 \u043e\u0431\u044a\u0435\u043a\u0442\u043e\u0432",
+    "January": "\u044f\u043d\u0432\u0430\u0440\u044c",
+    "July": "\u0438\u044e\u043b\u044c",
+    "June": "\u0438\u044e\u043d\u044c",
+    "March": "\u043c\u0430\u0440\u0442",
+    "Marked as paid": "\u041e\u0442\u043c\u0435\u0447\u0435\u043d\u043e \u043a\u0430\u043a \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043d\u043e\u0435",
+    "May": "\u043c\u0430\u0439",
+    "Mo": "\u041f\u043d",
+    "No": "\u041d\u0435\u0442",
+    "None": "\u041d\u0438 \u043e\u0434\u043d\u043e\u0433\u043e",
+    "November": "\u043d\u043e\u044f\u0431\u0440\u044c",
+    "Object": "\u041e\u0431\u044a\u0435\u043a\u0442",
+    "October": "\u043e\u043a\u0442\u044f\u0431\u0440\u044c",
+    "Others": "\u0414\u0440\u0443\u0433\u0438\u0435",
+    "Paid orders": "\u041e\u043f\u043b\u0430\u0447\u0435\u043d\u043d\u044b\u0435 \u0437\u0430\u043a\u0430\u0437\u044b",
+    "Placed orders": "\u0421\u043e\u0437\u0434\u0430\u043d\u043d\u044b\u0435 \u0437\u0430\u043a\u0430\u0437\u044b",
+    "Powered by pretix": "\u041d\u0430 \u0431\u0430\u0437\u0435 pretix",
+    "Press Ctrl-C to copy!": "\u0427\u0442\u043e\u0431\u044b \u0441\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c, \u043d\u0430\u0436\u043c\u0438\u0442\u0435 Ctrl-C.",
+    "Sa": "\u0421\u0431",
+    "Saving failed.": "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c.",
+    "September": "\u0441\u0435\u043d\u0442\u044f\u0431\u0440\u044c",
+    "Su": "\u0412\u0441",
+    "Th": "\u0427\u0442",
+    "The PDF background file could not be loaded for the following reason:": "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u043e\u043d\u043e\u0432\u044b\u0439 \u0444\u0430\u0439\u043b PDF \u043f\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0439 \u043f\u0440\u0438\u0447\u0438\u043d\u0435:",
+    "Ticket design": "\u0414\u0438\u0437\u0430\u0439\u043d \u0431\u0438\u043b\u0435\u0442\u0430",
+    "Total": "\u0418\u0442\u043e\u0433\u043e",
+    "Total revenue": "\u041e\u0431\u0449\u0430\u044f \u0432\u044b\u0440\u0443\u0447\u043a\u0430",
+    "Tu": "\u0412\u0442",
+    "Unknown error.": "\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u0430\u044f \u043e\u0448\u0438\u0431\u043a\u0430.",
+    "Use a different name internally": "\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0435 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0435 \u0438\u043c\u044f",
+    "We": "\u0421\u0440",
+    "We are currently sending your request to the server. If this takes longer than one minute, please check your internet connection and then reload this page and try again.": "\u041e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u0435\u043c \u0432\u0430\u0448 \u0437\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0441\u0435\u0440\u0432\u0435\u0440. \u0415\u0441\u043b\u0438 \u044d\u0442\u043e \u0437\u0430\u0439\u043c\u0451\u0442 \u0431\u043e\u043b\u044c\u0448\u0435 \u043c\u0438\u043d\u0443\u0442\u044b, \u043f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442\u0443, \u0437\u0430\u0442\u0435\u043c \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u043e\u043f\u044b\u0442\u043a\u0443.",
+    "We are processing your request \u2026": "\u0412\u0430\u0448 \u0437\u0430\u043f\u0440\u043e\u0441 \u043e\u0431\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u0435\u0442\u0441\u044f\u2026",
+    "We currently cannot reach the server, but we keep trying. Last error code: {code}": "\u041d\u0435 \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442\u0441\u044f \u0441\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f \u0441 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u043c, \u043f\u043e\u0432\u0442\u043e\u0440\u044f\u0435\u043c \u043f\u043e\u043f\u044b\u0442\u043a\u0438. \u041a\u043e\u0434 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0435\u0439 \u043e\u0448\u0438\u0431\u043a\u0438: {code}",
+    "We currently cannot reach the server. Please try again. Error code: {code}": "\u0412 \u0434\u0430\u043d\u043d\u044b\u0439 \u043c\u043e\u043c\u0435\u043d\u0442 \u043d\u0435 \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442\u0441\u044f \u0441\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f \u0441 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u043c. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437. \u041a\u043e\u0434 \u043e\u0448\u0438\u0431\u043a\u0438: {code}",
+    "Yes": "\u0414\u0430",
+    "Your request arrived on the server but we still wait for it to be processed. If this takes longer than two minutes, please contact us or go back in your browser and try again.": "\u0412\u0430\u0448 \u0437\u0430\u043f\u0440\u043e\u0441 \u043f\u043e\u0441\u0442\u0443\u043f\u0438\u043b \u043d\u0430 \u0441\u0435\u0440\u0432\u0435\u0440, \u043d\u043e \u0432\u0441\u0451 \u0435\u0449\u0451 \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u0441\u044f \u0432 \u043e\u0436\u0438\u0434\u0430\u043d\u0438\u0438 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0438. \u0415\u0441\u043b\u0438 \u044d\u0442\u043e \u0437\u0430\u0439\u043c\u0451\u0442 \u0431\u043e\u043b\u044c\u0448\u0435 \u0434\u0432\u0443\u0445 \u043c\u0438\u043d\u0443\u0442, \u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u0441\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u0441 \u043d\u0430\u043c\u0438 \u0438\u043b\u0438 \u0432\u0435\u0440\u043d\u0438\u0442\u0435\u0441\u044c \u043d\u0430\u0437\u0430\u0434 \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u0437\u0430\u043f\u0440\u043e\u0441.",
+    "widget\u0004Back": "\u041d\u0430\u0437\u0430\u0434",
+    "widget\u0004Buy": "\u041a\u0443\u043f\u0438\u0442\u044c",
+    "widget\u0004Choose a different date": "\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0434\u0440\u0443\u0433\u0443\u044e \u0434\u0430\u0442\u0443",
+    "widget\u0004Choose a different event": "\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0434\u0440\u0443\u0433\u043e\u0435 \u043c\u0435\u0440\u043e\u043f\u0440\u0438\u044f\u0442\u0438\u0435",
+    "widget\u0004Close": "\u0417\u0430\u043a\u0440\u044b\u0442\u044c",
+    "widget\u0004Close ticket shop": "\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0431\u0438\u043b\u0435\u0442\u043d\u0443\u044e \u043a\u0430\u0441\u0441\u0443",
+    "widget\u0004Continue": "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c",
+    "widget\u0004FREE": "\u0411\u0415\u0421\u041f\u041b\u0410\u0422\u041d\u041e",
+    "widget\u0004Next month": "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0439 \u043c\u0435\u0441\u044f\u0446",
+    "widget\u0004Next week": "\u0421\u043b\u0435\u0434. \u043d\u0435\u0434\u0435\u043b\u044f",
+    "widget\u0004Only available with a voucher": "\u0414\u043e\u0441\u0442\u0443\u043f\u043d\u043e \u0442\u043e\u043b\u044c\u043a\u043e \u0441 \u0432\u0430\u0443\u0447\u0435\u0440\u043e\u043c",
+    "widget\u0004Open seat selection": "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0432\u044b\u0431\u043e\u0440 \u043c\u0435\u0441\u0442",
+    "widget\u0004Previous month": "\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0438\u0439 \u043c\u0435\u0441\u044f\u0446",
+    "widget\u0004Previous week": "\u041f\u0440\u0435\u0434. \u043d\u0435\u0434\u0435\u043b\u044f",
+    "widget\u0004Redeem": "\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c",
+    "widget\u0004Redeem a voucher": "\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u044c \u043f\u0440\u043e\u043c\u043e\u043a\u043e\u0434",
+    "widget\u0004Register": "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c",
+    "widget\u0004Reserved": "\u0417\u0430\u0440\u0435\u0437\u0435\u0440\u0432\u0438\u0440\u043e\u0432\u0430\u043d\u043e",
+    "widget\u0004Resume checkout": "\u0412\u043e\u0437\u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435 \u0437\u0430\u043a\u0430\u0437\u0430",
+    "widget\u0004Sold out": "\u0420\u0430\u0441\u043f\u0440\u043e\u0434\u0430\u043d\u043e",
+    "widget\u0004The cart could not be created. Please try again later": "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u043a\u043e\u0440\u0437\u0438\u043d\u0443. \u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u043e\u043f\u044b\u0442\u043a\u0443 \u043f\u043e\u0437\u0436\u0435.",
+    "widget\u0004The ticket shop could not be loaded.": "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0431\u0438\u043b\u0435\u0442\u043d\u0443\u044e \u043a\u0430\u0441\u0441\u0443.",
+    "widget\u0004Voucher code": "\u041f\u0440\u043e\u043c\u043e\u043a\u043e\u0434",
+    "widget\u0004Waiting list": "\u041b\u0438\u0441\u0442 \u043e\u0436\u0438\u0434\u0430\u043d\u0438\u044f",
+    "widget\u0004You currently have an active cart for this event. If you select more products, they will be added to your existing cart.": "\u0412 \u0434\u0430\u043d\u043d\u044b\u0439 \u043c\u043e\u043c\u0435\u043d\u0442 \u0443 \u0432\u0430\u0441 \u0438\u043c\u0435\u0435\u0442\u0441\u044f \u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u043e\u0440\u0437\u0438\u043d\u0430 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043c\u0435\u0440\u043e\u043f\u0440\u0438\u044f\u0442\u0438\u044f. \u0415\u0441\u043b\u0438 \u0432\u044b \u0435\u0449\u0451 \u0432\u044b\u0431\u0435\u0440\u0435\u0442\u0435 \u043f\u043e\u0437\u0438\u0446\u0438\u0438, \u043e\u043d\u0438 \u0431\u0443\u0434\u0443\u0442 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b \u0432 \u044d\u0442\u0443 \u043a\u043e\u0440\u0437\u0438\u043d\u0443.",
+    "widget\u0004currently available: %s": "\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e \u043d\u0430 \u0434\u0430\u043d\u043d\u044b\u0439 \u043c\u043e\u043c\u0435\u043d\u0442: %s",
+    "widget\u0004from %(currency)s %(price)s": "\u043e\u0442 %(currency)s %(price)s",
+    "widget\u0004incl. %(rate)s% %(taxname)s": "\u0432\u043a\u043b\u044e\u0447\u0430\u044f  %(rate)s% %(taxname)s",
+    "widget\u0004incl. taxes": "\u0432\u043a\u043b\u044e\u0447\u0430\u044f \u043d\u0430\u043b\u043e\u0433\u0438",
+    "widget\u0004minimum amount to order: %s": "\u043c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u0437\u0430\u043a\u0430\u0437: %s,\u043e\u0432",
+    "widget\u0004plus %(rate)s% %(taxname)s": "\u043f\u043b\u044e\u0441 %(rate)s% %(taxname)s",
+    "widget\u0004plus taxes": "\u043f\u043b\u044e\u0441 \u043d\u0430\u043b\u043e\u0433\u0438"
+  };
+  for (const key in newcatalog) {
+    django.catalog[key] = newcatalog[key];
+  }
+  
+
+  if (!django.jsi18n_initialized) {
+    django.gettext = function(msgid) {
+      const value = django.catalog[msgid];
+      if (typeof value === 'undefined') {
+        return msgid;
+      } else {
+        return (typeof value === 'string') ? value : value[0];
+      }
+    };
+
+    django.ngettext = function(singular, plural, count) {
+      const value = django.catalog[singular];
+      if (typeof value === 'undefined') {
+        return (count == 1) ? singular : plural;
+      } else {
+        return value.constructor === Array ? value[django.pluralidx(count)] : value;
+      }
+    };
+
+    django.gettext_noop = function(msgid) { return msgid; };
+
+    django.pgettext = function(context, msgid) {
+      let value = django.gettext(context + '\x04' + msgid);
+      if (value.includes('\x04')) {
+        value = msgid;
+      }
+      return value;
+    };
+
+    django.npgettext = function(context, singular, plural, count) {
+      let value = django.ngettext(context + '\x04' + singular, context + '\x04' + plural, count);
+      if (value.includes('\x04')) {
+        value = django.ngettext(singular, plural, count);
+      }
+      return value;
+    };
+
+    django.interpolate = function(fmt, obj, named) {
+      if (named) {
+        return fmt.replace(/%\(\w+\)s/g, function(match){return String(obj[match.slice(2,-2)])});
+      } else {
+        return fmt.replace(/%s/g, function(match){return String(obj.shift())});
+      }
+    };
+
+
+    /* formatting library */
+
+    django.formats = {
+    "DATETIME_FORMAT": "j E Y \u0433. G:i",
+    "DATETIME_INPUT_FORMATS": [
+      "%d.%m.%Y %H:%M:%S",
+      "%d.%m.%Y %H:%M:%S.%f",
+      "%d.%m.%Y %H:%M",
+      "%d.%m.%y %H:%M:%S",
+      "%d.%m.%y %H:%M:%S.%f",
+      "%d.%m.%y %H:%M",
+      "%Y-%m-%d %H:%M:%S",
+      "%Y-%m-%d %H:%M:%S.%f",
+      "%Y-%m-%d %H:%M",
+      "%Y-%m-%d"
+    ],
+    "DATE_FORMAT": "j E Y \u0433.",
+    "DATE_INPUT_FORMATS": [
+      "%d.%m.%Y",
+      "%d.%m.%y",
+      "%Y-%m-%d"
+    ],
+    "DECIMAL_SEPARATOR": ",",
+    "FIRST_DAY_OF_WEEK": 1,
+    "MONTH_DAY_FORMAT": "j F",
+    "NUMBER_GROUPING": 3,
+    "SHORT_DATETIME_FORMAT": "d.m.Y H:i",
+    "SHORT_DATE_FORMAT": "d.m.Y",
+    "THOUSAND_SEPARATOR": "\u00a0",
+    "TIME_FORMAT": "G:i",
+    "TIME_INPUT_FORMATS": [
+      "%H:%M:%S",
+      "%H:%M:%S.%f",
+      "%H:%M"
+    ],
+    "YEAR_MONTH_FORMAT": "F Y \u0433."
+  };
+
+    django.get_format = function(format_type) {
+      const value = django.formats[format_type];
+      if (typeof value === 'undefined') {
+        return format_type;
+      } else {
+        return value;
+      }
+    };
+
+    /* add to global namespace */
+    globals.pluralidx = django.pluralidx;
+    globals.gettext = django.gettext;
+    globals.ngettext = django.ngettext;
+    globals.gettext_noop = django.gettext_noop;
+    globals.pgettext = django.pgettext;
+    globals.npgettext = django.npgettext;
+    globals.interpolate = django.interpolate;
+    globals.get_format = django.get_format;
+
+    django.jsi18n_initialized = true;
+  }
+};
+
