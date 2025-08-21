@@ -1,0 +1,49 @@
+services:
+  stream_pose_ml_api:
+    image: mrilikecoding/stream_pose_ml_api:latest
+    ports:
+      - "5001:5001"
+    networks:
+      - app-tier
+    volumes:
+      - ${PWD}/data/trained_models:/usr/src/app/data/trained_models
+      - shared_models:/usr/src/app/tmp # Mount the named volume at /usr/src/app/tmp
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=development
+      - PYTHONUNBUFFERED=1
+    command: >
+      bash -c "python -u run.py"
+
+  web_ui:
+    image: mrilikecoding/stream_pose_ml_web_ui:latest
+    depends_on:
+      - stream_pose_ml_api
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    networks:
+      - app-tier
+    environment:
+      - VITE_STREAM_POSE_ML_API_ENDPOINT=http://127.0.0.1:5001
+      - VITE_STREAM_POSE_ML_ML_FLOW_API_ENDPOINT=http://127.0.0.1:5002
+
+  mlflow:
+    image: mrilikecoding/stream_pose_ml_mlflow:latest
+    networks:
+      - app-tier
+    ports:
+      - "5002:5002" # Expose Flask API
+      - "1234:1234" # Expose MLFlow Model Server API Subprocess
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - shared_models:/models # Mount the named volume at /models
+
+networks:
+  app-tier:
+    driver: bridge
+
+volumes:
+  shared_models:

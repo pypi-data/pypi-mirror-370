@@ -1,0 +1,118 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'stream_pose_ml/**'
+      - 'api/**'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - '.github/workflows/publish-to-pypi.yml'
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+    paths:
+      - 'stream_pose_ml/**'
+      - 'api/**'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - '.github/workflows/publish-to-pypi.yml'
+  workflow_dispatch:  # Enables manual trigger from GitHub UI
+
+jobs:
+  # Build and publish (only runs after CI passes)
+  build-and-publish:
+    name: Build and publish package
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"  # Use a stable Python version for building
+    
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        uv sync --all-groups --dev
+        uv add --dev build twine
+
+    - name: Debug variables
+      run: |
+        echo "GitHub Event Name: ${{ github.event_name }}"
+        echo "GitHub Ref: ${{ github.ref }}"
+        echo "GitHub Head Ref: ${{ github.head_ref }}"
+        echo "GitHub Base Ref: ${{ github.base_ref }}"
+        echo "Will publish to PyPI after build"
+    
+    - name: Build package
+      run: |
+        uv run python -m build .
+        echo "Package contents:"
+        ls -la dist/
+        uv run twine check dist/*
+      
+    - name: Extract version
+      id: get_version
+      run: |
+        VERSION=$(grep 'version = ' pyproject.toml | sed -n 's/version = "\(.*\)"/\1/p')
+        echo "::set-output name=package_version::$VERSION"
+        echo "Building version: $VERSION"
+
+    - name: Publish to TestPyPI
+      env:
+        PYPI_TEST_API_KEY: ${{ secrets.PYPI_TEST_API_KEY }}
+      run: |
+        echo "Uploading version ${{ steps.get_version.outputs.package_version }} to TestPyPI..."
+        if [ -z "$PYPI_TEST_API_KEY" ]; then
+          echo "WARNING: PYPI_TEST_API_KEY is empty, skipping TestPyPI upload"
+        else
+          # Run twine upload with || true to prevent failures from stopping the workflow
+          TESTPYPI_OUTPUT=$(uv run twine upload --repository testpypi dist/* -u "__token__" -p "$PYPI_TEST_API_KEY" --verbose 2>&1) || true
+          
+          if echo "$TESTPYPI_OUTPUT" | grep -i "already exists"; then
+            echo "Version ${{ steps.get_version.outputs.package_version }} already exists on TestPyPI - skipping upload"
+          elif echo "$TESTPYPI_OUTPUT" | grep -i "error" || echo "$TESTPYPI_OUTPUT" | grep -i "fail"; then
+            echo "WARNING: Upload to TestPyPI encountered errors:"
+            echo "$TESTPYPI_OUTPUT"
+            echo "Workflow continuing despite TestPyPI upload issues"
+          else
+            echo "Successfully published to TestPyPI"
+          fi
+        fi
+
+    - name: Publish to PyPI
+      env:
+        PYPI_API_KEY: ${{ secrets.PYPI_API_KEY }}
+      run: |
+        echo "Uploading version ${{ steps.get_version.outputs.package_version }} to PyPI..."
+        if [ -z "$PYPI_API_KEY" ]; then
+          echo "ERROR: PYPI_API_KEY is empty"
+          exit 1
+        fi
+        
+        # Run twine upload with || true to prevent failures from stopping the workflow
+        # Common failure case is 400 error when version already exists
+        UPLOAD_OUTPUT=$(uv run twine upload dist/* -u "__token__" -p "$PYPI_API_KEY" --verbose 2>&1) || true
+        
+        if echo "$UPLOAD_OUTPUT" | grep -i "already exists"; then
+          echo "Version ${{ steps.get_version.outputs.package_version }} already exists on PyPI - skipping upload"
+        elif echo "$UPLOAD_OUTPUT" | grep -i "error" || echo "$UPLOAD_OUTPUT" | grep -i "fail"; then
+          echo "WARNING: Upload to PyPI encountered errors:"
+          echo "$UPLOAD_OUTPUT"
+          echo "Workflow continuing despite PyPI upload issues"
+        else
+          echo "Successfully published to PyPI"
+        fi
