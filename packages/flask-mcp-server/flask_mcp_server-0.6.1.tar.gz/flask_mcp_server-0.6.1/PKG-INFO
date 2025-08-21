@@ -1,0 +1,314 @@
+Metadata-Version: 2.4
+Name: flask-mcp-server
+Version: 0.6.1
+Summary: Flask-MCP-Server is a lightweight, production-ready Model Context Protocol (MCP) server for Flask, with tool discovery, endpoint registration, async support, and full compliance with the latest MCP 2025-06-18 specification.
+Author-email: Bashar Bhuiyan <bbhuiyan1@gmail.com>
+License: MIT
+Project-URL: Homepage, https://github.com/bashar94/flask-mcp-server
+Project-URL: Documentation, https://github.com/bashar94/flask-mcp-server/blob/main/README.md
+Project-URL: Repository, https://github.com/bashar94/flask-mcp-server
+Project-URL: Issues, https://github.com/bashar94/flask-mcp-server/issues
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: Flask>=3.0.0
+Requires-Dist: typer>=0.12.3
+Requires-Dist: pydantic>=2.6.0
+Requires-Dist: typing_extensions>=4.9.0
+Requires-Dist: blinker>=1.8.0
+Provides-Extra: redis
+Requires-Dist: redis>=5.0.1; extra == "redis"
+Provides-Extra: async
+Requires-Dist: hypercorn>=0.16.0; extra == "async"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: pytest-mock>=3.10.0; extra == "dev"
+Requires-Dist: coverage>=7.0.0; extra == "dev"
+
+# flask-mcp-server
+
+Flask-based **Model Context Protocol (MCP)** server for Python. Drop it into any Flask app or run it standalone. Ships with security and ops features out of the box.
+
+**Spec target:** MCP **2025-06-18** — Streamable HTTP transport with a **unified `/mcp` endpoint** (POST for JSON-RPC; GET for SSE). Back-compat routes retained.
+
+**Package version:** `0.6.1`
+
+---
+
+## Table of Contents
+- [Requirements](#requirements)
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [What’s new in 0.6.1](#whats-new-in-060)
+- [Configuration (env vars)](#configuration-env-vars)
+- [Core Concepts](#core-concepts)
+- [Examples](#examples)
+  - [A. Unified MCP endpoint usage](#a-unified-mcp-endpoint-usage)
+  - [B. Tools with roles & TTL cache](#b-tools-with-roles--ttl-cache)
+  - [C. Resources & ResourceTemplates](#c-resources--resourcetemplates)
+  - [D. Prompts & Completions](#d-prompts--completions)
+  - [E. Batch Calls (compat)](#e-batch-calls-compat)
+  - [F. SSE (hello + registry events)](#f-sse-hello--registry-events)
+  - [G. Auth: API keys & HMAC](#g-auth-api-keys--hmac)
+  - [H. Rate limiting](#h-rate-limiting)
+  - [I. Service Providers](#i-service-providers)
+  - [J. Discovery (auto-register)](#j-discovery-auto-register)
+  - [K. CLI](#k-cli)
+  - [L. OpenAPI & Swagger](#l-openapi--swagger)
+- [FAQ](#faq)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+
+---
+
+## Requirements
+- **Python** 3.9+
+- **Flask** 3.x (auto-installed)
+---
+
+## Install
+### From PyPI
+```bash
+pip install flask-mcp-server
+```
+
+Add to `requirements.txt` from a file path:
+```
+flask-mcp-server==0.6.1
+```
+
+---
+
+## Quick Start
+
+**Integrated into an existing Flask app** (integrated HTTP):
+```python
+from flask import Flask
+from flask_mcp_server import mount_mcp, Mcp
+from flask_mcp_server.http_integrated import mw_auth, mw_ratelimit, mw_cors
+
+app = Flask(__name__)
+
+@Mcp.tool(name="sum")
+def sum_(a: int, b: int) -> int:
+    return a + b
+
+# Mount at /mcp with useful middlewares
+mount_mcp(app, url_prefix="/mcp", middlewares=[mw_auth, mw_ratelimit, mw_cors])
+
+if __name__ == "__main__":
+    app.run(port=8765)
+```
+
+**Dedicated server app** (ships with docs endpoints):
+```bash
+flask-mcp serve-http
+# Swagger: http://127.0.0.1:8765/swagger
+# OpenAPI: /docs.json
+```
+
+**STDIO transport**:
+```bash
+flask-mcp serve-stdio
+```
+
+---
+
+## What’s new in 0.6.1
+- **Unified MCP endpoint** (`/mcp`):
+  - **POST** a single JSON-RPC message (request/notification/response). If the `Accept` header includes `text/event-stream`, the server streams the response via SSE; otherwise returns JSON.
+  - **GET** to open an SSE stream for server messages (optional). Supports `Last-Event-ID` for resumability in future minor releases.
+- **Protocol header**: Accepts `MCP-Protocol-Version: 2025-06-18` (or `2025-03-26` for back-compat); others => `400 Bad Request`.
+- **Sessions (minimal)**: If the POSTed method is `"initialize"`, response includes **`Mcp-Session-Id`** header. Clients can include this header on subsequent requests.
+- **Origin validation**: Optional **`FLASK_MCP_ALLOWED_ORIGINS`** (comma-separated). If set, only requests with matching `Origin` are allowed at the unified MCP endpoint.
+- **Backwards compatibility**: legacy endpoints `/mcp/list`, `/mcp/call`, `/mcp/batch` remain.
+
+---
+
+## Configuration (env vars)
+
+### Auth & roles
+```bash
+export FLASK_MCP_AUTH_MODE=apikey     # none|apikey|hmac
+export FLASK_MCP_API_KEYS="k1,k2"
+export FLASK_MCP_API_KEYS_MAP="k1:admin|user;k2:user"   # per-key roles
+export FLASK_MCP_HMAC_SECRET="supersecret"              # if using HMAC
+```
+
+### Rate limiting
+```bash
+export FLASK_MCP_RATE_LIMIT=60/m      # format: <N>/<s|m|h|d>
+export FLASK_MCP_RATE_SCOPE=key       # ip|key
+```
+
+### CORS, Origins & Logging
+```bash
+export FLASK_MCP_ALLOWED_ORIGINS="http://localhost:3000,https://your.app"
+export FLASK_MCP_CORS_ORIGIN="*"
+export FLASK_MCP_LOG_FORMAT=json
+```
+
+### Providers autoload
+```bash
+export FLASK_MCP_PROVIDERS="my_pkg.mcp_provider:Provider,another.mod:Provider"
+```
+
+---
+
+## Core Concepts
+
+- **Registry** — stores tools, resources, prompts, completions.
+- **Decorators** — `@tool`, `@resource`, `@prompt`, `@completion_provider` register elements.
+- **Facade** — `Mcp.tool(...)` etc. (fluent, same params as decorators).
+- **Roles/ACL** — per-element role lists checked at call time.
+- **TTL cache** — per-tool/resource memoization via `ttl=int_seconds` (memory backend).
+- **Middleware** — pluggable pipeline for integrated HTTP routes.
+- **Service Providers** — `register(container, registry)` and `boot(app, registry)` to wire services/routes.
+- **Transports** — Streamable HTTP unified endpoint, STDIO, and SSE notifications (hello + registry change).
+
+---
+
+## Examples
+
+### A. Unified MCP endpoint usage
+```bash
+# List registry (JSON)
+curl -s -X POST http://127.0.0.1:8765/mcp \
+  -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2025-06-18" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"mcp.list"}' | jq .
+
+# Call a tool over SSE
+curl -N -X POST http://127.0.0.1:8765/mcp \
+  -H "Accept: text/event-stream, application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"2","method":"mcp.call","params":{"kind":"tool","name":"sum","args":{"a":5,"b":7}}}'
+```
+
+### B. Tools with roles & TTL cache
+```python
+from flask_mcp_server import Mcp
+
+@Mcp.tool(name="math.add", roles=["user","admin"], ttl=30)
+def add(a: int, b: int) -> int:
+    return a + b
+```
+
+### C. Resources & ResourceTemplates
+```python
+from flask_mcp_server import resource, ResourceTemplate
+
+@resource(name="profile", ttl=15)
+def profile(user_id: int) -> dict:
+    return {"id": user_id, "name": "Alice"}
+
+tpl = ResourceTemplate("https://api.example.com/items/{id}")
+url = tpl.expand(id=42)  # "https://api.example.com/items/42"
+```
+
+### D. Prompts & Completions
+```python
+from flask_mcp_server import prompt, completion_provider
+from typing import List
+
+@prompt(name="greet")
+def greet(name: str) -> str:
+    return f"Write a warm one-line greeting for {name}."
+
+@completion_provider(name="cities")
+def cities(prefix: str="") -> List[str]:
+    base = ["Dhaka","Chittagong","Khulna","Rajshahi"]
+    return [c for c in base if c.lower().startswith(prefix.lower())]
+```
+
+### E. Batch Calls (compat)
+```bash
+curl -s -X POST http://127.0.0.1:8765/mcp/batch \
+  -H "Content-Type: application/json" \
+  -d '[
+    {"kind":"tool","name":"math.add","args":{"a":1,"b":2}},
+    {"kind":"prompt","name":"greet","args":{"name":"Bashar"}}
+  ]' | jq .
+```
+
+### F. SSE (hello + registry events)
+```bash
+# GET /mcp opens an SSE stream and emits a hello event and future registry change events.
+curl -N http://127.0.0.1:8765/mcp
+```
+
+### G. Auth: API keys & HMAC
+```bash
+export FLASK_MCP_AUTH_MODE=apikey
+export FLASK_MCP_API_KEYS="secret123"
+curl -s http://127.0.0.1:8765/mcp/list -H "X-API-Key: secret123"
+
+# HMAC
+python - <<'PY'
+import hmac, hashlib, json, requests
+secret = b"supersecret"
+body = json.dumps({"jsonrpc":"2.0","id":1,"method":"mcp.list"}).encode()
+sig = hmac.new(secret, body, hashlib.sha256).hexdigest()
+print(requests.post("http://127.0.0.1:8765/mcp",
+    headers={"X-Signature":"sha256="+sig,"Content-Type":"application/json"},
+    data=body).text)
+PY
+```
+
+### H. Rate limiting
+```bash
+export FLASK_MCP_RATE_LIMIT=100/m
+export FLASK_MCP_RATE_SCOPE=key      # or 'ip'
+```
+
+### I. Service Providers
+```python
+# my_pkg/mcp_provider.py
+from flask_mcp_server import ServiceProvider, Mcp
+
+class Provider(ServiceProvider):
+    def register(self, container, registry):
+        @Mcp.tool(name="time.now")
+        def now() -> str:
+            import time; return str(int(time.time()))
+```
+
+### J. Discovery (auto-register)
+```bash
+# Suppose your tools live in package 'my_tools'
+python -c "from flask_mcp_server.discovery import discover_package; discover_package('my_tools')"
+```
+
+### K. CLI
+```bash
+flask-mcp serve-http      # unified /mcp endpoint
+flask-mcp serve-stdio     # stdio transport
+flask-mcp list            # print registry
+```
+
+### L. OpenAPI & Swagger
+- **`/docs.json`** — OpenAPI 3.1 JSON
+- **`/swagger`** — Swagger UI
+
+---
+
+## FAQ
+
+**Is Redis required?** No. 0.6.1 uses in-memory backends by default.
+
+**Can I mount it into any Flask project?** Yes—`mount_mcp(app, url_prefix="/mcp")`.
+
+**Does it fully implement all MCP JSON-RPC methods?** It implements the transport semantics and common operations (`mcp.list`, `mcp.call`, compat endpoints). If you need additional method names or shapes to match a specific client, open an issue or extend in a Service Provider.
+
+---
+
+## Troubleshooting
+- **400 unsupported_protocol_version** — set `MCP-Protocol-Version: 2025-06-18`.
+- **403 origin_not_allowed** — configure `FLASK_MCP_ALLOWED_ORIGINS` or remove it.
+- **401 invalid_api_key / invalid_signature** — check headers and env vars.
+- **429 rate_limited** — adjust `FLASK_MCP_RATE_LIMIT` or scope.
+
+---
+
+## License
+MIT
