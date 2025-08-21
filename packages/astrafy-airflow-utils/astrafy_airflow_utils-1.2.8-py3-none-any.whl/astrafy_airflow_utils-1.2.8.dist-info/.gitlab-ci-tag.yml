@@ -1,0 +1,50 @@
+include:
+  - project: gitlab-ci-templates3/gitlab-ci-authorization
+    ref: v0.0.5
+    file:
+        - gcp-auth-with-workload-identity.yml
+
+variables:
+  DBT_USE_SSH: false # used to use the git key to download the dp-common package
+
+push_docker_image_tag_gcr:
+  stage: tag
+  image: google/cloud-sdk:515.0.0-slim
+  services:
+    - docker:dind
+  id_tokens:
+    WORKLOAD_IDENTITY_TOKEN:
+        aud: https://gitlab.com
+
+  variables:
+    # Use BuildKit for better performance and Buildx support
+    DOCKER_BUILDKIT: "1"
+    # Connect to the Docker daemon started in the service
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+    # Google Cloud variables
+    GCP_SERVICE_ACCOUNT: ${ARTIFACT_SERVICE_ACCOUNT}
+
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+
+  before_script:
+      # Authenticate with Google Cloud
+      - !reference [ .application-credentials-workload-identity, before_script ]
+      # Configure Docker to use the Artifact Registry
+      - gcloud auth configure-docker ${ARTIFACTS_REGION}-docker.pkg.dev --quiet
+      # Set up Docker Buildx
+      - docker buildx create --use --name mybuilder || docker buildx use mybuilder
+      - docker buildx inspect mybuilder --bootstrap
+
+  script:
+    - echo "Building Docker image dbt/monitoring using projects/${CI_COMMIT_TAG%%-*} with version:${CI_COMMIT_TAG}"
+    - |
+      docker buildx build --push \
+        --tag "${ARTIFACTS_REGION}-docker.pkg.dev/${ARTIFACTS_PROJECT_ID}/mds/dbt/monitoring:${CI_COMMIT_TAG}" \
+        --cache-from=type=local,src=/cache \
+        --cache-to=type=local,dest=/cache,mode=max \
+        --build-arg GIT_KEY=${GIT_KEY} \
+        --build-arg DBT_PROJECT=${CI_COMMIT_TAG%%-*} \
+        .

@@ -1,0 +1,110 @@
+stages:
+  - docs
+
+include:
+  - project: gitlab-ci-templates3/gitlab-ci-authorization
+    ref: v0.0.5
+    file:
+        - gcp-auth-with-workload-identity.yml
+
+
+.upload_dbt_docs:
+  stage: docs
+  image: python:3.12.9-slim
+  id_tokens:
+    WORKLOAD_IDENTITY_TOKEN:
+      aud: https://gitlab.com
+  before_script:
+    # Install dependencies
+    - apt-get -y update && apt-get -y install curl git
+    - curl -sSL https://sdk.cloud.google.com | bash
+    - export PATH=$PATH:/root/google-cloud-sdk/bin
+    # Authenticate with GCP
+    - !reference [ .application-credentials-workload-identity, before_script ]
+  script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+    - export DBT_USER=gitlab-ci
+    - |
+      if [ -z "$SOURCE_PROJECT_PATH" ] || [ -z "$SOURCE_COMMIT_SHA" ]; then
+        echo "SOURCE_PROJECT_PATH or SOURCE_COMMIT_SHA not set. Assuming local execution."
+      else
+        echo "Cloning source repository ${SOURCE_PROJECT_PATH} at commit ${SOURCE_COMMIT_SHA}..."
+        git clone "https://gitlab-ci-token:${GIT_KEY}@gitlab.com/${SOURCE_PROJECT_PATH}.git" temp_repo
+        cd temp_repo
+        git checkout "${SOURCE_COMMIT_SHA}"
+      fi
+    - pip install -r requirements.txt
+    - export DBT_USER=gitlab-ci
+    - |
+      if [ -d "projects" ]; then
+        echo "Found 'projects' directory. Processing sub-projects..."
+        for project_dir in projects/*; do
+          if [ -d "${project_dir}" ] && [ -f "${project_dir}/dbt_project.yml" ]; then
+            PROJECT_NAME=$(basename "${project_dir}")
+            echo "--- Processing project: ${PROJECT_NAME} ---"
+            
+            ( # Run in a subshell to avoid cd issues
+              cd "${project_dir}"
+              
+              # Install dependencies and generate docs
+              echo "Installing dbt dependencies for ${PROJECT_NAME}..."
+              dbt deps $DBT_ARGS
+              echo "Generating dbt docs for ${PROJECT_NAME}..."
+              dbt docs generate $DBT_ARGS
+              
+              # Upload generated files
+              echo "Uploading dbt docs for ${PROJECT_NAME} to gs://${DBT_DOCS_BUCKET}/${PROJECT_NAME}/"
+              for file in index.html manifest.json catalog.json graph.gpickle partial_parse.msgpack run_results.json; do
+                if [ -f "target/$file" ]; then
+                  gcloud storage cp "target/$file" "gs://${DBT_DOCS_BUCKET}/${PROJECT_NAME}/$file"
+                  echo "Uploaded $file"
+                else
+                  echo "Warning: File target/$file not found for project ${PROJECT_NAME}, skipping upload"
+                fi
+              done
+            )
+            echo "--- Finished processing project: ${PROJECT_NAME} ---"
+          else
+            echo "Skipping ${project_dir} as it is not a valid dbt project directory."
+          fi
+        done
+      else
+        echo "No 'projects' directory found. Processing as a single dbt project..."
+        dbt deps $DBT_ARGS
+        dbt docs generate $DBT_ARGS
+        
+        echo "Uploading dbt docs files to GCS bucket ${DBT_DOCS_BUCKET}..."
+        for file in index.html manifest.json catalog.json graph.gpickle partial_parse.msgpack run_results.json; do
+          if [ -f "target/$file" ]; then
+            gcloud storage cp "target/$file" "gs://${DBT_DOCS_BUCKET}/$file"
+            echo "Uploaded $file to gs://${DBT_DOCS_BUCKET}/$file"
+          else
+            echo "Warning: File target/$file not found, skipping upload"
+          fi
+        done
+      fi
+
+upload_dbt_docs_uat:
+  extends: .upload_dbt_docs
+  variables:
+    GCP_SERVICE_ACCOUNT: ${PROD_SERVICE_ACCOUNT}
+    DBT_ARGS: "--target prd"
+  environment:
+    name: dev
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+      when: always
+    - when: never
+
+upload_dbt_docs_prd:
+  extends: .upload_dbt_docs
+  variables:
+    GCP_SERVICE_ACCOUNT: ${PROD_SERVICE_ACCOUNT}
+    DBT_ARGS: "--target prd"
+  environment:
+    name: prd
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - when: never
