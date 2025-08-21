@@ -1,0 +1,114 @@
+# Name of the Environment variable to use for GitHub Tokens
+ENV_GITHUB_TOKEN = "GH_ACCESS_TOKEN"
+# Name of the Environment variable to use for VirusTotal API Key
+ENV_VT_API_KEY = "VT_API_KEY"
+
+# GitHub has historically signed commits made via its web editor with a Key that expired in 2024
+# The latest Key however has no expiration set. The "web-flow" GitHub account owns these keys:
+# GitHub (web-flow commit signing) <noreply@github.com>
+# https://api.github.com/users/web-flow/gpg_keys
+GITHUB_WEB_EDITOR_SIGNING_KEYS = ['4AEE18F83AFDEB23', 'B5690EEEBB952194']
+
+# This is ocd related, I needed my separators to match.
+SCREEN_SEPARATOR_LENGTH = 100
+
+REACTIONS_POSITIVE = ['+1', 'heart']
+REACTIONS_NEGATIVE = ['-1']
+REACTIONS_NEUTRAL = ['laugh', 'hooray', 'confused', 'rocket', 'eyes']
+
+COMMIT_HOURS = {i: f"{i%12 if i%12 else 12}{'am' if i < 12 else 'pm'} UTC" for i in range(24)}
+
+# For the HTML output format
+HTML_REPORT_EMOJIS = {
+    "metrics": "&#128200;",
+    "host_refs": "&#128225;",
+    "host_refs_vt": "&#128126;",
+    "urls": "&#127760;",
+    "personal": "&#127380;",
+    "emails": "&#9993;",
+    "profiling": "&#128373;",
+    "commits": "&#128229;",
+    "keys": "&#128273;",
+    "user_input": "&#9000;",
+    "90d_events": "&#128467;",
+    "releases": "&#128640;",
+    "contributors": "&#128101;",
+    "labels": "&#128278;",
+    "comments": "&#128172;",
+    "deployments": "&#128736;",
+    "environments": "&#127757;",
+    "branches": "&#127807;",
+    "tags": "&#127991;",
+    "workflows": "&#128421;",
+    "artifacts": "&#128230;",
+    "signatures": "&#9997;",
+    "association": "&#129309;",
+    "prs": "&#128256;"
+}
+
+HTML_REPORT_DESCRIPTIONS = {
+    "host_refs":"Hosts were obtained by searching for http(s) keywords using <a href='https://docs.github.com/en/rest/search/search?apiVersion=2022-11-28#search-code' target='_new'>GitHub's Code Search API</a> which requires a valid <a href='https://gitxray.com/installing/#creating-an-access-token-to-increase-rate-limits' target='_new'>GitHub API Token</a> to work - Note that GitHub only scans the default branch, and any dynamically constructed resources, or connections over other protocols would not be picked up and therefore not listed below.",
+    "host_refs_vt":"Only hosts from the host_refs section are scanned using VirusTotal (requires a VT API Key) and displayed here."
+}
+
+# Identifies user-supplied data as per: https://securitylab.github.com/resources/github-actions-untrusted-input/
+WORKFLOWS_USER_INPUT = {
+    "Issue Title": r'\${{\s*github\.event\.issue\.title\s*}}',
+    "Issue Body": r'\${{\s*github\.event\.issue\.body\s*}}',
+    "Pull Request Title": r'\${{\s*github\.event\.pull_request\.title\s*}}',
+    "Pull Request Body": r'\${{\s*github\.event\.pull_request\.body\s*}}',
+    "Comment Body": r'\${{\s*github\.event\.comment\.body\s*}}',
+    "Review Body": r'\${{\s*github\.event\.review\.body\s*}}',
+    "Review Comment Body": r'\${{\s*github\.event\.review_comment\.body\s*}}',
+    "Page Name in Pages Event": r'\${{\s*github\.event\.pages(?:\.\w+|\[\d+\])\.page_name\s*}}',
+    "Head Commit Message": r'\${{\s*github\.event\.head_commit\.message\s*}}',
+    "Head Commit Author\'s Email": r'\${{\s*github\.event\.head_commit\.author\.email\s*}}',
+    "Head Commit Author\'s Name": r'\${{\s*github\.event\.head_commit\.author\.name\s*}}',
+    "Commit Author\'s Email": r'\${{\s*github\.event\.commits(?:\.\w+|\[\d+\])\.author\.email\s*}}',
+    "Commit Author\'s Name": r'\${{\s*github\.event\.commits(?:\.\w+|\[\d+\])\.author\.name\s*}}',
+    "Pull Request Head Ref": r'\${{\s*github\.event\.pull_request\.head\.ref\s*}}',
+    "Pull Request Head Label": r'\${{\s*github\.event\.pull_request\.head\.label\s*}}',
+    "Pull Request Default Branch": r'\${{\s*github\.event\.pull_request\.head\.repo\.default_branch\s*}}',
+    "Head Ref": r'\${{\s*github\.head_ref\s*}}',
+    "Inputs in Event": r'\${{\s*github\.event\.inputs(?:\.\w+|\[\w+\])\s*}}',
+}
+
+OPENPGP_SIG_TYPES = {
+    0x00: "Signature of a binary document",
+    0x01: "Signature of a canonical text document",
+    0x02: "Standalone signature",
+    0x10: "Generic certification of a User ID and Public-Key packet",
+    0x11: "Persona certification of a User ID and Public-Key packet",
+    0x12: "Casual certification of a User ID and Public-Key packet",
+    0x13: "Positive certification of a User ID and Public-Key packet",
+    0x18: "Subkey Binding Signature",
+    0x19: "Primary Key Binding Signature",
+    0x1F: "Signature directly on a key",
+    0x20: "Key revocation signature",
+    0x28: "Subkey revocation signature",
+    0x30: "Certification revocation signature"
+}
+
+OPENPGP_PK_ALGOS = {
+    1: "RSA (Encrypt or Sign)",
+    2: "RSA Encrypt-Only",
+    3: "RSA Sign-Only",
+    16: "Elgamal Encrypt-Only",
+    17: "DSA",
+    18: "Reserved for Elliptic Curve",
+    19: "Reserved for ECDSA",
+    20: "Reserved (formerly Elgamal Encrypt or Sign)",
+    21: "Reserved for Diffie-Hellman"
+}
+
+OPENPGP_HASH_ALGOS = {
+    1: "MD5",
+    2: "SHA-1",
+    3: "RIPEMD-160",
+    8: "SHA256",
+    9: "SHA384",
+    10: "SHA512",
+    11: "SHA224"
+}
+
+REGEX_HOST_ANALYSIS = r'(?:https?|ftps?|s3)://([\w.-]+)'
