@@ -1,0 +1,201 @@
+{#- Template for members (children) of an object.
+
+This template iterates on members of a given object and renders them.
+It can group members by category (properties, classes, functions, scripts, namespaces) or render them in a flat list.
+
+Context:
+  obj (mkdocstring_handlers.matlab.models.Object): The object to render.
+  config (dict): The configuration options.
+  root_members (bool): Whether the object is the root object.
+  heading_level (int): The HTML heading level to use.
+-#}
+
+{% if obj.all_members %}
+  {% block logs scoped %}
+    {#- Logging block.
+
+    This block can be used to log debug messages, deprecation messages, warnings, etc.
+    -#}
+    {{ log.debug("Rendering children of " + obj.path) }}
+  {% endblock logs %}
+
+  <div class="doc doc-children">
+
+    {% if root_members %}
+      {% set members_list = config.members %}
+    {% else %}
+      {% set members_list = none %}
+    {% endif %}
+
+    {% if config.group_by_category %}
+
+      {% with %}
+
+        {% if config.show_category_heading %}
+          {% set extra_level = 1 %}
+        {% else %}
+          {% set extra_level = 0 %}
+        {% endif %}
+
+        {% with properties = obj.properties|filter_objects(
+            filters=config.filters,
+            members_list=members_list,
+            inherited_members=config.inherited_members,
+            private_members=config.private_members,
+            hidden_members=config.hidden_members,
+            keep_no_docstrings=config.show_if_no_docstring,
+          ) %}
+          {% if properties %}
+            {% if config.show_category_heading %}
+              {% filter heading(heading_level, id=html_id ~ "-properties") %}Properties{% endfilter %}
+            {% endif %}
+            {% with heading_level = heading_level + extra_level %}
+              {% for property in properties|order_members(config.members_order, members_list) %}
+                {% include property|get_template %}
+              {% endfor %}
+            {% endwith %}
+          {% endif %}
+        {% endwith %}
+
+        {% with classes = obj.classes|filter_objects(
+            filters=config.filters,
+            members_list=members_list,
+            inherited_members=config.inherited_members,
+            private_members=config.private_members,
+            hidden_members=config.hidden_members,
+            keep_no_docstrings=config.show_if_no_docstring,
+          ) %}
+          {% if classes %}
+            {% if config.show_category_heading %}
+              {% filter heading(heading_level, id=html_id ~ "-classes") %}Classes{% endfilter %}
+            {% endif %}
+            {% with heading_level = heading_level + extra_level %}
+              {% for class in classes|order_members(config.members_order, members_list) %}
+                {% include class|get_template %}
+              {% endfor %}
+            {% endwith %}
+          {% endif %}
+        {% endwith %}
+
+        {% with functions = obj.functions|filter_objects(
+            filters=config.filters,
+            members_list=members_list,
+            inherited_members=config.inherited_members,
+            private_members=config.private_members,
+            hidden_members=config.hidden_members,
+            keep_no_docstrings=config.show_if_no_docstring,
+          ) %}
+          {% if functions %}
+            {% if config.show_category_heading %}
+              {% if obj.is_class %}
+                {% filter heading(heading_level, id=html_id ~ "-methods") %}Methods{% endfilter %}
+              {% else %}
+                {% filter heading(heading_level, id=html_id ~ "-functions") %}Functions{% endfilter %}
+              {% endif %}
+            {% endif %}
+            {% with heading_level = heading_level + extra_level %}
+              {% for function in functions|order_members(config.members_order, members_list) %}
+                {% if not (obj.kind.value == "class" and function.name == obj.name and config.merge_constructor_into_class) %}
+                  {% include function|get_template %}
+                {% endif %}
+              {% endfor %}
+            {% endwith %}
+          {% endif %}
+        {% endwith %}
+
+        {% with scripts = obj.scripts|filter_objects(
+            filters=config.filters,
+            members_list=members_list,
+            inherited_members=config.inherited_members,
+            private_members=config.private_members,
+            hidden_members=config.hidden_members,
+            keep_no_docstrings=config.show_if_no_docstring,
+          ) %}
+          {% if scripts %}
+            {% if config.show_category_heading %}
+              {% filter heading(heading_level, id=html_id ~ "-scripts") %}Scripts{% endfilter %}
+            {% endif %}
+            {% with heading_level = heading_level + extra_level %}
+              {% for script in scripts|order_members(config.members_order.alphabetical, members_list) %}
+                {% include script|get_template %}
+              {% endfor %}
+            {% endwith %}
+          {% endif %}
+        {% endwith %}
+
+        {% if config.show_subnamespaces or obj.is_folder %}
+          {% with namespaces = obj.namespaces|filter_objects(
+              filters=config.filters,
+              members_list=members_list,
+              inherited_members=config.inherited_members,
+              private_members=config.private_members,
+              hidden_members=config.hidden_members,
+              keep_no_docstrings=config.show_if_no_docstring,
+            ) %}
+            {% if namespaces %}
+              {% if config.show_category_heading %}
+                {% filter heading(heading_level, id=html_id ~ "-namespaces") %}Namespaces{% endfilter %}
+              {% endif %}
+              {% with heading_level = heading_level + extra_level %}
+                {% for namespace in namespaces|order_members("alphabetical", members_list) %}
+                  {% include namespace|get_template %}
+                {% endfor %}
+              {% endwith %}
+            {% endif %}
+          {% endwith %}
+        {% endif %}
+
+      {% endwith %}
+
+    {% else %}
+
+      {% for child in obj.all_members
+          |filter_objects(
+            filters=config.filters,
+            members_list=members_list,
+            inherited_members=config.inherited_members,
+            private_members=config.private_members,
+            hidden_members=config.hidden_members,
+            keep_no_docstrings=config.show_if_no_docstring,
+            )
+          |order_members(config.members_order, members_list)
+        %}
+
+        {% if not (config.merge_constructor_into_class and obj.is_class and child.is_function and child.name == obj.name) %}
+
+          {% if child.is_property %}
+            {% with property = child %}
+              {% include property|get_template %}
+            {% endwith %}
+
+          {% elif child.is_class %}
+            {% with class = child %}
+              {% include class|get_template %}
+            {% endwith %}
+
+          {% elif child.is_function %}
+            {% with function = child %}
+              {% include function|get_template %}
+            {% endwith %}
+
+          {% elif child.is_script %}
+            {% with script = child %}
+              {% include script|get_template %}
+            {% endwith %}
+
+          {% elif (child.is_namespace and config.show_subnamespaces) or obj.is_folder %}
+            {% with namespace = child %}
+              {% include namespace|get_template %}
+            {% endwith %}
+
+          {% endif %}
+
+        {% endif %}
+
+      {% endfor %}
+
+    {% endif %}
+
+  </div>
+
+{% endif %}
