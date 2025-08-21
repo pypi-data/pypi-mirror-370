@@ -1,0 +1,13 @@
+class ErrorConsts(object):
+    NO_MATCHING_LABEL = "No match found for provided file label"
+    NO_VALID_DATASETS = "No valid datasets generated. Survey migration failed."
+    NO_SURVEY_INSTRUMENT = "Unable to identify valid instrument for file"
+    NO_MATCHING_PLATFORM_TYPE = "Unable to determine platform type from datafile derived type."
+    NO_TARGET_SURVEYS = "No surveys configured for migration. Add surveys to config or disable use of survey list."
+    BAD_DATASET_TYPE = "Dataset type does not exist or i"
+    NO_MATCHING_INSTRUMENT = "Instrument does not match expected names"
+    NONE_VALUE_PROVIDED_WHERE_DISALLOWED = "None type provided as a parameter where value should never be null"
+    MULTIPLE_SURVEY_INSTRUMENTS = "Cannot derive file instrument from survey instrument"
+    NO_FILE_DECODER = "Attempted to migrate a file without an implemented file decoder."
+    NO_FILE_VALIDATOR = "Attempted to migrate a file without an implemented file validator"
+    NO_PREFAB_FABRICATOR = "Attempted to migrate a file without an implemented dataset generation."
