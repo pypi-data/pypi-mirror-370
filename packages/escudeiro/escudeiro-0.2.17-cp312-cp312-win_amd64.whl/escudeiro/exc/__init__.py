@@ -1,0 +1,33 @@
+from escudeiro.exc.errors import (
+    AlreadySet,
+    DuplicateFile,
+    ErrorGroup,
+    FailedFileOperation,
+    InvalidCast,
+    InvalidEnv,
+    InvalidParamType,
+    InvalidPath,
+    KeyAlreadyRead,
+    MissingName,
+    RetryError,
+    SquireError,
+    StrictCast,
+    SyncError,
+)
+
+__all__ = [
+    "SquireError",
+    "KeyAlreadyRead",
+    "InvalidCast",
+    "MissingName",
+    "AlreadySet",
+    "StrictCast",
+    "InvalidEnv",
+    "InvalidParamType",
+    "ErrorGroup",
+    "FailedFileOperation",
+    "InvalidPath",
+    "SyncError",
+    "DuplicateFile",
+    "RetryError",
+]
