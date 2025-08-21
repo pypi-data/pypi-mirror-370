@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSA Reasoning Engine v2 - Real-time Reasoning</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .chat-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+
+        .status-indicator {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 30px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 20px;
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message-bubble {
+            display: inline-block;
+            max-width: 70%;
+            padding: 16px 20px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-bubble {
+            background: white;
+            color: #2d3748;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+        }
+
+        .reasoning-stages {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .stages-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .stages-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .overall-confidence {
+            font-size: 14px;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .stage {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .stage:last-child {
+            margin-bottom: 0;
+        }
+
+        .stage.pending {
+            background: #f7fafc;
+            border-left: 4px solid #e2e8f0;
+        }
+
+        .stage.running {
+            background: #fff7ed;
+            border-left: 4px solid #f6ad55;
+            animation: pulse 2s infinite;
+        }
+
+        .stage.completed {
+            background: #f0fff4;
+            border-left: 4px solid #48bb78;
+        }
+
+        .stage.failed {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .stage-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 16px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .stage.pending .stage-icon {
+            background: #e2e8f0;
+            color: #a0aec0;
+        }
+
+        .stage.running .stage-icon {
+            background: #f6ad55;
+            color: white;
+        }
+
+        .stage.completed .stage-icon {
+            background: #48bb78;
+            color: white;
+        }
+
+        .stage.failed .stage-icon {
+            background: #f56565;
+            color: white;
+        }
+
+        .stage-content {
+            flex: 1;
+        }
+
+        .stage-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .stage-description {
+            font-size: 14px;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+
+        .stage-metrics {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+        }
+
+        .stage-metric {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #4a5568;
+        }
+
+        .confidence-bar {
+            width: 80px;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f56565 0%, #f6ad55 50%, #48bb78 100%);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .thinking-mode {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 15px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .thinking-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            color: #667eea;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .thinking-content {
+            color: #4a5568;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .thinking-sentence {
+            margin-bottom: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+        }
+
+        .input-section {
+            padding: 20px 30px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .message-input {
+            flex: 1;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 14px 18px;
+            font-size: 16px;
+            resize: none;
+            min-height: 50px;
+            max-height: 120px;
+            transition: border-color 0.2s ease;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .send-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            min-width: 80px;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: #5a67d8;
+            transform: translateY(-1px);
+        }
+
+        .send-button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #667eea;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .loading-dots {
+            display: inline-flex;
+            gap: 4px;
+        }
+
+        .loading-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #667eea;
+            animation: loadingDot 1.4s infinite ease-in-out;
+        }
+
+        .loading-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .loading-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes loadingDot {
+            0%, 80%, 100% {
+                transform: scale(0);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .visualization-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border-left: 4px solid #f56565;
+        }
+
+        .success-message {
+            background: #c6f6d5;
+            color: #2d7738;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border-left: 4px solid #48bb78;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="header">
+            <div>
+                <h1>MSA Reasoning Engine v2</h1>
+                <div class="subtitle">Real-time Five-Stage Reasoning with Thinking Mode</div>
+            </div>
+            <div class="status-indicator" id="status-indicator">
+                Ready
+            </div>
+        </div>
+
+        <div class="messages-container" id="messages-container">
+            <div class="message assistant">
+                <div class="message-bubble">
+                    Welcome to the MSA Reasoning Engine v2! I can analyze complex decision scenarios using a sophisticated five-stage reasoning process:
+                    <br><br>
+                    <strong>1. Parse:</strong> Extract key entities and relationships<br>
+                    <strong>2. Retrieve:</strong> Gather relevant background knowledge<br>
+                    <strong>3. Graph:</strong> Build causal dependency models<br>
+                    <strong>4. Synthesize:</strong> Generate probabilistic programs<br>
+                    <strong>5. Infer:</strong> Run Bayesian inference simulations
+                    <br><br>
+                    Ask me about any complex decision-making scenario, business analysis, or analytical question!
+                </div>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-container">
+                <textarea 
+                    class="message-input" 
+                    id="message-input" 
+                    placeholder="Ask about complex scenarios, decision-making, or analytical questions..."
+                    rows="1"
+                ></textarea>
+                <button class="send-button" id="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class MSAReasoningChat {
+            constructor() {
+                this.messageInput = document.getElementById('message-input');
+                this.sendButton = document.getElementById('send-button');
+                this.messagesContainer = document.getElementById('messages-container');
+                this.statusIndicator = document.getElementById('status-indicator');
+                
+                this.isProcessing = false;
+                this.currentSessionId = null;
+                
+                this.initializeEventHandlers();
+            }
+
+            initializeEventHandlers() {
+                this.sendButton.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                // Auto-resize textarea
+                this.messageInput.addEventListener('input', () => {
+                    this.messageInput.style.height = 'auto';
+                    this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 120) + 'px';
+                });
+            }
+
+            async sendMessage() {
+                if (this.isProcessing || !this.messageInput.value.trim()) return;
+
+                const userMessage = this.messageInput.value.trim();
+                this.messageInput.value = '';
+                this.messageInput.style.height = '50px';
+                
+                // Add user message
+                this.addMessage(userMessage, 'user');
+                
+                // Start reasoning process
+                await this.startReasoning(userMessage);
+            }
+
+            addMessage(content, type) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}`;
+                
+                const bubbleDiv = document.createElement('div');
+                bubbleDiv.className = 'message-bubble';
+                bubbleDiv.innerHTML = this.formatMessageContent(content);
+                
+                messageDiv.appendChild(bubbleDiv);
+                this.messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            // Escape HTML special characters to prevent XSS
+            escapeHTML(str) {
+                return str
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#39;")
+                    .replace(/`/g, "&#96;");
+            }
+
+            formatMessageContent(content) {
+                return content
+                    .split('\n')
+                    .map(line => {
+                        const escapedLine = this.escapeHTML(line);
+                        if (escapedLine.startsWith('**') && escapedLine.endsWith('**')) {
+                            return `<strong>${escapedLine.slice(2, -2)}</strong>`;
+                        } else if (escapedLine.startsWith('• ')) {
+                            return `<div style="margin-left: 16px;">${escapedLine}</div>`;
+                        }
+                        return escapedLine;
+                    })
+                    .join('<br>');
+            }
+
+            async startReasoning(vignette) {
+                this.isProcessing = true;
+                this.sendButton.disabled = true;
+                this.statusIndicator.textContent = 'Processing...';
+                this.statusIndicator.style.background = 'rgba(246, 173, 85, 0.2)';
+
+                // Create assistant message container
+                const assistantMessage = document.createElement('div');
+                assistantMessage.className = 'message assistant';
+                
+                const bubbleDiv = document.createElement('div');
+                bubbleDiv.className = 'message-bubble';
+                
+                // Add loading indicator
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'loading-indicator';
+                loadingDiv.innerHTML = `
+                    Analyzing through five-stage reasoning pipeline...
+                    <div class="loading-dots">
+                        <div class="loading-dot"></div>
+                        <div class="loading-dot"></div>
+                        <div class="loading-dot"></div>
+                    </div>
+                `;
+                
+                bubbleDiv.appendChild(loadingDiv);
+                assistantMessage.appendChild(bubbleDiv);
+                this.messagesContainer.appendChild(assistantMessage);
+                this.scrollToBottom();
+
+                try {
+                    // Create session ID
+                    this.currentSessionId = `chat_${Date.now()}`;
+                    
+                    // Send request to reasoning API
+                    const response = await fetch('/api/v2/reasoning/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            vignette: vignette,
+                            session_id: this.currentSessionId,
+                            config: {
+                                enable_thinking_mode: true,
+                                thinking_detail_level: 'detailed',
+                                generate_reasoning_sentences: true,
+                                include_step_by_step_thinking: true
+                            }
+                        })
+                    });
+
+                    const result = await response.json();
+                    
+                    // Remove loading indicator
+                    bubbleDiv.removeChild(loadingDiv);
+                    
+                    // Display results
+                    this.displayReasoningResult(bubbleDiv, result);
+                    
+                } catch (error) {
+                    console.error('Reasoning failed:', error);
+                    this.displayError(bubbleDiv, 'Failed to process reasoning request. Please try again.');
+                }
+
+                this.isProcessing = false;
+                this.sendButton.disabled = false;
+                this.statusIndicator.textContent = 'Ready';
+                this.statusIndicator.style.background = 'rgba(255,255,255,0.2)';
+                this.scrollToBottom();
+            }
+
+            displayReasoningResult(container, result) {
+                if (!result.success) {
+                    this.displayError(container, result.error_message || 'Analysis failed');
+                    return;
+                }
+
+                // Main result content
+                const contentDiv = document.createElement('div');
+                contentDiv.innerHTML = `
+                    <div style="font-weight: 600; color: #2d3748; margin-bottom: 12px;">
+                        Analysis Complete
+                    </div>
+                    <div style="font-size: 14px; color: #4a5568; margin-bottom: 16px;">
+                        Successfully processed through all five reasoning stages with ${(result.overall_confidence * 100).toFixed(1)}% confidence.
+                    </div>
+                `;
+                
+                container.appendChild(contentDiv);
+
+                // Display reasoning stages
+                if (result.stages && result.stages.length > 0) {
+                    this.displayReasoningStages(container, result);
+                }
+
+                // Display thinking mode output
+                if (result.thinking_process || result.reasoning_sentences) {
+                    this.displayThinkingMode(container, result);
+                }
+
+                // Display key findings
+                this.displayFindings(container, result);
+            }
+
+            displayReasoningStages(container, result) {
+                const stagesDiv = document.createElement('div');
+                stagesDiv.className = 'reasoning-stages';
+                
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'stages-header';
+                headerDiv.innerHTML = `
+                    <h3>Reasoning Pipeline Progress</h3>
+                    <div class="overall-confidence">
+                        Overall Confidence: ${(result.overall_confidence * 100).toFixed(1)}%
+                    </div>
+                `;
+                
+                stagesDiv.appendChild(headerDiv);
+
+                const stageNames = {
+                    'parse': { name: 'Parse', description: 'Analyzing scenario structure and key elements' },
+                    'retrieve': { name: 'Retrieve', description: 'Gathering relevant background knowledge' },
+                    'graph': { name: 'Graph', description: 'Building causal dependency relationships' },
+                    'synthesize': { name: 'Synthesize', description: 'Generating probabilistic models' },
+                    'infer': { name: 'Infer', description: 'Running Bayesian inference simulations' }
+                };
+
+                result.stages.forEach((stage, index) => {
+                    const stageDiv = document.createElement('div');
+                    const stageInfo = stageNames[stage.stage] || { name: stage.stage, description: 'Processing stage' };
+                    const status = stage.success ? 'completed' : 'failed';
+                    
+                    stageDiv.className = `stage ${status}`;
+                    stageDiv.innerHTML = `
+                        <div class="stage-icon">${index + 1}</div>
+                        <div class="stage-content">
+                            <div class="stage-title">${stageInfo.name}</div>
+                            <div class="stage-description">${stageInfo.description}</div>
+                            <div class="stage-metrics">
+                                <div class="stage-metric">
+                                    <span>Confidence:</span>
+                                    <div class="confidence-bar">
+                                        <div class="confidence-fill" style="width: ${(stage.confidence * 100)}%"></div>
+                                    </div>
+                                    <span>${(stage.confidence * 100).toFixed(1)}%</span>
+                                </div>
+                                <div class="stage-metric">
+                                    <span>Time:</span>
+                                    <span>${stage.execution_time.toFixed(2)}s</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    stagesDiv.appendChild(stageDiv);
+                });
+
+                container.appendChild(stagesDiv);
+            }
+
+            displayThinkingMode(container, result) {
+                if (!result.reasoning_sentences || result.reasoning_sentences.length === 0) return;
+
+                const thinkingDiv = document.createElement('div');
+                thinkingDiv.className = 'thinking-mode';
+                
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'thinking-header';
+                headerDiv.innerHTML = `
+                    🧠 Thinking Process
+                `;
+                
+                thinkingDiv.appendChild(headerDiv);
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'thinking-content';
+                
+                result.reasoning_sentences.forEach(sentence => {
+                    const sentenceDiv = document.createElement('div');
+                    sentenceDiv.className = 'thinking-sentence';
+                    sentenceDiv.textContent = sentence;
+                    contentDiv.appendChild(sentenceDiv);
+                });
+
+                thinkingDiv.appendChild(contentDiv);
+                container.appendChild(thinkingDiv);
+            }
+
+            displayFindings(container, result) {
+                const findingsDiv = document.createElement('div');
+                findingsDiv.innerHTML = `
+                    <div style="margin-top: 20px; padding: 16px; background: #f7fafc; border-radius: 8px; border-left: 4px solid #667eea;">
+                        <div style="font-weight: 600; color: #2d3748; margin-bottom: 8px;">Key Insights:</div>
+                        <div style="font-size: 14px; color: #4a5568;">
+                            Analysis completed successfully with detailed stage-by-stage reasoning.
+                            ${result.parsed_elements ? `Identified ${Object.keys(result.parsed_elements).length} key elements.` : ''}
+                            ${result.dependency_graph ? `Mapped ${result.dependency_graph.nodes?.length || 0} decision factors.` : ''}
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(findingsDiv);
+            }
+
+            displayError(container, message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.innerHTML = `
+                    <strong>❌ Analysis Failed</strong><br>
+                    ${message}
+                    <br><br>
+                    Please try rephrasing your question or providing more context about the decision scenario.
+                `;
+                
+                container.appendChild(errorDiv);
+            }
+
+            scrollToBottom() {
+                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            }
+        }
+
+        // Initialize chat when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new MSAReasoningChat();
+        });
+    </script>
+</body>
+</html>

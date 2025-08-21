@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Probability Visualization - MSA Reasoning Engine</title>
+    <link rel="stylesheet" href="/static/css/probability-visualizer.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="probability-visualization-container">
+        <!-- Header -->
+        <header class="probability-viz-header">
+            <h1>Interactive Probability Visualization</h1>
+            <p>Visualize complex decision scenarios with interactive probability models</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="probability-viz-content">
+            <!-- Visualization Panel -->
+            <div class="visualization-panel">
+                <div class="panel-header">
+                    <h3>Visualization Display</h3>
+                    <div class="viz-type-selector">
+                        <select id="main-viz-type" class="viz-type-select">
+                            <option value="decision_tree">Decision Tree</option>
+                            <option value="probability_distribution">Probability Distribution</option>
+                            <option value="monte_carlo">Monte Carlo Simulation</option>
+                            <option value="bayesian_network">Bayesian Network</option>
+                            <option value="uncertainty_bands">Uncertainty Bands</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="main-visualization" class="visualization-container">
+                    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+
+                <!-- Statistics Panel -->
+                <div class="statistics-panel" id="statistics-panel" style="display: none;">
+                    <h5>Statistical Summary</h5>
+                    <div id="stats-content"></div>
+                </div>
+            </div>
+
+            <!-- Controls Panel -->
+            <div class="controls-panel">
+                <div id="visualization-controls" class="probability-controls">
+                    <div class="controls-section">
+                        <h4>Quick Start</h4>
+                        <div class="quick-start-buttons">
+                            <button class="viz-control-btn btn-primary" onclick="loadMontyHallExample()">
+                                Monty Hall Problem
+                            </button>
+                            <button class="viz-control-btn btn-primary" onclick="loadInvestmentExample()">
+                                Investment Decision
+                            </button>
+                            <button class="viz-control-btn btn-primary" onclick="loadMedicalExample()">
+                                Medical Diagnosis
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="controls-section">
+                        <h4>Scenario Builder</h4>
+                        <div class="scenario-builder">
+                            <div class="control-item">
+                                <label for="scenario-title">Scenario Title</label>
+                                <input type="text" id="scenario-title" placeholder="Enter scenario title" />
+                            </div>
+                            
+                            <div class="control-item">
+                                <label for="scenario-description">Description</label>
+                                <textarea id="scenario-description" rows="3" placeholder="Describe your decision scenario"></textarea>
+                            </div>
+
+                            <div class="control-item">
+                                <label>Decision Points</label>
+                                <div id="decision-points-container">
+                                    <div class="decision-point">
+                                        <input type="text" class="decision-name" placeholder="Decision name" />
+                                        <input type="range" class="probability-slider" min="0" max="1" step="0.01" value="0.5" />
+                                        <span class="slider-value">0.5</span>
+                                    </div>
+                                </div>
+                                <button class="viz-control-btn btn-secondary" onclick="addDecisionPoint()">
+                                    Add Decision Point
+                                </button>
+                            </div>
+
+                            <div class="control-item">
+                                <button class="viz-control-btn btn-success" onclick="buildScenario()">
+                                    Build Visualization
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="controls-section" id="parameter-controls" style="display: none;">
+                        <h4>Parameters</h4>
+                        <div id="parameter-sliders"></div>
+                    </div>
+
+                    <div class="controls-section">
+                        <h4>Monte Carlo Settings</h4>
+                        <div class="control-item">
+                            <label for="mc-samples">Number of Samples</label>
+                            <input type="range" id="mc-samples" min="1000" max="50000" step="1000" value="10000" />
+                            <span class="slider-value">10000</span>
+                        </div>
+                        
+                        <div class="control-item">
+                            <label for="mc-mean">Distribution Mean</label>
+                            <input type="range" id="mc-mean" min="-10" max="10" step="0.1" value="0" />
+                            <span class="slider-value">0.0</span>
+                        </div>
+                        
+                        <div class="control-item">
+                            <label for="mc-std">Standard Deviation</label>
+                            <input type="range" id="mc-std" min="0.1" max="5" step="0.1" value="1" />
+                            <span class="slider-value">1.0</span>
+                        </div>
+                        
+                        <div class="control-item">
+                            <button class="viz-control-btn btn-primary" onclick="runMonteCarloSimulation()">
+                                Run Simulation
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="controls-section checkboxes">
+                        <h4>Display Options</h4>
+                        <div class="control-item">
+                            <label>
+                                <input type="checkbox" id="show-confidence" class="viz-checkbox" checked>
+                                Show Confidence Intervals
+                            </label>
+                        </div>
+                        <div class="control-item">
+                            <label>
+                                <input type="checkbox" id="enable-animation" class="viz-checkbox" checked>
+                                Enable Animations
+                            </label>
+                        </div>
+                        <div class="control-item">
+                            <label>
+                                <input type="checkbox" id="show-statistics" class="viz-checkbox">
+                                Show Statistics Panel
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="controls-section buttons">
+                        <h4>Actions</h4>
+                        <button id="reset-view" class="viz-control-btn btn-secondary">
+                            Reset View
+                        </button>
+                        <button id="export-data" class="viz-control-btn btn-primary">
+                            Export Data
+                        </button>
+                        <button id="save-scenario" class="viz-control-btn btn-success">
+                            Save Scenario
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar" id="status-bar">
+            <span id="status-text">Ready</span>
+        </div>
+    </div>
+
+    <!-- Error/Success Messages -->
+    <div id="message-container" style="position: fixed; top: 20px; right: 20px; z-index: 2000;"></div>
+
+    <script src="/static/js/probability-visualizer.js"></script>
+    <script>
+        // Initialize the application
+        let visualizer;
+        let currentVisualizationId = null;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            visualizer = new ProbabilityVisualizer();
+            initializeEventHandlers();
+            loadMontyHallExample(); // Load default example
+        });
+
+        function initializeEventHandlers() {
+            // Visualization type selector
+            document.getElementById('main-viz-type').addEventListener('change', function(e) {
+                const vizType = e.target.value;
+                switchVisualizationType(vizType);
+            });
+
+            // Statistics panel toggle
+            document.getElementById('show-statistics').addEventListener('change', function(e) {
+                const statsPanel = document.getElementById('statistics-panel');
+                statsPanel.style.display = e.target.checked ? 'block' : 'none';
+            });
+
+            // Monte Carlo parameter sliders
+            ['mc-samples', 'mc-mean', 'mc-std'].forEach(id => {
+                const slider = document.getElementById(id);
+                const valueSpan = slider.nextElementSibling;
+                
+                slider.addEventListener('input', function(e) {
+                    valueSpan.textContent = e.target.value;
+                });
+            });
+
+            // Control buttons
+            document.getElementById('reset-view').addEventListener('click', resetView);
+            document.getElementById('export-data').addEventListener('click', exportData);
+            document.getElementById('save-scenario').addEventListener('click', saveScenario);
+        }
+
+        // Example scenarios
+        function loadMontyHallExample() {
+            setStatus('Loading Monty Hall Problem...');
+            
+            const scenario = {
+                scenario_id: "monty_hall",
+                title: "Monty Hall Problem",
+                description: "A game show contestant must choose between three doors. Behind one is a car, behind the others are goats. After choosing, the host opens a door with a goat. Should you switch?",
+                decision_points: [
+                    {
+                        id: "initial_choice",
+                        name: "Initial Choice",
+                        probability: 0.33
+                    },
+                    {
+                        id: "switch_decision",
+                        name: "Switch Decision",
+                        probability: 0.5
+                    }
+                ],
+                outcomes: [
+                    {
+                        id: "win_car",
+                        name: "Win Car",
+                        probability: 0.67,
+                        value: 100,
+                        depends_on: ["switch_decision"]
+                    },
+                    {
+                        id: "win_goat",
+                        name: "Win Goat", 
+                        probability: 0.33,
+                        value: 0,
+                        depends_on: ["initial_choice"]
+                    }
+                ],
+                probabilities: {
+                    "switch_win": 0.67,
+                    "stay_win": 0.33
+                },
+                expected_values: {
+                    "switch": 67,
+                    "stay": 33
+                },
+                confidence_intervals: {
+                    "switch": [0.6, 0.74],
+                    "stay": [0.26, 0.4]
+                }
+            };
+
+            createVisualization(scenario, 'decision_tree');
+        }
+
+        function loadInvestmentExample() {
+            setStatus('Loading Investment Decision...');
+            
+            const scenario = {
+                scenario_id: "investment_decision",
+                title: "Investment Portfolio Decision",
+                description: "Choosing between different investment strategies with varying risk-return profiles.",
+                decision_points: [
+                    {
+                        id: "risk_tolerance",
+                        name: "Risk Tolerance",
+                        probability: 0.7
+                    },
+                    {
+                        id: "market_conditions",
+                        name: "Market Conditions",
+                        probability: 0.6
+                    }
+                ],
+                outcomes: [
+                    {
+                        id: "high_return",
+                        name: "High Return",
+                        probability: 0.3,
+                        value: 1000,
+                        depends_on: ["risk_tolerance", "market_conditions"]
+                    },
+                    {
+                        id: "moderate_return",
+                        name: "Moderate Return",
+                        probability: 0.5,
+                        value: 500,
+                        depends_on: ["market_conditions"]
+                    },
+                    {
+                        id: "loss",
+                        name: "Loss",
+                        probability: 0.2,
+                        value: -200,
+                        depends_on: ["risk_tolerance"]
+                    }
+                ],
+                probabilities: {
+                    "aggressive": 0.3,
+                    "conservative": 0.7
+                },
+                expected_values: {
+                    "aggressive": 640,
+                    "conservative": 400
+                },
+                confidence_intervals: {
+                    "aggressive": [200, 1080],
+                    "conservative": [300, 500]
+                }
+            };
+
+            createVisualization(scenario, 'uncertainty_bands');
+        }
+
+        function loadMedicalExample() {
+            setStatus('Loading Medical Diagnosis...');
+            
+            const scenario = {
+                scenario_id: "medical_diagnosis",
+                title: "Medical Test Accuracy",
+                description: "Evaluating the accuracy of medical tests and treatment decisions based on Bayesian probability.",
+                decision_points: [
+                    {
+                        id: "test_positive",
+                        name: "Test Positive",
+                        probability: 0.95
+                    },
+                    {
+                        id: "disease_present",
+                        name: "Disease Present",
+                        probability: 0.01
+                    }
+                ],
+                outcomes: [
+                    {
+                        id: "true_positive",
+                        name: "True Positive",
+                        probability: 0.95,
+                        value: 1,
+                        depends_on: ["test_positive", "disease_present"]
+                    },
+                    {
+                        id: "false_positive",
+                        name: "False Positive",
+                        probability: 0.05,
+                        value: -0.5,
+                        depends_on: ["test_positive"]
+                    }
+                ],
+                probabilities: {
+                    "has_disease_given_positive": 0.161,
+                    "no_disease_given_positive": 0.839
+                },
+                expected_values: {
+                    "test": 0.072,
+                    "no_test": 0
+                },
+                confidence_intervals: {
+                    "accuracy": [0.14, 0.18]
+                }
+            };
+
+            // Create Bayesian network for medical example
+            const networkStructure = {
+                nodes: [
+                    { id: "disease", name: "Disease", probability: 0.01, metadata: { type: "condition" } },
+                    { id: "test", name: "Test Result", probability: 0.95, metadata: { type: "observation" } },
+                    { id: "treatment", name: "Treatment", probability: 0.8, metadata: { type: "decision" } }
+                ],
+                edges: [
+                    { source: "disease", target: "test", strength: 0.95, type: "causal" },
+                    { source: "test", target: "treatment", strength: 0.8, type: "decision" }
+                ]
+            };
+
+            createBayesianNetwork(networkStructure);
+        }
+
+        async function createVisualization(scenario, vizType) {
+            showLoading(true);
+            
+            const config = {
+                visualization_type: vizType,
+                width: 800,
+                height: 600,
+                interactive: true,
+                color_scheme: "viridis",
+                animation_enabled: document.getElementById('enable-animation').checked,
+                show_confidence_intervals: document.getElementById('show-confidence').checked
+            };
+
+            try {
+                let visualizationId;
+                
+                switch (vizType) {
+                    case 'decision_tree':
+                        visualizationId = await visualizer.createDecisionTree(scenario, config, 'main-visualization');
+                        break;
+                    case 'uncertainty_bands':
+                        // Convert scenario to uncertainty data format
+                        const uncertaintyData = {
+                            scenarios: [
+                                {
+                                    name: scenario.title,
+                                    mean: Array.from({length: 50}, (_, i) => scenario.expected_values.aggressive || 500),
+                                    lower_ci: Array.from({length: 50}, (_, i) => (scenario.expected_values.aggressive || 500) * 0.8),
+                                    upper_ci: Array.from({length: 50}, (_, i) => (scenario.expected_values.aggressive || 500) * 1.2),
+                                    x_values: Array.from({length: 50}, (_, i) => i)
+                                }
+                            ]
+                        };
+                        visualizationId = await visualizer.createUncertaintyBands(uncertaintyData, config, 'main-visualization');
+                        break;
+                }
+                
+                currentVisualizationId = visualizationId;
+                setStatus('Visualization created successfully');
+                showStatistics(scenario);
+                
+            } catch (error) {
+                console.error('Failed to create visualization:', error);
+                showMessage('Failed to create visualization: ' + error.message, 'error');
+                setStatus('Error creating visualization');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function createBayesianNetwork(networkStructure) {
+            showLoading(true);
+            
+            const config = {
+                visualization_type: 'bayesian_network',
+                width: 800,
+                height: 600,
+                interactive: true,
+                color_scheme: "viridis"
+            };
+
+            try {
+                const visualizationId = await visualizer.createBayesianNetwork(networkStructure, config, 'main-visualization');
+                currentVisualizationId = visualizationId;
+                setStatus('Bayesian network created successfully');
+            } catch (error) {
+                console.error('Failed to create Bayesian network:', error);
+                showMessage('Failed to create Bayesian network: ' + error.message, 'error');
+                setStatus('Error creating Bayesian network');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function runMonteCarloSimulation() {
+            showLoading(true);
+            setStatus('Running Monte Carlo simulation...');
+
+            const samples = parseInt(document.getElementById('mc-samples').value);
+            const mean = parseFloat(document.getElementById('mc-mean').value);
+            const std = parseFloat(document.getElementById('mc-std').value);
+
+            try {
+                const response = await fetch('/api/v2/probability-visualization/run-monte-carlo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        parameters: { mean, std },
+                        num_samples: samples
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const config = {
+                        visualization_type: 'monte_carlo',
+                        width: 800,
+                        height: 600,
+                        interactive: true,
+                        animation_enabled: document.getElementById('enable-animation').checked,
+                        monte_carlo_samples: samples
+                    };
+
+                    const visualizationId = await visualizer.createMonteCarlo(result.simulation_data, config, 'main-visualization');
+                    currentVisualizationId = visualizationId;
+                    
+                    // Show statistics
+                    showSimulationStatistics(result.simulation_data.statistics);
+                    setStatus(`Monte Carlo simulation completed (${samples} samples)`);
+                } else {
+                    throw new Error('Simulation failed');
+                }
+            } catch (error) {
+                console.error('Failed to run Monte Carlo simulation:', error);
+                showMessage('Simulation failed: ' + error.message, 'error');
+                setStatus('Simulation error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function addDecisionPoint() {
+            const container = document.getElementById('decision-points-container');
+            const newPoint = document.createElement('div');
+            newPoint.className = 'decision-point';
+            newPoint.innerHTML = `
+                <input type="text" class="decision-name" placeholder="Decision name" />
+                <input type="range" class="probability-slider" min="0" max="1" step="0.01" value="0.5" />
+                <span class="slider-value">0.5</span>
+                <button class="remove-btn" onclick="this.parentElement.remove()">×</button>
+            `;
+            
+            // Add event listener to the slider
+            const slider = newPoint.querySelector('.probability-slider');
+            const valueSpan = newPoint.querySelector('.slider-value');
+            slider.addEventListener('input', function(e) {
+                valueSpan.textContent = e.target.value;
+            });
+            
+            container.appendChild(newPoint);
+        }
+
+        function buildScenario() {
+            const title = document.getElementById('scenario-title').value;
+            const description = document.getElementById('scenario-description').value;
+            
+            if (!title || !description) {
+                showMessage('Please enter title and description', 'error');
+                return;
+            }
+
+            const decisionPoints = [];
+            const decisionPointElements = document.querySelectorAll('.decision-point');
+            
+            decisionPointElements.forEach((element, index) => {
+                const name = element.querySelector('.decision-name').value;
+                const probability = parseFloat(element.querySelector('.probability-slider').value);
+                
+                if (name) {
+                    decisionPoints.push({
+                        id: `decision_${index}`,
+                        name: name,
+                        probability: probability
+                    });
+                }
+            });
+
+            if (decisionPoints.length === 0) {
+                showMessage('Please add at least one decision point', 'error');
+                return;
+            }
+
+            // Build scenario object
+            const scenario = {
+                scenario_id: `custom_${Date.now()}`,
+                title: title,
+                description: description,
+                decision_points: decisionPoints,
+                outcomes: decisionPoints.map((dp, i) => ({
+                    id: `outcome_${i}`,
+                    name: `Outcome for ${dp.name}`,
+                    probability: dp.probability,
+                    value: crypto.getRandomValues(new Uint32Array(1))[0] / (2**32) * 100,
+                    depends_on: [dp.id]
+                })),
+                probabilities: {},
+                expected_values: {},
+                confidence_intervals: {}
+            };
+
+            createVisualization(scenario, 'decision_tree');
+        }
+
+        function switchVisualizationType(vizType) {
+            if (!currentVisualizationId) {
+                showMessage('No visualization to switch', 'error');
+                return;
+            }
+
+            setStatus(`Switching to ${vizType}...`);
+            // Implementation would recreate visualization with new type
+        }
+
+        function showStatistics(scenario) {
+            if (!document.getElementById('show-statistics').checked) return;
+
+            const statsContent = document.getElementById('stats-content');
+            statsContent.innerHTML = `
+                <div class="stat-item">
+                    <span class="stat-label">Decision Points:</span>
+                    <span class="stat-value">${scenario.decision_points.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Outcomes:</span>
+                    <span class="stat-value">${scenario.outcomes.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Max Expected Value:</span>
+                    <span class="stat-value">${Math.max(...Object.values(scenario.expected_values || {}))}</span>
+                </div>
+            `;
+        }
+
+        function showSimulationStatistics(stats) {
+            document.getElementById('show-statistics').checked = true;
+            document.getElementById('statistics-panel').style.display = 'block';
+            
+            const statsContent = document.getElementById('stats-content');
+            statsContent.innerHTML = `
+                <div class="stat-item">
+                    <span class="stat-label">Mean:</span>
+                    <span class="stat-value">${stats.mean.toFixed(3)}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Std Dev:</span>
+                    <span class="stat-value">${stats.std.toFixed(3)}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Min:</span>
+                    <span class="stat-value">${stats.min.toFixed(3)}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Max:</span>
+                    <span class="stat-value">${stats.max.toFixed(3)}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">95th Percentile:</span>
+                    <span class="stat-value">${stats.percentiles[95].toFixed(3)}</span>
+                </div>
+            `;
+        }
+
+        // Utility functions
+        function showLoading(show) {
+            document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+        }
+
+        function setStatus(message) {
+            document.getElementById('status-text').textContent = message;
+        }
+
+        function showMessage(message, type = 'info') {
+            const container = document.getElementById('message-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `${type}-message`;
+            messageDiv.textContent = message;
+            
+            container.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                container.removeChild(messageDiv);
+            }, 5000);
+        }
+
+        function resetView() {
+            if (visualizer) {
+                visualizer.resetVisualizationView();
+                setStatus('View reset');
+            }
+        }
+
+        function exportData() {
+            if (visualizer) {
+                visualizer.exportVisualizationData();
+                setStatus('Data exported');
+            }
+        }
+
+        function saveScenario() {
+            showMessage('Scenario save functionality coming soon', 'info');
+        }
+    </script>
+</body>
+</html>
