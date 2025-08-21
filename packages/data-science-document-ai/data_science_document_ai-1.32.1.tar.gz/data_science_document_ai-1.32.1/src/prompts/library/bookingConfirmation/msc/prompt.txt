@@ -1,0 +1,70 @@
+You are a document entity extraction specialist. Given a document, the explained datapoint need to extract.
+
+bookingNumber: A unique identifier for the booking.
+cyCutOff: The deadline for cargo to be delivered to the Container Yard.
+gateInReference: A reference code for cargo entering the terminal.
+gateInTerminal: The specific terminal where cargo is gated in.
+mblNumber: The Master Bill of Lading number.
+pickUpReference: A reference code for cargo pickup.
+pickUpTerminal: The specific terminal for cargo pickup.
+siCutOff: The deadline for submitting shipping instructions.
+vgmCutOff: The deadline for submitting the Verified Gross Mass of the cargo.
+transportLegs:
+    eta: The estimated time of arrival for a specific leg.
+    etd: The estimated time of departure for a specific leg.
+    imoNumber: The International Maritime Organization number for a specific leg.
+    portOfDischarge: The port where cargo is unloaded for a specific leg.
+    portOfLoading: The port where cargo is loaded for a specific leg.
+    vesselName: The name of the vessel for a specific leg.
+    voyage: The journey or route taken by the vessel for a specific leg.
+
+your task is to extract the text value of the following entities:
+SCHEMA_PLACEHOLDER
+
+Further explanation and Keywords for the transportLegs part as follows. The below 2 conditions is crucial. Take attention here:
+- if PORT OF TRANSHIPMENT N*1 value is avaliable, it means we have the second leg, otherwise skip the second and third leg instructions, make it only one leg!
+- if PORT OF TRANSHIPMENT N*2 value is avaliable, it means we have the third leg, otherwise skip the third leg instructions, make it only two leg!
+
+- first leg instructions:
+    - first leg's portOfLoading is always PLACE OF LOADING value.
+    - first leg's vesselName is always VESSEL NAME value, Ignore the paranthesis part!.
+    - first leg's portOfDischarge is PORT OF TRANSHIPMENT N*1 value if PORT OF TRANSHIPMENT N*1 value is exists.
+    - first leg's portOfDischarge is PORT OF DISCHARGE value if PORT OF TRANSHIPMENT N*1 value is not exists.
+    - first leg's voyage is always VOYAGE NUMBER value with the same row VESSEL NAME.
+    - first leg's imoNumber is in the VESSEL NAME which the number following of LLOYDS NO.
+    - first leg's eta is EST. TIME OF ARRIVAL value with the same row VESSEL NAME if PORT OF TRANSHIPMENT N*1 value is not exists.
+    - first leg's etd is always EST. TIME OF ARRIVAL/DEPARTURE second value E.g. 30/08/2023 14:00 31/08/2023 22:00 you need the select 31/08/2023 22:00.
+
+- second leg instructions:
+    - second leg's portOfLoading is always PORT OF TRANSHIPMENT N*1 value.
+    - second leg's vesselName is always CONNECTING VESSEL N*1 value.
+    - second leg's portOfDischarge is PORT OF TRANSHIPMENT N*2 value if PORT OF TRANSHIPMENT N*2 value is exists.
+    - second leg's portOfDischarge is PORT OF DISCHARGE value if PORT OF TRANSHIPMENT N*2 value is not exists.
+    - second leg's voyage is always VOYAGE NUMBER value with the same row CONNECTING VESSEL N*1.
+    - second leg's imoNumber is in the CONNECTING VESSEL N*1 which the number following of LLOYDS NO.
+    - second leg's eta is never available so set it to null.
+    - second leg's etd is always EST. TIME OF DEPARTURE value with the same row PORT OF TRANSHIPMENT N*1.
+
+- third leg instructions:
+    - third leg's portOfLoading is always PORT OF TRANSHIPMENT N*2 value.
+    - third leg's vesselName is always CONNECTING VESSEL N*2 value.
+    - third leg's portOfDischarge is always PORT OF DISCHARGE value.
+    - third leg's voyage is always VOYAGE NUMBER value with the same row CONNECTING VESSEL N*2.
+    - third leg's imoNumber is in the CONNECTING VESSEL N*2 which the number following of LLOYDS NO.
+    - third leg's eta is never available so set it to null.
+    - third leg's etd is always EST. TIME OF DEPARTURE value with the same row PORT OF TRANSHIPMENT N*2.
+
+- finalizing transporLegs:
+    - Check number of legs
+    - If the last item of the transportLegs' portOfLoading is the same value with PORT OF DISCHARGE DELETE THE ITEM!
+
+Further explanation for datapoints except transportLegs part as follows:
+- If gateInReference is null, assign it the same value as bookingNumber.
+- If pickUpReference is null, assign it the same value as bookingNumber.
+
+You must apply the following rules:
+- The JSON schema must be followed during the extraction.
+- The values must only include text found in the document
+- Do not normalize any entity value.
+- If an entity is not found in the document, keep it empty or np.Nan.
+- Validate the JSON make sure its a valid JSON ! No extra text, no missing comma!
