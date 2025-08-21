@@ -1,0 +1,365 @@
+Metadata-Version: 2.4
+Name: tnz_mcp
+Version: 0.1.2
+Summary: MCP server for TNZ API integration with Claude Desktop and Gemini CLI
+Author: TNZ Group
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Operating System :: OS Independent
+Requires-Python: <3.14,>=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: tnzapi>=2.4.2
+Requires-Dist: mcp>=1.0.0
+Dynamic: license-file
+
+# TNZ MCP Server
+
+A Python package to run an MCP (Model Context Protocol) server for TNZ API, enabling integration with Claude Desktop and Gemini CLI.
+
+## User Installation Guide
+
+This guide provides step-by-step instructions to install and configure the TNZ MCP server for use with Claude Desktop and Gemini CLI, including how to set up a `config.json` file to register the MCP server.
+
+### Step 1: Install Python
+
+Ensure you have Python 3.9, 3.10, 3.11, or 3.12 installed. Verify with:
+
+```bash
+python --version
+```
+
+Download Python from [python.org](https://www.python.org) if needed.
+
+### Step 2: Install the Package
+
+Install the `tnz-mcp` package using pip:
+
+```bash
+pip install tnz-mcp
+```
+
+This installs the package and its dependencies (`tnzapi>=2.4.1`, `mcp>=1.0.0`).
+
+### Step 2.5: Add Python Scripts Folder to PATH (if needed)
+
+When you install `tnz-mcp`, pip places the executable script (`tnz-mcp`) in your Python **Scripts** (Windows) or **bin** (Linux/macOS) directory. If this folder is not already on your system `PATH`, you may see errors like `command not found` or `tnz-mcp is not recognized`.
+
+#### Windows
+
+1. Find the Scripts folder, e.g.:
+
+   ```
+   C:\Users\<YourUser>\AppData\Roaming\Python\Python312\Scripts
+   ```
+
+   Please note "Python312" is the version of your Python, e.g. Python 3.1.2 points to Python312, 3.1.3 points to Python313.
+
+   or (if installed for all users):
+
+   ```
+   C:\Python312\Scripts
+   ```
+2. Press **Win + R**, type `sysdm.cpl`, press Enter.
+3. Go to **Advanced → Environment Variables**.
+4. Under **User variables**, select `Path` → **Edit**.
+5. Add the folder path above, click OK, and restart your terminal.
+
+#### Linux / macOS
+
+Add this line to your shell config (`~/.bashrc`, `~/.zshrc`, etc.):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then reload your shell:
+
+```bash
+source ~/.bashrc
+```
+
+After this, you should be able to run:
+
+```bash
+tnz-mcp
+```
+
+from anywhere.
+
+### Step 3: Set TNZ AuthToken
+
+**Register your account**  
+If you don't have an account, head to [https://www.tnz.co.nz/Customer/SignUp/](https://www.tnz.co.nz/Customer/SignUp/) and fill in the form.
+
+**Create an API user**  
+To access the API, you'll need a User with API access:
+
+1. Log in to the [TNZ Dashboard](DIRS://www.tnz.co.nz/).
+2. Navigate to 'Users'.
+3. Create a new user or select an existing one.
+4. Enable API access (if it's not already enabled).
+5. Click on the 'API' tab.
+6. Enable 'Auth Token' and create a new Auth Token.
+7. Click the 'Copy' button to copy it to your clipboard.
+8. Paste the Auth Token into the Authorization Header in your application or code.
+9. At any time, you can refresh your Auth Token by clicking the button and exporting your new Auth Token. This action will invalidate any apps using your old Auth Token.
+
+Auth Tokens can be used for multiple use-cases, with SubAccount and Department values helping in tracking reporting and billing.
+
+API v2.04 utilizes JWT token Authentication. For OAuth2 authentication options, contact your TNZ representative.
+
+The TNZ MCP server requires a TNZ API AuthToken. You can set it using one of the following methods:
+
+* **Environment Variable**:
+
+  ```bash
+  export TNZ_AUTH_TOKEN="Your-Auth-Token-Here"
+  ```
+
+  Replace `Your-Auth-Token-Here` with your actual TNZ API token.
+
+* **Config File**:
+
+  Create a `tnz_mcp.ini` file in your working directory:
+
+  ```ini
+  [TNZ]
+  AuthToken = Your-Auth-Token-Here
+  ```
+
+* **AI Agent Config File**:
+
+  Add the AuthToken directly in the AI agent's configuration file (e.g., `settings.json` or `config.json`). This is done in the same `config.json` used to register the MCP server (see Steps 5 and 6). Include the `TNZ_AUTH_TOKEN` in the `env` field of the MCP server configuration. Examples are provided in Step 5 (Claude Desktop) and Step 6 (Gemini CLI) below, where the AuthToken is set within the `mcpServers` configuration.
+
+  **Note**: If the AuthToken is set in the AI agent's config file, it will override any token set via environment variable or `tnz_mcp.ini` when the server is launched by the AI agent.
+
+### Step 4: Run the MCP Server
+
+The server can run in **stdio** (default, for local CLI integration) or **HTTP** (for remote access).
+
+* **Stdio Mode**:
+
+  ```bash
+  tnz-mcp
+  ```
+
+  This starts the server using stdio, ideal for local use with Gemini CLI or Claude Desktop.
+
+* **HTTP Mode**:
+
+  ```bash
+  tnz-mcp --transport streamable-http --host localhost --port 8000
+  ```
+
+  This starts the server on `http://localhost:8000`, suitable for remote or multi-client access.
+
+### Step 5: Configure Claude Desktop
+
+Claude Desktop supports MCP servers via a `config.json` file or its settings UI. Verify Claude Desktop’s documentation for stdio support, as HTTP is more commonly used.
+
+1. ** nauseate or Create `config.json`**:
+
+   * Check Claude Desktop’s settings UI or documentation for the configuration file path (e.g., `~/.anthropic/claude_desktop_config.json` on Linux/Mac or `%USERPROFILE%\\.anthropic\\claude_desktop_config.json` on Windows).
+   * If `claude_desktop_config` doesn't exist, but `config.json` does, try to use `config.json`
+   * If above doesn't work, create a `claude_desktop_config.json` or `config.json` file in the specified directory.
+
+2. **Add TNZ MCP Server**:
+
+   * **Via `claude_desktop_config.json`**:
+
+     * For **Stdio**:
+
+       ```json
+       {
+         ...
+         "mcpServers": {
+           ...
+           "tnz-mcp": {
+             "command": "tnz-mcp",
+             "transport": "stdio",
+             "env": {
+               "TNZ_AUTH_TOKEN": "Your-Auth-Token-Here"
+             }
+           }
+         }
+       }
+       ```
+
+       Ensure `tnz-mcp` is installed and accessible in your PATH.
+     * For **HTTP**:
+
+       ```json
+       {
+         ...
+         "mcpServers": {
+           ...
+           "tnz-mcp": {
+             "command": "tnz-mcp",
+             "transport": "http",
+             "url": "http://localhost:8000",
+             "env": {
+               "TNZ_AUTH_TOKEN": "Your-Auth-Token-Here"
+             }
+           }
+         }
+       }
+       ```
+
+       Ensure the server is running with `tnz-mcp --transport streamable-http --host localhost --port 8000`.
+
+3. **Restart Claude Desktop**:
+   Restart Claude to load the configuration.
+
+4. **Verify Integration**:
+   Test with a Claude Desktop something like:
+
+   ```
+   Send an SMS to +64211231234 with message "Test from Claude" using tnz-mcp
+   ```
+
+5. **Troubleshooting**:
+
+   * Ensure the server is running before launching Claude.
+   * Verify the AuthToken is valid (check `tnz_mcp.ini`, environment variable, or `config.json`).
+   * If stdio fails, try HTTP mode, as it’s more widely supported.
+   * Consult Anthropic’s documentation for error logs or advanced configuration.
+
+### Step 6: Configure Gemini CLI
+
+Gemini CLI supports MCP servers via a `settings.json` or `config.json` file or command-line options.
+
+1. **Locate or Create `settings.json`**:
+
+   * Find Gemini CLI’s configuration directory (e.g., `~/.gemini/settings.json` on Linux/Mac or `%USERPROFILE%\\.gemini\\settings.json` on Windows). Refer to Gemini CLI’s documentation for the exact path.
+   * Create a `settings.json` file if it doesn’t exist.
+
+2. **Add TNZ MCP Server**:
+
+   * For **Stdio**:
+
+     ```json
+     {
+       ...
+       "mcpServers": {
+         ...
+         "tnz-mcp": {
+           "command": "tnz-mcp",
+           "transport": "stdio",
+           "env": {
+             "TNZ_AUTH_TOKEN": "Your-Auth-Token-Here"
+           }
+         }
+       }
+     }
+     ```
+
+     This tells Gemini CLI to run `tnz-mcp` as a stdio-based MCP server with the AuthToken.
+
+   * For **HTTP**:
+
+     ```json
+     {
+       ...
+       "mcpServers": {
+         ...
+         "tnz-mcp": {
+           "command": "tnz-mcp",
+           "transport": "http",
+           "url": "http://localhost:8000",
+           "env": {
+             "TNZ_AUTH_TOKEN": "Your-Auth-Token-Here"
+           }
+         }
+       }
+     }
+     ```
+
+     Ensure the server is running in HTTP mode.
+
+3. **Run Gemini CLI**:
+   Test with a Gemini CLI something like:
+
+   ```
+   Send an SMS to +64211231234 with message "Test from Gemini" using tnz-mcp
+   ```
+
+4. **Verify Integration**:
+   Check if tnz-mcp has been enabled for Gemini from the terminal:
+
+   ```bash
+   > gemini mcp list
+
+   Configured MCP servers:
+   ✓ tnz-mcp: tnz-mcp  (stdio) - Connected
+   ```
+
+   Check Gemini CLI’s documentation for exact syntax.
+
+**Note**: The `config.json` key names (`tools` for Claude Desktop, `mcpServers` for Gemini CLI) may vary depending on the tool’s version or configuration. Verify the exact key names in the respective documentation for Claude Desktop and Gemini CLI.
+
+### Step 7: Test the Server
+
+Test the MCP server using MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector --transport stdio
+```
+
+Or for HTTP:
+
+```bash
+npx @modelcontextprotocol/inspector --transport http --url http://localhost:8000
+```
+
+This verifies the server’s tools and responses.
+
+## Usage
+
+### Stdio Mode (Default)
+
+Run the MCP server using stdio for local CLI-based integration:
+
+```bash
+tnz-mcp
+```
+
+This starts the server in stdio mode, suitable for Gemini CLI or local Claude Desktop integrations.
+
+* **Gemini CLI**: Use `gemini connect mcp stdio` or a compatible wrapper. Check Gemini CLI documentation for exact syntax.
+* **Claude Desktop**: Configure Claude to use stdio-based MCP tools (refer to Anthropic's documentation for setup).
+
+### HTTP Mode
+
+Run the server over HTTP for remote access:
+
+```bash
+tnz-mcp --transport streamable-http --host localhost --port 8000
+```
+
+* **Claude Desktop**: Configure the MCP server URL (e.g., `http://localhost:8000`) in Claude's settings or `config.json`.
+* **Gemini CLI**: Use `gemini connect mcp http://localhost:8000` or a compatible wrapper.
+
+## Features
+
+* **Messaging**: Send SMS, Email, Fax, TTS, and Voice messages.
+* **Reports**: Check message status, SMS replies, and received messages.
+* **Actions**: Abort, resubmit, reschedule jobs, and set pacing for voice/TTS.
+* **Addressbook**: Manage contacts, groups, and relationships.
+* **Security**: AuthToken loaded securely from environment, config file, or AI agent configuration.
+
+## Testing
+
+Run unit tests:
+
+```bash
+python -m unittest discover tests
+```
+
+## License
+
+MIT License. See `LICENSE` for details.
