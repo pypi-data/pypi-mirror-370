@@ -1,0 +1,99 @@
+pipelines:
+  default:
+    - parallel:
+      - step:
+          name: linting
+          image: python:3.8-alpine
+          script:
+            - apk add gcc git musl-dev postgresql-dev
+            - pip install tox
+            - tox -e linting
+      - step:
+          name: py36
+          image: python:3.6-alpine
+          script:
+            - apk add postgresql-dev gcc git python3-dev musl-dev
+            - pip install tox
+            - tox -e py36-django111,py36-django20,py36-django21,py36-django22,py36-django30,py36-django31
+          services:
+            - postgres
+            - redis
+      - step:
+          name: py37
+          image: python:3.7-alpine
+          script:
+            - apk add postgresql-dev gcc git python3-dev musl-dev
+            - pip install tox
+            - tox -e py37-django111,py37-django20,py37-django21,py37-django22,py37-django30,py37-django31
+          services:
+            - postgres
+            - redis
+      - step:
+          name: py38
+          image: python:3.8-alpine
+          script:
+            - apk add postgresql-dev gcc git python3-dev musl-dev
+            - pip install tox
+            - tox -e py38-django22,py38-django30,py38-django31,py38-django32,py38-django40,py38-django41,py38-django42
+          services:
+            - postgres
+            - redis
+      - step:
+          name: py39
+          image: python:3.9-alpine
+          script:
+            - apk add postgresql-dev gcc git python3-dev musl-dev
+            - pip install tox
+            - tox -e py39-django32,py39-django40,py39-django41,py39-django42
+          services:
+            - postgres
+            - redis
+      - step:
+          name: py310
+          image: python:3.10-alpine
+          script:
+            - apk add postgresql-dev gcc git python3-dev musl-dev
+            - pip install tox
+            - tox -e py310-django40,py310-django41,py310-django42,py310-django50
+          services:
+            - postgres
+            - redis
+      - step:
+          name: py311
+          image: python:3.11-alpine
+          script:
+            - apk add postgresql-dev gcc git python3-dev musl-dev
+            - pip install tox
+            - tox -e py311-django42,py311-django50
+          services:
+            - postgres
+            - redis
+      - step:
+          name: py312
+          image: python:3.12-alpine
+          script:
+            - apk add postgresql-dev gcc git python3-dev musl-dev
+            - pip install tox
+            - tox -e py312-django42,py312-django50
+          services:
+            - postgres
+            - redis
+  tags:
+    '*':
+      - step:
+          name: Publish to PyPI
+          image: python:3.7-alpine
+          script:
+            - apk add gcc git libffi-dev musl-dev openssl-dev python3-dev
+            - pip install setuptools setuptools_scm twine
+            - python setup.py sdist bdist_wheel
+            - twine upload -u __token__ -p $PYPI_TOKEN --skip-existing dist/*
+definitions:
+  services:
+    postgres:
+      image: postgres
+      variables:
+        POSTGRES_PASSWORD: postgres
+    redis:
+      memory: 512
+      image: redis:5.0.7
