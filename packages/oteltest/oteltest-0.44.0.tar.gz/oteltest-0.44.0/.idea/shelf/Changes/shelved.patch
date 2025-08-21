@@ -1,0 +1,177 @@
+Index: src/oteltest/viz/templates/trace.html
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><!DOCTYPE html>\n<html>\n<head>\n    <title>Trace: {{ filename }}</title>\n    <style>\n        body {\n            font-family: monospace;\n            margin: 40px;\n        }\n\n        h1 {\n            color: #333;\n        }\n\n        .back {\n            margin-bottom: 20px;\n        }\n\n        a {\n            color: blue;\n            text-decoration: none;\n        }\n\n        a:hover {\n            text-decoration: underline;\n        }\n\n        .trace {\n            margin-top: 20px;\n        }\n\n        .span-tree {\n            min-width: 120px;\n            white-space: pre;\n            width: 400px;\n            overflow-x: auto;\n        }\n\n        .span-bar {\n            display: inline-block;\n            height: 8px;\n            background: #4a90e2;\n            border-radius: 3px;\n            vertical-align: middle;\n        }\n\n        .duration {\n            color: #666;\n        }\n\n        table {\n            width: 100%;\n            border-collapse: collapse;\n            border: 1px solid #ddd;\n            border-top: none;\n        }\n\n        th, td {\n            padding: 0 2px;\n            vertical-align: top;\n            line-height: 1;\n        }\n\n        .resource-attrs {\n            padding: 4px;\n            border: 1px solid #ddd;\n            border-bottom: none;\n            border-radius: 0;\n        }\n\n        .resource-attrs ul {\n            margin: 4px 0 0 16px;\n        }\n\n        .resource-attrs span {\n            color: #888;\n        }\n\n        .trace-separator {\n            padding-top: 12px;\n        }\n\n        .trace-separator hr {\n            border: 1px dashed #aaa;\n            margin: 0 0 2px 0;\n        }\n\n        .trace-separator div {\n            font-style: italic;\n            color: #888;\n        }\n\n        .resource-block {\n            margin-bottom: 32px;\n            padding: 16px 0 0 0;\n        }\n    </style>\n</head>\n<body>\n<div class=\"back\">\n    <a href=\"/\">← Back to file list</a>\n</div>\n\n<h1>Trace: {{ filename }}</h1>\n\n<div class=\"trace\">\n    {% if resource_groups is defined and resource_groups|length > 0 %}\n    {% for resource in resource_groups %}\n    <div class=\"resource-block\">\n        <div class=\"resource-attrs\">\n            <b>Resource Attributes:</b>\n            {% if resource.attrs and resource.attrs|length > 0 %}\n            <ul>\n                {% for attr in resource.attrs %}\n                <li><b>{{ attr.key }}</b>: {{ attr.value.stringValue or attr.value.intValue or attr.value.boolValue or\n                    attr.value.doubleValue or attr.value or '' }}\n                </li>\n                {% endfor %}\n            </ul>\n            {% else %}\n            <span>(none)</span>\n            {% endif %}\n        </div>\n        <table>\n            <tbody>\n            {% macro render_span(span) %}\n            <tr>\n                <td class=\"span-tree\">\n                    {%- for i in range(span.depth - 1) %}&nbsp;&nbsp;{%- endfor -%}\n                    {%- if span.depth > 0 %}└─ {%- endif -%}{{ span.name }}\n                </td>\n                <td class=\"span-bar-container\">\n                                <span class=\"span-bar\"\n                                      style=\"margin-left:{{ ((span.startTimeUnixNano|int - min_start) / (max_end - min_start + 1e-9)) * 200 }}px;width:{{ ((span.endTimeUnixNano|int - span.startTimeUnixNano|int) / (max_end - min_start + 1e-9)) * 200 }}px;\"></span>\n                    <span class=\"duration\">\n                                    ({{ ((span.endTimeUnixNano|int - span.startTimeUnixNano|int) / 1000000)|round(2) }} ms)\n                                </span>\n                </td>\n            </tr>\n            {% if span.children %}\n            {% for child in span.children %}\n            {{ render_span(child) }}\n            {% endfor %}\n            {% endif %}\n            {% endmacro %}\n            {% if resource.span_trees_by_trace is defined %}\n                {% for trace_id, root_spans in resource.span_trees_by_trace.items() %}\n                    <tr class=\"trace-separator\"><td colspan=\"2\"><hr><div>Trace</div></td></tr>\n                    {% for span in root_spans %}\n                        {{ render_span(span) }}\n                    {% endfor %}\n                {% endfor %}\n            {% else %}\n            <tr>\n                <td colspan=\"2\"><i>No span data available.</i></td>\n            </tr>\n            {% endif %}\n            </tbody>\n        </table>\n    </div>\n    {% endfor %}\n    {% else %}\n    <tr>\n        <td colspan=\"2\"><i>No span data available.</i></td>\n    </tr>\n    {% endif %}\n</div>\n</body>\n</html>\n\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/oteltest/viz/templates/trace.html b/src/oteltest/viz/templates/trace.html
+--- a/src/oteltest/viz/templates/trace.html	(revision e6ad35ff27b91844dad9a5817b911a3b038415a2)
++++ b/src/oteltest/viz/templates/trace.html	(date 1749859969603)
+@@ -48,52 +48,33 @@
+             color: #666;
+         }
+ 
+-        table {
+-            width: 100%;
+-            border-collapse: collapse;
+-            border: 1px solid #ddd;
+-            border-top: none;
+-        }
+-
+-        th, td {
+-            padding: 0 2px;
+-            vertical-align: top;
+-            line-height: 1;
+-        }
+-
+-        .resource-attrs {
+-            padding: 4px;
+-            border: 1px solid #ddd;
+-            border-bottom: none;
+-            border-radius: 0;
+-        }
+-
+-        .resource-attrs ul {
+-            margin: 4px 0 0 16px;
+-        }
+-
+-        .resource-attrs span {
+-            color: #888;
+-        }
+-
+-        .trace-separator {
+-            padding-top: 12px;
+-        }
+-
+-        .trace-separator hr {
+-            border: 1px dashed #aaa;
+-            margin: 0 0 2px 0;
+-        }
+-
+-        .trace-separator div {
+-            font-style: italic;
+-            color: #888;
+-        }
+-
+         .resource-block {
+             margin-bottom: 32px;
+             padding: 16px 0 0 0;
+         }
++
++        fieldset {
++            border: 1px solid #ddd;
++            border-radius: 4px;
++            padding: 16px;
++            margin-bottom: 24px;
++        }
++
++        legend {
++            font-weight: bold;
++            padding: 0 10px;
++        }
++
++        .span-tree-row {
++            display: flex;
++            align-items: center;
++            margin: 4px 0;
++        }
++
++        .span-bar-container {
++            flex-grow: 1;
++            position: relative;
++        }
+     </style>
+ </head>
+ <body>
+@@ -107,8 +88,8 @@
+     {% if resource_groups is defined and resource_groups|length > 0 %}
+     {% for resource in resource_groups %}
+     <div class="resource-block">
+-        <div class="resource-attrs">
+-            <b>Resource Attributes:</b>
++        <fieldset style="margin-bottom: 16px;">
++            <legend>Resource</legend>
+             {% if resource.attrs and resource.attrs|length > 0 %}
+             <ul>
+                 {% for attr in resource.attrs %}
+@@ -120,43 +101,37 @@
+             {% else %}
+             <span>(none)</span>
+             {% endif %}
+-        </div>
+-        <table>
+-            <tbody>
+-            {% macro render_span(span) %}
+-            <tr>
+-                <td class="span-tree">
+-                    {%- for i in range(span.depth - 1) %}&nbsp;&nbsp;{%- endfor -%}
+-                    {%- if span.depth > 0 %}└─ {%- endif -%}{{ span.name }}
+-                </td>
+-                <td class="span-bar-container">
+-                                <span class="span-bar"
+-                                      style="margin-left:{{ ((span.startTimeUnixNano|int - min_start) / (max_end - min_start + 1e-9)) * 200 }}px;width:{{ ((span.endTimeUnixNano|int - span.startTimeUnixNano|int) / (max_end - min_start + 1e-9)) * 200 }}px;"></span>
+-                    <span class="duration">
+-                                    ({{ ((span.endTimeUnixNano|int - span.startTimeUnixNano|int) / 1000000)|round(2) }} ms)
+-                                </span>
+-                </td>
+-            </tr>
+-            {% if span.children %}
+-            {% for child in span.children %}
+-            {{ render_span(child) }}
+-            {% endfor %}
+-            {% endif %}
+-            {% endmacro %}
+-            {% if resource.span_trees_by_trace is defined %}
+-                {% for trace_id, root_spans in resource.span_trees_by_trace.items() %}
+-                    <tr class="trace-separator"><td colspan="2"><hr><div>Trace</div></td></tr>
+-                    {% for span in root_spans %}
+-                        {{ render_span(span) }}
+-                    {% endfor %}
+-                {% endfor %}
+-            {% else %}
+-            <tr>
+-                <td colspan="2"><i>No span data available.</i></td>
+-            </tr>
+-            {% endif %}
+-            </tbody>
+-        </table>
++        </fieldset>
++        {% if resource.span_trees_by_trace is defined %}
++            {% for trace_id, root_spans in resource.span_trees_by_trace.items() %}
++            <fieldset style="margin-bottom: 24px;">
++                <legend>Trace</legend>
++                {% macro render_span(span) %}
++                <div class="span-tree-row">
++                    <span class="span-tree">
++                        {%- for i in range(span.depth - 1) %}&nbsp;&nbsp;{%- endfor -%}
++                        {%- if span.depth > 0 %}└─ {%- endif -%}{{ span.name }}
++                    </span>
++                    <span class="span-bar-container">
++                        <span class="span-bar"
++                              style="margin-left:{{ ((span.startTimeUnixNano|int - min_start) / (max_end - min_start + 1e-9)) * 200 }}px;width:{{ ((span.endTimeUnixNano|int - span.startTimeUnixNano|int) / (max_end - min_start + 1e-9)) * 200 }}px;"></span>
++                        <span class="duration">
++                            ({{ ((span.endTimeUnixNano|int - span.startTimeUnixNano|int) / 1000000)|round(2) }} ms)
++                        </span>
++                    </span>
++                </div>
++                {% if span.children %}
++                {% for child in span.children %}
++                {{ render_span(child) }}
++                {% endfor %}
++                {% endif %}
++                {% endmacro %}
++                {% for span in root_spans %}
++                    {{ render_span(span) }}
++                {% endfor %}
++            </fieldset>
++            {% endfor %}
++        {% endif %}
+     </div>
+     {% endfor %}
+     {% else %}
+@@ -167,4 +142,3 @@
+ </div>
+ </body>
+ </html>
+-
