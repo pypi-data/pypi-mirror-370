@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""
+arena-py CLI
+
+Usage: python3 -m arena -s <scene> -a <pub/sub> ...
+"""
+
+import argparse
+import json
+
+from arena import *
+
+from .topics import PUBLISH_TOPICS
+
+# define defaults
+DEFAULT_WEB_HOST = "arenaxr.org"
+PUBLISH = "pub"
+SUBSCRIBE = "sub"
+
+
+def on_msg_callback(scene, obj, msg):
+    print(f"<{msg['topic']}> \"{msg}\"")
+
+
+def on_custom_topic_callback(client, userdata, msg):
+    try:
+        payload_str = msg.payload.decode("utf-8", "ignore")
+        print(f"<{msg.topic}> \"{payload_str}\"")
+    except:
+        pass
+
+
+def send_msg(scene, topic, msg):
+    if topic is None:
+        # use object topic name if possible
+        try:
+            json_msg = json.loads(msg)
+            obj_topic = PUBLISH_TOPICS.SCENE_OBJECTS.substitute(
+                {**scene.topicParams, **{"objectId": json_msg["object_id"]}}
+            )
+            print(f"Publishing to topic: <{obj_topic}>... ", end="")
+            scene.mqttc.publish(obj_topic, msg)
+        except:
+            print("Invalid message format!")
+    else:
+        print(f"Publishing to topic: <{topic}>... ", end="")
+        scene.mqttc.publish(topic, msg)
+    print("done!")
+
+    scene.stop_tasks()
+
+
+def main(host, realm, scene, namespace, action, topic, message):
+    scene = Scene(host=host, realm=realm, scene=scene, namespace=namespace)
+
+    if action == SUBSCRIBE:
+        if topic is None:
+            print(f"Subscribing to topic(s): <{', '.join(map(str, scene.subscribe_topics.values()))}>... ", end="")
+            scene.on_msg_callback = on_msg_callback
+        else:
+            print(f"Subscribing to topic: <{topic}>... ", end="")
+            scene.message_callback_add(topic, on_custom_topic_callback)
+        print("done!")
+
+    elif action == PUBLISH:
+        if message is None:
+            print("Message not specified! Aborting...")
+            return
+        scene.run_once(send_msg, scene=scene, topic=topic, msg=message)
+
+    scene.run_tasks()
+
+
+def cli():
+    parser = argparse.ArgumentParser(description=("arena-py MQTT CLI"))
+
+    parser.add_argument("-mh", "--host",
+                        type=str,
+                        help="ARENA webserver main host to connect to",
+                        default=DEFAULT_WEB_HOST)
+    parser.add_argument("-r", "--realm",
+                        type=str,
+                        help="Realm to listen to",
+                        default="realm")
+    parser.add_argument("-s", "--scene",
+                        type=str,
+                        help="Scene to listen to")
+    parser.add_argument("-n", "--namespace",
+                        type=str,
+                        help="Namespace of scene",
+                        default=None)
+
+    parser.add_argument("-a", "--action",
+                        help=f"Action to do ({PUBLISH} or {SUBSCRIBE})",
+                        choices=(PUBLISH, SUBSCRIBE),
+                        required=True)
+
+    parser.add_argument("-t", "--topic",
+                        type=str,
+                        help="Custom topic to publish/subscribe to")
+    parser.add_argument("-m", "--message",
+                        type=str,
+                        help=f"Message to send (ignored when action={SUBSCRIBE})")
+
+    args = parser.parse_args()
+
+    main(**vars(args))
+
+
+if __name__ == "__main__":
+    cli()
