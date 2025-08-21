@@ -1,0 +1,1 @@
+§slide_0ƒ¨children©slide_0_0ƒ¤type¦Iframe£srcÙ:https://www.youtube.com/embed/zDtx6Z9g4xA?controls=0&rel=0¥styleŠ¨position¨absolute¤left¥50.0%£top¥50.0%©transformµtranslate(-50%, -50%)§display¤flex®justifyContent¦center©textAlign¦centerªalignItems¦center¥width¥40.0%¦height²71.11111111111111%¥style¯backgroundColor§#303030©animation‘¡0Â
