@@ -1,0 +1,113 @@
+Metadata-Version: 2.4
+Name: fastcrawl
+Version: 1.1.0
+Summary: Fast and asynchronous web crawling and scraping library for Python.
+Author-email: ilarionkuleshov <ilarion.kuleshov@gmail.com>
+License-Expression: MIT
+Requires-Python: <3.14,>=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: parsel>=1.10.0
+Requires-Dist: pydantic>=2.11.4
+Requires-Dist: pydantic-settings>=2.9.1
+Requires-Dist: typeguard>=4.4.4
+Requires-Dist: typer>=0.15.3
+Dynamic: license-file
+
+# FastCrawl
+
+<p align="left">
+<a href="https://github.com/ilarionkuleshov/fastcrawl/actions/workflows/code-quality.yml/?query=event%3Apush+branch%3Amain">
+    <img src="https://github.com/ilarionkuleshov/fastcrawl/actions/workflows/code-quality.yml/badge.svg?event=push&branch=main">
+</a>
+<a href="https://coverage-badge.samuelcolvin.workers.dev/redirect/ilarionkuleshov/fastcrawl">
+    <img src="https://coverage-badge.samuelcolvin.workers.dev/ilarionkuleshov/fastcrawl.svg">
+</a>
+<a href="https://pypi.org/project/fastcrawl">
+    <img src="https://img.shields.io/pypi/v/fastcrawl?color=%2334D058">
+</a>
+<a href="https://pypi.org/project/fastcrawl">
+    <img src="https://img.shields.io/pypi/pyversions/fastcrawl.svg?color=%2334D058">
+</a>
+</p>
+
+FastCrawl is a Python library for web crawling and scraping, inspired by [Scrapy](https://github.com/scrapy/scrapy) and the clean, decorator-based API design of [FastAPI](https://github.com/fastapi/fastapi).
+
+FastCrawl is designed to run seamlessly in asynchronous applications and uses [Pydantic](https://github.com/pydantic/pydantic) models for automatic data validation and serialization of scraped items. Built on top of [Httpx](https://github.com/encode/httpx), it provides a lightweight foundation for creating custom crawlers. The library supports defining custom pipelines for processing scraped items. While its functionality is still growing, FastCrawl offers flexible settings options for the crawler, HTTP client, requests, and more.
+
+
+## Installation
+FastCrawl is available on PyPI and can be installed using pip:
+```bash
+pip install fastcrawl
+```
+
+
+## Usage
+Here's a simple example that demonstrates FastCrawl's core functionality by scraping book information from [books.toscrape.com](https://books.toscrape.com):
+
+```python
+# books_crawler.py
+from typing import Iterator
+from fastcrawl import FastCrawl, Response
+from pydantic import BaseModel
+
+class Book(BaseModel):
+    url: str
+    title: str
+    price: str | None
+
+app = FastCrawl()
+
+@app.handler("https://books.toscrape.com/")
+def parse_books(response: Response) -> Iterator[Book]:
+    for book in response.selector.xpath(".//ol[@class='row']/li"):
+        url = book.xpath(".//h3/a/@href").get()
+        title = book.xpath(".//h3/a/@title").get()
+        if url and title:
+            yield Book(
+                url=str(response.url.join(url)),
+                title=title,
+                price=book.xpath(".//p[@class='price_color']/text()").get()
+            )
+
+@app.pipeline()
+async def save_book(item: Book) -> Book:
+    print("Saving book:", item.model_dump_json())
+    # Async saving logic can be implemented here
+    return item
+```
+
+### What this example demonstrates:
+
+- **Pydantic model** (`Book`) defines the structure of scraped data with automatic validation
+- **Handler function** (`parse_books`) extracts book information from the listing page
+- **XPath selectors** for precise data extraction from HTML elements
+- **Pipeline function** for processing scraped items (logging, saving, etc.)
+- **Handlers and pipelines can optionally be asynchronous** functions if you need it.
+- **Type hints** throughout ensure IDE support and catch errors early
+
+To run the crawler, use CLI command:
+```bash
+fastcrawl run books_crawler.py
+```
+
+
+## How it works
+
+FastCrawl combines the simplicity of decorator-based handler registration with the power of Pydantic for data validation:
+
+- **Handlers**: Use the `@app.handler()` decorator to define URL patterns and their corresponding parsing functions. Each handler receives a `Response` object containing the HTTP response and a built-in CSS/XPath selector powered by [Parsel](https://github.com/scrapy/parsel). Handlers can return scraped items, new `Request` objects to crawl additional pages, or both using Python generators.
+
+- **Request Generation**: Handlers can yield `Request` objects to dynamically generate new URLs to crawl. This enables following pagination links, crawling detail pages from listing pages, and building complex crawling workflows.
+
+- **Pydantic Models**: Define your scraped data structure using Pydantic models. This provides automatic data validation, type conversion, and serialization. If the scraped data doesn't match your model schema, FastCrawl will raise validation errors early.
+
+- **Pipelines**: Use the `@app.pipeline()` decorator to define data processing steps. Items flow through pipelines in the order they're defined, allowing you to clean, transform, or store your data.
+
+- **Type Safety**: FastCrawl leverages Python's type hints and Pydantic's validation to catch errors early and provide better IDE support.
+
+
+## License
+This project is licensed under the MIT License.
