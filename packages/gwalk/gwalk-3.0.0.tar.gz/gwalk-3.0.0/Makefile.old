@@ -1,0 +1,162 @@
+.PHONY: all
+
+# Used to keep track of multiple runs at once.
+# Can be discarded if you would like to specify more filenames explicitly
+RUN_ID = 0003
+RUN_DIR = /home/xevra/Event_Likelihood_Approximation/nal-runs/run_$(RUN_ID)
+
+# Location of catalog
+FNAME_CATALOG = $(RUN_DIR)/catalog_samples.hdf5
+FNAME_MESH = $(RUN_DIR)/likelihood_mesh.hdf5
+FNAME_NAL_GWTC_1 = $(RUN_DIR)/GWTC-1.nal.hdf5
+FNAME_NAL_GWTC_2 = $(RUN_DIR)/GWTC-2.nal.hdf5
+FNAME_NAL_GWTC_3 = $(RUN_DIR)/GWTC-3.nal.hdf5
+FNAME_NAL_GWTC_2p1 = $(RUN_DIR)/GWTC-2p1.nal.hdf5
+
+# Location of GWXXXXXX.h5 files from LIGO release
+# May require some renaming of files (or linking)
+GWTC_1_RELEASE = 	/home/xevra/Event_Likelihood_Approximation/GWTC_1_sample_release
+GWTC_2_RELEASE = 	/home/xevra/Event_Likelihood_Approximation/GWTC_2
+GWTC_2p1_RELEASE = 	/home/xevra/Event_Likelihood_Approximation/GWTC_2p1
+GWTC_3_RELEASE = 	/home/xevra/Event_Likelihood_Approximation/GWTC_3
+
+# Maximum histogram bins
+MIN_BINS = 8
+MAX_BINS = 21
+
+EVENTS = \
+	GW150914 GW151012 GW151226 GW170104 GW170608 GW170729 GW170809 GW170814 \
+	GW170817 GW170818 GW170823 \
+	GW190408_181802 GW190412 GW190413_052954 \
+	GW190413_134308 GW190421_213856 GW190424_180648 GW190425 GW190426_152155 \
+	GW190503_185404 GW190512_180714 GW190513_205428 GW190514_065416 \
+	GW190517_055101 GW190519_153544 GW190521_074359 GW190521 GW190527_092055 \
+	GW190602_175927 GW190620_030421 GW190630_185205 GW190701_203306 \
+	GW190706_222641 GW190707_093326 GW190708_232457 GW190719_215514 \
+	GW190720_000836 GW190727_060333 GW190728_064510 GW190731_140936 \
+	GW190803_022701 GW190814 GW190828_063405 GW190828_065509 GW190909_114149 \
+	GW190910_112807 GW190915_235702 GW190924_021846 GW190929_012149 \
+	GW190930_133541 GW191103_012549 GW191105_143521 GW191109_010717 \
+	GW191113_071753 GW191126_115259 GW191127_050227 GW191129_134029 \
+	GW191204_110529 GW191204_171526 GW191215_223052 GW191216_213338 \
+	GW191219_163120 GW191222_033537 GW191230_180458 GW200105_162426 \
+	GW200112_155838 GW200115_042309 GW200128_022011 GW200129_065458 \
+	GW200202_154313 GW200208_130117 GW200208_222617 GW200209_085452 \
+	GW200210_092255 GW200216_220804 GW200219_094415 GW200220_061928 \
+	GW200220_124850 GW200224_222234 GW200225_060421 GW200302_015811 \
+	GW200306_093714 GW200308_173609 GW200311_115853 GW200316_215756 \
+	GW200322_091133 GW190403_051519 GW190426_190642 GW190725_174728 \
+	GW190805_211137 GW190916_200658 GW190917_114630 GW190925_232845 \
+	GW190926_050336
+
+######## Installation ########
+
+
+build-dist: clean
+	python3 -m build
+
+install: build-dist
+	python3 -m pip install dist/gwalk-1.0.10.tar.gz
+
+testpypi: build-dist
+	python3 -m twine upload --repository testpypi dist/gwalk-1.0.10.tar.gz
+
+pypi: build-dist
+	python3 -m twine upload dist/gwalk-1.0.10.tar.gz
+
+
+
+######## Unit tests ########
+
+unit_tests: \
+	test_maha \
+	test_parameter \
+	test_relation \
+	test_covariance \
+	test_norm \
+	test_kl \
+	test_grid 
+	#test_mesh
+
+test_parameter: install
+	python3 tests/test_parameter.py
+
+test_relation: test_parameter
+	python3 tests/test_relation.py
+
+test_covariance: test_relation
+	python3 tests/test_covariance.py
+
+test_maha: install
+	python3 tests/test_maha.py
+
+test_norm: test_covariance test_maha
+	python3 tests/test_norm.py
+
+test_kl: test_norm
+	python3 tests/test_kl.py
+
+test_mesh: install
+	python3 tests/test_mesh.py
+
+test_grid: test_norm
+	python3 tests/test_grid.py
+
+######## Catalog ########
+
+build-catalog: 
+	mkdir -p $(RUN_DIR)
+	python3 tools/build_catalog.py $(FNAME_CATALOG) clean
+	python3 tools/build_catalog.py $(FNAME_CATALOG) GWTC-1 		$(GWTC_1_RELEASE)
+	python3 tools/build_catalog.py $(FNAME_CATALOG) GWTC-2 		$(GWTC_2_RELEASE)
+	python3 tools/build_catalog.py $(FNAME_CATALOG) GWTC-2p1 	$(GWTC_2p1_RELEASE)
+	python3 tools/build_catalog.py $(FNAME_CATALOG) GWTC-3 		$(GWTC_3_RELEASE)
+
+######## Mesh ########
+
+######## NAL ########
+test_nal: \
+	GW150914-aligned3d_source-IMRPhenomPv2 \
+	GW190814-aligned3d_source-IMRPhenomPv3HM
+
+example-script:
+	python3 tests/example_script.py
+
+GW150914-aligned3d_source-IMRPhenomPv2:
+	python3 tools/fit_catalog_samples.py \
+		$(FNAME_CATALOG) \
+		$(FNAME_MESH) \
+		$(FNAME_NAL_GWTC_1) \
+		GW150914 IMRPhenomPv2 aligned3d_source \
+		$(MIN_BINS) $(MAX_BINS)
+
+GW190814-aligned3d_source-IMRPhenomPv3HM:
+	python3 tools/fit_catalog_samples.py \
+		$(FNAME_CATALOG) \
+		$(FNAME_MESH) \
+		$(FNAME_NAL_GWTC_2) \
+		GW190814 IMRPhenomPv3HM aligned3d_source \
+		$(MIN_BINS) $(MAX_BINS)
+
+all: $(EVENTS)
+
+$(EVENTS): %: %.fit
+
+%.fit: install
+	python3 tools/NAL_event_pipeline.py $(RUN_DIR) $(basename $@)
+
+######## Clean ########
+
+clean:
+	rm -rf .eggs
+	rm -rf src/gwalk.egg-info
+	rm -rf .tox
+	rm -rf dist
+	rm -rf build
+	rm -f test_matern_plot.png
+	rm -f src/gp_api/kernels/compact_kernel_cython.c
+	rm -f src/gwalk/compat*so
+	rm -f src/*so
+	rm -f test_mesh.hdf5
+	rm -rf test_*.png
+	rm -rf test_*.hdf5
