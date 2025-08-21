@@ -1,0 +1,97 @@
+from setuptools import setup, find_packages
+
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
+setup(
+    name="jtech-installer",
+    version="0.1.0",
+    author="JTECH™ Core Team",
+    author_email="support@jtech.dev",
+    description="🚀 JTECH™ Core Framework Installer - Configuração automatizada de ambiente",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/jtech/jtech-installer",
+    project_urls={
+        "Bug Tracker": "https://github.com/jtech/jtech-installer/issues",
+        "Documentation": "https://docs.jtech.dev/installer",
+        "Source": "https://github.com/jtech/jtech-installer",
+    },
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Environment :: Console",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Topic :: Software Development :: Libraries :: Application Frameworks",
+        "Topic :: System :: Installation/Setup",
+        "Topic :: Utilities",
+    ],
+    package_dir={"": "src"},
+    packages=find_packages(where="src"),
+    python_requires=">=3.9",
+    install_requires=[
+        "click>=8.0.0",
+        "rich>=13.0.0",
+        "pydantic>=2.0.0",
+        "pyyaml>=6.0",
+        "gitpython>=3.1.0",
+        "requests>=2.28.0",
+        "psutil>=5.9.0",
+        "packaging>=21.0",
+        "tomlkit>=0.11.0",
+        "pathspec>=0.10.0",
+        "jsonschema>=4.0.0",
+    ],
+    extras_require={
+        "dev": [
+            "pytest>=7.0.0",
+            "pytest-cov>=4.0.0",
+            "pytest-mock>=3.10.0",
+            "pytest-timeout>=2.1.0",
+            "black>=23.0.0",
+            "flake8>=6.0.0",
+            "mypy>=1.0.0",
+            "pre-commit>=3.0.0",
+            "isort>=5.12.0",
+            "bandit>=1.7.0",
+        ],
+        "test": [
+            "pytest>=7.0.0",
+            "pytest-cov>=4.0.0",
+            "pytest-mock>=3.10.0",
+            "pytest-timeout>=2.1.0",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "jtech-installer=jtech_installer.cli.main:main",
+        ],
+    },
+    include_package_data=True,
+    package_data={
+        "jtech_installer": [
+            "templates/**/*",
+            "framework/**/*",
+            "data/**/*",
+        ],
+    },
+    keywords=[
+        "jtech",
+        "installer",
+        "framework",
+        "development",
+        "environment",
+        "setup",
+        "configuration",
+        "automation",
+        "cli",
+        "tool",
+    ],
+    zip_safe=False,
+)
