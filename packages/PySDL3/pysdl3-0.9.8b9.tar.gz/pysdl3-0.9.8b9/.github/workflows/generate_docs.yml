@@ -1,0 +1,54 @@
+name: Generate Docs
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ${{matrix.os}}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        system: [Linux, Darwin, Windows]
+
+        include:
+          - system: Linux
+            os: ubuntu-latest
+
+          - system: Darwin
+            os: macos-latest
+
+          - system: Windows
+            os: windows-latest
+
+    steps:
+      - name: Checkout code.
+        uses: actions/checkout@v4
+
+      - name: Set up python.
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies.
+        shell: bash
+        run: python -m pip install .
+
+      - name: Generate docs.
+        shell: bash
+        run: python -c "import sdl3"
+        env:
+          SDL_GITHUB_TOKEN: ${{secrets.PERSONAL_ACCESS_TOKEN}}
+          SDL_CTYPES_ALIAS_FIX: "1"
+
+      - name: Upload asset.
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{github.event.release.upload_url}}
+          asset_path: sdl3/__doc__.py
+          asset_name: ${{matrix.system}}-Docs.py
+          asset_content_type: text/plain
+        env:
+          GITHUB_TOKEN: ${{secrets.PERSONAL_ACCESS_TOKEN}}
