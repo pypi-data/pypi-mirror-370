@@ -1,0 +1,37 @@
+# lisaai
+
+High-level, repo-independent tools for the LISA Vision+Audio model.
+
+## Install
+
+From this folder:
+
+```
+pip install -e .
+```
+
+## CLI
+
+- Inspect a checkpoint (folder or .safetensors):
+```
+lisa.inspect "PATH/TO/MODEL_DIR"
+```
+- Compare param counts by saved prefixes:
+```
+lisa.compare-params "PATH/TO/MODEL_DIR"
+```
+
+## Python API
+
+```python
+from lisaai import inspect_checkpoint, compare_param_counts
+
+rep = inspect_checkpoint("PATH/TO/MODEL_DIR")
+print(rep["inferred_dimensions"])  # {vision_embed_dim, fusion_hidden_dim}
+```
+
+To use runtime loading (optional, if the original repo is available):
+```python
+from lisaai import load_model
+m = load_model()  # will use LISA_MODEL_PATH if set
+```
