@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container" id="full-container">
+  <div class="card">
+    <div class="card-header">Preview App</div>
+    <div class="card-body">
+    {% if exceptions %}
+      <h5>Validation Error</h5>
+      <br>
+      {% for error in exceptions %}
+        {% if error.error %}
+          <div class="alert alert-danger">{{ error.error }}</div>
+        {% else %}
+          <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      {% if warnings.get("missing_loadsdk") %}
+        <div class="alert alert-warning" role="alert">
+          Make sure you include a <code>{% raw %}{{ __loadsdk__ }}{% endraw %}</code> directive in your template. From February 2023 onwards, it will be required in all Apps.
+        </div>
+      {% endif %}
+      <h5>App Info</h5>
+      <p><strong>Name :</strong><br>{{ title }}</p>
+      {% if description %}<p><strong>Description :</strong><br>{{ description }}</p>{% endif %}
+      {% if kind %}<p><strong>Kind :</strong><br>{{ kind }}</p>{% endif %}
+      <form action="{{ file_name }}" method="POST" enctype="multipart/form-data">
+      {% if has_attributes %}
+        <hr>
+        <h5>App Attributes</h5>
+        <small class="form-text text-muted">Check the <a href="https://github.com/onsigntv/apps/tree/master/docs/ATTRS.md">App Attributes API documentation</a> for how to declare and access attributes.</small>
+        <p class="form-text text-muted">This app contains attributes that are connected to the following player attributes. The user will have to choose which player attributes to connect to.</p>
+      {% endif %}
+      {% set optsection = namespace(is_open=false) %}
+      {% for field in form -%}
+        {% if field.label.field_id == "_delay_show" %}
+          {% set optsection.is_open = True %}
+          <hr>
+          <h5>Simulator Options</h5>
+        {% endif %}
+        {% if not field.is_attribute and not optsection.is_open %}
+          {% set optsection.is_open = True %}
+          <hr>
+          <h5>App Options</h5>
+          <p class="form-text text-muted">The user of this app will be able to configure the following options.</p>
+        {% endif %}
+        {% if field.widget.input_type == "checkbox" -%}
+        <div class="form-check {% if field.label.field_id == '_toast_serial_port_data' %}serial-toast d-none{% endif %}" style="margin-bottom: 1rem;">
+          {{ field() }}
+          <label class="form-check-label" for="{{ field.label.field_id }}">{{ field.label.text }}</label>
+        {% else -%}
+        <div class="form-group">
+          <label for="{{ field.label.field_id }}" {% if field.is_attribute %}style="margin-bottom: auto"{% endif %}>
+            {% if field.is_attribute and not field.required %}
+              <input data-attr="{{ field.label.field_id }}" data-label="{{ field.label.text }}" class="connect-attr form-check-label" type="checkbox" checked="true">
+            {% endif %}
+            {{ field.label.text }}
+            {% if field.flags.required %}<small class="align-top"><strong>[required]</strong></small>{% endif %}
+          </label>
+          {% if field.label.field_id == "_serial_port_config" %}
+            &nbsp;&nbsp;&nbsp;<button id="add-serial" type="button" class="btn btn-light btn-sm">Add Port</button>
+            <table id="serial-ports-table" style="margin-bottom: 10px">
+              <tr id="serial-port-form" hidden="hidden">
+                <td style="padding: 5px 0"><input class="form-control" type="text" placeholder="Port Alias"></td>
+                <td style="padding: 5px 0"><span class="form-check-label">&nbsp;Mode:&nbsp;</span></td>
+                <td style="padding: 5px 0">
+                  <select class="form-control" name="mode">
+                    <option value="character">Character</option>
+                    <option value="line">Line</option>
+                    <option value="binary">Binary</option>
+                  </select>
+                </td>
+              </tr>
+            </table>
+            <div hidden="hidden">{{ field() }}</div>
+          {% elif field.is_datafeed %}
+            {{ field() }}
+            <div class="input-group mb-3">
+              <input type="text" id="url{{ field.label.field_id }}" data-target-id="{{ field.label.field_id }}" class="form-control js-datafeed-input">
+              <div class="input-group-append">
+                <button class="btn btn-outline-secondary js-open-config-datafeed" type="button" data-toggle="modal" data-target="#modal{{ field.label.field_id }}" data-fields='{{ field.fields|tojson }}' data-target-id="{{ field.label.field_id }}" title="Enter a valid URL to configure the Data Feed" disabled>Configure</button>
+              </div>
+            </div>
+            <div class="modal fade" id="modal{{ field.label.field_id }}" data-backdrop="static" data-keyboard="false" tabindex="-1">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">Data Feed Config</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span>&times;</span>
+                    </button>
+                  </div>
+                  <div class="modal-body"></div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" style="margin-right: auto;" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary js-save-config-datafeed" data-target-id="{{ field.label.field_id }}" id="save{{ field.label.field_id }}" data-dismiss="modal">OK</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            {% if field.label.field_id == "_playback_info" %}
+              &nbsp;&nbsp;&nbsp;<button type="button" class="btn btn-light btn-sm" id="pbInfoBtn">Edit</button>
+            {% endif %}
+            {{ field() }}
+          {% endif %}
+        {% endif -%}
+          {% for error in field.errors -%}
+            <div class="invalid-feedback">{{ error }}</div>
+          {% endfor -%}
+          {% if field.description -%}
+            <small class="form-text text-muted">{{ field.description }}</small>
+          {% endif -%}
+        </div>
+      {% endfor %}
+        <hr>
+        <button type="submit" class="btn btn-primary"> Preview </button>
+      </form>
+    {% endif %}
+    </div>
+  </div>
+</div>
+<script type="text/javascript" src="/.static/js/widget_form.js"></script>
+{% endblock %}
