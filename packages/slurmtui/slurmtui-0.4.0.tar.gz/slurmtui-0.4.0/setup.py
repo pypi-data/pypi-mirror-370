@@ -1,0 +1,62 @@
+import os
+import sys
+
+from setuptools import find_packages, setup
+
+# Add src directory to path to import version
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+from slurmtui._version import __author__, __author_email__, __version__
+
+requirements = ["rich==13.4.2", "textual==1.0.0"]
+
+
+def get_long_description():
+    with open("README.md", "r", encoding="utf-8") as f:
+        long_description = f.read()
+
+    return long_description
+
+
+setup(
+    name="slurmtui",
+    version=__version__,
+    author=__author__,
+    author_email=__author_email__,
+    description="A simple Terminal UI (TUI) for Slurm",
+    long_description=get_long_description().replace(
+        "./img/screenshot.png",
+        "https://raw.githubusercontent.com/WissamAntoun/SlurmTUI/main/img/screenshot.png",
+    ),
+    url="https://github.com/WissamAntoun/SlurmTUI",
+    long_description_content_type="text/markdown",
+    packages=find_packages("src"),
+    package_dir={"": "src"},
+    entry_points={
+        "console_scripts": [
+            "slurmtui = slurmtui.main:entry_point",
+            "slurmui = slurmtui.main:entry_point",
+            "sui = slurmtui.main:entry_point",
+        ],
+    },
+    install_requires=requirements,
+    package_data={
+        "slurmtui": ["css/*"],
+    },
+    python_requires=">=3.6.0",
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Education",
+        "Intended Audience :: Science/Research",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Topic :: Scientific/Engineering",
+    ],
+)
