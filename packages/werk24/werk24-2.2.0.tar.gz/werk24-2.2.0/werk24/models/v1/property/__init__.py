@@ -1,0 +1,16 @@
+__all__ = [
+    "abbe_number",
+    "bubbles_and_inclusions",
+    "cleanness",
+    "color",
+    "corrosion_resistance",
+    "fraunhofer",
+    "glass_homogeneity",
+    "hardness",
+    "material",
+    "refractive_index",
+    "stress_birefringence",
+    "striae",
+    "surface_area",
+    "weight",
+]
