@@ -1,0 +1,154 @@
+Metadata-Version: 2.4
+Name: oceanpy
+Version: 0.2.0
+Summary: A simple Python package Optimal Counterfactual Explanations in Tree Ensembles
+Author-email: Youssouf Emine <youssouf.emine@polymtl.ca>
+License: MIT License
+        
+        Copyright (c) 2025 Yoemi
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/eminyous/ocean
+Project-URL: Repository, https://github.com/eminyous/ocean
+Project-URL: Issues, https://github.com/eminyous/ocean/issues
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3 :: Only
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: anytree
+Requires-Dist: gurobipy
+Requires-Dist: numpy
+Requires-Dist: ortools
+Requires-Dist: pandas
+Requires-Dist: pydantic
+Requires-Dist: scikit-learn
+Provides-Extra: dev
+Requires-Dist: coverage; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pandas-stubs; extra == "dev"
+Requires-Dist: pyright; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: scipy-stubs; extra == "dev"
+Requires-Dist: tox; extra == "dev"
+Provides-Extra: test
+Requires-Dist: coverage; extra == "test"
+Requires-Dist: mypy; extra == "test"
+Requires-Dist: pandas-stubs; extra == "test"
+Requires-Dist: pyright; extra == "test"
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: ruff; extra == "test"
+Requires-Dist: scipy-stubs; extra == "test"
+Requires-Dist: tox; extra == "test"
+Provides-Extra: example
+Requires-Dist: rich; extra == "example"
+Dynamic: license-file
+
+# Optimal Counterfactual Explanations in Tree Ensembles
+
+![Logo](https://github.com/eminyous/ocean/blob/main/logo.svg?raw=True)
+
+This repository provides methods to generate optimal counterfactual explanations in tree ensembles.
+It is based on the paper *Optimal Counterfactual Explanations in Tree Ensemble* by Axel Parmentier and Thibaut Vidal in the *Proceedings of the thirty-eighth International Conference on Machine Learning*, 2021, in press. The article is [available here](http://proceedings.mlr.press/v139/parmentier21a/parmentier21a.pdf).
+
+## Installation
+
+This project requires the gurobi solver. You can request for a free academic license [here](https://www.gurobi.com/academia/academic-program-and-licenses/). Once you have installed gurobi, you can install the package with the following command:
+
+```bash
+pip install oceanpy
+```
+
+## Usage
+
+The package provides multiple classes and functions to wrap the tree ensemble models from the `scikit-learn` library. A minimal example is provided below:
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+
+from ocean import MixedIntegerProgramExplainer, ConstraintProgrammingExplainer
+from ocean.datasets import load_adult
+
+# Load the adult dataset
+(data, target), mapper = load_adult()
+
+# Select an instance to explain from the dataset
+x = data.iloc[0].to_frame().T
+
+# Train a random forest classifier
+rf = RandomForestClassifier(n_estimators=10, max_depth=3, random_state=42)
+rf.fit(data, target)
+
+# Predict the class of the random instance
+y = int(rf.predict(x).item())
+
+# Explain the prediction using MIPEXplainer
+mip_model = MixedIntegerProgramExplainer(rf, mapper=mapper)
+x = x.to_numpy().flatten()
+mip_explanation = mip_model.explain(x, y=1 - y, norm=1)
+
+# Explain the prediction using CPEExplainer
+cp_model = ConstraintProgrammingExplainer(rf, mapper=mapper)
+x = x.to_numpy().flatten()
+cp_explanation = cp_model.explain(x, y=1 - y, norm=1)
+
+# Show the explanation
+print("MIP: ",mip_explanation)
+print("CP : ",cp_explanation)
+
+```
+
+Expected output:
+
+```plaintext
+MIP Explanation:
+Age              : 39.0
+CapitalGain      : 2174.0
+CapitalLoss      : 0
+EducationNumber  : 13.0
+HoursPerWeek     : 41.0
+MaritalStatus    : 3
+NativeCountry    : 0
+Occupation       : 1
+Relationship     : 0
+Sex              : 0
+WorkClass        : 6
+CP Explanation:
+Age              : 39.0
+CapitalGain      : 2174.0
+CapitalLoss      : 0.0
+EducationNumber  : 13.0
+HoursPerWeek     : 41.0
+MaritalStatus    : 3
+NativeCountry    : 0
+Occupation       : 1
+Relationship     : 0
+Sex              : 0
+WorkClass        : 6
+```
