@@ -1,0 +1,140 @@
+# Lully
+A small library providing some helpers for python devs.
+
+See the [tests](test/) for usage examples and ideas.
+
+
+## Collections
+
+### Otom
+The One-To-One-Mapping is a special kind of dict, where all values are also keys, associated to their key.
+
+
+    from lully import Otom
+
+    O = Otom({
+        'one': 1,
+        'two': 2,
+        'tee': 3,
+    })
+    assert O[1] == 'one'
+    assert O['one'] == 1
+
+An Otom acts like a dict. See [tests](test/test_collections.py) for more.
+
+
+## Confiseur
+A Confiseur is here to help with configurations.
+
+The principle is to subclass, for each configuration kind you need, the Confiseur base class and populate it with Bonbon instances, describing options.
+
+    from lully import Confiseur, Bonbon
+
+    class MyConfig(Confiseur):
+
+        def bonbons(self) -> [Bonbon]:
+            return (
+                Bonbon('server options', 'max instances', default=3),
+            )
+
+        def validate(self, cfg):
+            if cfg['server options']['max instances'] > 10:
+                self.add_error(f"Can't handle more than ten instances. Provided: {cfg['server options']['max instances']}.")
+
+    myconfig = MyConfig('{"server options": { "max instances": 11 }}')
+    assert myconfig['server options']['max instances'] == 11
+    assert myconfig.has_error
+    assert len(myconfig.errors)
+
+See [tests](test/test_confiseur.py) for more.
+
+
+## Itermore
+More itertools functions !
+
+    from lully.itermore import window, grouper, flatten, dotproduct, ncycles
+
+See the [source file](lully/itermore.py) for the full set of functions.
+
+
+## Kotlin-inspired functions
+When coding in other languages, you get ideas. Here are the ones i got after a 1h course of Kotlin.
+
+    from lully import first, last, zip_with_next
+
+    assert first([1, 2]) == 1
+    assert last([1, 2]) == 2
+    assert first([2, 3], lambda x: x % 2) == 3
+    assert tuple(zip_with_next('abc')) == (('a', 'b'), ('c', None))
+
+See the [source file](lully/kotlin.py) for the full set of functions.
+
+
+## Fief
+This name should recall both its goal, which is *FIltering of EFfective paramaters*, and the fact it keeps functions to work within their [fief](https://en.wikipedia.org/wiki/Fief).
+
+You have this function:
+
+    def func(a, b):
+        ...  # some implementation
+
+and you have its parameter stored in a dict, with other keys that are not for that specific function:
+
+    config = {'a': 1, 'b': 'doe', 'loglevel': 'WARNING'}
+
+Thus, you can't just do that:
+
+    func(**config)
+
+Because of the expected:
+
+    TypeError: func() got an unexpected keyword argument 'loglevel'
+
+One solution can be to filter that dict, but that's cumbersome and needs maintainance. And that's worse if you have a lot of functions to call that way.
+
+Fief is a decorator that will make that for you, using `inspect` module.
+
+
+    from lully import fief
+
+    @fief
+    def func(a, b):
+        return a + b
+
+    config = {'a': 2, 'b': 3, 'loglevel': 'WARNING'}
+
+    # and suddenly, you can provide anything in keywords argument:
+    assert func(**config) == 5   # no TypeError, that's magic !
+
+
+## random
+### lsample
+This is a function answering to the *n choose k* problem using the Vitter's algorithm.
+
+The problem is to choose randomly n element in a set of k. That's usually done with the `random.sample(n, [1, 2, ...])` function. Hence the *sampling* part of `lsample` name.
+However, that stdlib function will load everything in memory, forcing you to provide a list, not a generator.
+
+Vitter's solution is to collect the `n` elements during a single pass over the list, making possible to work on generators,
+as long as you have a idea of their size, hence not loading all data in memory.
+
+    from lully import lsample
+    print(lsample(3, [x for x in range(10)], it_size=10))
+
+This enables you to pick 100 random tweets among the entire tweeter database without having to load it in memory.
+Provided you have enough time for the full browsing to be performed.
+
+See [that repo](https://github.com/aluriak/linear_choosens) for more information, sources and benchmarks.
+
+
+### weighed_choices
+This function is basically a `random.choice()` equivalent, but where each choice can be weighted.
+
+    from lully import weighed_choices
+    print(weighed_choices(a=2, b=4, c=1))
+
+Will print you mostly `b`, sometimes `a` and only once on seven calls `c`.
+
+Note that you can also provide the input choices as a dict:
+
+    print(weighed_choices({'a': 2, 'b': 4, 'c': 1))
+
