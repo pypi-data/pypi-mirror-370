@@ -1,0 +1,3 @@
+from QT6.managers.windowManagerConsole import startWindowManagerConsole
+startWindowManagerConsole()
+
