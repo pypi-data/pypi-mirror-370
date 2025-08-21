@@ -1,0 +1,57 @@
+{% set invenio_request = notification.context.request %}
+{% set invenio_request_event = notification.context.request_event %}
+
+{# created_by is either a resolved user or an email (for guests) #}
+{% set event_creator_name = invenio_request_event.created_by.username or invenio_request_event.created_by %}
+{% set request_id = invenio_request.id %}
+{% set request_event_content = invenio_request_event.payload.content | safe %}
+{% set request_title = invenio_request.title | safe %}
+{%- set request_link = invenio_url_for("invenio_app_rdm_requests.user_dashboard_request_view", request_pid_value=request_id) %}
+{%- set account_settings_link = invenio_url_for("invenio_notifications_settings.index") %}
+
+{#- Subject for emails -#}
+{%- block subject -%}
+{{ _("💬 New comment on '%(request_title)s'", request_title=request_title) }}
+{%- endblock subject -%}
+
+{#- HTML body for emails -#}
+{%- block html_body -%}
+<p>
+    {{ _("'@%(user_name)s' commented on '%(request_title)s':", user_name=event_creator_name, request_title=request_title) }}
+</p>
+<p>
+    <em>{{ request_event_content }}</em>
+</p>
+<p>
+    <a href="{{request_link}}" class="button">{{ _("See the curation request") }}</a>
+</p>
+<hr />
+<p style="font-size:smaller;">
+    {{ _('This is an auto-generated message. To manage notifications, visit your <a href="%(account_settings_link)s">account settings</a>.', account_settings_link=account_settings_link) }}
+</p>
+{%- endblock html_body %}
+{#- End of HTML body -#}
+
+{#- Plaintext body for emails -#}
+{%- block plain_body -%}
+{{ _("@%(user_name)s commented on '%(request_title)s':", user_name=event_creator_name, request_title=request_title) }}.
+
+{{ request_event_content }}
+
+{{ _("See the request") }}: {{ request_link }}
+
+{{ _("This is an auto-generated message. To manage notifications, visit your account settings")}}
+{%- endblock plain_body %}
+{#- End of plaintext body -#}
+
+{#- Markdown body for Slack/Mattermost/chat -#}
+{%- block md_body -%}
+{{ _("*@%(user_name)s* commented on *%(request_title)s*:", user_name=event_creator_name, request_title=request_title) }}.
+
+> {{ request_event_content }}
+
+[{{_("See the request")}}]({{request_link}})
+
+{{ _("This is an auto-generated message. To manage notifications, visit your account settings")}}
+{%- endblock md_body %}
+{#- End of Markdown body -#}

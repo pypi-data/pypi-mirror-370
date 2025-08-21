@@ -1,0 +1,254 @@
+{# -*- coding: utf-8 -*-
+
+  Copyright (C) 2015-2018 CERN.
+  Copyright (C) 2021 New York University.
+  Copyright (C) 2020-2024 TU Wien.
+
+  Invenio is free software; you can redistribute it and/or modify it
+  under the terms of the MIT License; see LICENSE file for more details.
+#}
+
+{#- base: invenio-theme v4.4.0 #}
+{#- changes: quite a few, see "change:" comments in the code #}
+
+<!DOCTYPE html>
+<html{% if html_css_classes %} class="{{ html_css_classes|join(' ') }}"{% endif %} lang="{{ current_i18n.locale.language|safe }}" dir="{{ current_i18n.locale.text_direction }}">
+  <head>
+    {%- block head %}
+      {%- block head_meta %}
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        {%- if description %}
+          <meta name="description" content="{{ description }}"/>
+        {%- endif %}
+
+        {%- if keywords %}
+          <meta name="keywords" content="{{ keywords }}"/>
+        {%- endif %}
+
+        {%- if config.get('THEME_GOOGLE_SITE_VERIFICATION', None) %}
+          {%- for google_id in config.THEME_GOOGLE_SITE_VERIFICATION %}
+            <meta name="google-site-verification" content="{{ google_id }}"/>
+          {%- endfor %}
+        {%- endif %}
+
+        {%- set meta_generator = get_meta_generator() -%}
+        {%- if meta_generator -%}
+          <meta name="generator" content="{{ meta_generator }}" />
+        {%- endif -%}
+
+        {#- Add meta tags from an existing "meta_robot_tags" Jinja variable or config #}
+        {%- set meta_robot_tags = meta_robot_tags or config.get("THEME_META_ROBOT_TAGS") %}
+        {%- for meta_tag in meta_robot_tags %}
+          <meta {{ meta_tag | xmlattr }} />
+        {%- endfor %}
+      {%- endblock head_meta %}
+
+      {%- block head_title %}
+        {%- set title = title or _(config.THEME_SITENAME) or _('Invenio') %}
+        <title>{{ title }}</title>
+      {%- endblock head_title %}
+
+      {%- block head_links %}
+        {#- change: favicons in 16x16 and 32x32 #}
+        <link rel="shortcut icon" type="image/png" href="{{ url_for('static', filename='images/favicon-32x32.png') }}"/>
+        <link rel="shortcut icon" type="image/png" href="{{ url_for('static', filename='images/favicon-16x16.png') }}"/>
+
+        {%- if keywords %}
+          <link rel="canonical" href="{{ canonical_url }}"/>
+        {%- endif %}
+
+        {%- block head_links_langs %}
+          {%- if alternate_urls %}
+            {%- for alt_ln, alternate_url in alternate_urls.items() %}
+              <link rel="alternate" hreflang="{{ alt_ln }}" href="{{ alternate_url }}"/>
+            {%- endfor %}
+          {%- endif %}
+        {%- endblock %}
+
+        {%- block head_apple_icons %}
+          {#- change: removed apple touch icons #}
+        {%- endblock head_apple_icons %}
+      {%- endblock head_links %}
+
+      {%- block header %}
+      {%- endblock header %}
+
+      {%- block css %}
+        {{- webpack['theme.css'] }}
+        {#- change: removed IE8 compat code #}
+      {%- endblock css %}
+
+      {%- block tuw_metadata %}
+        {#- change: added tuw_metadata block #}
+      {%- endblock tuw_metadata -%}
+
+      {%- block tracking %}
+        {#- change: added matomo block #}
+        {%- if config.get("THEME_TUW_MATOMO_ENABLED", False) %}
+          {{- webpack["invenio-theme-tuw-tracking.js"] }}
+        {%- endif %}
+      {%- endblock tracking %}
+    {%- endblock head %}
+  </head>
+
+  {#- change: formatting, added 'pushable' class, shape of isMathJaxEnabled #}
+    <body data-invenio-config='{{ {"isMathJaxEnabled": config.THEME_MATHJAX_CDN != ""} | tojson }}' class="{{ body_css_classes|join(' ') -}} pushable" {% if g.ln %} lang="{{ g.ln.split('_', 1)[0]|safe }}" {% if rtl_direction %}{{ rtl_direction|safe }} {% endif %}{% endif -%} itemscope itemtype="http://schema.org/WebPage" data-spy="scroll" data-target=".scrollspy-target">
+    {#- change: added matomo code #}
+    {%- if config.get("THEME_TUW_MATOMO_ENABLED", False) and config.get("THEME_TUW_MATOMO_URL", None) %}
+      {%- set matomo_url = config.get("THEME_TUW_MATOMO_URL", "").rstrip("/") + "/" %}
+      {%- set matomo_site_id = config.get("THEME_TUW_MATOMO_SITE_ID", 1) %}
+
+      <input id="matomo-url" type="hidden" value="{{ matomo_url }}"/>
+      <input id="matomo-site-id" type="hidden" value="{{ matomo_site_id }}"/>
+    {%- endif %}
+
+    {%- block body %}
+      {%- block bypasslinks %}
+        <a id="skip-to-main" class="ui button primary ml-5 mt-5 skip-link" href="#main">
+          {{_('Skip to main')}}
+        </a>
+      {%- endblock bypasslinks %}
+
+      {#- change: removed browserupgrade block (IE < 8) #}
+      {#- change: most of the body_inner block #}
+      {%- block body_inner %}
+
+        {%- block sidebar %}
+          {#- TODO check if we can rework the sidebar #}
+          {#- * refactor (different file & page structure #}
+          {#- * get rid of the horizontal scroll bar #}
+          <div class="ui sidebar inverted vertical menu" id="sidebar">
+            {%- if not current_user.is_authenticated %}
+              <a href="{{ url_for_security('login', next=request.path) }}" class="item login mobile">
+                <span><i class="ui icon sign-in"></i>{{ _("Log in") }}</span>
+              </a>
+            {%- elif current_user.is_authenticated %}
+              <a href="{{ url_for_security('logout', next=request.path) }}" class="item login mobile">
+                <span><i class="ui icon sign-out"></i>{{ _("Log out") }}</span>
+              </a>
+            {%- endif %}
+
+            <div class="ui submenu">
+              <a class="item" href="/">Home</a>
+
+              {#- Main Submenu: Communities #}
+              {%- for item in current_menu.submenu('main').children|sort(attribute='order') if item.visible recursive %}
+                <a href="{{ item.url }}" class="item">{{ item.text|safe }}</a>
+              {%- endfor %}
+
+              {#- Actions Submenu: My dashboard #}
+              {%- for item in current_menu.submenu('actions').children|sort(attribute='order') if item.visible recursive %}
+                <a href="{{ item.url }}" class="item">{{ item.text|safe }}</a>
+              {%- endfor %}
+
+              {%- if config.ACCOUNTS %}
+                {%- if current_user.is_authenticated %}
+
+                  {#- Notifications Submenu: Requests #}
+                  {%- for item in current_menu.submenu('notifications').children|sort(attribute='order') if item.visible recursive %}
+                    <a class="item" href="{{ item.url }}">
+                      {{ item.text|safe }}
+                    </a>
+                  {%- endfor %}
+                {%- endif %}
+              {%- endif %}
+            </div>
+
+            {#- Rechecking if accounts are enabled and user is logged-in #}
+            {#- because the settings must be in a different ui submenu #}
+            {%- if config.ACCOUNTS %}
+              {%- if current_user.is_authenticated %}
+                <div class="ui divider"></div>
+
+                <div class="ui submenu">
+                  <h1 class="item submenu-header">Settings</h1>
+
+                  {#- Settings Submenu: Profile, Security, Linked Accounts, Applications #}
+                  {%- for item in current_menu.submenu('settings').children if item.visible %}
+                    <a href="{{ item.url }}" class="item">{{ item.text|safe }}</a>
+                  {%- endfor %}
+
+                  {#- Admin stuff #}
+                  {%- for item in current_menu.submenu('profile-admin').children if item.visible %}
+                    <a role="menuitem" class="item" href="{{ item.url }}" tabindex="-1">{{ item.text|safe }}</a>
+                  {%- endfor %}
+                </div>
+              {%- endif %}
+            {%- endif %}
+
+          </div>
+        {%- endblock sidebar %}
+
+        <div class="pusher">
+          <div class="page-content">
+
+            {#- same as upstream #}
+            {%- block page_header %}
+              {%- include config.THEME_HEADER_TEMPLATE %}
+            {%- endblock page_header %}
+
+            {%- block site_banner %}
+              {% from 'invenio_banners/banner.html' import banner %}
+              {{ banner() }}
+            {%- endblock %}
+
+            {%- block page_hero %}
+            {%- endblock page_hero %}
+
+            {%- block flashmessages %}
+              {%- from "invenio_theme/macros/messages.html" import flashed_messages with context -%}
+              {{ flashed_messages() }}
+            {%- endblock %}
+
+            {#- these seem to have been moved here from the header #}
+            {#- TODO check if they are actually useful #}
+            {%- block breadcrumbs %}
+            {%- endblock breadcrumbs %}
+
+            <main id="main">
+              <div class="invenio-page-body">
+                {%- block page_body %}
+                  {%- include "invenio_theme/body.html" %}
+                {%- endblock page_body %}
+              </div>
+            </main>
+
+          </div>
+
+          {#- same as upstream #}
+          {%- block page_footer %}
+            {%- include config.THEME_FOOTER_TEMPLATE %}
+          {%- endblock page_footer %}
+
+        </div>
+      {%- endblock body_inner %}
+
+      {%- block javascript %}
+        {#- change: add static path for FDT if enabled (we need the nonce for CSP, it's not included in the provided script tag) #}
+        {%- if config.DEBUG_TB_ENABLED -%}
+          <script type="text/javascript" nonce="{{ csp_nonce() }}">var DEBUG_TOOLBAR_STATIC_PATH = '{{ url_for("_debug_toolbar.static", filename="") }}'</script>
+        {%- endif -%}
+        {%- if config.THEME_MATHJAX_CDN -%}
+          {#- change: added nonce for the inline script #}
+          <script type="text/javascript" nonce="{{ csp_nonce() }}">
+            window.MathJax = {
+              tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                processEscapes: true // Allows escaping $ signs if needed
+              }
+            };
+          </script>
+          <script type="text/javascript" src="{{ config.THEME_MATHJAX_CDN }}"></script>
+        {%- endif -%}
+        {%- include config.THEME_JAVASCRIPT_TEMPLATE %}
+      {%- endblock javascript %}
+
+      {%- block trackingcode %}
+        {%- include config.THEME_TRACKINGCODE_TEMPLATE %}
+      {%- endblock trackingcode %}
+    {%- endblock body %}
+  </body>
+</html>

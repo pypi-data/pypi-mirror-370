@@ -1,0 +1,139 @@
+{# -*- coding: utf-8 -*-
+
+  This file is part of Invenio.
+  Copyright (C) 2023 CERN.
+  Copyright (C) 2025 TU Wien.
+
+  Invenio is free software; you can redistribute it and/or modify it
+  under the terms of the MIT License; see LICENSE file for more details.
+#}
+
+{#- NOTE: this file is *not* an override, it's for our own comstats feature -#}
+{%- extends "invenio_communities/details/base.html" %}
+{%- set active_community_header_menu_item= 'statistics' %}
+
+{%- block header %}
+  {{ super() }}
+  <!-- Folium start -->
+  {{ map_header|safe }}
+  <!-- Folium end -->
+
+  {#- note: inline style might conflict with strict CSP values -#}
+  <style>
+      #input-form ul {
+          list-style-type: none;
+          padding: 0;
+          margin: 0;
+      }
+      #input-form li {
+          margin-bottom: 10px;
+      }
+      #input-form label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: bold;
+      }
+      #input-form select,
+      #input-form input[type="date"],
+      #input-form input[type="submit"] {
+          padding: 10px;
+          font-size: 1em;
+          border: 1px solid #ccc;
+          border-radius: 5px;
+      }
+      #input-form input[type="submit"] {
+          background-color: #007BFF;
+          color: white;
+          cursor: pointer;
+          transition: background-color 0.3s;
+      }
+      #input-form input[type="submit"]:hover {
+          background-color: #0056b3;
+      }
+
+      /* Adding some styling for the map container with a shadow */
+      #map-container {
+        margin: 20px 0;
+        margin-bottom: 30px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+      }
+
+      /* Centering and styling the table */
+      table {
+        margin: 20px auto;  /* Centers the table horizontally */
+        border-radius: 10px;
+        border-collapse: collapse;
+        width: 70%;
+        box-shadow: 0 0 10px rgba(0,0,0,0.15);
+      }
+      table, th, td {
+        border: 1px solid #ddd;
+      }
+      th, td {
+        padding: 12px;
+        text-align: left;
+      }
+      th:first-child {
+        background-color: #0066998a; /* TUW Blue but transparent*/
+        color: #f4f4f4;
+      }
+      thead {
+        background-color: #006699df; /* TUW Blue but transparent*/
+        color: #f4f4f4;
+      }
+      tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+  </style>
+{%- endblock header %}
+
+{%- block page_body %}
+  {{ super() }}
+  <div class="ui container rel-m-2 rel-pt-1">
+    <h1>Usage statistics for "{{ record_ui["metadata"]["title"] }}"</h1>
+    <form id="input-form">
+      <ul>
+        <li>
+          <label for="recid">Record</label>
+          <select name="recid" id="recid" onchange="document.getElementById('input-form').submit();">
+            {%- for rec in records -%}
+              {%- set selected = "selected" if rec.id == record_ui["id"] else "" -%}
+              <option value="{{ rec.id }}" {{ selected }}>{{ rec.metadata.title }}</option>
+            {%- endfor %}
+          </select>
+        </li>
+
+        <li>
+          {#- there is also type="month" but that has limited availability for now... -#}
+          {#- we use 'onblur' because 'onchange' triggers on every state change, even if the user isn't done yet -#}
+          <label for="month"><abbr title="Only the month of the selected date will be used">Month</abbr></label>
+          <input name="month" id="month" type="date" value="{{ month }}-01" onblur="document.getElementById('input-form').submit();" />
+        </li>
+
+        <li>
+          <label for="type">Views or downloads</label>
+          <select name="type" id="type" onchange="document.getElementById('input-form').submit();">
+            {%- for val, txt in [("view", "Views"), ("download", "Downloads"), ("both", "Both")] -%}
+            {%- set selected = "selected" if val == stats_type else "" -%}
+              <option value="{{ val }}" {{ selected }}>{{ txt }}</option>
+            {%- endfor -%}
+          </select>
+        </li>
+
+        <noscript>
+          <li>
+            <input type="submit" value="Go!" />
+          </li>
+        </noscript>
+      </ul>
+    </form>
+    <div id="map-container">
+      {{ map_html|safe }}
+    </div>
+    {#- the script is inline, which means we can't use defer #}
+    <script nonce="{{ csp_nonce() }}">
+      {{ map_script|safe }}
+    </script>
+    {{ table_html|safe }}
+  </div>
+{%- endblock page_body -%}

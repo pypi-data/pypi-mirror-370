@@ -1,0 +1,790 @@
+{# -*- coding: utf-8 -*-
+
+  Copyright (C) 2025 TU Wien.
+
+  Invenio Theme TUW is free software; you can redistribute it and/or modify it
+  under the terms of the MIT License; see LICENSE file for more details.
+#}
+
+{%- extends config.BASE_TEMPLATE %}
+
+{# These links are used multiple times throughout this page. #}
+{% set inveniordm_api_ref_link = "https://inveniordm.docs.cern.ch/reference/rest_api_index/" %}
+{% set token_link = url_for("invenio_oauth2server_settings.token_new") %}
+
+{# NOTE: Set API cases text here (sequentially) #}
+{%
+  set api_cases_text = [
+    "Retrieve a Dataset's Metadata",
+    "Search for Datasets",
+    "Upload a New Dataset",
+    "Attach a File to an Existing Record",
+    "File Download",
+  ]
+%}
+
+{%- block page_hero %}
+  <section id="hero" class="policies no-shrink"></section>
+{%- endblock page_hero %}
+
+{%- block page_body %}
+  <section class="ui about container rel-mt-3">
+    <a href="{{ url_for('invenio_theme_tuw.tuw_about') }}">⬅️ {{ _("To parent page") }}</a>
+
+    <h1>{{ _("API Documentation") }}</h1>
+    <p>
+      {{ _("The %(sitename)s API provides programmatic access to datasets, metadata, search functionalities, and more.", sitename=config.THEME_SITENAME) }}
+      {{ _("This API lets you automate data management tasks, integrate with external systems, or build custom workflows for data analysis and visualization.") }}
+    </p>
+    <p>
+      {{ _("In this page we list the most common API operations which include:") }}
+    </p>
+    <ul>
+      {% for case in api_cases_text %}
+        {% set index = loop.index %}
+        <li>
+          {%- trans trimmed case_link = "#case" ~ index %}
+            <a href="{{ case_link }}">
+              Case {{ index }} - {{ case }}
+            </a>
+          {%- endtrans %}
+        </li>
+      {% endfor %}
+    </ul>
+    <p>
+      {{ _("While our customized implementation inherits all the core functionalities from a vanilla InvenioRDM instance, it introduces several enhancements to better serve the research community:") }}
+    </p>
+    <ul>
+      <li>
+        <strong> {{ _("Custom Permissions:") }}</strong>
+         {{ _("Unlike the standard InvenioRDM, our instance enforces enhanced permission settings.") }}
+         {{ _("For instance, an extra \"guard\" ensures that users can't create drafts in the system without being granted access by an administrator.") }}
+         {{ _("Moreover, records prior to publication go also through an administrative review, thus ensuring that only curated high-quality content can be publicly available.") }}
+      </li>
+      <li>
+        <strong> {{ _("Curation Workflow:") }}</strong>
+         {{ _("A thorough review system now includes new ways to interact through the interface.") }}
+         {{ _("These endpoints allow curators to review submissions, add annotations, and approve records before they are published, ensuring compliance with data quality and regulatory standards.") }}
+        <!-- These additions let reviewers examine entries, make notes besides validate records prior to release, which keeps data accurate and follows rules. -->
+      </li>
+      <li>
+        <strong> {{ _("Invenio-DAMAP Integration:") }}</strong>
+        {{ _("Our deployment includes extended functionality through the Invenio-DAMAP package.") }}
+        {%- trans trimmed tuw_dmp_tool_link = config.DAMAP_BASE_URL or "#" %}
+          This is the additional fine layer of advanced digital asset management such as automatic population of DMP fields and enriched file-specific metadata in the <a href="{{ tuw_dmp_tool_link }}">TU Wien DMP Tool</a>.
+        {%- endtrans %}
+      </li>
+    </ul>
+    <p>
+      {%- trans trimmed tuw_customizations_link = "#tuw_customizations" %}
+        For detailed examples of our enhanced Curation Workflow and Invenio-DAMAP integration, please see the <a href={{ tuw_customizations_link }}>Additional Customizations</a> section below.
+      {%- endtrans %}
+    </p>
+
+    <h2>{{ _("Authentication") }}</h2>
+    <p>
+      {%- trans trimmed token_link = token_link %}
+        <strong>Note: </strong>Operations such as creating records or attaching files require an access token. You can generate one
+        <a href="{{ token_link }}">here</a>.
+        Other operations (like retrieving metadata) are public.
+      {%- endtrans %}
+    </p>
+
+    <h2>{{ _("Common Query Parameters") }}</h2>
+    <p>
+      {{ _("For search endpoints, the most relevant parameters include:") }}
+    </p>
+    <ul>
+      <li><code>q</code>: {{ _("The search query") }} ({{ _("e.g.") }}, <code>q=title:climate</code>).</li>
+      <li><code>sort</code>: {{ _("Sorting criteria") }} ({{ _("e.g.") }}, <code>sort=newest</code>).</li>
+      <li><code>size</code>: {{ _("Results size per page") }} ({{ _("e.g.") }}, <code>size=50</code>).</li>
+      <li><code>page</code>: {{ _("Pagination control") }} ({{ _("e.g.") }}, <code>page=1</code>).</li>
+    </ul>
+    <p>
+      {%- trans trimmed inveniordm_api_ref_link = inveniordm_api_ref_link %}
+        More details about query parameters can be found in the official <a href="{{ inveniordm_api_ref_link }}" target="_blank" rel="noopener">InvenioRDM API Documentation</a>.
+      {%- endtrans %}
+    </p>
+
+    <h2>{{ _("API Usage Examples") }}</h2>
+    {# TODO: This could be reworked with a loop, use the 'api_cases_text' list defined above? #}
+    {# If possible, then readjust translation strings: should be marked only with the 2nd sentence here due to trans property above. #}
+
+    <!-- Case 1-->
+    <h3 id="case1">{{ _("Case 1 - Retrieve a Dataset's Metadata: Quickly fetch detailed metadata for a dataset using its persistent identifier.") }}</h3>
+    <p>
+      <strong>{{ _("User Story:") }}</strong>
+      <i>{{ _("As a researcher, I want to quickly retrieve detailed metadata for a dataset using its unique identifier so that I can verify its relevance and incorporate accurate information into my analysis.") }}</i>
+    </p>
+    <p><strong>{{ _("Endpoint:") }} </strong><code>GET /api/records/{record_id}</code></p>
+    <p><strong>{{ _("Token Required:") }} </strong>{{ _("No") }}</p>
+
+    <p><strong>cURL:</strong></p>
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl "{{ config.SITE_API_URL }}/records/abcde-12345"
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p><strong>Python (requests):</strong></p>
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/records/abcde-12345"
+
+response = requests.get(url)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p><strong>{{ _("Example Response") }} (HTTP 200 - OK):</strong></p>
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+{
+  "id": "abcde-12345",
+  "metadata": {
+    "title": "Dataset Title",
+    "creators": [{"name": "Doe, John"}],
+    "publication_date": "2025-01-09",
+    "resource_type": {"id": "dataset", "title": {"en": "Dataset"}}
+  },
+  "links": {
+    "self": "{{ config.SITE_API_URL }}/records/abcde-12345",
+    "files": "{{ config.SITE_API_URL }}/records/abcde-12345/files"
+  }
+}
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <!-- Example 2: Search for Datasets -->
+    <h3 id="case2">{{ _("Case 2 - Search for Datasets: Execute advanced searches with filters (keywords, authors, dates, etc.).") }} </h3>
+    <p>
+      <strong>{{ _("User Story:") }}</strong>
+      <i>{{ _("As a data scientist, I want to search for datasets using keywords and publication ranges, or author names so that I can find data that matches my research criteria without browsing through irrelevant records.") }}</i>
+    </p>
+    <p><strong>{{ _("Endpoint:") }} </strong><code>GET /api/records</code></p>
+    <p><strong>{{ _("Token Required:") }} </strong>{{ _("No") }}</p>
+    <p><strong>{{ _("Query Parameters:") }} </strong><code>q</code>, <code>sort</code>, and <code>page</code></p>
+    <p><strong>cURL:</strong></p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -G "{{ config.SITE_API_URL }}/records" \
+     --data-urlencode "q=climate AND metadata.publication_date:[2023 TO 2025]" \
+     --data-urlencode "sort=newest" \
+     --data-urlencode "page=1"
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p><strong>Python (requests):</strong></p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+params = {
+    "q": "climate AND metadata.publication_date=[2023 TO 2025]",
+    "sort": "newest",
+    "page": 1
+}
+url = "{{ config.SITE_API_URL }}/records"
+
+response = requests.get(url, params=params)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p><strong>{{ _("Example Response") }} (HTTP 200 - OK):</strong></p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+{
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "id": "abcde-12345",
+        "metadata": {
+          "title": "Climate Change Data",
+          "publication_date": "2025-01-01"
+        }
+      },
+      {
+        "id": "efgh-5678",
+        "metadata": {
+          "title": "Temperature Records",
+          "publication_date": "2024-12-25"
+        }
+      }
+    ]
+  },
+  "links": {
+    "self": "{{ config.SITE_API_URL }}/records?q=climate&sort=newest&page=1",
+    "next": "{{ config.SITE_API_URL }}/records?q=climate&sort=newest&page=2"
+  }
+}
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+    <p>
+      💡
+      {%- trans trimmed search_link = url_for("invenio_app_rdm.help_search") %}
+        Hint: You can refer to our <a href="{{ search_link }}">search guide</a> for further details on how to construct simple or advanced search queries.</p>
+      {%- endtrans %}
+    </p>
+
+    <!-- Example 3: Upload a New Dataset -->
+    <h3 id="case3">{{ _("Case 3 - Upload a New Dataset: Automate metadata submissions and record creation.") }}</h3>
+    <p>
+      <strong>{{ _("User Story:") }}</strong>
+      <i>{{ _("As a lab scientist, I want to automate the upload of new datasets along with detailed metadata so that my research outputs are quickly published, discoverable, and citable through an assigned DOI.") }}</i>
+    </p>
+    <div>
+      <strong>{{ _("Workflow:") }}</strong>
+      <ol>
+        <li>
+          <p>{{ _("Create a new draft:") }}</p>
+          <p><strong>{{ _("Endpoint:") }} </strong><code>POST /api/records</code></p>
+          <p>
+            <strong>{{ _("Token Required:") }} </strong>
+            {%- trans trimmed token_link = token_link %}
+              Yes — generate one <a href="{{ token_link }}">here</a>.
+            {%- endtrans %}
+          </p>
+        </li>
+        <br>
+        <li>
+          {{ _("Request a DOI:") }}
+          <p><br><strong>{{ _("Endpoint:") }} </strong><code>POST /api/records/{record_id}/draft/pids/doi</code></p>
+          <p>
+            <strong>{{ _("Token Required:") }} </strong>
+            {%- trans trimmed token_link = token_link %}
+              Yes — generate one <a href="{{ token_link }}">here</a>.
+            {%- endtrans %}
+          </p>
+        </li>
+      </ol>
+    </div>
+    <br>
+    <div>
+      <p><strong>cURL {{ _("Snippets") }}:</strong></p>
+
+      <p>{{ _("Step 1: Create a new draft") }}</p>
+
+      <div class="ui code-container">
+        <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -X POST "{{ config.SITE_API_URL }}/records" \
+     -H "Authorization: Bearer {your-access-token}" \
+     -H "Content-Type: application/json" \
+     -d '
+{
+  "metadata": {
+    "creators": [
+      {
+        "person_or_org": {
+          "family_name": "Doe",
+          "given_name": "Jane",
+          "type": "personal"
+        }
+      }
+    ],
+    "publication_date": "2025-01-09",
+    "publisher": "TU Wien",
+    "resource_type": {"id": "dataset"},
+    "title": "New Dataset Title"
+  },
+  "files": {"enabled": true}
+}'
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+      <p>{{ _("Step 2: Request a DOI") }}</p>
+
+      <div class="ui code-container">
+        <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -X POST "{{ config.SITE_API_URL }}/records/abcde-12345/draft/pids/doi" \
+     -H "Authorization: Bearer {your-access-token}"
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+      <p><strong>Python (requests) {{ _("Snippets") }}:</strong></p>
+      <p>{{ _("Step 1: Create a new draft") }}</p>
+
+      <div class="ui code-container">
+        <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/records"
+headers = {
+    "Authorization": "Bearer {your-access-token}",
+    "Content-Type": "application/json"
+}
+data = {
+    "metadata": {
+        "creators": [
+            {
+                "person_or_org": {
+                    "family_name": "Doe",
+                    "given_name": "Jane",
+                    "type": "personal",
+                }
+            }
+        ],
+        "publication_date": "2025-01-09",
+        "publisher": "TU Wien",
+        "resource_type": {"id": "dataset"},
+        "title": "New Dataset Title",
+    },
+    "files": {"enabled": True},
+}
+
+response = requests.post(url, json=data, headers=headers)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p>{{ _("Step 2: Request a DOI") }}</p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/records/abcde-12345/draft/pids/doi"
+headers = {
+    "Authorization": "Bearer {your-access-token}",
+}
+
+response = requests.post(url, headers=headers)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <!-- Example 4: Attach a File to an Existing Record -->
+    <h3 id="case4">{{ _("Case 4 - Attach a File to an Existing Record: Enrich records by associating files using a multi-step upload process.") }}</h3>
+    <p>
+      <strong>{{ _("User Story:") }}</strong>
+      <i>{{ _("As a project manager, I want to attach supplementary files (like additional data or documentation) to an existing dataset record so that all components of the research project are organized and accessible in one place.") }}</i>
+    </p>
+    <div>
+      <strong>{{ _("Workflow:") }}</strong>
+      <ol>
+        <li>
+          <p>{{ _("Initialize the file upload:") }}</p>
+          <p><strong>{{ _("Endpoint:") }}: </strong><code>POST /api/records/{record_id}/draft/files</code></p>
+          <p>
+            <strong>{{ _("Token Required:") }} </strong>
+            {%- trans trimmed token_link = token_link %}
+              Yes — generate one <a href="{{ token_link }}">here</a>.
+            {%- endtrans %}
+          </p>
+        </li>
+        <br>
+        <li>
+          <p>{{ _("Upload the file content:") }}</p>
+          <p><strong>{{ _("Endpoint:") }} </strong><code>PUT /api/records/{record_id}/draft/files/{file_name}/content</code></p>
+          <p>
+            <strong>{{ _("Token Required:") }} </strong>
+            {%- trans trimmed token_link = token_link %}
+              Yes — generate one <a href="{{ token_link }}">here</a>.
+            {%- endtrans %}
+          </p>
+        </li>
+        <br>
+        <li>
+          <p>{{ _("Commit draft file upload:") }}</p>
+          <p><strong>{{ _("Endpoint:") }} </strong><code>POST /api/records/{record_id}/draft/files/{file_name}/commit</code></p>
+          <p>
+            <strong>{{ _("Token Required:") }} </strong>
+            {%- trans trimmed token_link = token_link %}
+              Yes — generate one <a href="{{ token_link }}">here</a>.
+            {%- endtrans %}
+          </p>
+        </li>
+        <br>
+        <li>
+          <p>
+            {%- trans trimmed tuw_customizations_link = "#tuw_customizations" %}
+              Publish the draft: (After curation request has been accepted - See <a href="{{ tuw_customizations_link }}" rel="noopener">curation endpoint</a>)</p>
+            {%- endtrans %}
+          <p><strong>{{ _("Endpoint:") }} </strong><code>POST /api/records/{record_id}/draft/actions/publish</code></p>
+          <p>
+            <strong>{{ _("Token Required:") }} </strong>
+            {%- trans trimmed token_link = token_link %}
+              Yes — generate one <a href="{{ token_link }}">here</a>.
+            {%- endtrans %}
+          </p>
+        </li>
+      </ol>
+    </div>
+    <br>
+    <div>
+      <p><strong>cURL {{ _("Snippets") }}:</strong></p>
+      <p>{{ _("Step 1: Initialize File Upload") }}</p>
+
+      <div class="ui code-container">
+        <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -X POST "{{ config.SITE_API_URL }}/records/abcde-12345/draft/files" \
+     -H "Authorization: Bearer {your-access-token}" \
+     -H "Content-Type: application/json" \
+     -d '
+{
+  "files": [{"key": "example_dataset.csv"}]
+}'
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p>{{ _("Step 2: Upload File Content") }}</p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -X PUT "{{ config.SITE_API_URL }}/records/abcde-12345/draft/files/example_dataset.csv/content" \
+     -H "Authorization: Bearer {your-access-token}" \
+     -H "Content-Type: application/octet-stream" \
+     --data-binary @example_dataset.csv
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p>{{ _("Step 3: Commit Draft File Upload") }}</p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -X POST "{{ config.SITE_API_URL }}/records/abcde-12345/draft/files/example_dataset.csv/commit" \
+     -H "Authorization: Bearer {your-access-token}"
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p>
+      {%- trans trimmed tuw_customizations_link = "#tuw_customizations" %}
+        Step 4: Publish the Draft (After curation request has been accepted - See <a href="{{ tuw_customizations_link }}" rel="noopener">curation endpoint</a>)
+      {%- endtrans %}
+    </p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -X POST "{{ config.SITE_API_URL }}/records/abcde-12345/draft/actions/publish" \
+     -H "Authorization: Bearer {your-access-token}"
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p><strong>Python (requests) {{ _("Snippets") }}:</strong></p>
+    <p>{{ _("Step 1: Initialize File Upload") }}</p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/records/abcde-12345/draft/files"
+headers = {
+    "Authorization": "Bearer {your-access-token}",
+    "Content-Type": "application/json"
+}
+data = [
+    {
+        "key": "example_dataset.csv"
+    }
+]
+
+response = requests.post(url, json=data, headers=headers)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p>{{ _("Step 2: Upload File Content") }}</p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/records/abcde-12345/draft/files/example_dataset.csv/content"
+headers = {
+    "Authorization": "Bearer {your-access-token}",
+    "Content-Type": "application/octet-stream"
+}
+
+with open("example_dataset.csv", "rb") as file_data:
+    response = requests.put(url, headers=headers, data=file_data)
+
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p>{{ _("Step 3: Commit Draft File Upload") }}</p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/records/abcde-12345/draft/files/example_dataset.csv/commit"
+headers = {
+    "Authorization": "Bearer {your-access-token}",
+}
+
+response = requests.post(url, headers=headers)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p>
+      {%- trans trimmed tuw_customizations_link = "#tuw_customizations" %}
+        Step 4: Publish the Draft (After curation request has been accepted - See <a href="{{ tuw_customizations_link }}" rel="noopener">curation endpoint</a>)
+      {%- endtrans %}
+    </p>
+
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/records/abcde-12345/draft/actions/publish"
+headers = {
+    "Authorization": "Bearer {your-access-token}",
+}
+data = {
+    "metadata": {
+        "title": "New Dataset Title",
+        "creators": [{"name": "Doe, Jane"}],
+        "publication_date": "2025-01-09",
+        "resource_type": {"id": "dataset"}
+    },
+    "files": {"enabled": True}
+}
+
+response = requests.post(url, json=data, headers=headers)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <!-- Example 5: File Download -->
+    <h3 id="case5">{{ _("Case 5 - File Download: Retrieving Contents from a Record.") }}</h3>
+    <p>
+      <strong>{{ _("User Story:") }}</strong>
+      <i>{{ _("As a researcher, I want to download an individual file from a dataset so that I can analyze its contents locally without navigating through multiple interfaces.") }}</i>
+    </p>
+    <p><strong>{{ _("Endpoint:") }} </strong><code>GET /api/records/{record_id}/files/{filename}/content</code></p>
+    <p><strong>{{ _("Token Required:") }} </strong>{{ _("No") }}</p>
+
+    <p><strong>cURL:</strong></p>
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -JO "{{ config.SITE_API_URL }}/records/abcde-12345/files/example_dataset.csv/content"
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p><strong>Python (requests):</strong></p>
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import os, re, requests
+url = "{{ config.SITE_API_URL }}/records/abcde-12345/files/example_dataset.csv/content"
+response = requests.get(url, stream=True)
+
+content_disposition = response.headers.get("Content-Disposition", "")
+filename = re.search(r'filename="([^"]+)"', content_disposition).group(1)
+
+with open(filename, "wb") as f:
+    for chunk in response.iter_content(chunk_size=8192):
+        _ = f.write(chunk)
+
+print("File saved at: ", os.path.abspath(filename))
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <p><strong>{{ _("Example Response Headers") }} (HTTP 200 - OK):</strong></p>
+    <div class="ui code-container">
+      <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+Content-Disposition: attachment; filename="example_dataset.csv"
+Content-Length: 5577907
+Content-Type: application/octet-stream
+Date: Mon, 28 Fri 2025 13:56:29 GMT
+ETag: "674c65f3-551cb3"
+Last-Modified: Sun, 01 Dec 2024 13:34:43 GMT
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+        <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+          <i class="copy icon"></i>
+        </button>
+      </pre>
+    </div>
+
+    <h2 id="tuw_customizations">{{ _("Additional Customizations") }}</h2>
+    <h3>{{ _("Extended Functionality: Custom Endpoints") }}</h3>
+    <p>
+      {{ _("Our customized instance of the repository comes with additional endpoints that differ from what would be expected from a standard Invenio RDM installation.") }}
+      {{ _("These improvements cover the following:") }}
+    </p>
+    <ul>
+      <li>
+        <strong>{{ _("Curation Workflow Requests:") }}</strong>
+        <p>
+          {{ _("We offer an API that supports a custom curation process. Custom endpoints assign curators to records, review submissions, add curation notes, and allow publishing of curated content.") }}
+          {{ _("This workflow guarantees that data quality and compliance standards are met prior to data being made public.") }}
+        </p>
+        <p>{{ _("Create a new curation request:") }}</p>
+        <p><strong>{{ _("Endpoint:") }} </strong><code>POST /api/curations/</code></p>
+        <p>
+          <strong>{{ _("Token Required:") }} </strong>
+          {%- trans trimmed token_link = token_link %}
+            Yes — generate one <a href="{{ token_link }}">here</a>.
+          {%- endtrans %}
+        </p>
+
+        <p><strong>cURL:</strong></p>
+        <div class="ui code-container">
+          <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+curl -X POST "{{ config.SITE_API_URL }}/curations/" \
+     -H "Authorization: Bearer {your-access-token}" \
+     -H "Content-Type: application/json" \
+     -d '
+{
+  "topic":{
+    "record": "fghij-54321"
+  }
+}'
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+            <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+              <i class="copy icon"></i>
+            </button>
+          </pre>
+        </div>
+
+        <p><strong>Python (requests):</strong></p>
+        <div class="ui code-container">
+          <pre class="ui segment code-block">
+{#- ################# PREFORMATTED AREA TEXT BEGIN ################# #}
+import requests
+url = "{{ config.SITE_API_URL }}/curations/"
+headers = {
+    "Authorization": "Bearer {your-access-token}",
+}
+data = {
+  "topic":{
+      "record": "fghij-54321"
+  }
+}
+
+response = requests.post(url, json=data, headers=headers)
+print(response.json())
+{#- ################## PREFORMATTED AREA TEXT END ################## -#}
+            <button class="ui button copy-btn" data-tooltip="Copy to clipboard">
+              <i class="copy icon"></i>
+            </button>
+          </pre>
+        </div>
+      </li>
+      <li>
+        <strong>Invenio-DAMAP {{ _("Endpoints") }}:</strong>
+        <p>
+          Additionally, we provide extra endpoints that ship with the <a href="https://github.com/fair-data-austria/invenio-damap" target="_blank" rel="noopener">Invenio-DAMAP package</a>.
+          {{ _("They allow to directly link your record to a DAMAP-based system, by automatically filling specific DMP fields, saving you time and effort.") }}
+          {%- trans trimmed damap_page_link = url_for("invenio_theme_tuw.tuw_about_damap") %}
+            For further details about this integration, visit the dedicated <a href="{{ damap_page_link }}">DAMAP page</a>.
+          {%- endtrans %}
+        </p>
+      </li>
+    </ul>
+
+    <h2>{{ _("Additional Resources") }}</h2>
+    <p>
+      {%- trans trimmed inveniordm_api_ref_link = inveniordm_api_ref_link %}
+        For further details, please refer to the official <a href="{{ inveniordm_api_ref_link }}" target="_blank" rel="noopener">InvenioRDM API Documentation</a>.
+      {%- endtrans %}
+    </p>
+  </section>
+
+  {%- block javascript %}
+    {{ super() }}
+    {{ webpack["invenio-theme-tuw-clipboard.js"] }}
+  {%- endblock javascript %}
+
+{%- endblock page_body %}
