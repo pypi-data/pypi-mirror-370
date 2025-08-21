@@ -1,0 +1,104 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published, prereleased]
+
+jobs:
+  build-package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Build the project
+        run: uv build
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: dist
+
+  test-package:
+    needs: build-package
+
+    strategy:
+      matrix:
+        python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12", "3.13" ]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv and set the python version ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist
+
+      - name: Install package and dependencies
+        # We need to use --group dev to install development dependencies. Previous option ".[dev]" is deprecated
+        run: |
+          uv venv
+          uv pip install dist/pyfrag-*.whl
+          uv pip install --group dev
+
+      - name: Run Unit Tests
+        working-directory: tests
+        run: |
+            uv run pytest
+
+  publish-package:
+    runs-on: ubuntu-latest
+
+    needs: test-package
+
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+
+    environment:
+      name: pypi-release
+      url: https://pypi.org/project/${{ github.event.repository.name }}/
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist
+
+      # - name: Publish package to Test PyPI
+      #   if: ${{ vars.PUBLISH_TO_TEST_PYPI == 'true' }}
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     repository-url: https://test.pypi.org/legacy/
+
+
+      - name: Publish ${{ github.event.repository.name }} to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
