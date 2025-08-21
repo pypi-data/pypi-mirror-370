@@ -1,0 +1,1 @@
+import{g as s}from"./micromark-extension-gfm-D6ke1pJ_.js";import{g as o,a as n}from"./mdast-util-gfm-Dc8WEYZO.js";const t={};function r(r){const a=r||t,i=this.data(),m=i.micromarkExtensions||(i.micromarkExtensions=[]),e=i.fromMarkdownExtensions||(i.fromMarkdownExtensions=[]),x=i.toMarkdownExtensions||(i.toMarkdownExtensions=[]);m.push(s(a)),e.push(o()),x.push(n(a))}export{r};

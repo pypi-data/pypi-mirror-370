@@ -1,0 +1,1 @@
+import{t}from"./mdast-util-to-hast-CxG0hrDP.js";function n(n,r){return n&&"run"in n?async function(i,o){const u=t(i,{file:o,...r});await n.run(u,o)}:function(i,o){return t(i,{file:o,...n||r})}}export{n as r};
