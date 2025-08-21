@@ -1,0 +1,156 @@
+# Este archivo ha sido generado automáticamente por tai-sql
+# No modifiques este archivo directamente
+
+{{ imports|join('\n') }}
+
+{% if has_encrypted_columns %}
+
+# Configuración de encriptación
+_secret_key = os.getenv('{{ secret_key_name }}')
+if not _secret_key:
+    raise ValueError(
+        f"Variable de entorno '{{ secret_key_name }}' no encontrada para encriptación. "
+        f"Por favor, configure la variable de entorno '{{ secret_key_name }}' en su sistema "
+        f"con una clave secreta segura antes de ejecutar la aplicación. "
+        f"Ejemplo: export {{ secret_key_name }}='su-clave-secreta-de-32-caracteres-aqui'"
+    )
+
+# Generar clave Fernet desde la clave secreta
+_fernet_key = base64.urlsafe_b64encode(_secret_key.encode()[:32].ljust(32, b'\0'))
+_cipher = Fernet(_fernet_key)
+
+def encrypt_value(value: str) -> str:
+    """Encripta un valor string"""
+    if value is None:
+        return None
+    return _cipher.encrypt(value.encode()).decode()
+
+def decrypt_value(value: str) -> str:
+    """Desencripta un valor string"""
+    if value is None:
+        return None
+    return _cipher.decrypt(value.encode()).decode()
+
+{% endif %}
+
+class Base(DeclarativeBase):
+    pass
+
+{% for model in models %}
+class {{ model.name }}(Base):
+    __tablename__ = "{{ model.tablename }}"
+
+    {% if model.is_view %}
+    is_view = True
+    {% endif %}
+    {% set encrypted_columns = model.columns | selectattr('encrypt') | list %}
+    {% if encrypted_columns %}
+    def __init__(self, **kwargs):
+        # Manejar columnas encriptadas especialmente
+        {% for column in encrypted_columns %}
+        if '{{ column.name }}' in kwargs:
+            {{ column.name }}_value = kwargs.pop('{{ column.name }}')
+            self.{{ column.name }} = {{ column.name }}_value
+
+        {% endfor %}
+        super().__init__(**kwargs)
+
+    {% endif %}
+    {% for column in model.columns %}
+    {% set column_name = '_' + column.name if column.encrypt else column.name %}
+    {% set needs_mapped_column = not column.no_args or column.encrypt or column.user_defined_sqlalchemy_type is not none %}
+    {% if needs_mapped_column %}
+    {{ column_name }}: Mapped[{% if column.nullable %}Optional[{{ column.type }}]{% else %}{{ column.type }}{% endif %}] = mapped_column(
+        {%- set args_list = [] -%}
+        {%- if column.user_defined_sqlalchemy_type is not none -%}
+            {%- set _ = args_list.append(column.user_defined_sqlalchemy_type) -%}
+        {%- endif -%}
+        {%- if not column.no_args -%}
+            {%- for key, value in column.args.items() -%}
+                {%- if key == 'autoincrement' and value -%}
+                    {%- set _ = args_list.append('autoincrement=True') -%}
+                {%- elif key == 'primary_key' and value -%}
+                    {%- set _ = args_list.append('primary_key=True') -%}
+                {%- elif key == 'unique' and value -%}
+                    {%- set _ = args_list.append('unique=True') -%}
+                {%- elif key == 'index' and value -%}
+                    {%- set _ = args_list.append('index=True') -%}
+                {%- elif key == 'default' and value is not none -%}
+                    {%- if value == 'datetime.now' -%}
+                        {%- set _ = args_list.append('default=datetime.now') -%}
+                    {%- elif value is string -%}
+                        {%- set _ = args_list.append('default="' + value|string + '"') -%}
+                    {%- else -%}
+                        {%- set _ = args_list.append('default=' + value|string) -%}
+                    {%- endif -%}
+                {%- elif key == 'length' and value is not none -%}
+                    {%- set _ = args_list.append('length=' + value|string) -%}
+                {%- endif -%}
+            {%- endfor -%}
+        {%- endif -%}
+        {%- if column.encrypt -%}
+            {%- set _ = args_list.append('name="' + column.name|string + '"') -%}
+        {%- endif -%}
+        {{- args_list|join(', ') -}}
+    )
+    {% else %}
+    {{ column_name }}: Mapped[{% if column.nullable %}Optional[{{ column.type }}]{% else %}{{ column.type }}{% endif %}]
+    {% endif %}
+    {% if column.encrypt %}
+    
+    @hybrid_property
+    def {{ column.name }}(self) -> {% if column.nullable %}Optional[{{ column.type }}]{% else %}{{ column.type }}{% endif %}:
+        """Propiedad encriptada para {{ column.name }}"""
+        if self._{{ column.name }} is None:
+            return None
+        return decrypt_value(self._{{ column.name }})
+    
+    @{{ column.name }}.setter
+    def {{ column.name }}(self, value: {% if column.nullable %}Optional[{{ column.type }}]{% else %}{{ column.type }}{% endif %}):
+        """Setter encriptado para {{ column.name }}"""
+        if value is None:
+            self._{{ column.name }} = None
+        else:
+            self._{{ column.name }} = encrypt_value(str(value))
+    
+    {% endif %}
+    {% endfor %}
+    {% if model.relations %}
+    
+    {% for relation in model.relations %}
+    {{ relation.name }}: Mapped[{{ relation.target_type }}] = relationship({% if relation.backref %}back_populates="{{ relation.backref }}"{% endif %})
+    {% endfor %}
+    {% endif %}
+
+    {% if model.has_foreign_keys %}
+    __table_args__ = (
+        {% for fk in model.foreign_keys %}
+        # {{ 'Clave foránea simple' if fk.is_simple else 'Clave foránea compuesta' }}: {{ fk.constraint_name }}
+        ForeignKeyConstraint(
+            # Columnas locales
+            {{ fk.local_columns }},
+            # Columnas objetivo
+            {{ fk.target_columns }},
+            ondelete='{{ fk.ondelete }}',
+            onupdate='{{ fk.onupdate }}'
+        ),
+        {% endfor %}
+        {% if is_postgres %}
+        # Esquema de la tabla
+        {'schema': '{{ schema_name }}'}
+        {% endif %}
+    )
+    {% else %}
+    {% if is_postgres %}
+    __table_args__ = {'schema': '{{ schema_name }}'}
+    {% endif %}
+    {% endif %}
+    {% if model.is_view %}
+    __mapper_args__ = {'primary_key': [
+        {% for column in model.columns %}
+        '{{ column.name }}',
+        {% endfor %}
+    ]}
+    {% endif %}
+
+{% endfor %}

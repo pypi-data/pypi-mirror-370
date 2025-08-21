@@ -1,0 +1,976 @@
+# Este archivo ha sido generado automáticamente por tai-sql
+# No modifiques este archivo directamente
+{% import "macros.jinja2" as macros %}
+{{ imports|join('\n') }}
+
+# Logger
+logger = Alphi.get_logger_by_name("{{ logger_name }}")
+
+
+{% for model in models %}
+{% set all_pk_autoincrement = true %}
+{% for column in model.columns %}
+    {% if column.args.get('primary_key', False) and not column.args.get('autoincrement', False) %}
+        {% set all_pk_autoincrement = false %}
+    {% endif %}
+{% endfor %}
+class {{ model.name }}SyncDAO:
+    """
+    Clase DAO síncrona para el modelo {{ model.name }}.
+    
+    Proporciona operaciones completas de Create, Read, Update y Delete
+    para el modelo {{ model.name }} con soporte para gestión automática
+    y manual de sesiones SQLAlchemy.
+    
+    Características principales:
+    - Soporte dual: sesiones automáticas o compartidas
+    - Type hints completos para mejor experiencia de desarrollo
+    - Manejo robusto de errores con rollback automático
+    - Operaciones optimizadas con flush para obtener IDs
+    - Filtros flexibles en todas las operaciones de búsqueda
+    
+    Métodos de lectura:
+        find(**filters, session=None): Busca un único registro
+        find_many(limit, offset, **filters, session=None): Busca múltiples registros
+        find_by_id(id, session=None): Busca por clave primaria
+        count(**filters, session=None): Cuenta registros
+    
+    {% if not model.is_view %}
+    Métodos de escritura:
+        create(**data, session=None): Crea un nuevo registro
+        create_many(records, session=None): Crea múltiples registros
+        update(filters, **data, session=None): Actualiza registros existentes
+        delete(**filters, session=None): Elimina registros
+
+    {% endif %}
+    Parámetros de sesión:
+        Todos los métodos aceptan un parámetro opcional 'session':
+        - Si session=None: Se crea una sesión automática con commit
+        - Si session=Session: Se usa la sesión proporcionada (para transacciones)
+    
+    Ejemplos de uso:
+        ```python
+        # Operaciones simples (sesión automática)
+        crud = {{ model.name }}SyncDAO(session_manager)
+        {% if model.columns %}
+        {% set first_column = model.columns[0] %}
+        {% if not first_column.args.get('autoincrement', False) %}
+        record = crud.create({{ first_column.name }}="valor")
+        {% endif %}
+        {% endif %}
+        found = crud.find_by_id(1)
+        
+        # Operaciones transaccionales (sesión compartida)
+        with session_manager.transaction() as session:
+            record1 = crud.create(data="valor1", session=session)
+            record2 = crud.create(data="valor2", session=session)
+            # Ambos se crean en la misma transacción
+        ```
+    """
+    
+    def __init__(self, session_manager: SyncSessionManager):
+        """
+        Inicializa el SyncDAO con un gestor de sesiones.
+        
+        Args:
+            session_manager: Gestor de sesiones síncronas
+        """
+        self.session_manager = session_manager
+        {% if not model.is_view %}
+        self._df_validator = {{ model.name }}DataFrameValidator()
+        {% endif %}
+
+    {% if not model.is_view %}
+    @error_handler
+    def find(
+        self,
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        {{ column.name }}: {{ column.type }},
+        {% endif %}
+        {% endfor %}
+        includes: Optional[List[str]] = None,
+        session: Optional[Session] = None
+    ) -> Optional[{{ model.name }}Read]:
+        """
+        Busca un único registro por primary key con carga optimizada de relaciones.
+        
+        Args:
+            {% for column in model.columns %}
+            {% if column.args.get('primary_key', False) %}
+            {{ column.name }}: Filtrar por {{ column.name }}
+            {% endif %}
+            {% endfor %}
+            includes: Lista de relaciones a incluir  (formato: 'relation' o 'relation.nested')
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Instancia del modelo o None si no se encuentra
+
+        Examples:
+            Incluir relación simple
+
+            await dao.find(id=1, includes=['author'])
+            
+            Incluir relaciones anidadas
+
+            await dao.find(id=1, includes=['author', 'author.posts'])
+            
+            Múltiples relaciones
+
+            await dao.find(id=1, includes=['author', 'comments', 'tags'])
+        """
+        logger.info(f"[{{ schema_name }}] 🔍 Buscando {{ model.name }}:")
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        logger.info(f"[{{ schema_name }}]     {{ column.name }}={{ '{' }}{{ column.name }}{{ '}' }}")
+        {% endif %}
+        {% endfor %}
+        logger.info(f"[{{ schema_name }}]     includes={includes}")
+
+        # Construir query base
+        query = select({{ model.name }})
+        
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        query = query.where({{ model.name }}.{{ column.name }} == {{ column.name }})
+        {% endif %}
+        {% endfor %}
+
+        # Aplicar opciones de carga optimizada
+        if includes:
+            loading_options = get_loading_options({{ model.name }}, includes)
+            if loading_options:
+                query = query.options(*loading_options)
+
+        # Ejecutar query
+        def execute_query(session: Session) -> Optional[{{ model.name }}Read]:
+            result = session.execute(query)
+            instance = result.scalars().first()
+            
+            if instance:
+                logger.info(f"[{{ schema_name }}] ✅ {{ model.name }} encontrado exitosamente")
+                return {{ model.name }}Read.from_instance(
+                    instance, 
+                    includes=includes, 
+                    max_depth={{ max_depth }}
+                )
+            else:
+                logger.info(f"[{{ schema_name }}] 📭 {{ model.name }} no encontrado")
+                return None
+
+        if session is not None:
+            return execute_query(session)
+        else:
+            with self.session_manager.get_session() as session:
+                return execute_query(session)
+    {% endif %}
+    
+    @error_handler
+    def find_many(
+        self,
+        limit: Optional[int] = None, 
+        offset: Optional[int] = None,
+        {{ macros.generate_query_parameters(model).rstrip('\n') | indent(8) }}
+        includes: Optional[List[str]] = None,
+        session: Optional[Session] = None
+    ) -> List[{{ model.name }}Read]:
+        """
+        Busca múltiples registros, filtrados, con carga optimizada de relaciones.
+        
+        Args:
+            limit: Límite de registros a retornar
+            offset: Número de registros a saltar
+            {{ macros.generate_query_args(model).rstrip('\n') | indent(12) }}
+            includes: Lista de relaciones a incluir (formato: 'relation' o 'relation.nested')
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Lista de instancias del modelo
+
+        Examples:
+            Búsqueda simple con relaciones
+
+            await dao.find_many(limit=10, includes=['author'])
+            
+            Relaciones anidadas con filtros
+
+            await dao.find_many(
+                ..., 
+                includes=['author', 'author.profile', 'comments']
+            )
+        """
+        logger.info(f"[{{ schema_name }}] 🔍 Buscando múltiples {{ model.name }}:")
+        logger.info(f"[{{ schema_name }}]     limit={limit}")
+        logger.info(f"[{{ schema_name }}]     offset={offset}")
+        logger.info(f"[{{ schema_name }}]     includes={includes}")
+
+        # Construir query base
+        query = select({{ model.name }})
+        
+        # Aplicar filtros de búsqueda
+        {{ macros.generate_filter_query(model).rstrip('\n') | indent(8)  }}
+        
+        # Aplicar opciones de carga optimizada
+        if includes:
+            loading_options = get_loading_options({{ model.name }}, includes)
+            if loading_options:
+                query = query.options(*loading_options)
+        
+        # Aplicar paginación
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        
+        # Ejecutar query
+        def execute_query(session: Session) -> List[{{ model.name }}Read]:
+            results = session.execute(query)
+            instances = results.scalars().all()
+            
+            logger.info(f"[{{ schema_name }}] ✅ Encontrados {len(instances)} registros {{ model.name }}")
+
+            return [
+                {{ model.name }}Read.from_instance(
+                    instance, 
+                    includes=includes, 
+                    max_depth={{ max_depth }}
+                ) 
+                for instance in instances
+            ]
+        
+        if session is not None:
+            return execute_query(session)
+        else:
+            with self.session_manager.get_session() as session:
+                return execute_query(session)
+
+    def as_dataframe(
+        self,
+        limit: Optional[int] = None, 
+        offset: Optional[int] = None,
+        {% for column in model.columns %}
+        {% if not column.args.get('autoincrement', False) %}
+        {% if column.args.get('primary_key', False) or column.is_foreign_key %}
+        {{ column.name }}: Optional[{{ column.type }}] = None,
+        {% elif 'str' == column.type or 'Text' == column.type or 'bool' == column.type %}
+        {{ column.name }}: Optional[{{ column.type }}] = None,
+        {% elif  'date' == column.type or 'int' == column.type or 'BigInteger' == column.type %}
+        {{ column.name }}: Optional[{{ column.type }}] = None,
+        min_{{ column.name }}: Optional[{{ column.type }}] = None,
+        max_{{ column.name }}: Optional[{{ column.type }}] = None,
+        {% elif 'float' == column.type or 'Numeric' == column.type or 'datetime' == column.type or 'time' == column.type %}
+        min_{{ column.name }}: Optional[{{ column.type }}] = None,
+        max_{{ column.name }}: Optional[{{ column.type }}] = None,
+        {% else %}
+        {{ column.name }}: Optional[{{ column.type }}] = None,
+        {% endif %}
+        {% endif %}
+        {% endfor %}
+    ) -> DataFrame:
+        """
+        Busca múltiples registros estableciendo filtros y devuelve el resultado como pandas DataFrame.
+        
+        Args:
+            limit: Límite de registros a retornar
+            offset: Número de registros a saltar
+            {% for column in model.columns %}
+            {% if not column.args.get('autoincrement', False) %}
+            {% if column.args.get('primary_key', False) or column.is_foreign_key %}
+            {{ column.name }}: Filtrar por {{ column.name }}
+            {% elif 'str' == column.type or 'Text' == column.type or 'bool' == column.type %}
+            {{ column.name }}: Filtrar por {{ column.name }}
+            {% elif  'date' == column.type or 'int' == column.type or 'BigInteger' == column.type %}
+            {{ column.name }}: Filtrar por {{ column.name }},
+            min_{{ column.name }}: Filtrar por fecha mínima (incluída)
+            max_{{ column.name }}: Filtrar por fecha máxima (incluída)
+            {% elif 'float' == column.type or 'Numeric' == column.type or 'datetime' == column.type or 'time' == column.type %}
+            min_{{ column.name }}: Filtrar por valor mínimo de {{ column.name }} (incluído)
+            max_{{ column.name }}: Filtrar por valor máximo de {{ column.name }} (incluído)
+            {% else %}
+            {{ column.name }}: Filtrar por {{ column.name }}
+            {% endif %}
+            {% endif %}
+            {% endfor %}
+            
+        Returns:
+            pandas.DataFrame con los registros encontrados
+            
+        Raises:
+            ImportError: Si pandas no está instalado
+            
+        Example:
+            ```python
+            
+            # Obtener todos los registros como DataFrame
+            df = db_api.{{ model.name.lower() }}.as_dataframe()
+            
+            # Con filtros y límites
+            df = db_api.{{ model.name.lower() }}.as_dataframe(
+                limit=100,
+                {% if model.columns %}
+                {{ model.columns[0].name }}="valor_filtro"
+                {% endif %}
+            )
+            
+            # Análisis de datos
+            print(df.describe())
+            print(df.head())
+            
+            # Exportar a CSV
+            df.to_csv('{{ model.name.lower() }}_data.csv', index=False)
+            ```
+        """
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError(
+                "pandas no está instalado. Para usar find_as_dataframe(), instala pandas:\n"
+                "pip install pandas\n"
+                "o si usas poetry:\n"
+                "poetry add pandas"
+            )
+        
+        # Obtener los registros usando find_many
+        records = self.find_many(
+            limit=limit,
+            offset=offset,
+            {% for column in model.columns %}
+            {% if not column.args.get('autoincrement', False) %}
+            {% if column.args.get('primary_key', False) or column.is_foreign_key %}
+            {{ column.name }}={{ column.name }},
+            {% elif 'str' == column.type or 'Text' == column.type or 'bool' == column.type %}
+            {{ column.name }}={{ column.name }},
+            {% elif  'date' == column.type or 'int' == column.type or 'BigInteger' == column.type %}
+            {{ column.name }}={{ column.name }},
+            min_{{ column.name }}=min_{{ column.name }},
+            max_{{ column.name }}=max_{{ column.name }},
+            {% elif 'float' == column.type or 'Numeric' == column.type or 'datetime' == column.type or 'time' == column.type %}
+            min_{{ column.name }}=min_{{ column.name }},
+            max_{{ column.name }}=max_{{ column.name }},
+            {% else %}
+            {{ column.name }}={{ column.name }},
+            {% endif %}
+            {% endif %}
+            {% endfor %}
+        )
+
+        # Si no hay registros, devolver DataFrame vacío con las columnas del modelo
+        if not records:
+            return pd.DataFrame(columns=[
+                {% for column in model.columns %}
+                '{{ column.name }}'{{ ',' if not loop.last }}
+                {% endfor %}
+            ])
+
+        data = [record.to_dict() for record in records]
+        
+        # Crear DataFrame
+        df = pd.DataFrame(data)
+        
+        # Optimizar tipos de datos si es posible
+        return self._optimize_dataframe_dtypes(df)
+
+    def _optimize_dataframe_dtypes(self, df: DataFrame) -> DataFrame:
+        """
+        Optimiza los tipos de datos del DataFrame basándose en las columnas del modelo.
+        
+        Args:
+            df: DataFrame a optimizar
+            
+        Returns:
+            DataFrame con tipos de datos optimizados
+        """
+        try:
+            import pandas as pd
+        except ImportError:
+            # Si pandas no está disponible, devolver el DataFrame tal como está
+            return df
+        
+        if df.empty:
+            return df
+        
+        # Mapeo de tipos SQLAlchemy a tipos pandas optimizados
+        type_mapping = {
+            {% for column in model.columns %}
+            '{{ column.name }}': {% if 'int' == column.type or 'BigInteger' == column.type %}'int64'{% elif 'float' == column.type or 'Numeric' == column.type %}'float64'{% elif 'bool' == column.type %}'boolean'{% elif 'datetime' == column.type %}'datetime64[ns]'{% elif 'date' == column.type %}'datetime64[ns]'{% elif 'str' == column.type or 'Text' == column.type %}'string'{% else %}'object'{% endif %}{{ ',' if not loop.last }}
+            {% endfor %}
+        }
+        
+        # Aplicar conversiones de tipo de forma segura
+        for column, target_type in type_mapping.items():
+            if column in df.columns:
+                try:
+                    if target_type == 'int64':
+                        # Manejar valores nulos en columnas enteras
+                        df[column] = pd.to_numeric(df[column], errors='coerce').astype('Int64')
+                    elif target_type == 'float64':
+                        df[column] = pd.to_numeric(df[column], errors='coerce')
+                    elif target_type == 'boolean':
+                        df[column] = df[column].astype('boolean')
+                    elif target_type == 'datetime64[ns]':
+                        df[column] = pd.to_datetime(df[column], errors='coerce')
+                    elif target_type == 'string':
+                        df[column] = df[column].astype('string')
+                    # 'object' se deja como está
+                except Exception:
+                    # Si falla la conversión, mantener el tipo original
+                    continue
+        
+        return df
+
+    {% if not model.is_view %}
+    def from_dataframe(
+        self,
+        df: DataFrame,
+        {% if not all_pk_autoincrement %}
+        mode: Literal['create', 'upsert'] = "upsert",
+        {% endif %}
+        validate_types: bool = False,
+        ignore_extra_columns: bool = False,
+        fill_missing_nullable: bool = True
+    ) -> int:
+        """
+        Ingesta un DataFrame de pandas en la tabla correspondiente.
+        
+        Realiza validaciones de esquema y tipos de datos antes de la inserción,
+        y permite diferentes modos de inserción (create o upsert).
+        
+        Args:
+            df: DataFrame de pandas con los datos a insertar
+            {% if not all_pk_autoincrement %}
+            mode ('upsert'): Modo de inserción - 'create' o 'upsert'
+            {% endif %}
+            validate_types (False): Si True, valida tipos de datos del DataFrame
+            ignore_extra_columns (False): Si True, ignora columnas extra del DataFrame
+            fill_missing_nullable (True): Si True, llena con None las columnas nullable faltantes
+            
+        Returns:
+            Número de registros creados o actualizados
+            
+        Raises:
+            ImportError: Si pandas no está instalado
+            ValueError: Si el DataFrame no cumple con el esquema requerido
+            TypeError: Si los tipos de datos no son compatibles
+            
+        Example:
+            ```python
+            import pandas as pd
+            
+            crud = {{ model.name }}SyncDAO(session_manager)
+            
+            # Crear DataFrame
+            df = pd.DataFrame({
+                {% for column in model.columns %}
+                '{{ column.name }}': [{% if 'int' == column.type %}1, 2, 3{% elif 'str' == column.type %}'valor1', 'valor2', 'valor3'{% elif 'bool' == column.type %}True, False, True{% else %}None, None, None{% endif %}]{{ ',' if not loop.last }}
+                {% endfor %}
+            })
+            
+            # Inserción simple
+            records = crud.from_df(df)
+            
+            # Upsert con validaciones relajadas
+            records = crud.from_df(
+                df, 
+                mode='upsert',
+                ignore_extra_columns=True
+            )
+            ```
+        """
+        
+        if df.empty:
+            return []
+
+        {% if not all_pk_autoincrement %}
+        # Validar modo
+        if mode not in ['create', 'upsert']:
+            raise ValueError("mode debe ser 'create' o 'upsert'")
+        {% endif %}
+        
+        # Realizar validaciones del esquema
+        self._df_validator.validate_dataframe_schema(df, ignore_extra_columns, fill_missing_nullable)
+        
+        # Validar tipos de datos si se solicita
+        if validate_types:
+            self._df_validator.validate_dataframe_types(df)
+        
+        # Preparar DataFrame para inserción
+        cleaned_df = self._df_validator.prepare_dataframe_for_insertion(df, ignore_extra_columns, fill_missing_nullable)
+        
+        # Convertir DataFrame a lista de diccionarios
+        records_data = cleaned_df.to_dict('records')
+        
+        # Limpiar valores NaN/None problemáticos
+        records_data = self._df_validator.clean_records_data(records_data)
+        
+        # Ejecutar inserción según el modo
+        {% if not all_pk_autoincrement %}
+        if mode == 'create':
+            return self.create_many([{{ model.name }}Create.from_dict(record) for record in records_data])
+        else:  # upsert
+            return self.upsert_many([{{ model.name }}Create.from_dict(record) for record in records_data])
+        {% else %}
+        return self.create_many([{{ model.name }}Create.from_dict(record) for record in records_data])
+        {% endif %}
+
+    @error_handler
+    def create(
+        self, 
+        {{ model.tablename }}: {{ model.name }}Create,
+        session: Optional[Session] = None
+    ) -> {{ model.name }}Read:
+        """
+        Crea un nuevo registro.
+        
+        Args:
+            {{ model.tablename }}: Datos del {{ model.tablename }} a crear
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Instancia del modelo creado
+        """
+        logger.info(f"[{{ schema_name }}] 🆕 Creando nuevo {{ model.name }}")
+
+        instance = {{ model.tablename }}.to_instance()
+
+        if session is not None:
+            session.add(instance)
+            session.flush()  # Asegura que se genere el ID si es autoincrement
+            included = load_relationships_from_dto(session, instance, {{ model.tablename }})
+            data = {{ model.name }}Read.from_created_instance(instance, included)
+        else:
+            with self.session_manager.get_session() as session:
+                session.add(instance)
+                session.flush()
+                included = load_relationships_from_dto(session, instance, {{ model.tablename }})
+                data = {{ model.name }}Read.from_created_instance(instance, included)
+
+        {% set pk_fields = [] %}
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        {% set _ = pk_fields.append(column.name) %}
+        {% endif %}
+        {% endfor %}
+        {% if pk_fields %}
+        logger.info(f"[{{ schema_name }}] ✅ {{ model.name }} creado exitosamente con {% for pk in pk_fields %}{{ pk }}={getattr(data, '{{ pk }}', 'N/A')}{% if not loop.last %}, {% endif %}{% endfor %}")
+        {% else %}
+        logger.info(f"[{{ schema_name }}] ✅ {{ model.name }} creado exitosamente")
+        {% endif %}
+        return data
+    
+    @error_handler
+    def create_many(self, records: List[{{ model.name }}Create], session: Optional[Session] = None) -> int:
+        """
+        Crea múltiples registros en la tabla {{ model.tablename }}.
+        
+        Args:
+            records: Lista de {{ model.name }}Create con los datos de los registros
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Número de registros creados
+
+        """
+        logger.info(f"[{{ schema_name }}] 🔢 Creando {len(records)} registros {{ model.name }}")
+
+        instances = []
+        for record in records:
+            instances.append(record.to_instance())
+        
+        if session is not None:
+            session.add_all(instances)
+            session.flush()  # Asegura que se generen los IDs si son autoincrement
+        else:
+            with self.session_manager.get_session() as session:
+                session.add_all(instances)
+                session.flush()  # Asegura que se generen los IDs si son autoincrement
+
+        logger.info(f"[{{ schema_name }}] ✅ {len(instances)} registros {{ model.name }} creados exitosamente")
+
+        return len(instances)
+    
+    @error_handler
+    def update(
+        self, 
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        {{ column.name }}: {{ column.type }},
+        {% endif -%}
+        {% endfor %}
+        updated_values: {{ model.name }}UpdateValues,
+        session: Optional[Session] = None
+    ) -> int:
+        """
+        Actualiza registros que coincidan con los filtros.
+        
+        Args:
+            {% for column in model.columns %}
+            {% if column.args.get('primary_key', False) %}
+            {{ column.name }}: Identificador del registro
+            {% endif -%}
+            {% endfor %}
+            updated_values: Datos a actualizar
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Número de registros actualizados
+        """
+
+        update_data = updated_values.to_dict()
+
+        if not update_data:  # Solo actualizar si hay datos
+            return 0
+
+        logger.info(f"[{{ schema_name }}] 🔄 Actualizando {{ model.name }}:")
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        logger.info(f"[{{ schema_name }}]     {{ column.name }}={{ '{' }}{{ column.name }}{{ '}' }}")
+        {% endif %}
+        {% endfor %}
+        logger.info(f"[{{ schema_name }}]     valores={updated_values.to_dict()}")
+
+        query = select({{ model.name }})
+
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        query = query.where({{ model.name }}.{{ column.name }} == {{ column.name }})
+        {% endif -%}
+        {% endfor %}
+        
+        if session is not None:
+            result = session.execute(query)
+            record = result.scalar_one_or_none()
+            if record is None:
+                return 0
+            for key, value in update_data.items():
+                setattr(record, key, value)
+
+            session.flush()  # Aplicar cambios a la base de datos  
+        else:
+            with self.session_manager.get_session() as session:
+                result = session.execute(query)
+                record = result.scalar_one_or_none()
+                if record is None:
+                    return 0
+                for key, value in update_data.items():
+                    setattr(record, key, value)
+
+                session.flush()  # Aplicar cambios a la base de datos
+        
+        logger.info(f"[public]  ✅ 1 registros {{ model.name }} actualizados exitosamente")
+
+        return 1
+    
+    @error_handler
+    def update_many(
+        self,
+        payload: {{ model.name }}Update, 
+        session: Optional[Session] = None
+    ) -> int:
+        """
+        Actualiza múltiples registros basándose en campos de coincidencia.
+        
+        Args:
+            payload: Datos de actualización y filtros
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Número total de registros actualizados
+        """
+        logger.info(f"[{{ schema_name }}] 🔄 Actualizando múltiples {{ model.name }} con filtros: {payload.filter.to_dict()}, valores: {payload.values.to_dict()}")
+
+        filters = payload.filter.to_dict()
+        values = payload.values.to_dict()
+        
+        if not filters and not values:  # Solo actualizar si hay filtros y valores
+            return 0
+
+        query = update({{ model.name }})
+
+        for key, value in filters.items():
+            query = query.where(getattr({{ model.name }}, key) == value)
+        
+        query = query.values(**values)
+                
+        if session is not None:
+            result = session.execute(query)
+        else:
+            with self.session_manager.get_session() as session:
+                result = session.execute(query)
+        
+        logger.info(f"[{{ schema_name }}] ✅ {result.rowcount} registros {{ model.name }} actualizados masivamente exitosamente")
+
+        return result.rowcount
+    
+    {% if not all_pk_autoincrement %}
+    @error_handler
+    def upsert(
+        self,
+        {{ model.tablename }}: {{ model.name }}Create,
+        match_fields: List[str] = [
+            {% for column in model.columns %}
+            {% if column.args.get('primary_key', False) %}
+            '{{ column.name }}'{{ ', ' if not loop.last }}
+            {% endif %}
+            {% endfor %}
+        ],
+        session: Optional[Session] = None
+    ) -> {{ model.name }}DTO:
+        """
+        Inserta o actualiza un registro (upsert).
+        
+        Args:
+            {{ model.tablename }}: Datos del registro a insertar o actualizar
+            match_fields: Campos a usar para verificar si el registro existe. 
+                         Por defecto usa las claves primarias.
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Instancia del modelo (creada o actualizada)
+        """
+        logger.info(f"[{{ schema_name }}] 🔄 Upsert {{ model.name }} con campos de coincidencia: {match_fields}, datos: {{ "{" }}{{ model.tablename }}.to_dict(){{ "}" }}")
+
+        record_dict = {{ model.tablename }}.to_dict()
+
+        # Buscar registro existente usando los campos de coincidencia
+        if not match_fields:
+            raise ValueError("match_fields no puede estar vacío. Debe contener al menos un campo para identificar registros.")
+
+        for field in match_fields:
+            if not field in record_dict:
+                raise ValueError(f"El campo '{field}' debe estar presente en '{{ model.tablename }}' para upsert.")
+            if record_dict[field] is None:
+                raise ValueError(f"El campo '{field}' no puede ser None. Debe tener un valor para upsert.")
+
+        filters = {field: getattr({{ model.tablename }}, field) for field in match_fields}
+
+        def execute_query(session: Session) -> Optional[{{ model.name }}]:
+
+            query = select({{ model.name }})
+        
+            for key, value in filters.items():
+                query = query.where(getattr({{ model.name }}, key) == value)
+
+            result = await session.execute(query)
+            existing = result.scalars().first()
+            
+            if existing:
+                # Actualizar registro existente usando la instancia de SQLAlchemy
+                update_data = {k: v for k, v in record_dict.items() if k not in match_fields}
+
+                if update_data:
+                    # Actualizar atributos directamente en la instancia
+                    for key, value in update_data.items():
+                        if hasattr(existing, key):
+                            setattr(existing, key, value)
+                    
+                    session.flush()  # Aplicar cambios a la base de datos
+                return existing
+
+            else:
+                # Crear nuevo registro
+                instance = {{ model.name }}(**record_dict)
+                session.add(instance)
+                session.flush()
+                return instance
+
+        if session is not None:
+            instance = execute_query(session)
+            result = {{ model.name }}Read.from_instance(instance)
+            logger.info(f"[{{ schema_name }}] ✅ Upsert {{ model.name }} completado exitosamente")
+            return result
+            
+        else:
+            with self.session_manager.get_session() as session:
+                instance = execute_query(session)
+                result = {{ model.name }}Read.from_instance(instance)
+                logger.info(f"[{{ schema_name }}] ✅ Upsert {{ model.name }} completado exitosamente")
+                return result
+    
+    @error_handler
+    def upsert_many(
+        self,
+        records: List[{{ model.name }}Create],
+        match_fields: List[str] = [
+            {% for column in model.columns %}
+            {% if column.args.get('primary_key', False) %}
+            '{{ column.name }}'{{ ', ' if not loop.last }}
+            {% endif %}
+            {% endfor %}
+        ],
+        session: Optional[Session] = None
+    ) -> int:
+        """
+        Inserta o actualiza múltiples registros.
+        
+        Args:
+            {{ model.tablename }}: Lista de registros a insertar o actualizar
+            match_fields: Campos a usar para verificar si los registros existen
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Número de registros creados o actualizados
+        """
+        logger.info(f"[{{ schema_name }}] 🔄 Upsert masivo {{ model.name }} con {len(records)} registros, campos de coincidencia: {match_fields}")
+
+        results = []
+
+        if session is not None:
+            for record in records:
+                result = self.upsert(record, match_fields, session)
+                results.append(result)
+        else:
+            with self.session_manager.get_session() as session:
+                for record in records:
+                    result = self.upsert(record, match_fields, session)
+                    results.append(result)
+
+        logger.info(f"[{{ schema_name }}] ✅ Upsert masivo {{ model.name }} completado: {len(results)} registros procesados")
+
+        return len(results)
+    
+    {% endif %}
+    @error_handler
+    def delete(
+        self, 
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        {{ column.name }}: {{ column.type }},
+        {% endif %}
+        {% endfor %}
+        session: Optional[Session] = None
+    ) -> int:
+        """
+        Elimina un registro atentiendo a su primary key.
+        
+        Args:
+            {% for column in model.columns %}
+            {% if column.args.get('primary_key', False) %}
+            {{ column.name }}: Filtrar por {{ column.name }} para eliminar
+            {% endif %}
+            {% endfor %}
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Número de registros eliminados
+        """
+        logger.info(f"[{{ schema_name }}] 🗑️ Eliminando {{ model.name }}:")
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        logger.info(f"[{{ schema_name }}]    {{ column.name }}={{ '{' }}{{ column.name }}{{ '}' }}")
+        {% endif %}
+        {% endfor %}
+
+        query = delete({{ model.name }})
+        
+        {% for column in model.columns %}
+        {% if column.args.get('primary_key', False) %}
+        query = query.where({{ model.name }}.{{ column.name }} == {{ column.name }})
+        {% endif %}
+        {% endfor %}
+
+        if session is not None:
+            result = session.execute(query)
+        else:
+            with self.session_manager.get_session() as session:
+                result = session.execute(query)
+
+        logger.info(f"[{{ schema_name }}] ✅ {result.rowcount} registros {{ model.name }} eliminados exitosamente")
+
+        return result.rowcount
+    
+    @error_handler
+    def delete_many(self, filters_list: List[Dict[str, Any]]) -> int:
+        """
+        Elimina múltiples registros basándose en una lista de filtros.
+        
+        Args:
+            filters_list: Lista de diccionarios con filtros para cada eliminación
+            
+        Returns:
+            Número total de registros eliminados
+        """
+        logger.info(f"[{{ schema_name }}] 🗑️ Eliminando múltiples {{ model.name }} con {len(filters_list)} filtros")
+
+        total_deleted = 0
+        def execute_query(session: Session) -> int:
+            for filters in filters_list:
+                query = delete({{ model.name }})
+                
+                for key, value in filters.items():
+                    if hasattr({{ model.name }}, key):
+                        query = query.where(getattr({{ model.name }}, key) == value)
+                
+                result = session.execute(query)
+                total_deleted += result.rowcount
+        
+        if session is not None:
+            execute_query(session)
+        else:
+            with self.session_manager.get_session() as session:
+                execute_query(session)
+        
+        logger.info(f"[{{ schema_name }}] ✅ {total_deleted} registros {{ model.name }} eliminados masivamente exitosamente")
+
+        return total_deleted
+    
+    @error_handler
+    def count(
+        self,
+        {{ macros.generate_query_parameters(model).rstrip('\n') | indent(8) }}
+        session: Optional[Session] = None
+    ) -> int:
+        """
+        Cuenta registros que coincidan con los filtros.
+        
+        Args:
+            {{ macros.generate_query_args(model).rstrip('\n') | indent(12) }}
+            session: Sesión existente (opcional)
+            
+        Returns:
+            Número de registros que coinciden con los filtros
+        """
+        logger.info(f"[{{ schema_name }}] 🔢 Contando registros {{ model.name }} con filtros aplicados")
+        
+        query = select(func.count()).select_from({{ model.name }})
+        
+        {{ macros.generate_filter_query(model).rstrip('\n') | indent(8) }}
+
+        if session is not None:
+            result = session.execute(query).scalar()
+        else:
+            with self.session_manager.get_session() as session:
+                result = session.execute(query).scalar()
+
+        count_result = result.scalar() or 0
+        logger.info(f"[{{ schema_name }}] ✅ Conteo {{ model.name }} completado: {count_result} registros")
+        return count_result
+    
+    @error_handler
+    def exists(
+        self,
+        {{ macros.generate_query_parameters(model).rstrip('\n') | indent(8) }}
+        session: Optional[Session] = None
+    ) -> bool:
+        """
+        Verifica si existe al menos un registro que coincida con los filtros.
+        
+        Args:
+            {{ macros.generate_query_args(model).rstrip('\n') | indent(12) }}
+            session: Sesión existente (opcional)
+            
+        Returns:
+            True si existe al menos un registro, False en caso contrario
+        """
+        logger.info(f"[{{ schema_name }}] ❓ Verificando existencia de registros {{ model.name }}")
+        records = self.count(
+            {{ macros.asing_parameters(model).rstrip('\n') | indent(12) }}
+            session=session
+        )
+        exists_result = records > 0
+        logger.info(f"[{{ schema_name }}] ✅ Verificación {{ model.name }} completada: {'existe' if exists_result else 'no existe'}")
+        return exists_result
+
+    {% endif %}
+    
+{% endfor %}
