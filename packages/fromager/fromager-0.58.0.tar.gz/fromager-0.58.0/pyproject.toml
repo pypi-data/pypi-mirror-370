@@ -1,0 +1,258 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fromager"
+authors = [
+    { name = "Mark McLoughlin", email = "markmc@redhat.com" },
+    { name = "Doug Hellmann", email = "dhellmann@redhat.com" },
+]
+description = "Wheel maker"
+readme = "README.md"
+dynamic = ["version"]
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Utilities",
+]
+
+requires-python = ">=3.11"
+
+dependencies = [
+    "click>=8.1.7",
+    "elfdeps>=0.2.0",
+    "html5lib",
+    "packaging",
+    "pkginfo",
+    "psutil",
+    "pydantic",
+    "pyproject_hooks>=1.0.0,!=1.1.0",
+    "PyYAML",
+    "rich",
+    "requests",
+    "resolvelib",
+    "requests-mock",
+    "stevedore",
+    "tomlkit",
+    "tqdm",
+    "virtualenv!=20.33.0",
+    "wheel",
+]
+
+[project.optional-dependencies]
+build = [
+    "build",
+    "twine",
+]
+mypy = [
+    "mypy",
+    "pytest",
+    "types-html5lib",
+    "types-psutil",
+    "types-PyYAML",
+    "types-requests",
+    "types-toml",
+    "types-tqdm",
+]
+test = [
+    "coverage[toml]!=4.4,>=4.0",
+    "pytest",
+    "requests-mock",
+    "twine>=6.1.0",
+    "hatchling",
+    "hatch-vcs",
+]
+docs = [
+    "sphinx",
+    "sphinx-click",
+    "myst-parser",
+    "sphinx-rtd-theme",
+    "autodoc-pydantic",
+]
+
+[project.urls]
+Repository = "https://github.com/python-wheel-build/fromager"
+Documentation = "https://fromager.readthedocs.io/en/latest/"
+
+[project.scripts]
+fromager = "fromager.__main__:invoke_main"
+
+[project.entry-points."fromager.override_methods"]
+# override methods and their default implementations
+get_build_system_dependencies = "fromager.dependencies:default_get_build_system_dependencies"
+get_build_backend_dependencies = "fromager.dependencies:default_get_build_backend_dependencies"
+get_build_sdist_dependencies = "fromager.dependencies:default_get_build_sdist_dependencies"
+resolver_provider = "fromager.resolver:default_resolver_provider"
+download_source = "fromager.sources:default_download_source"
+resolve_source = "fromager.sources:default_resolve_source"
+build_sdist = "fromager.sources:default_build_sdist"
+build_wheel = "fromager.wheels:default_build_wheel"
+
+[tool.coverage.run]
+branch = true
+parallel = true
+relative_files = true
+source = ["fromager", "tests/"]
+
+[tool.coverage.paths]
+source = ["src/fromager", ".hatch/**/site-packages/fromager"]
+tests = ["tests/"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "@abc.abstractmethod",
+    "@typing.overload",
+    "if typing.TYPE_CHECKING",
+]
+
+[tool.hatch.version]
+path = "src/fromager/version.py"
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fromager"]
+
+[tool.ruff]
+target-version = "py311"
+# same as black's default line length
+line-length = 88
+exclude = [
+    "src/fromager/version.py", # file is generated dynamically, out of our control
+]
+
+[tool.ruff.lint]
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+select = [
+    "B",   # flake8-bugbear
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "Q",   # flake8-quotes
+    "I",   # isort
+    "N",   # pep8-naming
+    "W",   # pycodestyle
+    "RUF", # ruff-specific rules
+    "UP",  # pyupgrade
+    "TID", # flake8-tidy-imports
+]
+ignore = [
+    "E501",   # Line too long
+    "RUF005", # Consider iterable unpacking instead of concatenation
+    "TID252", # Prefer absolute imports over relative imports from parent modules
+    "UP015",  # Unnecessary open mode parameters
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fromager"]
+
+[tool.mypy]
+mypy_path = ["src"]
+# TODO: tighten type checks
+# check_untyped_defs = true
+# disallow_incomplete_defs = true
+# disallow_untyped_defs = true
+# warn_return_any = true
+
+# TODO: remove excludes and silent follow
+follow_imports = "silent"
+exclude = [
+    "^src/fromager/sources\\.py$",
+    "^src/fromager/sdist\\.py$",
+    "^src/fromager/commands/build\\.py$",
+    "^src/fromager/settings\\.py$",
+]
+
+[[tool.mypy.overrides]]
+# packages without typing annotations and stubs
+module = ["pyproject_hooks", "requests_mock", "resolver", "stevedore"]
+ignore_missing_imports = true
+
+[tool.basedpyright]
+reportUnannotatedClassAttribute = false
+reportUnusedCallResult = false
+reportUntypedFunctionDecorator = false
+reportUnknownMemberType = false
+reportUnusedParameter = false
+reportAny = false
+reportImplicitOverride = false
+reportAttributeAccessIssue = false  # adding our own private property on click commands
+reportImplicitStringConcatenation = false
+
+[tool.hatch.envs.default]
+# No specific python version here, so it uses the active Python by default.
+dependencies = []
+
+[tool.hatch.envs.test]
+features = ["test"]
+# {args:tests} allows passing arguments to specify which tests to run
+
+[tool.hatch.envs.test.scripts]
+test = "python -m coverage run -m pytest --log-level DEBUG -vv {args:tests}"
+coverage-report = ["coverage combine", "coverage report --format=markdown"]
+
+[tool.hatch.envs.lint]
+description = "Run linters."
+skip-install = true # Corresponds to skipping project installation for linting
+features = ["build"]
+dependencies = [
+  "ruff",
+  "packaging",
+  "check-python-versions"
+]
+[tool.hatch.envs.lint.scripts]
+check = [
+  "ruff check src tests",
+  "ruff format --check src tests",
+  "python ./e2e/mergify_lint.py",
+]
+fix = [
+  "ruff format src tests docs",
+  "ruff check --fix src tests docs",
+]
+pkglint = [
+  "python -m build",
+  "twine check dist/*.tar.gz dist/*.whl",
+  "check-python-versions --only pyproject.toml,.github/workflows/test.yml",
+]
+
+[tool.hatch.envs.e2e]
+description = "Run end-to-end tests."
+dependencies = ["coverage[toml]", "twine"]
+env-vars.COVERAGE_PROCESS_START = "{root}/pyproject.toml"
+[tool.hatch.envs.e2e.scripts]
+# Script to create cov.pth for coverage in subprocesses
+setup-cov = "python e2e/setup_coverage.py"
+# Generic script to run any command in the e2e environment
+# e.g. hatch run e2e:run ./e2e/test_bootstrap.sh
+run = "{args}"
+
+[tool.hatch.envs.mypy]
+description = "Python type checking with mypy."
+features = ["mypy"]
+[tool.hatch.envs.mypy.scripts]
+check = [
+  "mypy -p fromager",
+  "mypy tests/",
+]
+
+[tool.hatch.envs.docs]
+description = "Sphinx docs."
+features = ["docs"]
+[tool.hatch.envs.docs.scripts]
+build = "sphinx-build -M html docs docs/_build -j auto --keep-going {args:--fail-on-warning --fresh-env -n}"

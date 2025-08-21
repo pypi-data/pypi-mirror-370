@@ -1,0 +1,125 @@
+name: Check
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  linter:
+    name: linter
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags') }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # minimum supported lang version
+
+      - name: Install dependencies
+        run: python -m pip install hatch
+
+      - name: Run
+        run: hatch run lint:check
+
+  mypy:
+    name: mypy
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags') }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # minimum supported lang version
+
+      - name: Install dependencies
+        run: python -m pip install hatch
+
+      - name: Check MyPy
+        run: hatch run mypy:check
+
+  pkglint:
+    name: pkglint
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags') }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # minimum supported lang version
+
+      - name: Install dependencies
+        run: python -m pip install hatch
+
+      - name: Run
+        run: hatch run lint:pkglint
+
+  markdownlint:
+    # https://github.com/marketplace/actions/markdown-lint
+    name: markdownlint
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags') }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: articulate/actions-markdownlint@v1.1.0
+        with:
+          config: .markdownlint-config.yaml
+        #   files: 'docs/**/*.md'
+        #   ignore: node_modules
+        #   version: 0.28.1
+
+  docs:
+    name: readthedocs
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags') }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # minimum supported lang version
+
+      - name: Install dependencies
+        run: python -m pip install hatch
+
+      - name: Run
+        run: hatch run docs:build
+
+  super-linter:
+    name: super-linter
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags') }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Super-Linter
+        uses: super-linter/super-linter@v8.0.0 # x-release-please-version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # To reuse the same Super-linter configuration that you use in the
+          # lint job without duplicating it, see
+          # https://github.com/super-linter/super-linter/blob/main/docs/run-linter-locally.md#share-environment-variables-between-environments
+          VALIDATE_ALL_CODEBASE: false
+          VALIDATE_MARKDOWN: true
