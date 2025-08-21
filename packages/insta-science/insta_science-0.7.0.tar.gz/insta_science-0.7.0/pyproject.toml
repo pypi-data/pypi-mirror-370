@@ -1,0 +1,140 @@
+[build-system]
+requires = ["setuptools"]
+backend = "setuptools.build_meta"
+
+[project]
+name = "insta-science"
+requires-python = ">=3.8"
+dependencies = [
+    "ansicolors",
+    "appdirs",
+    "colorama; sys_platform == 'win32'",
+    "filelock",
+    "httpx",
+    "packaging",
+    "tenacity",
+    "tomli; python_version < '3.11'",
+    "tqdm",
+    "typing-extensions",
+]
+
+authors = [
+    {name = "John Sirois", email = "john.sirois@gmail.com"},
+]
+description = "A tool to help with installing and using `science` in Python projects."
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = ["automation", "command", "runner", "testing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Unix",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Utilities",
+]
+
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/a-scie/science-installers/tree/main/python"
+"Bug Tracker" = "https://github.com/a-scie/science-installers/issues"
+Changelog = "https://github.com/a-scie/science-installers/blob/main/python/CHANGES.md"
+
+[project.scripts]
+insta-science = "insta_science.shim:main"
+insta-science-util = "insta_science.util:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "insta_science._internal.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["insta_science*"]
+
+[dependency-groups]
+dev = [
+    "dev-cmd",
+    "marko",
+    "mypy",
+    "pytest",
+    "pytest-xdist",
+    "ruff",
+    "setuptools",
+    "types-appdirs",
+    "types-colorama",
+    "types-setuptools",
+    "types-tqdm",
+]
+
+[[tool.mypy.overrides]]
+module = ["colors.*"]
+follow_untyped_imports = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.uv]
+required-version = ">=0.7.13"
+
+[tool.dev-cmd.commands]
+fmt = ["ruff", "format"]
+check-fmt = ["ruff", "format", "--diff"]
+
+lint = ["ruff", "check", "--fix"]
+check-lint = ["ruff", "check"]
+
+[tool.dev-cmd.commands.type-check.factors]
+py = "The Python version to type check in <major>.<minor> form; i.e.: 3.13."
+[tool.dev-cmd.commands.type-check]
+args = [
+    "mypy",
+    "--python-version", "{-py:{markers.python_version}}",
+    "--cache-dir", ".mypy_cache_{markers.python_version}",
+    "setup.py",
+    "insta_science",
+    "scripts",
+    "test-support",
+    "tests",
+]
+
+[tool.dev-cmd.commands.release]
+args = ["python", "scripts/release.py"]
+accepts-extra-args = true
+
+[tool.dev-cmd.commands.test]
+env = {"PYTHONPATH" = "../test-support"}
+args = ["pytest", "-n", "auto"]
+cwd = "tests"
+accepts-extra-args = true
+
+[tool.dev-cmd.tasks.checks]
+description = "Runs all development checks, including auto-formatting code."
+steps = [
+    "fmt",
+    "lint",
+    ["type-check-py3.{8..13}"],
+    "test",
+]
+
+[tool.dev-cmd.tasks.ci]
+description = "Runs all checks used for CI."
+steps = [["check-fmt", "check-lint", "type-check"], "test"]
+
+[tool.dev-cmd]
+default = "checks"
+exit-style = "immediate"
