@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkfrontend=self.webpackChunkfrontend||[]).push([[76],{17946:(u,t,e)=>{e.d(t,{k:()=>s});class s{static{this.INSTANCE=new s}get layoutInfos(){return this._layoutInfos}constructor(){this._layoutInfos=[]}registerKeyboardLayout(o){this._layoutInfos.push(o)}}}}]);
