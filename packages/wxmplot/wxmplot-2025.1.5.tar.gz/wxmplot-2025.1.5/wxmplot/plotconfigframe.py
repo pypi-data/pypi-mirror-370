@@ -1,0 +1,1146 @@
+#!/usr/bin/python
+#
+# wxmplott GUI to Configure Line Plots
+
+from functools import partial
+import yaml
+import numpy as np
+import wx
+import wx.lib.colourselect  as csel
+import wx.lib.agw.flatnotebook as flat_nb
+import wx.lib.scrolledpanel as scrolled
+
+from .utils import LabeledTextCtrl, MenuItem, Choice, FloatSpin
+from .config import PlotConfig
+from .colors import hexcolor, mpl_color, GUI_COLORS
+
+FNB_STYLE = flat_nb.FNB_NO_X_BUTTON|flat_nb.FNB_SMART_TABS|flat_nb.FNB_NO_NAV_BUTTONS|flat_nb.FNB_NODRAG
+
+ISPINSIZE = 60
+FSPINSIZE = 80
+
+def autopack(panel, sizer):
+    panel.SetAutoLayout(True)
+    panel.SetSizer(sizer)
+    sizer.Fit(panel)
+
+def ffmt(val):
+    """format None or floating point as string"""
+    if val is not None:
+        try:
+            return "%.5g" % val
+        except:
+            pass
+    return repr(val)
+
+def clean_texmath(txt):
+    """
+    clean tex math string, preserving control sequences
+    (incluing \n, so also '\nu') inside $ $, while allowing
+    \n and \t to be meaningful in the text string
+    """
+    s = "%s " % txt
+    out = []
+    i = 0
+    while i < len(s)-1:
+        if s[i] == '\\' and s[i+1] in ('n', 't'):
+            if s[i+1] == 'n':
+                out.append('\n')
+            elif s[i+1] == 't':
+                out.append('\t')
+            i += 1
+        elif s[i] == '$':
+            j = s[i+1:].find('$')
+            if j < 0:
+                j = len(s)
+            out.append(s[i:j+2])
+            i += j+2
+        else:
+            out.append(s[i])
+        i += 1
+        if i > 5000:
+            break
+    return ''.join(out).strip()
+
+############################################################
+#  monkey-patch of ColourSelect text setting
+#  yes, a PR has been submitted to wx, no it is not merged or released.
+def MyMakeBitmap(self):
+    """ Creates a bitmap representation of the current selected colour. """
+
+    bdr = 8
+    width, height = self.GetSize()
+
+    # yes, this is weird, but it appears to work around a bug in wxMac
+    if "wxMac" in wx.PlatformInfo and width == height:
+        height -= 1
+
+    bmp = wx.Bitmap(width-bdr, height-bdr)
+    dc = wx.MemoryDC()
+    dc.SelectObject(bmp)
+    dc.SetFont(self.GetFont())
+    label = self.GetLabel()
+    # Just make a little colored bitmap
+    dc.SetBackground(wx.Brush(self.colour))
+    dc.Clear()
+    if label:
+        # Add a label to it
+        labcol =  self.colour.Get()
+        avg = (labcol[0] + labcol[1] + labcol[2])/3
+        if "wxMac" in wx.PlatformInfo and len(labcol) > 3: # alpha included
+            avg *= labcol[3]/255.0
+        dc.SetTextForeground(wx.BLACK if avg > 128 else wx.WHITE)
+        dc.DrawLabel(label, (0, 0, width-bdr, height-bdr),
+                     wx.ALIGN_CENTER)
+
+    dc.SelectObject(wx.NullBitmap)
+    return bmp
+csel.ColourSelect.MakeBitmap = MyMakeBitmap
+############################################################
+
+class PlotConfigFrame(wx.Frame):
+    """ GUI Configure Frame"""
+    def __init__(self, parent=None, config=None, trace_color_callback=None):
+        if config is None:
+            config = PlotConfig()
+        self.conf   = config
+        if callable(trace_color_callback):
+            self.conf.trace_color_callback = trace_color_callback
+
+        self.parent = parent
+        self.canvas = self.conf.canvas
+        self.axes = self.canvas.figure.get_axes()
+        self.conf.relabel()
+        self.show_legend_cbs = []
+        self.wids = {}
+        self.DrawPanel()
+        mbar = wx.MenuBar()
+        fmenu = wx.Menu()
+        MenuItem(self, fmenu, "Save Configuration\tCtrl+S",
+                 "Save Configuration",
+                 self.save_config)
+        MenuItem(self, fmenu, "Load Configuration\tCtrl+R",
+                "Load Configuration",
+                self.load_config)
+        mbar.Append(fmenu, 'File')
+        self.SetMenuBar(mbar)
+
+    def DrawPanel(self):
+        style = wx.DEFAULT_FRAME_STYLE
+        wx.Frame.__init__(self, self.parent, -1, 'Configure Plot', style=style)
+        panel = wx.Panel(self, -1)
+
+        font = wx.Font(12, wx.SWISS, wx.NORMAL,wx.NORMAL,False)
+        panel.SetFont(font)
+
+        self.nb = flat_nb.FlatNotebook(panel, wx.ID_ANY, agwStyle=FNB_STYLE)
+
+        self.nb.SetTabAreaColour(GUI_COLORS.nb_area)
+        self.nb.SetActiveTabColour(GUI_COLORS.nb_active)
+        self.nb.SetNonActiveTabTextColour(GUI_COLORS.nb_text)
+        self.nb.SetActiveTabTextColour(GUI_COLORS.nb_activetext)
+
+        self.nb.AddPage(self.make_linetrace_panel(parent=self.nb, font=font),
+                        'Colors and Line Properties', True)
+        self.nb.AddPage(self.make_range_panel(parent=self.nb, font=font),
+                        'Ranges and Margins', True)
+        self.nb.AddPage(self.make_text_panel(parent=self.nb, font=font),
+                        'Text, Labels, Legends', True)
+        self.nb.AddPage(self.make_scatter_panel(parent=self.nb, font=font),
+                        'Scatterplot Settings',
+                        self.conf.plot_type == 'scatter')
+        self.nb.SetSelection(0)
+
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sty = wx.ALIGN_LEFT|wx.LEFT|wx.TOP|wx.BOTTOM|wx.EXPAND
+
+        sizer.Add(self.nb, 1, wx.GROW|sty, 3)
+        autopack(panel, sizer)
+        self.SetMinSize((750, 250))
+        self.SetSize((1050, 475))
+        self.Show()
+
+    def save_config(self, evt=None):
+        self.conf.panel.config_save_dialog()
+
+    def load_config(self, evt=None):
+        confdict = self.conf.panel.config_load_dialog()
+
+        # check boxes
+        for attr in ('auto_margins', 'hidewith_legend',
+                     'show_grid', 'show_legend', 'show_legend_frame'):
+            self.wids[attr].SetValue(confdict[attr])
+        self.wids['show_legend_2'].SetValue(confdict['show_legend'])
+        self.wids['axes_style'].SetValue('box'==confdict['axes_style'])
+
+        # choices
+        for attr in ('theme', 'legend_loc', 'legend_onaxis', 'zoom_style'):
+            self.wids[attr].SetStringSelection(confdict[attr])
+
+        xscale = confdict['xscale']
+        yscale = confdict['yscale']
+        self.wids['logchoice'].SetStringSelection(f"x {xscale} / y {yscale}")
+
+        # colors
+        for attr in ('facecolor', 'textcolor', 'framecolor', 'gridcolor',
+                     'scatter_normalcolor', 'scatter_normaledge',
+                     'scatter_selectcolor', 'scatter_selectedge'):
+            self.wids[attr].SetColour(confdict[attr])
+
+        # floats
+        for attr in ('labelfont', 'legendfont', 'titlefont',
+                     'viewpad', 'scatter_size'):
+            self.wids[attr].SetValue(confdict[attr])
+
+        margin_vals = confdict['margins']
+        for i in range(4):
+            self.wids['margins'][i].SetValue(margin_vals[i])
+
+        for i, trace in enumerate(confdict['traces']):
+            w = self.wids[f'trace_{i}']
+            w['color'].SetColour(trace['color'])
+            w['style'].SetStringSelection(trace['style'])
+            w['marker'].SetStringSelection(trace['marker'])
+            w['drawstyle'].SetStringSelection(trace['drawstyle'])
+            w['linewidth'].SetValue(trace['linewidth'])
+            w['alpha'].SetValue(trace['alpha'])
+            w['markersize'].SetValue(trace['markersize'])
+            w['zorder'].SetValue(trace['zorder'])
+            w['fill'].SetValue(trace['fill'])
+            if i == 0:
+                self.wids['def_thickness'].SetValue(trace['linewidth'])
+                self.wids['def_markersize'].SetValue(trace['markersize'])
+
+
+    def make_range_panel(self, parent, font=None):
+        # bounds, margins, scales
+        panel = wx.Panel(parent)
+        if font is None:
+            font = wx.Font(12,wx.SWISS,wx.NORMAL,wx.NORMAL,False)
+
+        sizer = wx.GridBagSizer(4, 4)
+        labstyle= wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL
+        mtitle = wx.StaticText(panel, -1, 'Linear/Log Scale: ')
+
+        logchoice = wx.Choice(panel, choices=self.conf.log_choices,  size=(200,-1))
+        logchoice.SetStringSelection("x %s / y %s" % (self.conf.xscale, self.conf.yscale))
+        logchoice.Bind(wx.EVT_CHOICE, self.onLogScale)
+        self.wids['logchoice'] = logchoice
+
+        sizer.Add(mtitle,     (1, 0), (1,1), labstyle, 2)
+        sizer.Add(logchoice,  (1, 1), (1,3), labstyle, 2)
+
+
+        # Zoom
+        ztitle = wx.StaticText(panel, -1, 'Zoom Style: ')
+        zoomchoice = wx.Choice(panel, choices=self.conf.zoom_choices, size=(200,-1))
+        self.wids['zoom_style'] = zoomchoice
+
+        if self.conf.zoom_style in self.conf.zoom_choices:
+            zoomchoice.SetStringSelection(self.conf.zoom_style)
+        zoomchoice.Bind(wx.EVT_CHOICE, self.onZoomStyle)
+        sizer.Add(ztitle,      (2, 0), (1,1), labstyle, 2)
+        sizer.Add(zoomchoice,  (2, 1), (1,3), labstyle, 2)
+
+        # Bounds
+        axes = self.canvas.figure.get_axes()
+        laxes = axes[0]
+        raxes = None
+        if len(axes) > 1:
+            raxes = axes[1]
+        try:
+            user_lims = self.conf.user_limits[laxes]
+        except:
+            user_lims = 4*[None]
+        auto_b  = wx.CheckBox(panel,-1, ' From Data ', (-1, -1), (-1, -1))
+        auto_b.Bind(wx.EVT_CHECKBOX,self.onAutoBounds)
+        try:
+            auto_b.SetValue(self.conf.user_limits[laxes] == 4*[None])
+        except:
+            pass
+        
+        self.vpad_val = FloatSpin(panel, value=2.5, min_val=0, max_val=100,
+                                  increment=0.5, digits=2,
+                                  size=(FSPINSIZE, -1), action=self.onViewPadEvent)
+        self.wids['viewpad'] = self.vpad_val
+       
+        xb0, xb1 = laxes.get_xlim()
+        yb0, yb1 = laxes.get_ylim()
+        if user_lims[0] is not None:
+            xb0 = user_lims[0]
+        if user_lims[1] is not None:
+            xb1 = user_lims[1]
+
+        if user_lims[2] is not None:
+            yb0 = user_lims[2]
+        if user_lims[3] is not None:
+            yb1 = user_lims[3]
+
+        y2b0, y2b1 = [None, None]
+        if raxes is not None:
+            y2b0, y2b1 = raxes.get_ylim()
+            user_lims = self.conf.user_limits[raxes]
+            if user_lims[2] is not None:
+                y2b0 = user_lims[2]
+            if user_lims[3] is not None:
+                y2b1 = user_lims[3]
+
+        y3b0, y3b1 = [None, None]
+        if len(axes) > 2:
+            ax3 = axes[2]
+            y3b0, y3b1 = ax3.get_ylim()
+            user_lims = self.conf.user_limits[ax3]
+            if user_lims[2] is not None:
+                y3b0 = user_lims[2]
+            if user_lims[3] is not None:
+                y3b1 = user_lims[3]
+
+        y4b0, y4b1 = [None, None]
+        if len(axes) > 3:
+            ax4 = axes[3]
+            y4b0, y4b1 = ax4.get_ylim()
+            user_lims = self.conf.user_limits[ax4]
+            if user_lims[2] is not None:
+                y4b0 = user_lims[2]
+            if user_lims[3] is not None:
+                    y4b1 = user_lims[3]
+
+        opts = dict(size=(125, -1), labeltext='', action=self.onBounds)
+
+        self.xbounds  = [LabeledTextCtrl(panel,value=ffmt(xb0), **opts),
+                         LabeledTextCtrl(panel,value=ffmt(xb1), **opts)]
+        self.ybounds  = [LabeledTextCtrl(panel,value=ffmt(yb0), **opts),
+                         LabeledTextCtrl(panel,value=ffmt(yb1), **opts)]
+        self.y2bounds = [LabeledTextCtrl(panel,value=ffmt(y2b0), **opts),
+                         LabeledTextCtrl(panel,value=ffmt(y2b1), **opts)]
+        self.y3bounds = [LabeledTextCtrl(panel,value=ffmt(y3b0), **opts),
+                         LabeledTextCtrl(panel,value=ffmt(y3b1), **opts)]
+        self.y4bounds = [LabeledTextCtrl(panel,value=ffmt(y4b0), **opts),
+                         LabeledTextCtrl(panel,value=ffmt(y4b1), **opts)]
+
+
+        self.y3offset = FloatSpin(panel, value=self.conf.y3offset, min_val=0,
+                                  max_val=0.8, increment=0.01, digits=3,
+                                  size=(FSPINSIZE, -1), action=self.onY3Offset)
+
+        if user_lims == 4*[None]:
+            [w.Disable() for w in self.xbounds]
+            [w.Disable() for w in self.ybounds]
+            [w.Disable() for w in self.y2bounds]
+            [w.Disable() for w in self.y3bounds]
+            [w.Disable() for w in self.y4bounds]
+        else:
+            for yb in self.y4bounds:
+                yb.Enable(len(axes) > 3)
+            for yb in self.y3bounds:
+                yb.Enable(len(axes) > 2)
+            for yb in self.y2bounds:
+                yb.Enable(len(axes) > 1)
+
+        btext  = 'Plot Boundaries : '
+        ptext  = ' Padding (% of Data Range): '
+        xtext  = '   X axis:'
+        ytext  = '   Y axis:'
+        y2text = '   Y2 axis:'
+        y3text = '   Y3 axis:'
+        y4text = '   Y4 axis:'
+        def showtext(t):
+            return wx.StaticText(panel, -1, t)
+
+        sizer.Add(showtext(btext),  (3, 0), (1, 1), labstyle, 2)
+        sizer.Add(auto_b,           (3, 1), (1, 1), labstyle, 2)
+        sizer.Add(showtext(ptext),  (3, 2), (1, 2), labstyle, 2)
+        sizer.Add(self.vpad_val,     (3, 4), (1, 1), labstyle, 2)
+
+        sizer.Add(showtext(xtext),  (4, 0), (1, 1), labstyle, 2)
+        sizer.Add(self.xbounds[0],  (4, 1), (1, 1), labstyle, 2)
+        sizer.Add(showtext(' : '),  (4, 2), (1, 1), labstyle, 2)
+        sizer.Add(self.xbounds[1],  (4, 3), (1, 1), labstyle, 2)
+
+        sizer.Add(showtext(ytext),  (5, 0), (1, 1), labstyle, 2)
+        sizer.Add(self.ybounds[0],  (5, 1), (1, 1), labstyle, 2)
+        sizer.Add(showtext(' : '),  (5, 2), (1, 1), labstyle, 2)
+        sizer.Add(self.ybounds[1],  (5, 3), (1, 1), labstyle, 2)
+
+        sizer.Add(showtext(y2text), (6, 0), (1, 1), labstyle, 2)
+        sizer.Add(self.y2bounds[0], (6, 1), (1, 1), labstyle, 2)
+        sizer.Add(showtext(' : '),  (6, 2), (1, 1), labstyle, 2)
+        sizer.Add(self.y2bounds[1], (6, 3), (1, 1), labstyle, 2)
+
+        sizer.Add(showtext(y3text), (7, 0), (1, 1), labstyle, 2)
+        sizer.Add(self.y3bounds[0], (7, 1), (1, 1), labstyle, 2)
+        sizer.Add(showtext(' : '),  (7, 2), (1, 1), labstyle, 2)
+        sizer.Add(self.y3bounds[1], (7, 3), (1, 1), labstyle, 2)
+
+        sizer.Add(showtext(y4text), (8, 0), (1, 1), labstyle, 2)
+        sizer.Add(self.y4bounds[0], (8, 1), (1, 1), labstyle, 2)
+        sizer.Add(showtext(' : '),  (8, 2), (1, 1), labstyle, 2)
+        sizer.Add(self.y4bounds[1], (8, 3), (1, 1), labstyle, 2)
+
+        irow = 9
+        # Margins
+        _left, _top, _right, _bot = ["%.3f"% x for x in self.conf.margins]
+
+        mtitle = wx.StaticText(panel, -1, 'Plot Margins: ')
+        ltitle = wx.StaticText(panel, -1, ' Left:   ')
+        rtitle = wx.StaticText(panel, -1, ' Right:  ')
+        btitle = wx.StaticText(panel, -1, ' Bottom: ')
+        ttitle = wx.StaticText(panel, -1, ' Top:    ')
+
+        opts = dict(min_val=0.0, max_val=None, increment=0.01, digits=3,
+                    size=(FSPINSIZE, -1), action=self.onMargins)
+        lmarg = FloatSpin(panel, value=_left, **opts)
+        rmarg = FloatSpin(panel, value=_right, **opts)
+        bmarg = FloatSpin(panel, value=_bot, **opts)
+        tmarg = FloatSpin(panel, value=_top, **opts)
+
+        self.margins = [lmarg, tmarg, rmarg, bmarg]
+        if self.conf.auto_margins:
+            [m.Disable() for m in self.margins]
+
+        auto_m  = wx.CheckBox(panel,-1, ' Default ', (-1, -1), (-1, -1))
+        auto_m.Bind(wx.EVT_CHECKBOX,self.onAutoMargin)
+        auto_m.SetValue(self.conf.auto_margins)
+        self.wids['auto_margins'] = auto_m
+        self.wids['margins'] = (lmarg, rmarg, bmarg, tmarg)
+
+        msizer = wx.BoxSizer(wx.HORIZONTAL)
+        msizer.AddMany((ltitle, lmarg, rtitle, rmarg,
+                        btitle, bmarg, ttitle, tmarg))
+
+        sizer.Add(mtitle,  (irow, 0), (1,1), labstyle, 2)
+        sizer.Add(auto_m,  (irow, 1), (1,1), labstyle, 2)
+        sizer.Add(msizer,  (irow+1, 1), (1,6), labstyle, 2)
+
+        irow += 2
+        y3title = wx.StaticText(panel, -1, 'Extra Padding Y3 & Y4 Axes: ')
+        self.y3offset
+        sizer.Add(y3title,  (irow, 0), (1,2), labstyle, 2)
+        sizer.Add(self.y3offset,  (irow, 2), (1,3), labstyle, 2)
+        autopack(panel, sizer)
+        return panel
+
+    def make_scatter_panel(self, parent, font=None):
+        # list of traces
+        panel = wx.Panel(parent)
+        if font is None:
+            font = wx.Font(12,wx.SWISS,wx.NORMAL,wx.NORMAL,False)
+        sizer = wx.GridBagSizer(4, 4)
+
+        labstyle= wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL
+        slab = wx.StaticText(panel, -1, 'Symbol Size:', size=(-1,-1),style=labstyle)
+
+        ssize = FloatSpin(panel, value=self.conf.scatter_size,
+                          size=(FSPINSIZE, -1), min_val=1, max_val=500,
+                          action=partial(self.onScatter, item='size'))
+
+        sizer.Add(slab,  (0, 0), (1,1), labstyle, 5)
+        sizer.Add(ssize, (0, 1), (1,1), labstyle, 5)
+
+        conf = self.conf
+        nfcol = csel.ColourSelect(panel,  -1, "",
+                                  mpl_color(conf.scatter_normalcolor,
+                                            default=(0, 0, 128)),
+                                  size=(25, 25))
+        necol = csel.ColourSelect(panel,  -1, "",
+                                  mpl_color(conf.scatter_normaledge,
+                                            default=(0, 0, 200)),
+                                  size=(25, 25))
+        sfcol = csel.ColourSelect(panel,  -1, "",
+                                  mpl_color(conf.scatter_selectcolor,
+                                            default=(128, 0, 0)),
+                                  size=(25, 25))
+        secol = csel.ColourSelect(panel,  -1, "",
+                                  mpl_color(conf.scatter_selectedge,
+                                           default=(200, 0, 0)),
+                                  size=(25, 25))
+
+        self.wids['scatter_size'] = ssize
+        self.wids['scatter_normalcolor'] = nfcol
+        self.wids['scatter_normaledge'] = necol
+        self.wids['scatter_selectcolor'] = sfcol
+        self.wids['scatter_selectedge'] = secol
+
+        nfcol.Bind(csel.EVT_COLOURSELECT, partial(self.onScatter, item='scatt_nf'))
+        necol.Bind(csel.EVT_COLOURSELECT, partial(self.onScatter, item='scatt_ne'))
+        sfcol.Bind(csel.EVT_COLOURSELECT, partial(self.onScatter, item='scatt_sf'))
+        secol.Bind(csel.EVT_COLOURSELECT, partial(self.onScatter, item='scatt_se'))
+
+        btnstyle= wx.ALIGN_CENTER|wx.ALIGN_CENTER_VERTICAL|wx.ALL
+
+        sizer.Add(wx.StaticText(panel, -1, 'Colors: ',
+                                style=wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL),
+                  (1, 0), (1,1), labstyle,2)
+        sizer.Add(wx.StaticText(panel, -1, 'Normal Symbol:',
+                                style=wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL),
+                  (1, 1), (1,1), labstyle,2)
+        sizer.Add(wx.StaticText(panel, -1, 'Selected Symbol:',
+                                style=wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL),
+                  (1, 2), (1,1), labstyle,2)
+        sizer.Add(wx.StaticText(panel, -1, 'Face Color:',
+                                style=wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL),
+                  (2, 0), (1,1), labstyle,2)
+        sizer.Add(wx.StaticText(panel, -1, 'Edge Color:',
+                                style=wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL),
+                  (3, 0), (1,1), labstyle,2)
+
+        sizer.Add(nfcol,   (2, 1), (1,1), btnstyle,2)
+        sizer.Add(necol,   (3, 1), (1,1), btnstyle,2)
+        sizer.Add(sfcol,   (2, 2), (1,1), btnstyle,2)
+        sizer.Add(secol,   (3, 2), (1,1), btnstyle,2)
+
+        autopack(panel, sizer)
+        return panel
+
+
+    def make_text_panel(self, parent, font=None):
+        panel = scrolled.ScrolledPanel(parent, size=(875, 225),
+                                       style=wx.GROW|wx.TAB_TRAVERSAL, name='p1')
+        if font is None:
+            font = wx.Font(12,wx.SWISS,wx.NORMAL,wx.NORMAL,False)
+
+        sizer = wx.GridBagSizer(2, 2)
+        labstyle= wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL
+
+        self.titl = LabeledTextCtrl(panel, self.conf.title.replace('\n', '\\n'),
+                                    action = partial(self.onText, item='title'),
+                                    labeltext='Title: ', size=(475, -1))
+        self.xlab = LabeledTextCtrl(panel, self.conf.xlabel.replace('\n', '\\n'),
+                                    action = partial(self.onText, item='xlabel'),
+                                    labeltext='X Label: ', size=(475, -1))
+        self.ylab = LabeledTextCtrl(panel, self.conf.ylabel.replace('\n', '\\n'),
+                                    action = partial(self.onText, item='ylabel'),
+                                    labeltext='Y Label: ', size=(475, -1))
+        self.y2lab= LabeledTextCtrl(panel, self.conf.y2label.replace('\n', '\\n'),
+                                    action = partial(self.onText, item='y2label'),
+                                    labeltext='Y2 Label: ', size=(475, -1))
+        self.y3lab= LabeledTextCtrl(panel, self.conf.y3label.replace('\n', '\\n'),
+                                    action = partial(self.onText, item='y3label'),
+                                    labeltext='Y3 Label: ', size=(475, -1))
+        self.y4lab= LabeledTextCtrl(panel, self.conf.y4label.replace('\n', '\\n'),
+                                    action = partial(self.onText, item='y4label'),
+                                    labeltext='Y4 Label: ', size=(475, -1))
+
+        self.yax_color = wx.CheckBox(panel,-1, 'Use Trace Color for Y Axes', (-1, -1), (-1, -1))
+        self.yax_color.Bind(wx.EVT_CHECKBOX, self.onYaxes_tracecolor)
+        self.yax_color.SetValue(self.conf.yaxes_tracecolor)
+
+        axes = self.canvas.figure.get_axes()
+        self.yax_color.Enable(len(axes) > 1)
+        self.y2lab.label.Enable(len(axes) > 1)
+        self.y3lab.label.Enable(len(axes) > 2)
+        self.y4lab.label.Enable(len(axes) > 3)
+        self.y2lab.Enable(len(axes) > 1)
+        self.y3lab.Enable(len(axes) > 2)
+        self.y4lab.Enable(len(axes) > 3)
+
+        sizer.Add(self.titl.label,  (0, 0), (1, 1), labstyle)
+        sizer.Add(self.titl,        (0, 1), (1, 6), labstyle)
+        sizer.Add(self.xlab.label,  (1, 0), (1, 1), labstyle)
+        sizer.Add(self.xlab,        (1, 1), (1, 6), labstyle)
+        sizer.Add(self.ylab.label,  (2, 0), (1, 1), labstyle)
+        sizer.Add(self.ylab,        (2, 1), (1, 6), labstyle)
+        sizer.Add(self.y2lab.label, (3, 0), (1, 1), labstyle)
+        sizer.Add(self.y2lab,       (3, 1), (1, 6), labstyle)
+        sizer.Add(self.y3lab.label, (4, 0), (1, 1), labstyle)
+        sizer.Add(self.y3lab,       (4, 1), (1, 6), labstyle)
+        sizer.Add(self.y4lab.label, (5, 0), (1, 1), labstyle)
+        sizer.Add(self.y4lab,       (5, 1), (1, 6), labstyle)
+        sizer.Add(self.yax_color,   (6, 0), (1, 6), labstyle)
+
+        irow = 7
+
+        t0 = wx.StaticText(panel, -1, 'Text Sizes:', style=labstyle)
+        t1 = wx.StaticText(panel, -1, 'Titles:', style=labstyle)
+        t2 = wx.StaticText(panel, -1, 'Axis Labels:',  style=labstyle)
+        t3 = wx.StaticText(panel, -1, 'Legends:',  style=labstyle)
+
+        fsopts = dict(size=(ISPINSIZE, -1), min_val=2, max_val=32, increment=0.5)
+        ttl_size = FloatSpin(panel, value=self.conf.labelfont.get_size(),
+                             action=partial(self.onText, item='titlesize'),
+                             **fsopts)
+        lab_size = FloatSpin(panel, value=self.conf.labelfont.get_size(),
+                             action=partial(self.onText, item='labelsize'),
+                             **fsopts)
+        leg_size = FloatSpin(panel, value=self.conf.legendfont.get_size(),
+                             action=partial(self.onText, item='legendsize'),
+                             **fsopts)
+
+        self.title_fontsize = ttl_size
+        self.legend_fontsize = leg_size
+        self.label_fontsize = lab_size
+        self.wids['titlefont'] = ttl_size
+        self.wids['labelfont'] = lab_size
+        self.wids['legendfont'] = leg_size
+
+
+        sizer.Add(t0,        (irow, 0), (1, 1), labstyle)
+        sizer.Add(t1,        (irow, 1), (1, 1), labstyle)
+        sizer.Add(ttl_size,  (irow, 2), (1, 1), labstyle)
+        sizer.Add(t2,        (irow, 3), (1, 1), labstyle)
+        sizer.Add(lab_size,  (irow, 4), (1, 1), labstyle)
+        sizer.Add(t3,        (irow, 5), (1, 1), labstyle)
+        sizer.Add(leg_size,  (irow, 6), (1, 1), labstyle)
+
+        irow = irow + 1
+        # Legend
+        # bstyle = wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL|wx.ST_NO_AUTORESIZE
+        labstyle = wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL
+
+        # ax = self.axes[0]
+        show_leg = wx.CheckBox(panel,-1, 'Show Legend', (-1, -1), (-1, -1))
+        show_leg.Bind(wx.EVT_CHECKBOX,partial(self.onShowLegend, item='legend'))
+        show_leg.SetValue(self.conf.show_legend)
+        if show_leg not in self.show_legend_cbs:
+            self.show_legend_cbs.append(show_leg)
+
+        show_lfr = wx.CheckBox(panel,-1, 'Show Legend Frame', (-1, -1), (-1, -1))
+        show_lfr.Bind(wx.EVT_CHECKBOX,partial(self.onShowLegend,item='frame'))
+        show_lfr.SetValue(self.conf.show_legend_frame)
+
+        togg_leg  = wx.CheckBox(panel,-1, 'Click Legend to Show/Hide Line',
+                                (-1, -1), (-1, -1))
+        togg_leg.Bind(wx.EVT_CHECKBOX, self.onHideWithLegend)
+        togg_leg.SetValue(self.conf.hidewith_legend)
+
+        
+        leg_ttl = wx.StaticText(panel, -1, 'Legend:', size=(-1, -1), style=labstyle)
+        loc_ttl = wx.StaticText(panel, -1, 'Location:', size=(-1, -1), style=labstyle)
+        leg_loc = wx.Choice(panel, -1, choices=self.conf.legend_locs, size=(150, -1))
+        leg_loc.Bind(wx.EVT_CHOICE,partial(self.onShowLegend, item='loc'))
+        leg_loc.SetStringSelection(self.conf.legend_loc)
+
+        leg_onax = wx.Choice(panel, -1, choices=self.conf.legend_onaxis_choices,
+                             size=(120, -1))
+        leg_onax.Bind(wx.EVT_CHOICE,partial(self.onShowLegend, item='onaxis'))
+        leg_onax.SetStringSelection(self.conf.legend_onaxis)
+
+        self.wids['hidewith_legend'] = togg_leg
+        self.wids['legend_loc'] = leg_loc
+        self.wids['legend_onaxis'] = leg_onax
+        self.wids['show_legend_2'] = show_leg
+        self.wids['show_legend_frame'] = show_lfr
+
+        lsizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        lsizer.AddMany((leg_ttl, show_leg, show_lfr, togg_leg))
+        sizer.Add(lsizer,    (irow, 0), (1, 8), labstyle, 2)
+
+        irow += 1
+
+        lsizer = wx.BoxSizer(wx.HORIZONTAL)
+        lsizer.AddMany((loc_ttl, leg_loc, leg_onax))
+        sizer.Add(lsizer,  (irow, 1), (1, 5), labstyle, 2)
+        autopack(panel, sizer)
+        return panel
+
+    def make_linetrace_panel(self, parent, font=None):
+        """colours and line properties"""
+        panel = scrolled.ScrolledPanel(parent, size=(900, 250),
+                                       style=wx.GROW|wx.TAB_TRAVERSAL, name='p1')
+        if font is None:
+            font = wx.Font(12, wx.SWISS, wx.NORMAL, wx.NORMAL, False)
+
+        sizer = wx.GridBagSizer(2, 2)
+        i = 0
+        cnf = self.conf
+        ax = self.axes[0]
+        labstyle= wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL
+
+        theme_names = list(cnf.themes.keys())
+        themechoice = Choice(panel, choices=theme_names, action=self.onTheme)
+        themechoice.SetStringSelection(cnf.current_theme)
+        self.wids['theme'] = themechoice
+
+        textcol = csel.ColourSelect(panel, label=" Text ", size=(80, -1),
+                                    colour=mpl_color(cnf.textcolor))
+        gridcol = csel.ColourSelect(panel, label=" Grid ", size=(80, -1),
+                                    colour=mpl_color(cnf.gridcolor))
+        bgcol = csel.ColourSelect(panel, label=" Background ", size=(120, -1),
+                                  colour=mpl_color(ax.get_facecolor()))
+        fbgcol = csel.ColourSelect(panel,  label=" Frame ", size=(80, -1),
+                                   colour=mpl_color(self.canvas.figure.get_facecolor()))
+
+        self.wids.update({'textcolor': textcol, 'facecolor': bgcol,
+                           'gridcolor': gridcol, 'framecolor': fbgcol})
+
+        bgcol.Bind(csel.EVT_COLOURSELECT,   partial(self.onColor, item='face'))
+        fbgcol.Bind(csel.EVT_COLOURSELECT,  partial(self.onColor, item='frame'))
+        gridcol.Bind(csel.EVT_COLOURSELECT, partial(self.onColor, item='grid'))
+        textcol.Bind(csel.EVT_COLOURSELECT, partial(self.onColor, item='text'))
+
+        show_grid  = wx.CheckBox(panel,-1, ' Show Grid  ')
+        show_grid.Bind(wx.EVT_CHECKBOX,self.onShowGrid)
+        show_grid.SetValue(cnf.show_grid)
+        self.wids['show_grid'] = show_grid
+        
+        show_leg = wx.CheckBox(panel,-1, 'Show Legend  ')
+        show_leg.Bind(wx.EVT_CHECKBOX,partial(self.onShowLegend, item='legend'))
+        show_leg.SetValue(cnf.show_legend)
+        if show_leg not in self.show_legend_cbs:
+            self.show_legend_cbs.append(show_leg)
+        self.wids['show_legend'] = show_leg
+        
+        show_box  = wx.CheckBox(panel,-1, ' Show Top/Right Axes  ')
+        show_box.Bind(wx.EVT_CHECKBOX, self.onShowBox)
+        show_box.SetValue(cnf.axes_style == 'box')
+        self.wids['axes_style'] = show_box
+
+
+        tsizer = wx.BoxSizer(wx.HORIZONTAL)
+        tsizer.Add(wx.StaticText(panel, -1, ' Theme: '), 0, labstyle, 3)
+        tsizer.Add(themechoice,  1, labstyle, 3)
+        tsizer.Add(wx.StaticText(panel, -1, ' Colors: '), 0, labstyle, 3)
+        tsizer.Add(textcol,   0, labstyle, 5)
+        tsizer.Add(gridcol,   0, labstyle, 5)
+        tsizer.Add(bgcol,     0, labstyle, 5)
+        tsizer.Add(fbgcol ,   0, labstyle, 5)
+        sizer.Add(tsizer,    (1, 0), (1, 9), labstyle, 3)
+
+        tsizer = wx.BoxSizer(wx.HORIZONTAL)
+        tsizer.Add(wx.StaticText(panel, -1, ' Options: '), 0, labstyle, 3)
+        tsizer.Add(show_grid, 0, labstyle, 3)
+        tsizer.Add(show_leg,  0, labstyle, 3)
+        tsizer.Add(show_box,  0, labstyle, 3)
+
+        sizer.Add(tsizer,    (2, 0), (1, 9), labstyle, 3)
+
+        tsizer = wx.BoxSizer(wx.HORIZONTAL)
+        tsizer.Add(wx.StaticText(panel, -1, ' All Traces:  Thickness: '), 0, labstyle, 3)
+        ##
+        allthk = FloatSpin(panel, size=(FSPINSIZE, -1), value=cnf.traces[0].linewidth,
+                           min_val=0, max_val=20, increment=0.5, digits=1,
+                           action=partial(self.onThickness, trace=-1))
+
+        self.last_thickness_event = 0.0
+        tsizer.Add(allthk, 0, labstyle, 3)
+        msz = FloatSpin(panel, size=(FSPINSIZE, -1), value=cnf.traces[0].markersize,
+                        min_val=0, max_val=30, increment=0.5, digits=1,
+                        action=partial(self.onMarkerSize, trace=-1))
+        tsizer.Add(wx.StaticText(panel, -1, ' Symbol Size: '), 0, labstyle, 3)
+        tsizer.Add(msz, 0, labstyle, 3)
+
+        self.wids['def_thickness'] = allthk
+        self.wids['def_markersize'] = msz
+
+        sizer.Add(tsizer,    (3, 0), (1, 9), labstyle, 3)
+
+        irow = 4
+        for t in ('#','Label','Color', 'Alpha', 'Fill', 'Line Style',
+                  'Thickness', 'Symbol',
+                  'Size', 'Z Order', 'Join Style'):
+            x = wx.StaticText(panel, -1, t)
+            x.SetFont(font)
+            sizer.Add(x,(irow,i),(1,1),wx.ALIGN_LEFT|wx.ALL, 3)
+            i = i+1
+        self.trace_labels = []
+        self.choice_linewidths = []
+        self.choice_markersizes = []
+        ntrace_display = min(cnf.ntrace+2, len(cnf.traces))
+        for i in range(ntrace_display):
+            irow += 1
+            # label  = "trace %i" % i
+            lin  = cnf.traces[i]
+            dlab = lin.label
+            dcol = hexcolor(lin.color)
+            dthk = lin.linewidth
+            dalp = lin.alpha
+            dmsz = lin.markersize
+            dsty = lin.style
+            djsty = lin.drawstyle
+            dfill = lin.fill
+            dzord = lin.zorder
+            dsym = lin.marker
+            lab = LabeledTextCtrl(panel, dlab, size=(125, -1), labeltext="%i" % (i+1),
+                                  action = partial(self.onText, item='trace', trace=i))
+            self.trace_labels.append(lab)
+
+            col = csel.ColourSelect(panel,  -1, "", dcol, size=(25, 25))
+            col.Bind(csel.EVT_COLOURSELECT, partial(self.onColor, trace=i))
+
+            alp = FloatSpin(panel, size=(FSPINSIZE, -1), value=dalp,
+                            min_val=0, max_val=1, increment=0.05, digits=2,
+                            action=partial(self.onAlpha, trace=i))
+
+            ffil = wx.CheckBox(panel, -1, '')
+            ffil.Bind(wx.EVT_CHECKBOX, partial(self.onFill, trace=i))
+            ffil.SetValue(dfill)
+
+            sty = Choice(panel, choices=cnf.styles, size=(150,-1),
+                         action=partial(self.onStyle,trace=i))
+            sty.SetStringSelection(dsty)
+
+            thk = FloatSpin(panel, size=(ISPINSIZE, -1), value=dthk,
+                            min_val=0, max_val=20, increment=0.5, digits=1,
+                            action=partial(self.onThickness, trace=i))
+            self.choice_linewidths.append(thk)
+
+            sym = Choice(panel, choices=cnf.symbols, size=(125,-1),
+                         action=partial(self.onSymbol,trace=i))
+
+            sym.SetStringSelection(dsym)
+            
+            msz = FloatSpin(panel, size=(FSPINSIZE, -1), value=dmsz,
+                            min_val=0, max_val=30, increment=0.5, digits=1,
+                            action=partial(self.onMarkerSize, trace=i))
+            self.choice_markersizes.append(msz)
+            
+            zor = FloatSpin(panel, size=(ISPINSIZE, -1), value=dzord,
+                            min_val=-500, max_val=500, increment=1, digits=0,
+                            action=partial(self.onZorder, trace=i))
+
+
+            jsty = wx.Choice(panel, -1, choices=cnf.drawstyles, size=(125,-1))
+            jsty.Bind(wx.EVT_CHOICE, partial(self.onJoinStyle, trace=i))
+            jsty.SetStringSelection(djsty)
+
+            self.wids[f'trace_{i}'] = {'color': col, 'alpha': alp, 'fill': ffil,
+                                       'style': sty, 'linewidth': thk,
+                                       'marker': sym, 'markersize': msz,
+                                       'zorder': zor, 'drawstyle': jsty}
+
+            sizer.Add(lab.label,(irow,0),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(lab, (irow,1),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(col, (irow,2),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(alp, (irow,3),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(ffil,(irow,4),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(sty, (irow,5),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(thk, (irow,6),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(sym, (irow,7),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(msz, (irow,8),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(zor, (irow,9),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+            sizer.Add(jsty, (irow,10),(1,1),wx.ALIGN_LEFT|wx.ALL, 4)
+
+        autopack(panel,sizer)
+        wx.CallAfter(panel.SetupScrolling)
+        return panel
+
+    def onYaxes_tracecolor(self, event=None):
+        self.conf.set_yaxes_tracecolor(yaxes_tracecolor=event.IsChecked(), delay_draw=False)
+
+    def onResetLines(self, event=None):
+        pass
+
+    def onColor(self, event=None, color=None, item='trace', trace=1, draw=True):
+        event_col = event.GetValue()
+        if color is None and event is not None:
+            color = hexcolor(event_col)
+
+        if item == 'trace':
+            self.conf.set_trace_color(color, trace=trace)
+            self.wids[f'trace_{trace}']['color'].SetColour(color)
+            if self.conf.show_legend:
+                self.conf.draw_legend()
+
+        elif item == 'grid':
+            self.conf.set_gridcolor(color)
+        elif item == 'face':
+            self.conf.set_facecolor(color)
+        elif item == 'frame':
+            self.conf.set_framecolor(color)
+        elif item == 'text':
+            self.conf.set_textcolor(color)
+        if draw:
+            self.canvas.draw()
+
+
+    def onTheme(self, event):
+        theme = event.GetString()
+        conf = self.conf
+        conf.set_theme(theme=theme)
+        self.wids['textcolor'].SetColour(conf.textcolor)
+        self.wids['gridcolor'].SetColour(conf.gridcolor)
+        self.wids['facecolor'].SetColour(conf.facecolor)
+        self.wids['framecolor'].SetColour(conf.framecolor)
+
+        self.title_fontsize.SetValue(self.conf.titlefont.get_size())
+        self.legend_fontsize.SetValue(self.conf.legendfont.get_size())
+
+        ntrace_display = min(self.conf.ntrace+2, len(self.conf.traces))
+        for i in range(ntrace_display):
+            try:
+                lin = self.conf.traces[i]
+                curcol = hexcolor(self.wids[f'trace_{i}']['color'].GetColour())
+                newcol = hexcolor(lin.color)
+                self.wids[f'trace_{i}']['color'].SetColour(newcol)
+                if newcol != curcol:
+                    self.conf.set_trace_color(newcol, trace=i)
+            except KeyError:
+                pass
+        conf.draw_legend()
+
+    def onLogScale(self, event):
+        xword, yword = event.GetString().split(' / ')
+        xscale = xword.replace('x', '').strip()
+        yscale = yword.replace('y', '').strip()
+        self.conf.set_logscale(xscale=xscale, yscale=yscale)
+
+    def onZoomStyle(self, event=None):
+        self.conf.zoom_style = event.GetString()
+
+    def onStyle(self, event, trace=0):
+        self.conf.set_trace_style(event.GetString(),trace=trace)
+
+    def onJoinStyle(self, event, trace=0):
+        self.conf.set_trace_drawstyle(event.GetString(), trace=trace)
+
+    def onFill(self, event, trace=0):
+        self.conf.set_trace_fill(event.IsChecked(), trace=trace)
+
+    def onSymbol(self, event, trace=0):
+        self.conf.set_trace_marker(event.GetString(), trace=trace)
+
+    def onMarkerSize(self, event, trace=0):
+        val = event.GetEventObject().GetValue()
+        if trace == -1:
+            for t, c in enumerate(self.choice_markersizes):
+                c.SetValue(val)
+                self.conf.set_trace_markersize(val, trace=t)
+        else:
+            self.conf.set_trace_markersize(val, trace=trace)
+
+    def onAlpha(self, event, trace=0):
+        self.conf.set_trace_alpha(event.GetEventObject().GetValue(), trace=trace,
+                                  delay_draw=False)
+
+    def onZorder(self, event, trace=0):
+        self.conf.set_trace_zorder(event.GetEventObject().GetValue(),
+                                   trace=trace)
+
+    def onThickness(self, event, trace=0):
+        val = event.GetEventObject().GetValue()
+        if trace == -1:
+            for t, c in enumerate(self.choice_linewidths):
+                c.SetValue(val)
+                self.conf.set_trace_linewidth(val, trace=t)
+        else:
+            self.conf.set_trace_linewidth(val, trace=trace)
+
+
+    def onAutoBounds(self, event):
+        axes = self.canvas.figure.get_axes()
+        if event.IsChecked():
+            for ax in axes:
+                self.conf.user_limits[ax] = [None, None, None, None]
+            [m.Disable() for m in self.xbounds]
+            [m.Disable() for m in self.ybounds]
+            [m.Disable() for m in self.y2bounds]
+            [m.Disable() for m in self.y3bounds]
+            [m.Disable() for m in self.y4bounds]
+            self.vpad_val.Enable()
+            self.conf.unzoom(full=True)
+        else:
+            self.vpad_val.Disable()
+            xb = axes[0].get_xlim()
+            yb = axes[0].get_ylim()
+            for m, v in zip(self.xbounds, xb):
+                m.Enable()
+                m.SetValue(ffmt(v))
+            for m, v in zip(self.ybounds, yb):
+                m.Enable()
+                m.SetValue(ffmt(v))
+            if len(axes) > 1:
+                y2b = axes[1].get_ylim()
+                for m, v in zip(self.y2bounds, y2b):
+                    m.Enable()
+                    m.SetValue(ffmt(v))
+            if len(axes) > 2:
+                y3b = axes[2].get_ylim()
+                for m, v in zip(self.y3bounds, y3b):
+                    m.Enable()
+                    m.SetValue(ffmt(v))
+            if len(axes) > 3:
+                y4b = axes[3].get_ylim()
+                for m, v in zip(self.y4bounds, y4b):
+                    m.Enable()
+                    m.SetValue(ffmt(v))
+
+
+    def onBounds(self, event=None):
+        def FloatNone(v):
+            if v in ('', 'None', 'none'):
+                return None
+            try:
+                return float(v)
+            except:
+                return None
+
+        axes = self.canvas.figure.get_axes()
+        xmin, xmax = [FloatNone(w.GetValue()) for w in self.xbounds]
+        ymin, ymax = [FloatNone(w.GetValue()) for w in self.ybounds]
+        self.conf.user_limits[axes[0]] = [xmin, xmax, ymin, ymax]
+
+        if len(axes) > 1:
+            y2min, y2max = [FloatNone(w.GetValue()) for w in self.y2bounds]
+            self.conf.user_limits[axes[1]] = [xmin, xmax, y2min, y2max]
+        if len(axes) > 2:
+            y3min, y3max = [FloatNone(w.GetValue()) for w in self.y3bounds]
+            self.conf.user_limits[axes[2]] = [xmin, xmax, y3min, y3max]
+        if len(axes) > 3:
+            y4min, y4max = [FloatNone(w.GetValue()) for w in self.y4bounds]
+            self.conf.user_limits[axes[3]] = [xmin, xmax, y4min, y4max]
+        self.conf.set_viewlimits()
+        self.conf.canvas.draw()
+
+    def onAutoMargin(self,event):
+        self.conf.auto_margins = event.IsChecked()
+        if self.conf.auto_margins:
+            [m.Disable() for m in self.margins]
+        else:
+            ppanel = self.GetParent()
+            vals = ppanel.get_default_margins()
+            for m, v in zip(self.margins, vals):
+                m.Enable()
+                m.SetValue(v)
+        self.conf.canvas.draw()
+
+    def onMargins(self, event=None):
+        left, top, right, bottom = [float(w.GetValue()) for w in self.margins]
+        self.conf.set_margins(left=left, top=top, right=right, bottom=bottom)
+
+    def onY3Offset(self, event=None):
+        self.conf.y3offset = float(self.y3offset.GetValue())
+        self.conf.relabel()
+
+    def onViewPadEvent(self, event=None):
+
+        self.conf.viewpad = float(self.vpad_val.GetValue())
+        self.conf.set_viewlimits()
+        self.conf.canvas.draw()
+
+        axes = self.canvas.figure.get_axes()
+        xb = axes[0].get_xlim()
+        yb = axes[0].get_ylim()
+        for m, v in zip(self.xbounds, xb):
+            m.SetValue(ffmt(v))
+
+        for m, v in zip(self.ybounds, yb):
+            m.SetValue(ffmt(v))
+
+    def onScatter(self, event, item=None):
+        conf = self.conf
+        axes = self.canvas.figure.get_axes()[0]
+        if item == 'size':
+            conf.scatter_size = event.GetInt()
+        elif item == 'scatt_nf':
+            self.conf.scatter_normalcolor = hexcolor(event.GetValue())
+        elif item == 'scatt_ne':
+            self.conf.scatter_normaledge = hexcolor(event.GetValue())
+        elif item == 'scatt_sf':
+            self.conf.scatter_selectcolor = hexcolor(event.GetValue())
+        elif item == 'scatt_se':
+            self.conf.scatter_selectedge = hexcolor(event.GetValue())
+
+        axes.cla()
+        xd, yd = conf.scatter_xdata, conf.scatter_ydata
+        mask = conf.scatter_mask
+        if mask is  None:
+            axes.scatter(xd, yd, s=conf.scatter_size,
+                         c=conf.scatter_normalcolor,
+                         edgecolors=conf.scatter_normaledge)
+        else:
+            axes.scatter(xd[np.where(~mask)], yd[np.where(~mask)],
+                         s=conf.scatter_size,
+                         c=conf.scatter_normalcolor,
+                         edgecolors=conf.scatter_normaledge)
+            axes.scatter(xd[np.where(mask)], yd[np.where(mask)],
+                         s=conf.scatter_size,
+                         c=conf.scatter_selectcolor,
+                         edgecolors=conf.scatter_selectedge)
+        self.conf.relabel(delay_draw=False)
+
+    def onText(self, event=None, item='trace', trace=0):
+        if item=='labelsize':
+            size = self.label_fontsize.GetValue()
+            self.conf.labelfont.set_size(size)
+            for ax in self.axes:
+                for lab in ax.get_xticklabels()+ax.get_yticklabels():
+                    lab.set_fontsize(size)
+            self.conf.relabel()
+            return
+        elif item=='titlesize':
+            size = self.title_fontsize.GetValue()
+            self.conf.titlefont.set_size(size)
+            self.conf.relabel()
+            return
+        elif item=='legendsize':
+            size = self.legend_fontsize.GetValue()
+            self.conf.legendfont.set_size(size)
+            self.conf.draw_legend()
+            return
+
+        if item == 'title':
+            wid = self.titl
+        elif item == 'ylabel':
+            wid = self.ylab
+        elif item == 'y2label':
+            wid = self.y2lab
+        elif item == 'y3label':
+            wid = self.y3lab
+        elif item == 'y4label':
+            wid = self.y4lab
+        elif item == 'xlabel':
+            wid = self.xlab
+        elif item == 'trace':
+            wid = self.trace_labels[trace]
+
+        s = wid.GetValue()
+        try:
+            s = str(s).strip()
+        except TypeError:
+            s = ''
+
+        if item in ('xlabel', 'ylabel', 'y2label', 'y3label', 'y4label', 'title'):
+            try:
+                kws = {item: s}
+                self.conf.relabel(**kws)
+                wid.SetBackgroundColour(GUI_COLORS.text_bg)
+                wid.SetForegroundColour(GUI_COLORS.text)
+            except: # as from latex error!a
+                wid.SetBackgroundColour(GUI_COLORS.text_invalid_bg)
+                wid.SetForegroundColour(GUI_COLORS.text_invalid)
+        elif item == 'trace':
+            try:
+                self.conf.set_trace_label(s, trace=trace)
+            except:
+                pass
+
+    def onShowGrid(self,event):
+        self.conf.enable_grid(show=event.IsChecked())
+
+    def onShowBox(self, event=None):
+        style='box'
+        if not event.IsChecked():
+            style='open'
+        self.conf.set_axes_style(style=style)
+
+    def onShowLegend(self, event, item=''):
+        auto_location = True
+        if item == 'legend':
+            self.conf.show_legend  = checked = event.IsChecked()
+            for cb in self.show_legend_cbs:
+                if cb.GetValue() != checked:
+                    cb.SetValue(checked)
+
+        elif item=='frame':
+            self.conf.show_legend_frame = event.IsChecked()
+        elif item=='loc':
+            self.conf.legend_loc  = event.GetString()
+            auto_location = False
+        elif item=='onaxis':
+            self.conf.legend_onaxis  = event.GetString()
+        self.conf.draw_legend(auto_location=auto_location)
+
+    def onDragLegend(self, event=None):
+        self.conf.draggable_legend = event.IsChecked()
+        self.conf.draw_legend()
+
+    def onHideWithLegend(self, event=None):
+        self.conf.hidewith_legend = event.IsChecked()
+        self.conf.draw_legend()
+
+    def redraw_legend(self):
+        self.conf.draw_legend()
+
+    def onExit(self, event):
+        self.Close(True)
