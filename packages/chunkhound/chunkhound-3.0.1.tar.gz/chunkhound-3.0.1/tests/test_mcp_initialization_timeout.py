@@ -1,0 +1,485 @@
+"""Test MCP server initialization timeout behavior.
+
+This test reproduces the VS Code MCP integration issue where the server
+hangs during initialization due to synchronous directory scanning.
+
+IMPORTANT: This file contains stress tests that create thousands of files 
+and directories to test performance under load. The large stress tests are
+automatically skipped in CI environments due to GitHub Actions I/O limitations.
+
+To run stress tests locally:
+  pytest tests/test_mcp_initialization_timeout.py -v
+
+To run only the stress tests:
+  pytest tests/test_mcp_initialization_timeout.py -k "large_directory or deep_directory" -v
+"""
+
+import asyncio
+import json
+import os
+import tempfile
+import time
+from pathlib import Path
+
+import pytest
+
+
+class TestMCPInitializationTimeout:
+    """Test MCP server initialization timeout scenarios."""
+
+    @pytest.mark.skipif(os.environ.get("CI") == "true", reason="Stress test with 1000 files too slow for CI")
+    @pytest.mark.asyncio
+    async def test_mcp_initialization_timeout_on_large_directory(self):
+        """Test that MCP server times out on initialize when processing large directories.
+        
+        This reproduces the VS Code MCP integration issue where the server
+        becomes unresponsive during directory scanning.
+        
+        NOTE: This is a stress test that creates 1000 files with substantial content.
+        It's skipped in CI due to GitHub Actions I/O performance limitations.
+        Run locally to verify performance fixes.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create many files to simulate a large codebase that takes time to scan
+            # This reproduces the VS Code issue with large directories like /home/e197460/Documents/genesis/InfraDomain
+            for i in range(1000):  # Create enough files to cause significant delay
+                subdir = temp_path / f"module_{i // 100}"
+                subdir.mkdir(exist_ok=True)
+                
+                test_file = subdir / f"file_{i}.py"
+                # Add substantial content that will create many chunks during scanning
+                # This simulates real-world codebases with large files
+                test_file.write_text(f"""
+# File {i} - Large content to slow down chunking and indexing
+
+def function_{i}():
+    '''Function {i} for testing initialization timeout.
+    
+    This function has extensive documentation to create more chunks
+    during the parsing and indexing process. The goal is to simulate
+    a real-world codebase that would take significant time to process.
+    '''
+    data = {{
+        "id": {i},
+        "name": "function_{i}",
+        "description": "A test function that does various operations",
+        "operations": [
+            "data_processing",
+            "file_handling", 
+            "network_requests",
+            "database_operations"
+        ]
+    }}
+    
+    # Perform some operations
+    for operation in data["operations"]:
+        process_operation(operation, data["id"])
+        
+    return data
+
+class Class_{i}:
+    '''Class {i} for testing large directory initialization.
+    
+    This class contains multiple methods and properties to increase
+    the parsing and chunking work during initialization.
+    '''
+    
+    def __init__(self):
+        self.data = {{
+            "class_id": {i},
+            "methods": [],
+            "properties": [],
+            "metadata": {{
+                "created": "2025-01-01",
+                "version": "1.0.{i}",
+                "author": "test_system"
+            }}
+        }}
+    
+    def method_{i}(self):
+        '''Method {i} implementation.'''
+        return self.function_{i}()
+        
+    def function_{i}(self):
+        '''Another function in class {i}.'''
+        return f"class_value_{{self.data['class_id']}}"
+        
+    def process_data(self):
+        '''Process data for class {i}.'''
+        results = []
+        for j in range(10):
+            result = {{
+                "iteration": j,
+                "value": f"{{self.data['class_id']}}_{{j}}",
+                "timestamp": "2025-01-01T00:00:00Z"
+            }}
+            results.append(result)
+        return results
+
+def process_operation(operation, operation_id):
+    '''Process an operation for function {i}.'''
+    print(f"Processing {{operation}} with ID {{operation_id}}")
+    return f"{{operation}}_completed_{{operation_id}}"
+
+# Additional module-level code to increase parsing work
+CONSTANTS_{i} = {{
+    "MAX_RETRIES": 3,
+    "TIMEOUT": 30,
+    "BUFFER_SIZE": 1024,
+    "VERSION": "1.{i}.0"
+}}
+
+# More content to make the file substantial
+CONFIGURATION_{i} = {{
+    "database": {{
+        "host": "localhost",
+        "port": 5432,
+        "name": "test_db_{i}"
+    }},
+    "cache": {{
+        "enabled": True,
+        "ttl": 3600,
+        "size": 100
+    }},
+    "logging": {{
+        "level": "INFO",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    }}
+}}
+""")
+            
+            # Create minimal config
+            config_path = temp_path / ".chunkhound.json"
+            db_path = temp_path / ".chunkhound" / "test.db"
+            db_path.parent.mkdir(exist_ok=True)
+            
+            config = {
+                "database": {"path": str(db_path), "provider": "duckdb"},
+                "indexing": {"include": ["*.py"]}
+            }
+            config_path.write_text(json.dumps(config))
+            
+            # Start MCP server (it will auto-index on startup which should cause timeout)
+            mcp_env = os.environ.copy()
+            mcp_env["CHUNKHOUND_MCP_MODE"] = "1"
+            
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "run", "chunkhound", "mcp", str(temp_path),
+                cwd=temp_path,
+                env=mcp_env,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                # Send initialize request
+                init_request = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "1.0"}
+                    }
+                }
+                
+                proc.stdin.write((json.dumps(init_request) + "\n").encode())
+                await proc.stdin.drain()
+                
+                # After our fix: server should respond quickly even with large directories
+                # VS Code waits about 5 seconds, server should respond in under 3 seconds now
+                start_time = time.time()
+                response_line = await asyncio.wait_for(
+                    proc.stdout.readline(), timeout=5.0
+                )
+                response_time = time.time() - start_time
+                
+                # Verify response within VS Code timeout (should be under 5 seconds)
+                assert response_time < 5.0, f"Server took {response_time:.2f} seconds (should be < 5s to avoid VS Code timeout)"
+                
+                print(f"✅ Server responded in {response_time:.2f} seconds (within VS Code timeout)")
+                
+                # Verify proper response structure  
+                init_response = json.loads(response_line.decode())
+                assert "result" in init_response, f"No result in response: {init_response}"
+                assert "serverInfo" in init_response["result"], f"No serverInfo in result: {init_response['result']}"
+                assert init_response["result"]["serverInfo"]["name"] == "ChunkHound Code Search"
+                
+                # Verify the server process is still running (not crashed)
+                assert proc.returncode is None, "Server process crashed during initialization"
+                    
+            finally:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+
+    @pytest.mark.asyncio
+    async def test_mcp_initialization_responds_quickly_small_directory(self):
+        """Test that MCP server responds quickly with small directories.
+        
+        This verifies normal behavior and will help validate the fix.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create just a few files - should initialize quickly
+            test_file = temp_path / "test.py"
+            test_file.write_text("def hello(): return 'world'")
+            
+            # Create minimal config
+            config_path = temp_path / ".chunkhound.json"
+            db_path = temp_path / ".chunkhound" / "test.db"
+            db_path.parent.mkdir(exist_ok=True)
+            
+            config = {
+                "database": {"path": str(db_path), "provider": "duckdb"},
+                "indexing": {"include": ["*.py"]}
+            }
+            config_path.write_text(json.dumps(config))
+            
+            # Start MCP server
+            mcp_env = os.environ.copy()
+            mcp_env["CHUNKHOUND_MCP_MODE"] = "1"
+            
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "run", "chunkhound", "mcp", str(temp_path),
+                cwd=temp_path,
+                env=mcp_env,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                # Send initialize request
+                init_request = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "1.0"}
+                    }
+                }
+                
+                proc.stdin.write((json.dumps(init_request) + "\n").encode())
+                await proc.stdin.drain()
+                
+                # Should respond quickly with small directory
+                response_line = await asyncio.wait_for(
+                    proc.stdout.readline(), timeout=10.0
+                )
+                init_response = json.loads(response_line.decode())
+                
+                # Verify response structure
+                assert "result" in init_response, f"No result in response: {init_response}"
+                assert "serverInfo" in init_response["result"], f"No serverInfo in result: {init_response['result']}"
+                assert init_response["result"]["serverInfo"]["name"] == "ChunkHound Code Search"
+                    
+            finally:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+
+    @pytest.mark.asyncio
+    async def test_mcp_initialization_eventual_response(self):
+        """Test that MCP server eventually responds even with large directories.
+        
+        This verifies the server doesn't crash, just takes too long for VS Code.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create moderate number of files - enough to delay but not excessive
+            for i in range(50):
+                test_file = temp_path / f"test_{i}.py"
+                test_file.write_text(f"def function_{i}(): return {i}")
+            
+            # Create minimal config
+            config_path = temp_path / ".chunkhound.json"
+            db_path = temp_path / ".chunkhound" / "test.db"
+            db_path.parent.mkdir(exist_ok=True)
+            
+            config = {
+                "database": {"path": str(db_path), "provider": "duckdb"},
+                "indexing": {"include": ["*.py"]}
+            }
+            config_path.write_text(json.dumps(config))
+            
+            # Start MCP server
+            mcp_env = os.environ.copy()
+            mcp_env["CHUNKHOUND_MCP_MODE"] = "1"
+            
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "run", "chunkhound", "mcp", str(temp_path),
+                cwd=temp_path,
+                env=mcp_env,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                # Send initialize request
+                init_request = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "1.0"}
+                    }
+                }
+                
+                proc.stdin.write((json.dumps(init_request) + "\n").encode())
+                await proc.stdin.drain()
+                
+                # Give it enough time to eventually respond (but VS Code wouldn't wait this long)
+                response_line = await asyncio.wait_for(
+                    proc.stdout.readline(), timeout=60.0
+                )
+                init_response = json.loads(response_line.decode())
+                
+                # Verify it eventually works
+                assert "result" in init_response, f"No result in response: {init_response}"
+                assert "serverInfo" in init_response["result"]
+                    
+            finally:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+
+    @pytest.mark.skipif(os.environ.get("CI") == "true", reason="Stress test with 2500 directories too slow for CI")
+    @pytest.mark.asyncio
+    async def test_watchdog_recursive_blocking_on_deep_directory_tree(self):
+        """Test that watchdog's recursive directory traversal blocks MCP initialization.
+        
+        This test creates a deeply nested directory structure that causes 
+        watchdog's observer.schedule(..., recursive=True) to block for 
+        several seconds during filesystem watch setup.
+        
+        The key difference from other tests is that this creates many directories
+        rather than many files, which is what causes watchdog blocking.
+        
+        NOTE: This is a stress test that creates 2500 directories in a deep hierarchy.
+        It's skipped in CI due to GitHub Actions I/O performance limitations.
+        Run locally to verify watchdog performance fixes.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Create deeply nested directory structure
+            # Watchdog blocks on directory traversal, not file count
+            for i in range(50):  # 50 top-level dirs
+                level1 = temp_path / f"project_{i}"
+                level1.mkdir()
+                
+                for j in range(10):  # 10 subdirs each
+                    level2 = level1 / f"module_{j}"
+                    level2.mkdir()
+                    
+                    for k in range(5):  # 5 more subdirs each
+                        level3 = level2 / f"submodule_{k}"
+                        level3.mkdir()
+                        
+                        # Add one small file per leaf directory
+                        (level3 / "code.py").write_text("# code")
+            
+            print(f"Created {50 * 10 * 5} directories for watchdog traversal test")
+            
+            # Setup minimal chunkhound config
+            config_path = temp_path / ".chunkhound.json"
+            db_path = temp_path / ".chunkhound" / "test.db"
+            db_path.parent.mkdir(exist_ok=True)
+            
+            config = {
+                "database": {"path": str(db_path), "provider": "duckdb"},
+                "indexing": {"include": ["*.py"]}
+            }
+            config_path.write_text(json.dumps(config))
+            
+            # Start MCP server with deep directory structure
+            mcp_env = os.environ.copy()
+            mcp_env["CHUNKHOUND_MCP_MODE"] = "1"
+            
+            proc = await asyncio.create_subprocess_exec(
+                "uv", "run", "chunkhound", "mcp", str(temp_path),
+                cwd=temp_path,
+                env=mcp_env,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                # Send initialize request
+                init_request = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "1.0"}
+                    }
+                }
+                
+                proc.stdin.write((json.dumps(init_request) + "\n").encode())
+                await proc.stdin.drain()
+                
+                # This SHOULD timeout due to watchdog blocking
+                # After fix: should respond quickly
+                start_time = time.time()
+                try:
+                    response_line = await asyncio.wait_for(
+                        proc.stdout.readline(), 
+                        timeout=5.0  # VS Code timeout
+                    )
+                    response_time = time.time() - start_time
+                    
+                    # If we get here, the bug is fixed!
+                    print(f"✅ Server responded in {response_time:.2f}s - bug is fixed!")
+                    
+                    # Verify proper response structure  
+                    response_text = response_line.decode().strip()
+                    if not response_text:
+                        # Empty response, try reading more
+                        response_line = await asyncio.wait_for(proc.stdout.readline(), timeout=2.0)
+                        response_text = response_line.decode().strip()
+                    
+                    print(f"Response: {response_text}")
+                    init_response = json.loads(response_text)
+                    assert "result" in init_response, f"No result in response: {init_response}"
+                    assert "serverInfo" in init_response["result"]
+                    assert init_response["result"]["serverInfo"]["name"] == "ChunkHound Code Search"
+                    
+                except asyncio.TimeoutError:
+                    # This is expected with the current bug
+                    print("❌ Server timed out during initialization (watchdog blocking bug confirmed)")
+                    raise AssertionError(
+                        "MCP server timed out during initialization due to watchdog recursive directory traversal blocking. "
+                        "This reproduces the VS Code integration issue where the server becomes unresponsive."
+                    )
+                    
+            finally:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
