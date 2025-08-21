@@ -1,0 +1,71 @@
+{% extends 'base/layout.html' %}
+{% load buttons %}
+{% load helpers %}
+{% load perms %}
+
+{% block title %}Ingestion{% endblock %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs px-3">
+    <li class="nav-item" role="presentation">
+      <a class="nav-link active" role="tab">Ingestion</a>
+    </li>
+  </ul>
+{% endblock tabs %}
+
+{% block controls %}
+  <div class="controls">
+    <div class="control-group">
+      {% block extra_controls %}{% endblock %}
+      {% add_button model %}
+    </div>
+  </div>
+{% endblock controls %}
+
+{% block content %}
+  <div class="tab-content">
+    {% for sync in syncs %}
+      <div class="card">
+        <h5 class="card-header d-flex justify-content-between" id="module{{ module.pk }}">
+          <div>
+          <i class="mdi mdi-cloud-sync"></i><i class="mdi mdi-sync"></i> <a href="{% url 'plugins:ipfabric_netbox:ipfabricsync' pk=sync.pk %}">{{ sync.name}}</a>
+          </div>
+          {% if perms.ipfabric_netbox.delete_ipfabricsync %}
+              <a href="{% url 'plugins:ipfabric_netbox:ipfabricsync_delete' pk=sync.pk %}" class="btn btn-danger btn-sm">
+                <i class="mdi mdi-trash-can-outline" aria-hidden="true"></i> Delete
+              </a>
+          {% endif %}
+
+        </h5>
+        <div class="card-body">
+          {% include 'inc/sync_warning.html' with object=module %}
+          <table class="table table-hover table-headings reports">
+            <thead>
+              <tr>
+                <th width="200">Source</th>
+                <th width="400">Snapshot</th>
+                <th>Status</th>
+                <th>Last Run</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="{% url 'plugins:ipfabric_netbox:ipfabricsource' pk=sync.snapshot_data.source.pk %}">{{ sync.snapshot_data.source.name }}</a></td>
+                <td><a href="{% url 'plugins:ipfabric_netbox:ipfabricsnapshot' pk=sync.snapshot_data.pk %}">{{ sync.snapshot_data.name}}</a></td>
+                <td>{% badge sync.get_status_display last_job.get_status_color %}</td>
+                <td>{{sync.last_synced}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% empty %}
+      <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">Sync Jobs Settings Found</h4>
+        {% if perms.extras.add_reportmodule %}
+          Get started by <a href="{% url 'plugins:ipfabric_netbox:ipfabricsync_add' %}">creating a sync</a> from an IP Fabric source.
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+{% endblock content %}
