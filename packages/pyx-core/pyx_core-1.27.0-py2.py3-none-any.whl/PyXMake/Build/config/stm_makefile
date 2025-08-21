@@ -1,0 +1,127 @@
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# %                		      Make file for Mingw64/Linux 7/10 (x64)     	    		          %
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Make file for Mingw64/Linux (Windows & Linux)
+# Created on 17.08.2020
+# 
+# Version: 1.0
+# -------------------------------------------------------------------------------------------------
+#    Requirements and dependencies:
+#        - 
+#
+#     Changelog:
+#        - Created 	// mg 17.08.2020
+#	
+# -------------------------------------------------------------------------------------------------
+# Current version
+VERSION = 1.0.0
+
+# Check version of GCC compiler
+CCVERSION := $(shell expr `gcc -dumpversion | cut -f1 -d.` \>= 10)
+
+# Identify the current operating system
+ifeq '$(findstring ;,$(PATH))' ';'
+    OS := Windows
+else
+    OS := $(shell uname 2>/dev/null || echo Unknown)
+    OS := $(patsubst CYGWIN%,Cygwin,$(OS))
+    OS := $(patsubst MSYS%,MSYS,$(OS))
+    OS := $(patsubst MINGW%,MSYS,$(OS))
+endif
+
+## Common identifiers for native compiler and cross compiler
+# Build identifier (defaults to basename of source file). 
+ifdef PYX_BUILDID
+	BUILDID := $(PYX_BUILDID)
+else
+	BUILDID := $(basename ${SOURCES})	
+endif
+
+# Compiler (defaults to gfortran)
+ifdef PYX_COMPILER
+	CC := $(PYX_COMPILER)
+else	
+	CC := gfortran
+endif
+
+# Source files (defaults to all source files present in the current directory)
+ifdef PYX_SOURCE
+	SOURCES	:= $(PYX_SOURCE)
+else	
+	SOURCES	:= $(wildcard *.f *.F, *.for *.FOR *.f90 *.F90 *.f95 *.F95 *.f03 *.F03 *.f08 *.F08 *.c *.cpp)
+endif
+
+# Library or executable name (defaults to basename of source file). 
+ifeq ($(OS),Linux)
+	RESULT := $(addsuffix .a, ${BUILDID})
+else
+	RESULT := $(addsuffix .lib, ${BUILDID})
+endif
+
+# Create object files for each member of source
+HEADERS = $(wildcard *.h, *.mod)
+OBJECTS = $(addsuffix .o,$(basename ${SOURCES}))
+
+# Compilation and linking flags
+CFLAGS = -cpp -g -static -O2 -fPIC -fbacktrace -frecursive
+ifeq "$(CCVERSION)" "1"
+	CFLAGS += -fno-pad-source -fallow-argument-mismatch -fallow-invalid-boz
+endif
+
+CLFLAGS += -fcheck=all -ffpe-trap=invalid,zero,overflow,underflow -finit-real=nan -fopenmp -static
+ifdef PYX_CFLAGS
+	CFLAGS += $(PYX_CFLAGS)
+endif
+
+# Identifiers for cross linking
+LDFLAGS = -I. -L.
+LDFLAGS += -llapack -lblas -lgfortran $(addprefix -l, $(sort $(basename $(wildcard *.lib *.a))))
+ifdef MSYSTEM
+	LDFLAGS += -lquadmath
+	ifneq '$(findstring gfortran,$(CC))' 'gfortran'
+		LDFLAGS += --compiler=mingw32 -include"<setjmpex.h>"
+	endif
+endif
+
+ifdef PYX_LDFLAGS
+	LDFLAGS += $(PYX_LDFLAGS)
+endif
+
+# Linking rule
+$(RESULT): $(OBJECTS)
+	ar rc $(RESULT) $(OBJECTS)
+
+# Compilation rule	
+$(OBJECTS): $(SOURCES)
+	$(CC) -c -o $@ $< $(CFLAGS) $(LDFLAGS)
+	
+# Main entry point | Build & linking process.
+all: 
+	$(RESULT)
+
+# Using gcc	
+gcc:
+	$(RESULT)
+
+# Using gfortran
+gfortran:
+	$(RESULT)
+
+# Using f2py from numpy
+f2py:
+	MESON_FFLAGS="$(CFLAGS)" LDFLAGS="$(MESON_LDFLAGS)" $(CC) -c $(SOURCES) -m $(BUILDID) $(LDFLAGS) --build-dir tmp/ --opt="-O2" --f90flags="$(CFLAGS)"
+
+# Echo the current version
+version:
+	echo $(VERSION)
+
+# Combine multiple static libraries into one
+combine: 
+	ar -M <$(wildcard *.mri)
+
+# Tide up everything
+clean:
+	rm -f $(RESULT) *.o *.mod
+
+# Summary
+.PHONY:	all gcc gfortran f2py version clean 
