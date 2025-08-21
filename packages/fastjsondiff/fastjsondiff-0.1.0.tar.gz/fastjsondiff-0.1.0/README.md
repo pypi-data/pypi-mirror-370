@@ -1,0 +1,208 @@
+# FastJSONDiff
+
+A high-performance JSON difference detection library implemented in Rust with Python bindings. FastJSONDiff provides fast, memory-efficient JSON comparison with support for path-based filtering.
+
+## Features
+
+- ⚡ **High Performance**: Implemented in Rust for maximum speed
+- 🔍 **Path-based Filtering**: Use `ignore` and `allow` parameters to control which parts of JSON are compared
+- 🛠 **Flexible Path Notation**: Support for both dot notation (`"args.field"`) and slash notation (`"args/field"`)
+- 📦 **Easy Installation**: Simple pip install with pre-compiled wheels
+- 🐍 **Python Native**: Seamless Python integration with full type hints
+
+## Installation
+
+```bash
+pip install fastjsondiff
+```
+
+## Quick Start
+
+```python
+import fastjsondiff
+
+# Basic comparison
+json1 = {"a": 1, "b": {"c": 2}}
+json2 = {"a": 1, "b": {"c": 3}}
+
+differences = fastjsondiff.compare_json(json1, json2)
+print(differences)
+# Output: ['Value mismatch at b/c: Number(2) vs Number(3)']
+
+# Using ignore to skip certain paths
+differences = fastjsondiff.compare_json(json1, json2, ignore=["b"])
+print(differences)
+# Output: []
+
+# Using allow to only compare specific paths
+differences = fastjsondiff.compare_json(json1, json2, allow=["b/c"])
+print(differences)
+# Output: ['Value mismatch at b/c: Number(2) vs Number(3)']
+```
+
+## API Reference
+
+### `compare_json(j1, j2, ignore=None, allow=None)`
+
+Compare two JSON objects and return a list of differences.
+
+#### Parameters
+
+- **j1**: The first JSON object to compare. Can be a dict, list, or any JSON-serializable object.
+- **j2**: The second JSON object to compare. Can be a dict, list, or any JSON-serializable object.
+- **ignore** (optional): List of paths to ignore during comparison. Paths can use either dot notation (e.g., `"args.field"`) or slash notation (e.g., `"args/field"`). If a path is in the ignore list, it and all its children will be skipped.
+- **allow** (optional): List of paths to include in comparison. If provided, only paths that match the allow list (or are parent paths of allowed paths) will be compared. Paths can use either dot notation (e.g., `"args.field"`) or slash notation (e.g., `"args/field"`). If allow is empty or None, all paths are compared (except those in ignore).
+
+#### Returns
+
+A list of strings describing the differences found. Each string describes a specific difference, such as:
+
+- `"Value mismatch at path: value1 vs value2"`
+- `"Missing key in second JSON: path"`
+
+#### Raises
+
+- **ValueError**: If the input objects cannot be converted to JSON.
+
+## Advanced Examples
+
+### Complex JSON Comparison
+
+```python
+import fastjsondiff
+
+# Complex nested JSON objects
+json1 = {
+    "name": "create_testbench_for_current_mirror",
+    "args": {
+        "netlist_name": "001_02_0.txt",
+        "current_mirror_name": "current_mirror_2",
+        "testbench_description": "Testbench for impedance analysis of modified current mirror 2",
+        "ac_analysis_settings": {
+            "start_freq": 10000,
+            "stop_freq": 10000000,
+            "steps": 3,
+            "step_type": "dec",
+        },
+        "voltage_source_settings": {
+            "power_supply_voltage": 1.8,
+            "bias_current": 1e-5,
+            "primary_cascode_ac_stimulus": 1,
+        },
+    },
+    "id": "call_jBf9Gg0IQQj0XSTVnZVyO16p",
+    "type": "tool_call",
+}
+
+json2 = {
+    "name": "create_testbench_for_current_mirror",
+    "args": {
+        "netlist_name": "001_02_0.txt",
+        "current_mirror_name": "current_mirror_2",
+        "testbench_description": "Testbench for AC impedance analysis of current_mirror_2 (10kHz to 10MHz)",
+        "ac_analysis_settings": {
+            "start_freq": 10000.0,
+            "stop_freq": 10000000.0,
+            "steps": 3,
+            "step_type": "dec",
+        },
+        "voltage_source_settings": {
+            "power_supply_voltage": 1.8,
+            "bias_current": 1e-5,
+            "primary_cascode_ac_stimulus": 1.0,
+        },
+    },
+    "id": "chatcmpl-tool-924103cb3ed2478990fbd41d341355e6",
+    "type": "tool_call",
+}
+
+# Compare only specific paths
+differences = fastjsondiff.compare_json(
+    json1,
+    json2,
+    allow=[
+        "args/netlist_name",
+        "args/current_mirror_name",
+        "args/ac_analysis_settings/start_freq",
+        "args/ac_analysis_settings/stop_freq",
+        "args/testbench_description",
+        "args/voltage_source_settings",
+    ],
+)
+
+print("Differences found:", differences)
+# Output: Differences found: ['Value mismatch at args/testbench_description: String("Testbench for impedance analysis of modified current mirror 2") vs String("Testbench for AC impedance analysis of current_mirror_2 (10kHz to 10MHz)")', 'Value mismatch at args/ac_analysis_settings/start_freq: Number(10000) vs Number(10000.0)', 'Value mismatch at args/ac_analysis_settings/stop_freq: Number(10000000) vs Number(10000000.0)', 'Value mismatch at args/voltage_source_settings/primary_cascode_ac_stimulus: Number(1) vs Number(1.0)']
+```
+
+### Using Dot Notation
+
+```python
+# Dot notation works the same as slash notation
+differences = fastjsondiff.compare_json(
+    json1,
+    json2,
+    allow=["args.testbench_description", "args.voltage_source_settings"]
+)
+```
+
+### Ignoring Specific Paths
+
+```python
+# Ignore the id field and all voltage source settings
+differences = fastjsondiff.compare_json(
+    json1,
+    json2,
+    ignore=["id", "args/voltage_source_settings"]
+)
+```
+
+## Performance
+
+FastJSONDiff is designed for high performance:
+
+- **Rust Implementation**: Core logic is implemented in Rust for maximum speed
+- **Memory Efficient**: Minimal memory allocation during comparison
+- **Optimized Path Matching**: Efficient path matching algorithms for filtering
+
+## Development
+
+### Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/fastjsondiff.git
+cd fastjsondiff
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install maturin
+pip install maturin
+
+# Build and install in development mode
+maturin develop
+```
+
+### Running Tests
+
+```bash
+# Run the test suite
+python test_fastjsondiff.py
+```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Changelog
+
+### 0.1.0
+
+- Initial release
+- Basic JSON comparison functionality
+- Path-based filtering with ignore and allow parameters
+- Support for both dot and slash notation in paths
