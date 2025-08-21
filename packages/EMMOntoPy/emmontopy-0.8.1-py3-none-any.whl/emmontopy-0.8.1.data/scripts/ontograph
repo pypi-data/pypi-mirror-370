@@ -1,0 +1,345 @@
+#!python
+"""Tool for visualising ontologies."""
+# pylint: disable=wrong-import-position,wrong-import-order
+import sys
+import os
+import argparse
+import json
+
+# Support running from uninstalled package by adding parent dir to sys path
+rootdir = os.path.abspath(
+    os.path.realpath((os.path.dirname(os.path.dirname(__file__))))
+)
+if rootdir not in sys.path:
+    sys.path.insert(1, rootdir)
+
+from ontopy import World, onto_path  # pylint: disable=import-error
+from ontopy.graph import (  # pylint: disable=import-error
+    OntoGraph,
+    plot_modules,
+    _default_style,
+)
+from ontopy.utils import get_label, get_format  # pylint: disable=import-error
+import warnings
+import owlready2
+
+
+def main(
+    argv: list = None,
+):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    """Main run function.
+
+    Parameters:
+        argv: List of arguments, similar to `sys.argv[1:]`.
+            Mainly for testing purposes, since it allows one to invoke the tool
+            manually / through Python.
+
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "iri",
+        metavar="IRI",
+        help="File name or URI of the ontology to visualise.",
+    )
+    parser.add_argument("output", nargs="?", help="name of output file.")
+
+    parser.add_argument(
+        "--format",
+        "-f",
+        help=(
+            "Format of output file. By default it is inferred from the output "
+            "file extension."
+        ),
+    )
+    parser.add_argument(
+        "--database",
+        "-d",
+        metavar="FILENAME",
+        default=":memory:",
+        help=(
+            "Load ontology from Owlready2 sqlite3 database. The `iri` argument"
+            " should in this case be the IRI of the ontology you want to "
+            "visualise."
+        ),
+    )
+    parser.add_argument(
+        "--local",
+        "-l",
+        action="store_true",
+        help=(
+            "Load imported ontologies locally. Their paths are specified in "
+            "Protègè catalog files or via the --path option. The IRI should "
+            "be a file name."
+        ),
+    )
+    parser.add_argument(
+        "--catalog-file",
+        default="catalog-v001.xml",
+        help=(
+            "Name of Protègè catalog file in the same folder as the ontology. "
+            "This option is used together with --local and defaults to "
+            '"catalog-v001.xml".'
+        ),
+    )
+    parser.add_argument(
+        "--no-catalog",
+        action="store_false",
+        dest="url_from_catalog",
+        default=None,
+        help="Whether to not read catalog file even if it exists.",
+    )
+    parser.add_argument(
+        "--path",
+        action="append",
+        default=[],
+        help=(
+            "Paths where imported ontologies can be found. May be provided as "
+            "a comma-separated string and/or with multiple --path options."
+        ),
+    )
+    parser.add_argument(
+        "--reasoner",
+        nargs="?",
+        const="HermiT",
+        choices=["FaCT++", "HermiT", "Pellet"],
+        help=(
+            'Run given reasoner on the ontology. Valid reasoners are "HermiT" '
+            '(default), "Pellet", and "FaCT++".'
+        ),
+    )
+    parser.add_argument(
+        "--root",
+        "-r",
+        help="Name of root node in the graph. Defaults to all classes.",
+    )
+    parser.add_argument(
+        "--leaves",
+        action="append",
+        default=[],
+        help=(
+            "Leaf nodes for plotting sub-graphs. May be provided as a "
+            "comma-separated string and/or with multiple --leaves options."
+        ),
+    )
+    parser.add_argument(
+        "--leafs",
+        action="append",
+        default=[],
+        help=("This argument is deprecated, please use `--leaves` instead"),
+    )
+    parser.add_argument(
+        "--exclude",
+        "-E",
+        action="append",
+        default=[],
+        help=(
+            "Nodes, including their subclasses, to exclude from sub-graphs. "
+            "May be provided as a comma-separated string and/or with multiple "
+            "--exclude options."
+        ),
+    )
+    parser.add_argument(
+        "--parents",
+        "-p",
+        metavar="N",
+        type=int,
+        default=0,
+        help="Adds N levels of parents to graph.",
+    )
+    parser.add_argument(
+        "--relations",
+        "-R",
+        default="isA",
+        help=(
+            "Comma-separated string of relations to visualise. Default is "
+            '"isA". "all" means include all relations.'
+        ),
+    )
+    parser.add_argument(
+        "--edgelabels",
+        "-e",
+        action="store_true",
+        default=None,
+        help="Whether to add labels to edges.",
+    )
+    parser.add_argument(
+        "--addnodes",
+        "-n",
+        action="store_true",
+        help="Whether to add missing target nodes in relations.",
+    )
+    parser.add_argument(
+        "--addconstructs",
+        "-c",
+        action="store_true",
+        help="Whether to add nodes representing class constructs.",
+    )
+    parser.add_argument(
+        "--rankdir",
+        default="BT",
+        choices=["BT", "TB", "RL", "LR"],
+        help=(
+            'Graph direction (from leaves to root). Possible values are: "BT" '
+            '(bottom-top, default), "TB" (top-bottom), "RL" (right-left) and '
+            '"LR" (left-right).'
+        ),
+    )
+    parser.add_argument(
+        "--style-file",
+        "-s",
+        metavar="JSON_FILE",
+        help="A json file with style definitions.",
+    )
+    parser.add_argument(
+        "--legend",
+        "-L",
+        action="store_true",
+        help="Whether to add a legend to the graph.",
+    )
+    parser.add_argument(
+        "--generate-style-file",
+        "-S",
+        metavar="JSON_FILE",
+        help="Write default style file to a json file.",
+    )
+    parser.add_argument(
+        "--plot-modules",
+        "-m",
+        action="store_true",
+        help=(
+            "Whether to plot module inter-dependencies instead of their "
+            "content."
+        ),
+    )
+    parser.add_argument(
+        "--display", "-D", action="store_true", help="Whether to display graph."
+    )
+    args = parser.parse_args(args=argv)
+
+    if args.leafs:
+        warnings.warn(
+            "The `--leafs` option is deprecated and will soon be removed. "
+            "Please use `--leaves` instead.",
+            DeprecationWarning,
+        )
+        args.leaves = args.leafs
+
+    # Append to onto_path
+    for paths in args.path:
+        for path in paths.split(","):
+            if path not in onto_path:
+                onto_path.append(path)
+
+    # Customise style
+    style = _default_style
+    style["graph"]["rankdir"] = args.rankdir
+
+    # Update style from json file
+    if args.style_file:
+        with open(args.style_file, "rt") as handle:
+            style.update(json.load(handle))
+
+    # Write style to json file
+    if args.generate_style_file:
+        with open(args.generate_style_file, "wt") as handle:
+            json.dump(style, handle, indent=4)
+
+    # Join all --leaves options
+    leaves = set()
+    for leaf in args.leaves:
+        if "," in leaf:
+            leaves.update(leaf.split(","))
+        else:
+            leaves.add(leaf)
+
+    # Join all --exclude options
+    exclude = set()
+    for exclude_option in args.exclude:
+        if "," in exclude_option:
+            exclude.update(exclude_option.split(","))
+        else:
+            exclude.add(exclude_option)
+
+    # Split relations
+    relations = None
+    if args.relations:
+        relations = [r.strip() for r in args.relations.split(",")]
+
+    # Load ontology
+    world = World(filename=args.database)
+    if args.database != ":memory:" and args.iri not in world.ontologies:
+        parser.error(
+            "The IRI argument should be one of the ontologies in the database:"
+            "\n  " + "\n  ".join(world.ontologies.keys())
+        )
+    onto = world.get_ontology(args.iri)
+    try:
+        onto.load(
+            only_local=args.local,
+            url_from_catalog=args.url_from_catalog,
+            catalog_file=args.catalog_file,
+        )
+    except owlready2.OwlReadyOntologyParsingError as exc:
+        parser.error(f"error parsing {args.iri!r}: {exc}")
+
+    # Sync reasoner
+    if args.reasoner:
+        onto.sync_reasoner(reasoner=args.reasoner)
+
+    # Plot modules
+    if args.plot_modules:
+        plot_modules(
+            onto,
+            filename=args.output,
+            fmt=args.format,
+            show=args.display,
+            ignore_redundant=True,
+        )
+        return
+    # Set top as root if not defined
+    if not args.root:
+        roots = onto.get_root_classes()
+        roots.extend(onto.get_root_object_properties())
+        roots.extend(onto.get_root_data_properties())
+
+        for i in onto.classes():
+            if i.get_parents().isdisjoint(onto.classes()):
+                roots.append(i)
+    else:
+        roots = [args.root]
+
+    # Create graphs
+    for root in roots:
+        graph = OntoGraph(onto, style=style)
+        graph.add_branch(
+            root=root,
+            leaves=leaves,
+            exclude=exclude,
+            relations=relations,
+            edgelabels=args.edgelabels,
+            addnodes=args.addnodes,
+            addconstructs=args.addconstructs,
+        )
+        if args.parents:
+            graph.add_parents(root, levels=args.parents)
+
+        if args.legend:
+            graph.add_legend()
+
+        # Plot and display
+        fmt = get_format(args.output, default="svg", fmt=args.format)
+
+        if args.output:
+            if len(roots) > 1:
+                head, tail = args.output.rsplit(".", maxsplit=1)
+                output = ".".join((head, get_label(root), tail))
+            else:
+                output = args.output
+            graph.save(output, fmt=fmt)
+
+        if not args.output or args.display:
+            graph.view()
+
+
+if __name__ == "__main__":
+    main()
