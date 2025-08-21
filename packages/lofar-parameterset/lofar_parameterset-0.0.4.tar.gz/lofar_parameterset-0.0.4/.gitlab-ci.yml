@@ -1,0 +1,207 @@
+default:
+  image:
+    name: $CI_REGISTRY_IMAGE/ci-build-runner:$CI_COMMIT_REF_SLUG
+    pull_policy: always
+  cache:
+    paths:
+      - .cache/pip
+      # Do not cache .tox, to recreate virtualenvs for every step
+
+stages:
+  - prepare
+  - lint
+  # check if this needs to be a separate step
+  # - build_extensions
+  - test
+  - package
+  - images
+  - integration
+  - publish # publish instead of deploy
+
+# Caching of dependencies to speed up builds
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+# Job templates from Gitlab that scan for security issues or leaked secrets
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+# Prepare image to run ci on, image will be used in most jobs
+trigger_prepare:
+  stage: prepare
+  trigger:
+    strategy: depend
+    include: .prepare.gitlab-ci.yml
+
+run_lint:
+  stage: lint
+  script:
+    - tox -e lint
+  allow_failure: true
+
+# build_extensions:
+#   stage: build_extensions
+#   script:
+#     - echo "build fortran/c/cpp extension source code"
+
+sast:
+  variables:
+    SAST_EXCLUDED_ANALYZERS: brakeman, flawfinder, kubesec, nodejs-scan, phpcs-security-audit,
+      pmd-apex, security-code-scan, sobelow, spotbugs
+  stage: test
+
+# Basic setup for all Python versions for which we don't have a base image
+.run_unit_test_version_base:
+  before_script:
+    - python --version # For debugging
+    - python -m pip install --upgrade pip
+    - python -m pip install --upgrade tox twine
+
+# Run all unit tests for Python versions except the base image
+# The base image is used for the highest Python version
+run_unit_tests:
+  extends: .run_unit_test_version_base
+  stage: test
+  image: python:3.${PY_VERSION}
+  script:
+    - tox -e py3${PY_VERSION}
+  parallel:
+    matrix: # use the matrix for testing
+      - PY_VERSION: [10, 11, 12, 13]
+
+# Run code coverage on the base image thus also performing unit tests
+run_unit_tests_coverage:
+  stage: test
+  script:
+   - tox -e coverage
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/*
+
+# Build and packge the project
+package_files:
+  stage: package
+  artifacts:
+    expire_in: 1w
+    paths:
+      - dist/*
+  script:
+    - tox -e build
+
+# Build the sphinx documentation
+package_docs:
+  stage: package
+  artifacts:
+    expire_in: 1w
+    paths:
+      - docs/build/*
+  script:
+    - tox -e docs
+
+# Build a tiny docker image that contains the minimal dependencies to run this project
+docker_build:
+  stage: images
+  image: docker:latest
+  needs:
+    - package_files
+  tags:
+    - dind
+  before_script: []
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -f docker/lofar_parameterset/Dockerfile . --build-arg BUILD_ENV=copy --tag $CI_REGISTRY_IMAGE/lofar_parameterset:$CI_COMMIT_REF_SLUG
+    # enable this push line once you have configured docker registry cleanup policy
+    # - docker push $CI_REGISTRY_IMAGE/lofar_parameterset:$CI_COMMIT_REF_SLUG
+
+run_integration_tests:
+  stage: integration
+  allow_failure: true
+  needs:
+    - package_files
+  script:
+    - echo ">>> put your integration tests here <<<"
+    - echo "make sure to move out of source dir"
+    - echo "install package from filesystem (or use the artefact)"
+    - echo "run against foreign systems (e.g. databases, cwl etc.)"
+    - exit 1
+
+publish_on_gitlab:
+  stage: publish
+  environment: gitlab
+  needs:
+    - package_files
+  when: manual
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - echo "run twine for gitlab"
+    - |
+      TWINE_USERNAME=gitlab-ci-token \
+      TWINE_PASSWORD=${CI_JOB_TOKEN} \
+      TWINE_REPOSITORY_URL=${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
+      python -m twine upload dist/*
+
+publish_on_test_pypi:
+  stage: publish
+  environment: pypi-test
+  needs:
+    - package_files
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
+  script:
+    - echo "run twine for test pypi"
+    - |
+      TWINE_USERNAME=__token__ \
+      TWINE_PASSWORD=${TESTPYPI_TOKEN} \
+      TWINE_REPOSITORY_URL=https://test.pypi.org/legacy/ \
+      python -m twine upload dist/*
+
+publish_on_pypi:
+  stage: publish
+  environment: pypi
+  needs:
+    - package_files
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
+  script:
+    - echo "run twine for pypi"
+    - |
+      TWINE_USERNAME=__token__ \
+      TWINE_PASSWORD=${PYPI_TOKEN} \
+      TWINE_REPOSITORY_URL=https://upload.pypi.org/legacy/ \
+      python -m twine upload dist/*
+
+# I think it's better to let ReadTheDocs handle the publishing of documentation
+publish_to_readthedocs:
+  stage: publish
+  allow_failure: true
+  environment: readthedocs
+  needs:
+    - package_docs
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
+  script:
+    - echo "Configure ReadTheDocs to pull from this repository instead"
+    - exit 1
+
+# automatically create a release on Gitlab for every tagged commit
+release_job:
+  stage: publish
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
+  script:
+    - echo "running release_job"
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    description: '$CI_COMMIT_TAG - $CI_COMMIT_TAG_MESSAGE'

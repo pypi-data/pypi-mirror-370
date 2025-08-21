@@ -1,0 +1,120 @@
+[project]
+name = "lofar-parameterset"
+dynamic = ["version"]
+description = "Minimal Python implementation of the LOFAR ParameterSet"
+dependencies = []
+authors = [{ name = "Jan David Mol", email = "mol@astron.nl" }]
+license = { text = "GPL-3.0-or-later" }
+readme = "README.md"
+keywords = ["LOFAR", "ParameterSet"]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+
+[project.urls]
+repository = "https://git.astron.nl/lofar2.0/lofar_pyparameterset"
+
+[build-system]
+requires = [
+    "setuptools>=70.0",
+    "setuptools_scm[toml]>=8.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["lofar_parameterset"]
+
+[tool.setuptools_scm]
+version_file = "lofar_parameterset/_version.py"
+
+[tool.ruff]
+exclude = [
+    ".venv",
+    ".git",
+    ".tox",
+    "dist",
+    "docs",
+    "*lib/python*",
+    "*egg",
+    "_version.py"
+]
+
+[tool.ruff.lint]
+# Expand basic rules with name and style checks roughly equivalent to flake8 + black + pylint
+# Some additional functional errors such as `await` on none async or wrong return types / args.
+# More info https://docs.astral.sh/ruff/rules/
+select = ["N", "A", "E", "F", "B", "W", "Q", "PL", "ASYNC", "S", "G", "RET", "ARG", "I"]
+ignore = ["E203"]
+
+[tool.tox]
+# Generative environment list to test all supported Python versions
+requires = ["tox>=4.21"]
+env_list = ["fix", "coverage", "lint", "format", "py{13, 12, 11, 10}"]
+
+[tool.tox.env_run_base]
+package = "editable"
+deps = [
+    "-r{toxinidir}/requirements.txt",
+    "-r{toxinidir}/tests/requirements.txt"]
+set_env = { LANGUAGE = "en_US", LC_ALL = "en_US.UTF-8", PYTHONWARNINGS = "default::DeprecationWarning" }
+commands = [["python", "--version"], ["python", "-m", "pytest", "tests/{posargs}"]]
+
+[tool.tox.env.fix]
+description = "format the code base to adhere to our styles, and complain about what we cannot do automatically"
+skip_install = true
+deps = ["pre-commit-uv>=4.1.1"]
+commands = [["pre-commit", "run", "--all-files", "--show-diff-on-failure"]]
+
+[tool.tox.env.coverage]
+commands = [
+    ["python", "--version"],
+    ["python", "-m", "pytest", "--cov-report", "term", "--cov-report", "xml", "--cov-report", "html", "--cov=lofar_parameterset", "tests/{posargs}"]]
+
+# Command prefixes to reuse the same virtualenv for all linting jobs.
+[tool.tox.env.lint]
+deps = [
+    "ruff",
+    "-r{toxinidir}/tests/requirements.txt"]
+commands = [
+    ["python", "-m", "ruff", "--version"],
+    ["python", "-m", "ruff", "check", { replace = "posargs", default = ["lofar_parameterset", "tests"], extend = true }]
+]
+
+[tool.tox.env.format]
+deps = [
+    "ruff",
+    "-r{toxinidir}/tests/requirements.txt"]
+commands = [
+    ["python", "-m", "ruff", "format", "-v", { replace = "posargs", default = ["lofar_parameterset", "tests"], extend = true }]
+]
+
+[tool.tox.env.docs]
+deps = [
+    "-r{toxinidir}/requirements.txt",
+    "-r{toxinidir}/docs/requirements.txt"]
+# unset LC_ALL / LANGUAGE from testenv, would fail sphinx otherwise
+set_env = ""
+changedir = "{tox_root}"
+commands = [
+    ["python", "docs/cleanup.py"],
+    ["sphinx-build", "-b", "html", "docs/source", "docs/build/html"]
+]
+
+[tool.tox.env.build]
+package = "wheel"
+deps = ["build>=0.8.0"]
+commands = [["python", "-m", "build"]]
+
+[tool.coverage.run]
+omit = [
+    "lofar_parameterset/_version.py",
+]
