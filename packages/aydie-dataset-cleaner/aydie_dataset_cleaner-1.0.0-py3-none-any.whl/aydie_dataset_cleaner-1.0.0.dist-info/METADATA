@@ -1,0 +1,221 @@
+Metadata-Version: 2.4
+Name: aydie-dataset-cleaner
+Version: 1.0.0
+Summary: A Python library to validate, profile, and clean datasets (CSV, Excel, Parquet) for machine learning workflows.
+Author-email: "Aditya (Aydie) Dinesh K" <developer@aydie.in>
+Project-URL: Homepage, https://opensource.aydie.in/
+Project-URL: Bug Tracker, https://github.com/aydiegithub/aydie-dataset-cleaner/issues
+Project-URL: Documentation, https://github.com/aydiegithub/aydie-dataset-cleaner#readme
+Project-URL: Source, https://github.com/aydiegithub/aydie-dataset-cleaner
+Keywords: dataset,cleaning,validation,ML,data-science,parquet,csv,excel
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pandas>=1.5.0
+Requires-Dist: numpy>=1.23.0
+Requires-Dist: openpyxl
+Requires-Dist: pyarrow
+Requires-Dist: scikit-learn
+Requires-Dist: jinja2
+Dynamic: license-file
+
+![Aydie Banner](https://aydie.in/banner.jpg)
+
+# aydie-dataset-cleaner
+
+[![PyPI version](https://badge.fury.io/py/aydie-dataset-cleaner.svg)](https://badge.fury.io/py/aydie-dataset-cleaner)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Versions](https://img.shields.io/pypi/pyversions/aydie-dataset-cleaner.svg)](https://pypi.org/project/aydie-dataset-cleaner/)
+
+**A powerful Python toolkit for validating, cleaning, and preparing datasets for machine learning.**
+
+---
+
+`aydie-dataset-cleaner` is a comprehensive library designed to streamline the data preprocessing pipeline. It provides a structured, automated, and repeatable workflow for identifying and fixing common data quality issues in CSV, Excel, and Parquet files, ensuring your data is reliable and ready for analysis.
+
+This library is part of the **Aydie** family of developer tools.
+
+## Why `aydie-dataset-cleaner`?
+
+In any data-driven project, 80% of the work is data preparation. Messy, inconsistent data leads to unreliable models and flawed insights. `aydie-dataset-cleaner` automates the tedious parts of this process, allowing you to focus on building great models.
+
+- **Reliability & Consistency**: Apply a standardized set of validation rules to every dataset, ensuring consistent data quality across all your projects.
+- **Increased Efficiency**: Stop writing boilerplate data cleaning code. With a few lines of code, you can load, validate, clean, and report on any dataset.
+- **Clear Insights**: Generate beautiful HTML and machine-readable JSON reports to understand exactly what's wrong with your data and what was done to fix it.
+- **Extensible & Controllable**: You have full control over the cleaning process, from choosing outlier detection methods to defining how missing values are handled.
+
+## Core Features
+
+-   **Versatile File Loading**: Seamlessly load data from **CSV**, **Excel (.xlsx, .xls)**, and **Parquet** files into pandas DataFrames.
+-   **Comprehensive Validation**: Run a full suite of checks for common issues like **missing values**, **duplicate rows**, and **inconsistent data types**.
+-   **Advanced Outlier Detection**: Identify outliers in your numerical data using multiple statistical methods:
+    -   `iqr` (Interquartile Range)
+    -   `zscore` (Standard Score)
+    -   `mad` (Median Absolute Deviation)
+    -   `percentile` (Trimming extreme values)
+-   **Automated Cleaning**: Systematically fix issues found during validation, including filling missing data, removing duplicates, and correcting data types.
+-   **Rich Reporting**: Automatically generate a detailed **HTML report** for easy visual inspection or a **JSON report** for programmatic use.
+
+## Installation
+
+You can install `aydie-dataset-cleaner` directly from PyPI:
+
+```bash
+pip install aydie-dataset-cleaner
+```
+
+## Full Workflow Example
+
+Here’s a quick example demonstrating the end-to-end workflow.
+
+```python
+import pandas as pd
+import numpy as np
+from aydie_dataset_cleaner import file_loader, validator, cleaner, reporter
+
+# --- 1. SETUP: Create a messy DataFrame for demonstration ---
+data = {
+    'product_id': ['A101', 'A102', 'A103', 'A104', 'A101'],
+    'price': [1200.50, 75.00, np.nan, 250.75, 1200.50],
+    'stock_quantity': [15, 200, 30, np.nan, 15],
+    'rating': [4.5, 4.0, 3.5, 4.8, 4.5],
+    'region': ['USA', 'EU', 'USA', 'USA', 'UK_typo']
+}
+dirty_df = pd.DataFrame(data)
+print("--- Original Messy DataFrame ---")
+print(dirty_df)
+
+# --- 2. VALIDATE: Run all validation checks ---
+print("\n--- Validating Dataset ---")
+v = validator.DatasetValidator(dirty_df)
+validation_results = v.run_all_checks()
+
+# --- 3. REPORT: Generate a human-readable HTML report ---
+print("\n--- Generating Report ---")
+r = reporter.ReportGenerator(validation_results)
+r.to_html('validation_report.html')
+print("Validation report saved to 'validation_report.html'")
+
+# --- 4. CLEAN: Clean the dataset based on the validation results ---
+print("\n--- Cleaning Dataset ---")
+c = cleaner.DatasetCleaner(dirty_df, validation_results)
+cleaned_df = c.clean_dataset(missing_value_strategy='median')
+
+# --- 5. VERIFY: Display the cleaned data ---
+print("\n--- Cleaned DataFrame ---")
+print(cleaned_df)
+```
+
+## Module-by-Module Examples
+
+### `file_loader`: Loading Your Data
+
+The `load_dataset` function automatically detects the file type and loads it into a DataFrame.
+
+```python
+from aydie_dataset_cleaner import file_loader
+
+# Load a CSV file with specific options
+df_csv = file_loader.load_dataset('data.csv', sep=';')
+
+# Load a specific sheet from an Excel file
+df_excel = file_loader.load_dataset('data.xlsx', sheet_name='SalesData')
+
+# Load a Parquet file
+df_parquet = file_loader.load_dataset('data.parquet')
+```
+
+### `validator`: Finding Data Issues
+
+The `DatasetValidator` is the core of the library, identifying all potential issues.
+
+```python
+from aydie_dataset_cleaner import validator
+
+# Assume 'df' is your loaded DataFrame
+v = validator.DatasetValidator(df)
+
+# Check for missing values
+missing_report = v.check_missing_values()
+# {'price': {'count': 1, 'percentage': 20.0}}
+
+# Check for duplicate rows
+duplicate_report = v.check_duplicate_rows()
+# {'count': 1}
+
+# Check for outliers using different methods
+# The run_all_checks() method runs 'iqr' by default
+outliers_iqr = v.check_outliers(method='iqr', multiplier=1.5)
+outliers_zscore = v.check_outliers(method='zscore', threshold=3)
+outliers_mad = v.check_outliers(method='mad', threshold=3.5)
+
+# Run all checks at once
+full_report = v.run_all_checks()
+```
+
+### `cleaner`: Fixing Data Issues
+
+The `DatasetCleaner` uses the report from the validator to apply fixes.
+
+```python
+from aydie_dataset_cleaner import cleaner
+
+# Assume 'df' is your DataFrame and 'validation_results' is your report
+c = cleaner.DatasetCleaner(df, validation_results)
+
+# Handle missing values with different strategies
+df_mean_filled = c.handle_missing_values(strategy='mean')
+df_median_filled = c.handle_missing_values(strategy='median')
+df_mode_filled = c.handle_missing_values(strategy='mode')
+
+# Remove duplicate rows
+df_no_duplicates = c.handle_duplicate_rows()
+
+# Run the entire cleaning pipeline
+cleaned_df = c.clean_dataset(missing_value_strategy='mean')
+```
+
+### `reporter`: Generating Reports
+
+The `ReportGenerator` creates clean, shareable reports from the validation results.
+
+```python
+from aydie_dataset_cleaner import reporter
+
+# Assume 'validation_results' is your report
+r = reporter.ReportGenerator(validation_results)
+
+# Create a machine-readable JSON file
+r.to_json('report.json')
+
+# Create a beautiful, human-readable HTML file
+r.to_html('report.html')
+```
+
+## Contributing
+
+Contributions are welcome! If you have an idea for a new feature, find a bug, or want to improve the documentation, please open an issue or submit a pull request on our [GitHub repository](https://github.com/aydiegithub/aydie-dataset-cleaner).
+
+## License
+
+This project is licensed under the **MIT License**. See the `LICENSE` file for details.
+
+---
+
+## Connect with Me
+
+[![GitHub](https://img.shields.io/badge/GitHub-Profile-181717?logo=github&logoColor=white)](https://github.com/aydiegithub)
+[![Source Code](https://img.shields.io/badge/Source_Code-DataSetCleaner-2f80ed?logo=github&logoColor=white)](https://github.com/aydiegithub/aydie-dataset-cleaner)
+[![Website](https://img.shields.io/badge/Website-aydie.in-2ea44f?logo=googlechrome&logoColor=white)](https://aydie.in)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Profile-0a66c2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/aydiemusic)
+[![X](https://img.shields.io/badge/X-Profile-black?logo=x&logoColor=white)](https://x.com/aydiemusic)
+[![Instagram](https://img.shields.io/badge/Instagram-Profile-e4405f?logo=instagram&logoColor=white)](https://instagram.com/aydiemusic)
+[![YouTube](https://img.shields.io/badge/YouTube-Channel-ff0000?logo=youtube&logoColor=white)](https://youtube.com/@aydiemusic)
+[![GitLab](https://img.shields.io/badge/GitLab-Profile-fca121?logo=gitlab&logoColor=white)](https://gitlab.com/aydie)
+[![Email](https://img.shields.io/badge/Email-developer@aydie.in-d14836?logo=gmail&logoColor=white)](mailto:developer@aydie.in)
