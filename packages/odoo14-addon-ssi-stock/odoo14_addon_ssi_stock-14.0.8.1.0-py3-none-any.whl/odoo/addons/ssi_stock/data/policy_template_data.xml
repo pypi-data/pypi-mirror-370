@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Copyright 2024 OpenSynergy Indonesia
+     Copyright 2024 PT. Simetri Sinergi Indonesia
+     License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl). -->
+<odoo>
+<data>
+<record id="stock_picking_policy_template" model="policy.template">
+    <field name="name">Standard</field>
+    <field name="model_id" ref="model_stock_picking" />
+    <field
+                name="state_field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','state')]"
+            />
+    <field name="sequence" eval="100" />
+    <field name="python_code">result=True</field>
+</record>
+
+<!-- Mark as Todo -->
+<record
+            id="stock_picking_policy_template_detail_mark_as_to_do"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','mark_as_todo_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+allowed_user = False
+if env.user.id == document.picking_type_id.warehouse_id.manager_id.id:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.supervisor_ids.ids:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.user_ids.ids:
+    allowed_user = True
+
+if document.show_mark_as_todo and allowed_user:
+    result = True
+    </field>
+</record>
+
+<!-- Check Availability -->
+<record
+            id="stock_picking_policy_template_detail_check_availability"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','check_availability_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+allowed_user = False
+if env.user.id == document.picking_type_id.warehouse_id.manager_id.id:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.supervisor_ids.ids:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.user_ids.ids:
+    allowed_user = True
+
+if document.show_check_availability and allowed_user:
+    result = True
+    </field>
+</record>
+
+<!-- Validate -->
+<record
+            id="stock_picking_policy_template_detail_check_validate"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','validate_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = approval = False
+if document.approval_ids:
+  approval = True
+for approval in document.approval_ids:
+    if approval.status != "approved":
+        approval = False
+        break
+
+if document.show_validate and approval:
+  result = True
+    </field>
+</record>
+
+<!-- approve -->
+<record
+            id="stock_picking_policy_template_detail_approve"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','approve_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+if env.user.id in document.active_approver_user_ids.ids and document.show_validate:
+    result = True
+    </field>
+</record>
+
+<!-- reject -->
+<record id="stock_picking_policy_template_detail_reject" model="policy.template_detail">
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','reject_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+    </field>
+</record>
+
+<!-- restart approval -->
+<record
+            id="stock_picking_policy_template_detail_restart_approval"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','restart_approval_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+allowed_user = False
+if env.user.id == document.picking_type_id.warehouse_id.manager_id.id:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.supervisor_ids.ids:
+    allowed_user = True
+
+if document.state == 'assigned' and allowed_user:
+    result = True
+    </field>
+</record>
+
+<!-- Unreserve -->
+<record
+            id="stock_picking_policy_template_detail_unreserve"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','unreserved_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+allowed_user = False
+if env.user.id == document.picking_type_id.warehouse_id.manager_id.id:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.supervisor_ids.ids:
+    allowed_user = True
+
+if document.state in ['partially_available'] and allowed_user and document.move_type != 'one':
+    result = True
+    </field>
+</record>
+
+<!-- Return -->
+<record id="stock_picking_policy_template_detail_return" model="policy.template_detail">
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','return_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+allowed_user = False
+if env.user.id == document.picking_type_id.warehouse_id.manager_id.id:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.supervisor_ids.ids:
+    allowed_user = True
+
+if document.state == 'done' and allowed_user:
+    result = True
+    </field>
+</record>
+
+
+<!-- cancel -->
+<record id="stock_picking_policy_template_detail_cancel" model="policy.template_detail">
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','cancel_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="computation_method">use_group</field>
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+allowed_user = False
+if env.user.id == document.picking_type_id.warehouse_id.manager_id.id:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.supervisor_ids.ids:
+    allowed_user = True
+
+if document.state != 'cancel' and allowed_user:
+    result = True
+    </field>
+</record>
+
+<!-- restart -->
+<record
+            id="stock_picking_policy_template_detail_restart"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','restart_ok')]"
+            />
+    <field name="restrict_state" eval="0" />
+    <field name="restrict_user" eval="0" />
+    <field name="restrict_additional" eval="1" />
+    <field name="additional_python_code">result = False
+allowed_user = False
+if env.user.id == document.picking_type_id.warehouse_id.manager_id.id:
+    allowed_user = True
+elif env.user.id in document.picking_type_id.warehouse_id.supervisor_ids.ids:
+    allowed_user = True
+
+if document.state == 'cancel' and allowed_user:
+    result = True
+    </field>
+</record>
+
+<!-- Change Actual Movement Date -->
+<record
+            id="stock_picking_policy_template_detail_change_actual_movement_date"
+            model="policy.template_detail"
+        >
+    <field name="template_id" ref="stock_picking_policy_template" />
+    <field
+                name="field_id"
+                search="[('model_id.model','=','stock.picking'),('name','=','change_actual_movement_date_ok')]"
+            />
+    <field name="restrict_state" eval="1" />
+    <field
+                name="state_ids"
+                search="[('field_id.model_id.model','=','stock.picking'),('value','=','done')]"
+            />
+    <field name="restrict_user" eval="1" />
+    <field name="computation_method">use_group</field>
+    <field name="group_ids" eval="[(6,0,[ref('base.group_system')])]" />
+    <field name="restrict_additional" eval="0" />
+</record>
+</data>
+</odoo>
