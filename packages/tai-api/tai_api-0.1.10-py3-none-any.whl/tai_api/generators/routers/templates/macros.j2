@@ -1,0 +1,131 @@
+
+
+{% macro generate_query_parameters(model) -%}
+{% for column in model.columns -%}
+{% if not column.args.get('autoincrement', False) and not column.encrypt -%}
+    {% if column.args.get('primary_key', False) -%}
+{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="{{ 'Filtrar por ' + column.name + ' (clave primaria)' }}"{% if column.args.get('autoincrement', False) %}, gt=0{% endif %}),
+    {% elif column.is_foreign_key -%}
+{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="{{ 'Filtrar por ' + column.name + ' (clave foránea)' }}"{% if column.args.get('autoincrement', False) %}, gt=0{% endif %}),
+    {% elif 'str' == column.type -%}
+{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="{{ 'Filtrar por ' + column.name + '. ' + column.description }}", min_length=1, max_length=255),
+    {% elif 'bool' == column.type -%}
+{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="{{ 'Filtrar por ' + column.name + ' (verdadero/falso). ' + column.description }}"),
+    {% elif  'date' == column.type -%}
+{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="{{ 'Filtrar por fecha exacta de ' + column.name + ' (formato: YYYY-MM-DD). ' + column.description }}"),
+min_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Fecha mínima para {{ column.name }} (incluida, formato: YYYY-MM-DD)"),
+max_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Fecha máxima para {{ column.name }} (incluida, formato: YYYY-MM-DD)"),
+    {% elif  'int' == column.type -%}
+{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="{{ 'Filtrar por valor exacto de ' + column.name + '. ' + column.description }}"),
+min_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Valor mínimo para {{ column.name }} (incluido)"),
+max_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Valor máximo para {{ column.name }} (incluido)"),
+    {% elif 'float' == column.type -%}
+min_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Valor mínimo para {{ column.name }} (incluido)"),
+max_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Valor máximo para {{ column.name }} (incluido)"),
+    {% elif 'datetime' == column.type -%}
+min_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Fecha y hora mínima para {{ column.name }} (incluida, formato: YYYY-MM-DDTHH:MM:SS)"),
+max_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Fecha y hora máxima para {{ column.name }} (incluida, formato: YYYY-MM-DDTHH:MM:SS)"),
+    {% elif 'time' == column.type -%}
+min_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Hora mínima para {{ column.name }} (incluida, formato: HH:MM:SS)"),
+max_{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="Hora máxima para {{ column.name }} (incluida, formato: HH:MM:SS)"),
+    {% else -%}
+{{ column.name }}: Optional[{{ column.type }}] = Query(None, description="{{ 'Filtrar por ' + column.name + '. ' + column.description  }}"),
+    {%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro -%}
+
+
+{% macro generate_pagination_parameters() -%}
+limit: Optional[int] = Query(None, description="Número máximo de registros a retornar. Debe ser un valor positivo. Máximo permitido: 1000", gt=0, le=1000),
+offset: Optional[int] = Query(None, description="Número de registros a omitir desde el inicio. Útil para paginación. Debe ser un valor no negativo", ge=0),
+{%- endmacro -%}
+
+
+{% macro generate_includes_parameter() -%}
+includes: List[str] = Query(None, description="Lista de relaciones a incluir en la respuesta para obtener datos relacionados. Especifica los nombres de las relaciones que deseas expandir"),
+{%- endmacro -%}
+
+
+{% macro generate_path_parameters(model) -%}
+{% for column in model.columns if column.args.get('primary_key', False) %}
+{{ column.name }}: {{ column.type }} = Path(..., description="{{ column.description }}"{% if column.args.get('autoincrement', False) %}, gt=0{% endif %}),
+{% endfor %}
+{%- endmacro -%}
+
+
+{% macro generate_query_args(model) -%}
+{% for column in model.columns -%}
+{% if not column.args.get('autoincrement', False) and not column.encrypt -%}
+{% if column.args.get('primary_key', False) or column.is_foreign_key -%}
+- **{{ column.name }}**: Filtrar por {{ column.name }}
+{% elif 'str' == column.type or 'bool' == column.type -%}
+- **{{ column.name }}**: Filtrar por {{ column.name }}
+{% elif  'date' == column.type or 'int' == column.type -%}
+- **{{ column.name }}**: Filtrar por {{ column.name }}
+- **min_{{ column.name }}**: Filtrar por fecha mínima (incluída)
+- **max_{{ column.name }}**: Filtrar por fecha máxima (incluída)
+{% elif 'float' == column.type or 'datetime' == column.type or 'time' == column.type -%}
+- **min_{{ column.name }}**: Filtrar por valor mínimo de {{ column.name }} (incluído el valor del filtro)
+- **max_{{ column.name }}**: Filtrar por valor máximo de {{ column.name }} (incluído el valor del filtro)
+{% elif 'bytes' == column.type %}
+{% else -%}
+- **{{ column.name }}**: Filtrar por {{ column.name }}
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+
+{% macro asing_parameters(model) -%}
+{% for column in model.columns -%}
+{% if not column.args.get('autoincrement', False) and not column.encrypt -%}
+{% if column.args.get('primary_key', False) or column.is_foreign_key -%}
+{{ column.name }}={{ column.name }},
+{% elif 'str' == column.type or 'bool' == column.type -%}
+{{ column.name }}={{ column.name }},
+{% elif  'date' == column.type or 'int' == column.type -%}
+{{ column.name }}={{ column.name }},
+min_{{ column.name }}=min_{{ column.name }},
+max_{{ column.name }}=max_{{ column.name }},
+{% elif 'float' == column.type or 'datetime' == column.type or 'time' == column.type -%}
+min_{{ column.name }}=min_{{ column.name }},
+max_{{ column.name }}=max_{{ column.name }},
+{% elif 'bytes' == column.type %}
+{% else -%}
+{{ column.name }}={{ column.name }},
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+
+{% macro generate_filter_query(model) -%}
+{% for column in model.columns -%}
+{% if not column.args.get('autoincrement', False) and not column.encrypt  -%}
+{% if column.args.get('primary_key', False) or column.is_foreign_key -%}
+if {{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} == {{ column.name }})
+{% elif 'str' == column.type or 'bool' == column.type -%}
+if {{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} == {{ column.name }})
+{% elif 'date' == column.type or 'int' == column.type -%}
+if {{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} == {{ column.name }})
+if min_{{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} >= min_{{ column.name }})
+if max_{{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} <= max_{{ column.name }})
+{% elif 'float' == column.type or 'datetime' == column.type or 'time' == column.type -%}
+if min_{{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} >= min_{{ column.name }})
+if max_{{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} <= max_{{ column.name }})
+{% elif 'bytes' == column.type %}
+{% else -%}
+if {{ column.name }} is not None:
+    query = query.where({{ model.name }}.{{ column.name }} == {{ column.name }})
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro %}
