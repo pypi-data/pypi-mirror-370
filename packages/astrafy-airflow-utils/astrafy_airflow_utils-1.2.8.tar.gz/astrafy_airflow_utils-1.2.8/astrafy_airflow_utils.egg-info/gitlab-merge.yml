@@ -1,0 +1,61 @@
+include:
+  - project: gitlab-ci-templates3/gitlab-ci-authorization
+    ref: v0.0.5
+    file:
+        - gcp-auth-with-workload-identity.yml
+
+variables:
+  DBT_USE_SSH: false # used to use the git key to download the dp-common package
+  
+push_docker_image_main_gcr:
+  stage: merge
+  image: google/cloud-sdk:515.0.0-slim
+  services:
+    - docker:dind
+  id_tokens:
+    WORKLOAD_IDENTITY_TOKEN:
+        aud: https://gitlab.com
+
+  variables:
+    # Use BuildKit for better performance and Buildx support
+    DOCKER_BUILDKIT: "1"
+    # Connect to the Docker daemon started in the service
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+    # Google Cloud variables
+    GCP_SERVICE_ACCOUNT: ${ARTIFACT_SERVICE_ACCOUNT}
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - when: never
+
+  before_script:
+    # Set up Docker Buildx
+    - docker buildx create --use --name mybuilder || docker buildx use mybuilder
+    - docker buildx inspect mybuilder --bootstrap
+    # Authenticate with Google Cloud
+    - !reference [ .application-credentials-workload-identity, before_script ]
+    # Configure Docker to use the Artifact Registry
+    - gcloud auth configure-docker ${ARTIFACTS_REGION}-docker.pkg.dev --quiet
+
+  script:
+    - |
+      docker buildx build --push \
+        --tag "${ARTIFACTS_REGION}-docker.pkg.dev/${ARTIFACTS_PROJECT_ID}/${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" \
+        --tag "${ARTIFACTS_REGION}-docker.pkg.dev/${ARTIFACTS_PROJECT_ID}/${IMAGE_NAME}:${CI_COMMIT_REF_NAME}" \
+        --tag "${ARTIFACTS_REGION}-docker.pkg.dev/${ARTIFACTS_PROJECT_ID}/${IMAGE_NAME}:latest" \
+        --cache-from=type=local,src=/cache \
+        --cache-to=type=local,dest=/cache,mode=max \
+        --build-arg GIT_KEY=${GIT_KEY} \
+
+trigger_dbt_docs:
+  stage: merge
+  script:
+    - |
+      curl --request POST \
+        --form token=$DP_DOCS_TRIGGER_TOKEN \
+        --form ref=main \
+        "https://gitlab.com/api/v4/projects/46853361/trigger/pipeline"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never

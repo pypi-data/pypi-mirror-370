@@ -1,0 +1,116 @@
+name: "bq"
+version: "1.0.0"
+
+profile: "astrafy-dp-monitoring"
+
+clean-targets:
+  - "target"
+  - "logs"
+
+require-dbt-version: [ ">=1.0.0", "<2.0.0" ]
+
+flags:
+  partial_parse: true
+  use_colors: true
+  printer_width: 80
+  send_anonymous_usage_stats: false
+  require_explicit_package_overrides_for_builtin_materializations: false
+
+query-comment:
+  comment: "{{ common.query_comment(node) }}"
+  job-label: True
+
+quoting:
+  database: true
+  schema: true
+  identifier: true
+
+vars:
+  # Environment configuration
+  bq_region: "eu"
+  
+  'dbt_date:time_zone': "Europe/Paris"
+  bigquery_logs_dataset: 'bqdts_bigquery_logs'
+  source_geolite_dataset: 'geolite2'
+  impersonation_logs_dataset: 'impersonation_logs'
+
+  # Development environment
+  dev_mon_project_id: internal-monitoring-dev-7e9d
+  dev_lz_project_id: internal-data-lz-dev-7c5c
+  dev_stg_project_id: internal-data-stg-dev-27aa
+  dev_int_project_id: internal-data-dw-dev-29ce
+  dev_dm_project_id: internal-data-dm-dev-51ce
+
+  # UAT environment
+  uat_mon_project_id: internal-monitoring-uat-ae85
+  uat_lz_project_id: internal-data-lz-uat-b03d
+  uat_stg_project_id: internal-data-stg-uat-b057
+  uat_int_project_id: internal-data-dw-uat-c925
+  uat_dm_project_id: internal-data-dm-uat-de8a
+
+  # Production environment
+  prd_mon_project_id: internal-monitoring-prd-afa4
+  prd_lz_project_id: internal-data-lz-prd-86b7
+  prd_stg_project_id: internal-data-stg-prd-9970
+  prd_int_project_id: internal-data-dw-prd-6502
+  prd_dm_project_id: internal-data-dm-prd-a412
+
+  schema_prefix: bqdts_monitoring_bq
+  global_seed_schema: bqdts_mapping
+
+  # https://cloud.google.com/bigquery/pricing#pricing
+  # On-demand compute (analysis) pricing
+  use_flat_pricing: true
+  per_billed_tb_price: "6.25"
+  free_tb_per_month: "1"
+  # Capacity compute (analysis) pricing
+  hourly_slot_price: "0.04"
+  # https://cloud.google.com/bigquery/pricing#storage
+  prefer_physical_pricing_model: "true"
+  storage_billing_model: "PHYSICAL"
+  active_logical_storage_gb_price: "0.02"
+  long_term_logical_storage_gb_price: "0.01"
+  active_physical_storage_gb_price: "0.04"
+  long_term_physical_storage_gb_price: "0.02"
+  free_storage_gb_per_month: "10"
+  # BI Engine pricing
+  bi_engine_gb_hourly_price: "0.0416"
+
+  lookback_window_days: "60"
+  lookback_incremental_billing_window_days: "3"
+
+  use_copy_partitions: true
+
+  gcp_billing_export_storage_project: "external-billing-prod"
+  gcp_billing_export_dataset: "bqdts_finops_int"
+  gcp_billing_export_table: "billing_export_resource"
+
+  gcp_bigquery_audit_logs_storage_project: "prj-logging-monitoring"
+  gcp_bigquery_audit_logs_dataset: "bqdts_bigquery_logs"
+  gcp_bigquery_audit_logs_table: 'cloudaudit_googleapis_com_data_access'
+
+  google_information_schema_model_materialization: "ephemeral"
+
+models:
+  +on_schema_change: "append_new_columns"
+  +tags: bq
+  +pre-hook:
+    - '{{ common.check_dataset_existence() }}'
+  +persist_docs:
+    relation: true
+    columns: true
+
+  elementary:
+    +enabled: "{{ target.name not in ['local', 'dev', 'uat'] }}"
+
+  dbt_project_evaluator:
+    +enabled: "{{ target.name not in ['local', 'dev', 'uat'] }}"
+
+seeds:
+  +pre-hook:
+    - '{{ common.check_dataset_existence() }}'
+  +tags: bq
+
+data_tests:
+  +tags: bq
+  +store_failures: "{{ (target.name in ('dev','uat')) | as_bool }}"

@@ -1,0 +1,90 @@
+include:
+  - project: gitlab-ci-templates3/gitlab-ci-authorization
+    ref: v0.0.5
+    file:
+        - gcp-auth-with-workload-identity.yml
+
+variables:
+  DBT_USE_SSH: false # used to use the git key to download the dp-common package
+  DBT_SCOPE: "bq_monitoring" # scope to limit dbt operations to specific data product
+
+# Template for dbt CI jobs
+.dbt_ci_template:
+  stage: merge-request
+  image: python:3.12.9-slim
+  id_tokens:
+    WORKLOAD_IDENTITY_TOKEN:
+      aud: https://gitlab.com
+  variables:
+    GCP_SERVICE_ACCOUNT: ${CI_SERVICE_ACCOUNT}
+    # PROJECT_PATH should be overridden in extending jobs
+    PROJECT_PATH: ""
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+      changes:
+        - projects/${PROJECT_PATH}/models/**/*
+        - projects/${PROJECT_PATH}/analyses/**/*
+        - projects/${PROJECT_PATH}/macros/**/*
+        - projects/${PROJECT_PATH}/seeds/**/*
+        - projects/${PROJECT_PATH}/snapshots/**/*
+        - projects/${PROJECT_PATH}/sqlfluff_libs/**/*
+        - projects/${PROJECT_PATH}/tests/**/*
+        - projects/${PROJECT_PATH}/dbt_project.yml
+        - projects/${PROJECT_PATH}/packages.yml
+        - projects/${PROJECT_PATH}/profiles.yml
+    - when: never
+  before_script:
+    # Install dependencies
+    - cd projects/${PROJECT_PATH}
+    - apt-get -y update && apt-get -y install curl git > /dev/null 2>&1
+    - curl -sSL https://sdk.cloud.google.com | bash > /dev/null 2>&1
+    - export PATH=$PATH:/root/google-cloud-sdk/bin
+    # Authenticate with GCP
+    - !reference [ .application-credentials-workload-identity, before_script ]
+  script:
+    - python -m pip install --upgrade pip > /dev/null 2>&1
+    - pip install -r ../../requirements.txt > /dev/null 2>&1
+    - |
+      if ! gcloud storage objects describe gs://${DBT_TARGET_BUCKET}/${PROJECT_PATH}/manifest.json; then
+        echo "::warning:: manifest.json does not exist in the bucket."
+      else
+        gcloud storage cp gs://${DBT_TARGET_BUCKET}/manifest.json projects/${PROJECT_PATH}/target_prod/manifest.json
+      fi
+    - dbt deps --target uat
+    - |
+      if [ -f target_prod/manifest.json ]; then
+        dbt clone --profiles-dir ../../ --target uat --vars "{\"pr_id\": \"${CI_MERGE_REQUEST_IID}\"}" --select state:modified+,config.materialized:incremental,state:old --state target_prod
+      fi
+    - |
+      if [ -f target_prod/manifest.json ]; then
+        dbt build --profiles-dir ../../ --target uat --vars "{\"pr_id\": \"${CI_MERGE_REQUEST_IID}\"}" --select state:modified+ --defer --state target_prod
+      else
+        dbt build --profiles-dir ../../ --target uat --vars "{\"pr_id\": \"${CI_MERGE_REQUEST_IID}\"}"
+      fi
+
+build_docker_image:
+  stage: merge-request
+  image: docker:20.10.16
+  services:
+    - docker:dind
+  variables:
+    DOCKER_BUILDKIT: "1"
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+      changes:
+        - Dockerfile
+        - requirements.txt
+    - when: never
+  script:
+    - docker buildx create --use --name mybuilder || docker buildx use mybuilder
+    - docker buildx inspect mybuilder --bootstrap
+    - >
+      docker buildx build
+      --load
+      --tag "$IMAGE_NAME:test-build"
+      --cache-from=type=local,src=/cache
+      --cache-to=type=local,dest=/cache,mode=max
+      --build-arg GIT_KEY=${GIT_KEY}
+      .
