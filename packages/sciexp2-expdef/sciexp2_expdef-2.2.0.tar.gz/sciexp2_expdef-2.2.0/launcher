@@ -1,0 +1,366 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""Manage jobs created with `sciexp2.expdef.launchgen`."""
+
+from __future__ import print_function
+from __future__ import absolute_import
+
+__author__ = "Lluís Vilanova"
+__copyright__ = "Copyright 2008-2023, Lluís Vilanova"
+__license__ = "GPL version 3 or later"
+
+__maintainer__ = "Lluís Vilanova"
+__email__ = "llvilanovag@gmail.com"
+
+
+import argparse
+import collections
+import sys
+import os
+import pydoc
+
+from sciexp2.common import progress
+import sciexp2.expdef.launcher
+import sciexp2.expdef.templates
+
+
+class ArgumentError(Exception):
+    def __init__(self, msg):
+        Exception.__init__(self, msg)
+
+
+##################################################
+# Command running
+
+def run(job_descriptor, action, types, *filters,
+        **kwargs):
+    """Run selected action.
+
+    Parameters
+    ----------
+    job_descriptor : str
+        Job descriptor file to act upon.
+    action : str
+        Action to perform on the jobs (one of the methods in
+        `sciexp2.expdef.launcher.Launcher`).
+    types : list of {'running', 'done', 'failed', 'notrun', 'inverse'}
+        Select jobs according to their state. Value 'inverse' will invert the
+        selection.
+    filters : str or `Filter`
+        Extra filters to select jobs.
+    submit_args : list of str, optional
+        Extra job submission arguments. Only valid when submitting jobs.
+    keep_going : bool, optional
+        Whether to continue submitting jobs after an error. Only valid when
+        submitting jobs.
+    kill_args : list of str, optional
+        Extra job killing arguments. Only valid when killing jobs.
+
+    """
+    try:
+        launcher = sciexp2.expdef.launcher.load(job_descriptor)
+    except (sciexp2.expdef.launcher.LauncherLoadError, IOError) as e:
+        raise ArgumentError(str(e))
+
+    if action not in ["summary", "state", "submit", "kill", "files"]:
+        raise ArgumentError("Invalid action: %s" % action)
+    action_obj = getattr(sciexp2.expdef.launcher.Launcher, action)
+    extra_kwargs = {}
+    if action == "state":
+        extra_kwargs["expression"] = kwargs.pop("expression", None)
+    elif action == "submit":
+        extra_kwargs["submit_args"] = kwargs.pop("submit_args", [])
+        extra_kwargs["keep_going"] = kwargs.pop("keep_going", False)
+    elif action == "kill":
+        extra_kwargs["kill_args"] = kwargs.pop("kill_args", [])
+    elif action == "files":
+        extra_kwargs["expression"] = kwargs.pop("expression")
+        extra_kwargs["not_expanded"] = kwargs.pop("not_expanded", False)
+
+    if len(kwargs) > 0:
+        raise ValueError("Unknown arguments: " + " ".join(kwargs.keys()))
+
+    if not isinstance(types, collections.abc.Iterable):
+        raise ArgumentError("Invalid 'types'")
+    for t in types:
+        if t not in ['running', 'done', 'failed', 'outdated', 'notrun',
+                     'inverse']:
+            raise ArgumentError("Invalid type: %s" % t)
+
+    try:
+        filters = launcher.parse_filters(*filters)
+    except NameError as e:
+        raise ArgumentError(
+            e.args[0] + " in filter, try exporting it in `Experiments.generate_jobs`")
+
+    try:
+        exit_code = action_obj(launcher, types, filters,
+                               **extra_kwargs)
+    except NameError as e:
+        if action == "state" and extra_kwargs["expression"] is not None:
+            raise ArgumentError(
+                "invalid expression\n%s"
+                "\nYou can try exporting it in `Experiments.generate_jobs`." % e)
+        elif action == "files":
+            raise ArgumentError(
+                "invalid expression\n%s"
+                "\nYou can try exporting it in `Experiments.generate_jobs`." % e)
+        else:
+            raise
+    return exit_code
+
+
+def _run(action):
+    def do_run(job_descriptor, types, filter, **kwargs):
+        return run(job_descriptor, action, types, *filter,
+                   **kwargs)
+    return do_run
+
+
+##################################################
+# Extra commands
+
+def list_templates(plain):
+    text = sciexp2.expdef.templates.get_description()
+    if plain:
+        text = pydoc.plain(text)
+    print(text)
+
+
+def show_template(template_name, plain):
+    try:
+        template = sciexp2.expdef.templates.get(template_name)
+    except sciexp2.expdef.templates.TemplateError as e:
+        raise ArgumentError("error loading template %r: %s" %
+                            (template_name, e.message))
+    text = template.get_description()
+    if plain:
+        text = pydoc.plain(text)
+    print(text)
+
+
+def variables(job_descriptor, filter, show_contents):
+    try:
+        launcher = sciexp2.expdef.launcher.load(job_descriptor)
+    except (sciexp2.expdef.launcher.LauncherLoadError, IOError) as e:
+        raise ArgumentError(str(e))
+
+    print(pydoc.TextDoc().bold("Available variables:"))
+    print(", ".join(launcher.variables()))
+
+    print()
+    depends = launcher._system._depends
+    print(pydoc.TextDoc().bold("Dependencies:"))
+    print(", ".join(depends))
+
+    if show_contents:
+        print()
+        print(pydoc.TextDoc().bold("Contents:"))
+        for i in launcher.values(*filter):
+            print(i)
+
+
+##################################################
+# Main application
+
+def _action_doc(action):
+    action = getattr(sciexp2.expdef.launcher.Launcher, action)
+    doc = action.__doc__
+    # remove indentation set by second non-empty line
+    indent = ""
+    for idx, line in enumerate(doc.splitlines()):
+        if idx == 0:
+            continue
+        if line.strip() == "":
+            continue
+        indent = " " * (len(line) - len(line.lstrip()))
+        break
+    return doc.replace("\n" + indent, "\n")
+
+
+def _add_type(group, type, descr):
+    group.add_argument("--" + type, "-" + type[0],
+                       help=descr,
+                       action="append_const", const=type, dest="types")
+
+
+def _add_parser(parser, name, help, **kwargs):
+    if "description" not in kwargs:
+        kwargs["description"] = help
+    return parser.add_parser(name, help=help, **kwargs)
+
+
+def _add_action(parser, name):
+    p = _add_parser(parser, name, help=_action_doc(name))
+    p.add_argument("job_descriptor",
+                   help="Job descriptor file")
+    if name == "files":
+        p.add_argument("expression",
+                       help="Expression to match files.")
+    p.add_argument(nargs="*", action="store", dest="filter",
+                   help="Extra filters to select jobs.")
+    if name == "submit":
+        p.add_argument("--submit-arg",
+                       dest="submit_args",
+                       action="append", default=[],
+                       help="Additional job-submission argument.")
+        p.add_argument("--keep-going", "-k",
+                       action="store_const", const=True,
+                       help="Continue submitting jobs after an error.")
+    elif name == "state":
+        p.add_argument("--expression",
+                       help="Show state with the expansion"
+                       " of given expression.")
+    elif name == "kill":
+        p.add_argument("--kill-arg",
+                       dest="kill_args",
+                       action="append", default=[],
+                       help="Additional job-killing argument.")
+    elif name == "files":
+        p.add_argument("--not-expanded",
+                       action="append_const", const=True,
+                       help="Show files matching the expression"
+                       " but not expanded from the jobs (e.g., old results).")
+    p.set_defaults(func=_run(name))
+    types = p.add_argument_group(title="Types of jobs to act upon",
+                                 description="If not specified, defaults "
+                                             "to all jobs.")
+    _add_type(types, "notrun",   "Pending to run.")
+    _add_type(types, "outdated", "Outdated.")
+    _add_type(types, "running",  "Running.")
+    _add_type(types, "done",     "Correctly finished.")
+    _add_type(types, "failed",   "Failed.")
+    _add_type(types, "inverse",  "Invert job type selection (e.g., '-id' for all non-done jobs).")
+    return p
+
+
+def main(args):
+    """Parse arguments and run."""
+    import sciexp2
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+When allowed, filters select a susbset of jobs to operate upon (see
+`sciexp2.common.filter`).  If multiple filters are specified, they are AND'ed
+together.
+
+Filters can reference the variables exported by the job descriptor file (see
+command `variables`, and argument `export` in `sciexp2.expdef.Launchgen.launcher`).
+
+As a shorthand, you can instead provide the value of a variable, or a path to
+it (assuming the value actually represents a path); the following are
+equivalent:
+
+  cd /home/user
+  ./out/jobs.jd state "DONE=='done/job0'"      # regular filter
+  ./out/jobs.jd state done/job0                # value of variable
+  ./out/jobs.jd state out/done/job0            # relative path to value
+  ./out/jobs.jd state /home/user/out/done/job0 # absolute path to value
+
+""")
+    subparsers = parser.add_subparsers()
+
+    parser.add_argument(
+        "-v", "--version", action="version",
+        version=sciexp2.expdef.__version__)
+
+    parser.add_argument(
+        "--progress",
+        default="progress",
+        choices=["none", "progress", "info", "verbose", "debug"],
+        help="Select level of progress indication.")
+
+    plist = _add_parser(
+        subparsers, "list-templates",
+        "Show a list of the available templates.")
+    plist.add_argument(
+        "--plain",
+        action="append_const", const=True,
+        help="Show plain text")
+    plist.set_defaults(func=list_templates)
+
+    pshow = _add_parser(
+        subparsers, "show-template",
+        "Show the contents of the given template.")
+    pshow.add_argument(
+        "--plain",
+        action="append_const", const=True,
+        help="Show plain text.")
+    pshow.add_argument("template_name")
+    pshow.set_defaults(func=show_template)
+
+    pvars = _add_parser(
+        subparsers, "variables",
+        "Show the variables available in a job descriptor file.")
+    pvars.add_argument("job_descriptor",
+                       help="Job descriptor file.")
+    pvars.add_argument(nargs="*", action="store", dest="filter",
+                       help="Extra filters to select jobs.")
+    pvars.add_argument("--show-contents",
+                       action="store_const", const=True,
+                       help="Also show the values of each variable.")
+    pvars.set_defaults(func=variables)
+
+    actions = ["summary", "state", "submit", "kill", "files"]
+    for action in actions:
+        p = _add_action(subparsers, action)
+        p.set_defaults(types=[])
+
+    # job descriptor as a binary
+    if len(args) > 0 and os.path.isfile(args[0]):
+        accept_jd = actions + ["variables"]
+        cmd_idx = None
+        for aidx, arg in enumerate(args):
+            if arg in accept_jd:
+                cmd_idx = aidx
+                break
+        if len(args) >= 2 and cmd_idx is not None:
+            # flags must appear before JD
+            last_flag_idx = len(args)
+            for idx in range(cmd_idx+1, len(args)):
+                if args[idx][0] != "-":
+                    last_flag_idx = idx
+                    break
+
+            args = args[1:last_flag_idx] + [args[0]] + args[last_flag_idx:]
+        else:
+            args = args[1:]
+
+    args = parser.parse_args(args)
+
+    if "func" not in args:
+        parser.error("missing command")
+    func = args.func
+
+    progress_level = args.progress
+    levels = {
+        "none": progress.LVL_NONE,
+        "progress": progress.LVL_PROGRESS,
+        "info": progress.LVL_INFO,
+        "verbose": progress.LVL_VERBOSE,
+        "debug": progress.LVL_DEBUG,
+    }
+    progress.level(levels[progress_level])
+
+    args = vars(args)
+    del args["func"]
+    del args["progress"]
+
+    try:
+        exit_code = func(**args)
+    except (ArgumentError, sciexp2.expdef.system.SubmitArgsError) as e:
+        parser.error(str(e))
+
+    return exit_code
+
+
+if __name__ == "__main__":
+    try:
+        exit_code = main(sys.argv[1:])
+    except KeyboardInterrupt:
+        sys.exit(1)
+    else:
+        if exit_code is not None:
+            sys.exit(exit_code)
