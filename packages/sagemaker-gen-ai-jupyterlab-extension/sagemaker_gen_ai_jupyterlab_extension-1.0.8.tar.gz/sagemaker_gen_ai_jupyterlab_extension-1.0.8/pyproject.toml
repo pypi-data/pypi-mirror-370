@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling>=1.5.0", "jupyterlab>=4.0.0,<5", "hatch-nodejs-version>=0.3.2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sagemaker_gen_ai_jupyterlab_extension"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Framework :: Jupyter :: JupyterLab :: 4",
+    "Framework :: Jupyter :: JupyterLab :: Extensions",
+    "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "jupyter-docprovider>=1,<3",
+    "jupyter-server-ydoc>=1,<3",
+    "requests>=2.25.0",
+    "watchdog>=2.1.0",
+    "aws_embedded_metrics",
+    "sagemaker-jupyterlab-extension-common"
+]
+dynamic = ["version", "description", "authors", "urls", "keywords"]
+
+[tool.hatch.version]
+source = "nodejs"
+
+[tool.hatch.metadata.hooks.nodejs]
+fields = ["description", "authors", "urls"]
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["sagemaker_gen_ai_jupyterlab_extension/labextension"]
+exclude = [".github", "binder"]
+
+[tool.pytest.ini_options]
+testpaths = ["sagemaker_gen_ai_jupyterlab_extension"]
+python_files = ["test_*.py"]
+addopts = "--cov=sagemaker_gen_ai_jupyterlab_extension --cov-report=xml --cov-report=term"
+
+[tool.hatch.build.targets.wheel.shared-data]
+"sagemaker_gen_ai_jupyterlab_extension/labextension" = "share/jupyter/labextensions/@amzn/sagemaker_gen_ai_jupyterlab_extension"
+"sagemaker_gen_ai_jupyterlab_extension/static" = "share/jupyter/labextensions/@amzn/sagemaker_gen_ai_jupyterlab_extension/static"
+"jupyter-config/jupyter_server_config.d/sagemaker_gen_ai_jupyterlab_extension.json" = "etc/jupyter/jupyter_server_config.d/sagemaker_gen_ai_jupyterlab_extension.json"
+"install.json" = "share/jupyter/labextensions/sagemaker_gen_ai_jupyterlab_extension/install.json"
+
+[tool.hatch.build.hooks.version]
+path = "sagemaker_gen_ai_jupyterlab_extension/_version.py"
+
+[tool.hatch.build.hooks.jupyter-builder]
+dependencies = ["hatch-jupyter-builder>=0.5"]
+build-function = "hatch_jupyter_builder.npm_builder"
+ensured-targets = [
+    "sagemaker_gen_ai_jupyterlab_extension/labextension/static/style.js",
+    "sagemaker_gen_ai_jupyterlab_extension/labextension/package.json",
+]
+skip-if-exists = ["sagemaker_gen_ai_jupyterlab_extension/labextension/static/style.js"]
+
+[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
+build_cmd = "build:prod"
+npm = ["brazil-build"]
+
+[tool.hatch.build.hooks.jupyter-builder.editable-build-kwargs]
+build_cmd = "install:extension"
+npm = ["brazil-build"]
+source_dir = "src"
+build_dir = "sagemaker_gen_ai_jupyterlab_extension/labextension"
+
+[tool.coverage.run]
+source = ["sagemaker_gen_ai_jupyterlab_extension"]
+omit = ["*/tests/*", "*/test_*"]
+
+[tool.jupyter-releaser.options]
+version_cmd = "hatch version"
+
+[tool.jupyter-releaser.hooks]
+before-build-npm = [
+    "python -m pip install 'jupyterlab>=4.0.0,<5'",
+    "jlpm",
+    "npm run build:prod"
+]
+before-build-python = ["npm run clean:all"]
+
+[tool.check-wheel-contents]
+ignore = ["W002"]
+
+[tool.coverage.xml]
+output = "coverage.xml"
