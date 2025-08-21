@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+import fitz
+import sys
+import os
+
+from io import BytesIO
+
+from PIL import Jpeg2KImagePlugin, Image
+
+
+doc = fitz.open(sys.argv[1])
+filesize = os.path.getsize(sys.argv[1])
+
+fgsize = 0
+bgsize = 0
+masksize = 0
+
+for idx, page in enumerate(doc):
+    imgs = doc.get_page_images(pno=page.number)
+
+    for imgidx, img in enumerate(imgs):
+        img_xref = img[0]
+        img_maskxref = img[1]
+
+        image = doc.xref_stream_raw(img_xref)
+        image_io = BytesIO(image)
+
+        im = Image.open(image_io)
+        mode = im.mode
+        size = im.size
+
+        if img_maskxref > 0:
+            mask = doc.xref_stream_raw(img_maskxref)
+
+        if imgidx == 0:
+            bgsize += len(image)
+        if imgidx == 1:
+            fgsize += len(image)
+            masksize += len(mask)
+
+restsize = (filesize - fgsize - bgsize - masksize)
+
+def perct(sz):
+    return '%.2f%%' % round((sz / filesize) * 100, 2)
+
+def abssize(sz):
+    return '%.2fkB' % (sz/1024)
+
+print('backsize:', perct(bgsize), abssize(bgsize))
+print('frntsize:', perct(fgsize), abssize(fgsize))
+print('masksize:', perct(masksize), abssize(masksize))
+print('restsize:', perct(restsize), abssize(restsize))
