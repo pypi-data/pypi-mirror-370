@@ -1,0 +1,106 @@
+@Library(["utils"])_
+
+node('docker') {
+
+    stage('Clone Repository') {
+        checkout([$class: 'GitSCM',
+                    branches: [[name: "${BUILD_BRANCH}"]],
+                    userRemoteConfigs: [[
+                        credentialsId: 'nhn github app - toast jenkins',
+                        poll: false,
+                        refspec: "+refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/remotes/origin/tags/*",
+                        url: 'https://github.nhnent.com/TOASTCloud/EasyMaker.SDK.git']]
+                ])
+    }
+
+    stage('Set Environment Variables') {
+        // 초기 환경 변수 설정
+        script {
+            env.SERVICE_NAME = 'EasyMaker.SDK'
+            env.BOT_NAME = 'EasyMaker.SDK'
+            env.BOT_ICON_IMAGE = 'https://kr1-api-object-storage.nhncloudservice.com/v1/AUTH_6f6db0c4a436486d9abec24e3c3fef66/porthos/jenkins-kubernetes.png'
+            env.TITLE_LINK = 'http://ci.cloud.toastoven.net:10081/job/%ED%81%B4%EB%9D%BC%EC%9A%B0%EB%93%9C%EC%84%9C%EB%B9%84%EC%8A%A4%EA%B0%9C%EB%B0%9C%ED%8C%80/job/EasyMaker/job/EasyMaker.SDK/'
+            env.WEBHOOK_URL = 'https://hook.dooray.com/services/3234962574780345705/3391302397889470719/fTqFmg7BQYK7aJYpOil9wg'
+
+            def userId = currentBuild.getBuildCauses()[0].userId
+            if (userId == null) {
+                // 자동 트리거되어 실행 됨
+                userId = "Jenkins"
+            }
+            env.BUILD_TRIGGER_BY = userId
+
+            // pyproject.toml에서 버전 읽기
+            def tomlVersion = sh(script: "grep '^version = ' pyproject.toml | sed 's/version = \"\\(.*\\)\"/\\1/'", returnStdout: true).trim()
+            env.VERSION = tomlVersion
+        }
+
+        sh 'echo "${PYPI_TOKEN}"'
+        sh 'cat Dockerfile'
+        echo "Version: ${env.VERSION}"
+    }
+
+    stage('Docker Build') {
+        sh './build.sh'
+    }
+
+    runStageWithHandlers('Package Publish', {
+        sh 'docker run --rm easymaker-sdk:latest uv publish -u __token__ -p ${PYPI_TOKEN}'
+    }, {
+        echo 'Package Publish Success !'
+
+        sh """
+            curl -X POST -H "Content-Type: application/json" -d '{
+                "botName": "${env.BOT_NAME}",
+                "botIconImage": "${env.BOT_ICON_IMAGE}",
+                "text": ":smile: Build 성공! :smile:",
+                    "attachments" : [
+                        {
+                            "title" : "${env.SERVICE_NAME}",
+                            "titleLink" : "${env.TITLE_LINK}",
+                            "authorName": "${env.BUILD_URL}",
+                            "authorLink": "${env.BUILD_URL}",
+                            "text" : "- Branch: ${BUILD_BRANCH}\\n- Version : ${env.VERSION}\\n- Executor: ${env.BUILD_TRIGGER_BY}",
+                            "color" : "lime"
+                        }
+                    ]
+            }' ${env.WEBHOOK_URL}
+        """
+    }, {
+        echo 'Package Publish Failure !'
+
+        sh """
+            curl -X POST -H "Content-Type: application/json" -d '{
+                "botName": "${env.BOT_NAME}",
+                "botIconImage": "${env.BOT_ICON_IMAGE}",
+                "text": ":scream: Build 실패.. :scream:",
+                    "attachments" : [
+                        {
+                            "title" : "${env.SERVICE_NAME}",
+                            "titleLink" : "${env.TITLE_LINK}",
+                            "authorName": "${env.BUILD_URL}",
+                            "authorLink": "${env.BUILD_URL}",
+                            "text" : "- Branch: ${BUILD_BRANCH}\\n- Version : ${env.VERSION}\\n- Executor: ${env.BUILD_TRIGGER_BY}",
+                            "color" : "red"
+                        }
+                    ]
+            }' ${env.WEBHOOK_URL}
+        """
+    })
+}
+
+def runStageWithHandlers(String name, Closure stageBody, Closure onSuccess, Closure onFailure) {
+    def failed = false
+    try {
+        stage(name) {
+            stageBody()
+        }
+    } catch (err) {
+        failed = true
+        currentBuild.result = 'FAILURE'
+        onFailure()
+        throw err
+    }
+    if (!failed) {
+        onSuccess()
+    }
+}
