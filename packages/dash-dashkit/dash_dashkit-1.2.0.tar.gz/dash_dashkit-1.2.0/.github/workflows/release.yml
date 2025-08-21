@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'dash-dashkit-v*'
+      - 'dashkit_table-v*'
+      - 'dashkit_shadcn-v*'
+      - 'dashkit_kiboui-v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to publish (e.g., dashkit_table-v1.2.3)'
+        required: true
+
+jobs:
+  publish-table:
+    if: startsWith(github.ref_name, 'dashkit_table-v') || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'dashkit_table-v')) || (github.event_name == 'workflow_dispatch' && startsWith(inputs.tag_name, 'dashkit_table-v'))
+    name: Publish dashkit_table
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v3
+      - name: Build dashkit_table
+        working-directory: src/dashkit_table
+        run: |
+          uv run --with build python -m build
+      - name: Publish dashkit_table to PyPI
+        working-directory: src/dashkit_table
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv run --with twine python -m twine upload dist/*
+
+  publish-shadcn:
+    if: startsWith(github.ref_name, 'dashkit_shadcn-v') || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'dashkit_shadcn-v')) || (github.event_name == 'workflow_dispatch' && startsWith(inputs.tag_name, 'dashkit_shadcn-v'))
+    name: Publish dashkit_shadcn
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v3
+      - name: Build dashkit_shadcn
+        working-directory: src/dashkit_shadcn
+        run: |
+          uv run --with build python -m build
+      - name: Publish dashkit_shadcn to PyPI
+        working-directory: src/dashkit_shadcn
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv run --with twine python -m twine upload dist/*
+
+  publish-kiboui:
+    if: startsWith(github.ref_name, 'dashkit_kiboui-v') || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'dashkit_kiboui-v')) || (github.event_name == 'workflow_dispatch' && startsWith(inputs.tag_name, 'dashkit_kiboui-v'))
+    name: Publish dashkit_kiboui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v3
+      - name: Build dashkit_kiboui
+        working-directory: src/dashkit_kiboui
+        run: |
+          uv run --with build python -m build
+      - name: Publish dashkit_kiboui to PyPI
+        working-directory: src/dashkit_kiboui
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv run --with twine python -m twine upload dist/*
+
+  publish-main:
+    if: startsWith(github.ref_name, 'dash-dashkit-v') || startsWith(github.ref_name, 'v') || (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'dash-dashkit-v') || startsWith(github.event.release.tag_name, 'v'))) || (github.event_name == 'workflow_dispatch' && (startsWith(inputs.tag_name, 'dash-dashkit-v') || startsWith(inputs.tag_name, 'v')))
+    name: Publish dash-dashkit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v3
+      - name: Build main
+        run: |
+          uv run --with build python -m build
+      - name: Publish dash-dashkit to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv run --with twine python -m twine upload dist/dash_dashkit-*.whl dist/dash_dashkit-*.tar.gz
