@@ -1,0 +1,1 @@
+from .fsr import FSR, Galois_LFSR, Fibonacci_LFSR
